@@ -7,6 +7,7 @@ import { logger } from "@/lib/logger";
 import { parseBody, validateId, publishReplyBodySchema } from "@/lib/validation";
 import { toUserMessage, toStatusCode } from "@/lib/errors";
 import { checkRateLimit, PUBLISH_LIMIT } from "@/lib/rate-limit";
+import { ensurePersonalWorkspace } from "@/lib/services/workspace";
 
 interface RouteParams {
   params: Promise<{ reviewId: string }>;
@@ -53,14 +54,7 @@ export async function POST(request: Request, { params }: RouteParams) {
   }
 
   const admin = createAdminClient();
-
-  const { data: membership } = await admin
-    .from("grm_workspace_members")
-    .select("workspace_id")
-    .eq("user_id", user.id)
-    .limit(1)
-    .single();
-  if (!membership) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+  const membership = await ensurePersonalWorkspace(user);
 
   const { data: replyCheck } = await admin
     .from("grm_review_replies")
@@ -85,7 +79,13 @@ export async function POST(request: Request, { params }: RouteParams) {
     );
   }
 
-  if (replyCheck.status !== "approved") {
+  if (replyCheck.status === "failed") {
+    await ReplyPublishingService.resetFailedReply(
+      body.replyId,
+      reviewId,
+      membership.workspace_id
+    );
+  } else if (replyCheck.status !== "approved") {
     return NextResponse.json(
       { error: "Only approved replies can be published." },
       { status: 400 }

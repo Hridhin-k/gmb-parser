@@ -48,4 +48,7 @@ export type AuditAction =
   | "reviews.bulk_approve"
   | "reviews.bulk_publish"
   | "reviews.bulk_discard"
-  | "location_insight.generated";
+  | "location_insight.generated"
+  | "workspace.invite_created"
+  | "workspace.invite_revoked"
+  | "workspace.invite_accepted";

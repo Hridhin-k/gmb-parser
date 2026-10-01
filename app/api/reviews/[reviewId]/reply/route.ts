@@ -11,20 +11,14 @@ import {
   deleteReplyBodySchema,
 } from "@/lib/validation";
 import { toUserMessage, toStatusCode } from "@/lib/errors";
+import { ensurePersonalWorkspace } from "@/lib/services/workspace";
 
 interface RouteParams {
   params: Promise<{ reviewId: string }>;
 }
 
-async function getWorkspace(userId: string) {
-  const admin = createAdminClient();
-  const { data } = await admin
-    .from("grm_workspace_members")
-    .select("workspace_id")
-    .eq("user_id", userId)
-    .limit(1)
-    .single();
-  return data;
+async function getWorkspace(user: { id: string; email?: string | null }) {
+  return ensurePersonalWorkspace(user);
 }
 
 /**
@@ -51,7 +45,7 @@ export async function POST(request: Request, { params }: RouteParams) {
     return NextResponse.json({ error: toUserMessage(e) }, { status: toStatusCode(e) });
   }
 
-  const membership = await getWorkspace(user.id);
+  const membership = await getWorkspace(user);
   if (!membership) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
 
   const admin = createAdminClient();
@@ -121,7 +115,7 @@ export async function PUT(request: Request, { params }: RouteParams) {
     return NextResponse.json({ error: toUserMessage(e) }, { status: toStatusCode(e) });
   }
 
-  const membership = await getWorkspace(user.id);
+  const membership = await getWorkspace(user);
   if (!membership) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
 
   const admin = createAdminClient();
@@ -196,7 +190,7 @@ export async function DELETE(request: Request, { params }: RouteParams) {
     return NextResponse.json({ error: toUserMessage(e) }, { status: toStatusCode(e) });
   }
 
-  const membership = await getWorkspace(user.id);
+  const membership = await getWorkspace(user);
   if (!membership) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
 
   const admin = createAdminClient();

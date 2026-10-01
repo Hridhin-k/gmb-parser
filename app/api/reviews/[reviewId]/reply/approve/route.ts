@@ -3,7 +3,8 @@ import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { AuditService } from "@/lib/services/audit";
 import { parseBody, validateId, approveReplyBodySchema } from "@/lib/validation";
-import { toUserMessage, toStatusCode } from "@/lib/errors";
+import { toUserMessage, toStatusCode, AppError } from "@/lib/errors";
+import { assertCanApproveReplies, ensurePersonalWorkspace } from "@/lib/services/workspace";
 
 interface RouteParams {
   params: Promise<{ reviewId: string }>;
@@ -34,14 +35,16 @@ export async function POST(request: Request, { params }: RouteParams) {
   }
 
   const admin = createAdminClient();
+  const membership = await ensurePersonalWorkspace(user);
 
-  const { data: membership } = await admin
-    .from("grm_workspace_members")
-    .select("workspace_id")
-    .eq("user_id", user.id)
-    .limit(1)
-    .single();
-  if (!membership) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+  try {
+    await assertCanApproveReplies(user.id, membership.workspace_id);
+  } catch (error) {
+    if (error instanceof AppError) {
+      return NextResponse.json({ error: error.message }, { status: error.statusCode });
+    }
+    throw error;
+  }
 
   const { data: reply } = await admin
     .from("grm_review_replies")

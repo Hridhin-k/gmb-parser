@@ -33,13 +33,23 @@ const NAV_ITEMS = [
 
 interface AppShellProps {
   user: User;
+  workspaceName: string;
+  workspaces: Array<{ id: string; name: string }>;
+  activeWorkspaceId: string;
   children: React.ReactNode;
 }
 
-export function AppShell({ user, children }: AppShellProps) {
+export function AppShell({
+  user,
+  workspaceName,
+  workspaces,
+  activeWorkspaceId,
+  children,
+}: AppShellProps) {
   const pathname = usePathname();
   const router = useRouter();
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [switching, setSwitching] = useState(false);
   const initials = (user.email ?? "U").slice(0, 2).toUpperCase();
 
   // Close sidebar on Escape
@@ -91,6 +101,42 @@ export function AppShell({ user, children }: AppShellProps) {
           >
             <X className="h-4 w-4" />
           </button>
+        </div>
+
+        <div className="border-b border-sidebar-border px-3 py-2">
+          {workspaces.length > 1 ? (
+            <label className="block">
+              <span className="sr-only">Workspace</span>
+              <select
+                aria-label="Workspace"
+                value={activeWorkspaceId}
+                disabled={switching}
+                onChange={async (event) => {
+                  const workspaceId = event.target.value;
+                  setSwitching(true);
+                  try {
+                    await fetch("/api/workspace/active", {
+                      method: "POST",
+                      headers: { "Content-Type": "application/json" },
+                      body: JSON.stringify({ workspaceId }),
+                    });
+                    router.refresh();
+                  } finally {
+                    setSwitching(false);
+                  }
+                }}
+                className="w-full truncate rounded-md border border-gray-200 bg-white px-2 py-1.5 text-[12px] text-gray-700"
+              >
+                {workspaces.map((workspace) => (
+                  <option key={workspace.id} value={workspace.id}>
+                    {workspace.name}
+                  </option>
+                ))}
+              </select>
+            </label>
+          ) : (
+            <p className="truncate text-[12px] text-gray-500">{workspaceName}</p>
+          )}
         </div>
 
         {/* Nav links */}

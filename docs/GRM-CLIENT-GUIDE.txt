@@ -1,0 +1,121 @@
+GRM — Client guide
+Google Review Management
+
+
+WHAT THIS APP DOES
+
+GRM is where your team reads and replies to Google reviews for the
+businesses you manage.
+
+You sign in, connect the Google account that manages those businesses,
+and the app pulls in each business and its reviews. You can draft a
+reply, approve it, and publish it back to Google.
+
+
+TWO DIFFERENT GOOGLE STEPS
+
+Signing in and connecting a business profile are not the same thing.
+
+1. Sign in
+   This only opens the app. Use Continue with Google on the login page.
+
+2. Connect Google
+   This is on Settings. It is the step that lets GRM see the Business
+   Profiles that account manages.
+
+Until Connect Google is done, Clients and Reviews stay empty.
+
+
+THE SCREENS
+
+Dashboard    Overview of reviews that need attention.
+Clients      The businesses pulled from Google.
+Reviews      The inbox where you read and reply.
+Audit Log    A record of connections, syncs, and replies.
+Settings     Connect Google, and invite teammates.
+
+
+GETTING STARTED
+
+1. Sign in with Google.
+   The first time you open the app, GRM creates a workspace for you.
+   A workspace is your private area. Other people do not see it unless
+   you invite them.
+
+2. Open Settings and click Connect Google.
+   Choose the Google account that is an Owner or Manager of the
+   businesses you want to manage. If you pick a personal Gmail that
+   does not manage those businesses, the sync will come back empty.
+
+3. Open Clients and click Sync profiles.
+   GRM creates one client for each Business Profile that account can
+   manage.
+
+4. Click Sync reviews.
+   Reviews appear on the Dashboard and on Reviews after this step.
+   Profiles show up before reviews do.
+
+
+WORKING WITH REVIEWS
+
+Open Reviews, or start from the Dashboard.
+
+Anyone in the workspace can write a reply or generate an AI draft.
+A draft stays inside GRM until an owner or admin approves it.
+
+Members cannot approve. Approve, and Approve & publish, are shown
+only to owners and admins.
+
+After a reply is approved, a member can publish it to Google.
+Published means the reply is on Google. Until then it is only in
+this app.
+
+If publishing fails, anyone in the workspace can retry. That retry
+does not approve a new draft.
+
+
+INVITING A TEAMMATE
+
+Owners and admins can invite from Settings.
+
+Type the person's Google email, choose Member or Admin, and click
+Invite. GRM does not send an email. The invite is saved against that
+address.
+
+They must sign in with that same Google email. After they sign in:
+
+- They open your workspace.
+- They see the same clients, locations, reviews, and connected
+  Google accounts you see.
+- They can sync, draft replies, and publish replies that are already
+  approved.
+- They cannot approve drafts. An owner or admin does that.
+- A Member cannot invite other people. An Admin can.
+- They do not see any other workspace.
+
+If they already had their own workspace, yours opens first. A workspace
+menu in the sidebar lets them switch back to their own.
+
+Cancel a pending invite from Settings before they sign in if you
+change your mind.
+
+
+IF SOMETHING LOOKS EMPTY
+
+No Google account on Settings
+  Click Connect Google and finish the Google consent screen.
+
+Connect Google says no workspace found
+  Sign out, sign in again, and open Settings. A workspace is created
+  the first time you enter the app.
+
+Clients are empty after connecting
+  Click Sync profiles on Clients. The connected Google account must
+  be an Owner or Manager of those businesses.
+
+Reviews are empty but clients exist
+  Click Sync reviews.
+
+A teammate signed in and sees nothing of yours
+  Invite their exact Google email from your Settings, then ask them
+  to sign in again with that email.

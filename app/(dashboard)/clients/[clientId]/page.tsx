@@ -3,6 +3,7 @@ import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { GoogleBusinessProfileService } from "@/lib/services/google-business-profile";
 import { isUnassignedClient } from "@/lib/services/unassigned-client";
+import { ensurePersonalWorkspace } from "@/lib/services/workspace";
 import { PageHeader } from "@/components/page-header";
 import { LocationTable } from "@/components/location-table";
 import { UnlinkedLocationsPanel } from "@/components/unlinked-locations-panel";
@@ -24,14 +25,7 @@ export default async function ClientDetailPage({
   } = await supabase.auth.getUser();
 
   const admin = createAdminClient();
-  const { data: membership } = await admin
-    .from("grm_workspace_members")
-    .select("workspace_id")
-    .eq("user_id", user!.id)
-    .limit(1)
-    .single();
-
-  if (!membership) notFound();
+  const membership = await ensurePersonalWorkspace(user!);
 
   const { data: clientRow } = await admin
     .from("grm_clients")

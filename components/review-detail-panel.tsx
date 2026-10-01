@@ -50,6 +50,7 @@ interface ReplyForPanel {
 interface ReviewDetailPanelProps {
   review: ReviewForPanel;
   reply: ReplyForPanel | null;
+  canApprove: boolean;
   onClose: () => void;
 }
 
@@ -106,6 +107,7 @@ const REPLY_STATUS_MAP: Record<
 export function ReviewDetailPanel({
   review,
   reply,
+  canApprove,
   onClose,
 }: ReviewDetailPanelProps) {
   const router = useRouter();
@@ -209,7 +211,7 @@ export function ReviewDetailPanel({
     setError(null);
     setLoading("publish");
     try {
-      if (reply.status === "draft" || reply.status === "failed") {
+      if (reply.status === "draft" && canApprove) {
         await apiCall(`/api/reviews/${review.id}/reply/approve`, "POST", {
           replyId: reply.id,
         });
@@ -504,35 +506,43 @@ export function ReviewDetailPanel({
                 {/* Keep primary actions next to the draft so they are not clipped */}
                 {reply.status === "draft" && (
                   <div className="mt-3 flex flex-wrap gap-2">
-                    <Button
-                      size="sm"
-                      onClick={handleApproveAndPublish}
-                      disabled={loading !== null}
-                      className="gap-1.5"
-                    >
-                      {loading === "publish" ? (
-                        <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden />
-                      ) : (
-                        <Send className="h-3.5 w-3.5" aria-hidden />
-                      )}
-                      {loading === "publish"
-                        ? "Publishing..."
-                        : "Approve & publish"}
-                    </Button>
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      onClick={handleApprove}
-                      disabled={loading !== null}
-                      className="gap-1.5"
-                    >
-                      {loading === "approve" ? (
-                        <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden />
-                      ) : (
-                        <CheckCircle2 className="h-3.5 w-3.5" aria-hidden />
-                      )}
-                      {loading === "approve" ? "Approving..." : "Approve only"}
-                    </Button>
+                    {canApprove ? (
+                      <>
+                        <Button
+                          size="sm"
+                          onClick={handleApproveAndPublish}
+                          disabled={loading !== null}
+                          className="gap-1.5"
+                        >
+                          {loading === "publish" ? (
+                            <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden />
+                          ) : (
+                            <Send className="h-3.5 w-3.5" aria-hidden />
+                          )}
+                          {loading === "publish"
+                            ? "Publishing..."
+                            : "Approve & publish"}
+                        </Button>
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          onClick={handleApprove}
+                          disabled={loading !== null}
+                          className="gap-1.5"
+                        >
+                          {loading === "approve" ? (
+                            <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden />
+                          ) : (
+                            <CheckCircle2 className="h-3.5 w-3.5" aria-hidden />
+                          )}
+                          {loading === "approve" ? "Approving..." : "Approve only"}
+                        </Button>
+                      </>
+                    ) : (
+                      <p className="w-full text-xs text-gray-500">
+                        An owner or admin needs to approve this draft before it can be published.
+                      </p>
+                    )}
                     <Button
                       size="sm"
                       variant="outline"
@@ -612,7 +622,7 @@ export function ReviewDetailPanel({
                   <div className="mt-3 flex flex-wrap gap-2">
                     <Button
                       size="sm"
-                      onClick={handleApproveAndPublish}
+                      onClick={handlePublish}
                       disabled={loading !== null}
                       className="gap-1.5"
                     >

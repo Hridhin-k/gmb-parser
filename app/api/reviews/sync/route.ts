@@ -7,6 +7,7 @@ import { logger } from "@/lib/logger";
 import { parseBody, syncBodySchema } from "@/lib/validation";
 import { toUserMessage, toStatusCode } from "@/lib/errors";
 import { checkRateLimit, SYNC_LOCATION_LIMIT, SYNC_ALL_LIMIT } from "@/lib/rate-limit";
+import { ensurePersonalWorkspace } from "@/lib/services/workspace";
 
 /**
  * POST /api/reviews/sync
@@ -31,17 +32,7 @@ export async function POST(request: Request) {
   }
 
   const admin = createAdminClient();
-
-  const { data: membership } = await admin
-    .from("grm_workspace_members")
-    .select("workspace_id")
-    .eq("user_id", user.id)
-    .limit(1)
-    .single();
-
-  if (!membership) {
-    return NextResponse.json({ error: "No workspace found" }, { status: 403 });
-  }
+  const membership = await ensurePersonalWorkspace(user);
 
   const { workspace_id: workspaceId } = membership;
 

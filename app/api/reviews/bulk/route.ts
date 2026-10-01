@@ -8,6 +8,7 @@ import { AppError, toUserMessage } from "@/lib/errors";
 import { logger } from "@/lib/logger";
 import { parseBody, bulkReviewsBodySchema } from "@/lib/validation";
 import { checkRateLimit, AI_GENERATE_LIMIT, PUBLISH_LIMIT } from "@/lib/rate-limit";
+import { assertCanApproveReplies, ensurePersonalWorkspace } from "@/lib/services/workspace";
 
 type BulkAction = "generate" | "approve" | "publish" | "discard";
 
@@ -52,17 +53,33 @@ export async function POST(request: Request) {
   }
 
   const admin = createAdminClient();
-  const { data: membership } = await admin
-    .from("grm_workspace_members")
-    .select("workspace_id")
-    .eq("user_id", user.id)
-    .limit(1)
-    .single();
-  if (!membership) {
-    return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+  const membership = await ensurePersonalWorkspace(user);
+  const workspaceId = membership.workspace_id;
+  const userId = user.id;
+  let canApprove: boolean | null = null;
+
+  async function userCanApprove(): Promise<boolean> {
+    if (canApprove !== null) return canApprove;
+    try {
+      await assertCanApproveReplies(userId, workspaceId);
+      canApprove = true;
+    } catch (error) {
+      if (error instanceof AppError && error.statusCode === 403) {
+        canApprove = false;
+      } else {
+        throw error;
+      }
+    }
+    return canApprove;
   }
 
-  const workspaceId = membership.workspace_id;
+  if (body.action === "approve" && !(await userCanApprove())) {
+    return NextResponse.json(
+      { error: "Only an owner or admin can approve replies." },
+      { status: 403 }
+    );
+  }
+
   const results: Array<{ reviewId: string; ok: boolean; error?: string }> = [];
 
   for (const reviewId of body.reviewIds) {
@@ -116,6 +133,14 @@ export async function POST(request: Request) {
 
       if (body.action === "publish") {
         if (reply.status === "draft") {
+          if (!(await userCanApprove())) {
+            results.push({
+              reviewId,
+              ok: false,
+              error: "Only an owner or admin can approve replies.",
+            });
+            continue;
+          }
           await admin
             .from("grm_review_replies")
             .update({

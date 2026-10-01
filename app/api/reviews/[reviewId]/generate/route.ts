@@ -6,6 +6,7 @@ import { AppError } from "@/lib/errors";
 import { logger } from "@/lib/logger";
 import { validateId } from "@/lib/validation";
 import { checkRateLimit, AI_GENERATE_LIMIT } from "@/lib/rate-limit";
+import { ensurePersonalWorkspace } from "@/lib/services/workspace";
 
 interface RouteParams {
   params: Promise<{ reviewId: string }>;
@@ -40,14 +41,7 @@ export async function POST(_request: Request, { params }: RouteParams) {
   }
 
   const admin = createAdminClient();
-
-  const { data: membership } = await admin
-    .from("grm_workspace_members")
-    .select("workspace_id")
-    .eq("user_id", user.id)
-    .limit(1)
-    .single();
-  if (!membership) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+  const membership = await ensurePersonalWorkspace(user);
 
   const { data: review } = await admin
     .from("grm_reviews")

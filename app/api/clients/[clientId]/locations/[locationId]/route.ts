@@ -6,6 +6,7 @@ import { AuditService } from "@/lib/services/audit";
 import { AppError } from "@/lib/errors";
 import { logger } from "@/lib/logger";
 import { validateId } from "@/lib/validation";
+import { ensurePersonalWorkspace } from "@/lib/services/workspace";
 
 interface RouteParams {
   params: Promise<{ clientId: string; locationId: string }>;
@@ -35,16 +36,7 @@ export async function PUT(_request: Request, { params }: RouteParams) {
   }
 
   const admin = createAdminClient();
-  const { data: membership } = await admin
-    .from("grm_workspace_members")
-    .select("workspace_id")
-    .eq("user_id", user.id)
-    .limit(1)
-    .single();
-
-  if (!membership) {
-    return NextResponse.json({ error: "Forbidden" }, { status: 403 });
-  }
+  const membership = await ensurePersonalWorkspace(user);
 
   try {
     await GoogleBusinessProfileService.connectLocationToClient(
@@ -100,16 +92,7 @@ export async function DELETE(_request: Request, { params }: RouteParams) {
   }
 
   const admin = createAdminClient();
-  const { data: membership } = await admin
-    .from("grm_workspace_members")
-    .select("workspace_id")
-    .eq("user_id", user.id)
-    .limit(1)
-    .single();
-
-  if (!membership) {
-    return NextResponse.json({ error: "Forbidden" }, { status: 403 });
-  }
+  const membership = await ensurePersonalWorkspace(user);
 
   try {
     await GoogleBusinessProfileService.disconnectLocation(locationId, membership.workspace_id);

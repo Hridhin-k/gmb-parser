@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { ensurePersonalWorkspace } from "@/lib/services/workspace";
 import { GoogleBusinessProfileService } from "@/lib/services/google-business-profile";
 import { AuditService } from "@/lib/services/audit";
 import { logger } from "@/lib/logger";
@@ -32,16 +33,7 @@ export async function POST(request: Request) {
   }
 
   const admin = createAdminClient();
-  const { data: membership } = await admin
-    .from("grm_workspace_members")
-    .select("workspace_id")
-    .eq("user_id", user.id)
-    .limit(1)
-    .single();
-
-  if (!membership) {
-    return NextResponse.json({ error: "No workspace found" }, { status: 403 });
-  }
+  const membership = await ensurePersonalWorkspace(user);
 
   try {
     const client = await GoogleBusinessProfileService.createClient(

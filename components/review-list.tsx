@@ -46,6 +46,7 @@ interface ReplyItem {
 interface ReviewListProps {
   reviews: ReviewItem[];
   replies: Record<string, ReplyItem>;
+  canApprove: boolean;
 }
 
 type BulkAction = "generate" | "approve" | "publish" | "discard";
@@ -104,7 +105,7 @@ function ReplyStatusPill({ status, source }: { status: string; source?: string }
   );
 }
 
-export function ReviewList({ reviews, replies }: ReviewListProps) {
+export function ReviewList({ reviews, replies, canApprove }: ReviewListProps) {
   const router = useRouter();
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [checked, setChecked] = useState<Record<string, boolean>>({});
@@ -192,20 +193,26 @@ export function ReviewList({ reviews, replies }: ReviewListProps) {
             )}
             AI draft
           </Button>
-          <Button
-            size="xs"
-            variant="outline"
-            disabled={selectedIds.length === 0 || bulkLoading !== null}
-            onClick={() => runBulk("approve")}
-          >
-            Approve
-          </Button>
+          {canApprove ? (
+            <Button
+              size="xs"
+              variant="outline"
+              disabled={selectedIds.length === 0 || bulkLoading !== null}
+              onClick={() => runBulk("approve")}
+            >
+              Approve
+            </Button>
+          ) : null}
           <Button
             size="xs"
             disabled={selectedIds.length === 0 || bulkLoading !== null}
             onClick={() => runBulk("publish")}
           >
-            {bulkLoading === "publish" ? "Publishing…" : "Approve & publish"}
+            {bulkLoading === "publish"
+              ? "Publishing…"
+              : canApprove
+                ? "Approve & publish"
+                : "Publish"}
           </Button>
           <Button
             size="xs"
@@ -342,6 +349,7 @@ export function ReviewList({ reviews, replies }: ReviewListProps) {
             <ReviewDetailPanel
               review={selectedReview}
               reply={selectedReply}
+              canApprove={canApprove}
               onClose={() => setSelectedId(null)}
             />
           </div>

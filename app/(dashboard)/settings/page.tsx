@@ -1,8 +1,9 @@
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { ensurePersonalWorkspace, getMemberRole, getWorkspaceRoster } from "@/lib/services/workspace";
 import { PageHeader } from "@/components/page-header";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { GoogleConnectionCard } from "@/components/google-connection-card";
+import { WorkspaceMembersCard } from "@/components/workspace-members-card";
 
 const ERROR_MESSAGES: Record<string, string> = {
   access_denied:
@@ -31,37 +32,24 @@ export default async function SettingsPage({ searchParams }: SettingsPageProps) 
     data: { user },
   } = await supabase.auth.getUser();
 
-  // Get the user's workspace membership
   const admin = createAdminClient();
-  const { data: membership } = await admin
-    .from("grm_workspace_members")
-    .select("workspace_id")
-    .eq("user_id", user!.id)
-    .limit(1)
-    .single();
+  const membership = await ensurePersonalWorkspace(user!);
+  const [role, roster] = await Promise.all([
+    getMemberRole(user!.id, membership.workspace_id),
+    getWorkspaceRoster(membership.workspace_id),
+  ]);
 
-  // Fetch connections for the workspace (safe — no token columns)
-  let connections: Array<{
-    id: string;
-    google_email: string;
-    status: string;
-    created_at: string;
-    last_refreshed_at: string | null;
-  }> = [];
+  const { data } = await admin
+    .from("grm_google_connections")
+    .select("id, google_email, status, created_at, last_refreshed_at")
+    .eq("workspace_id", membership.workspace_id)
+    .neq("status", "revoked")
+    .order("created_at", { ascending: false });
 
-  if (membership) {
-    const { data } = await admin
-      .from("grm_google_connections")
-      .select("id, google_email, status, created_at, last_refreshed_at")
-      .eq("workspace_id", membership.workspace_id)
-      .neq("status", "revoked")
-      .order("created_at", { ascending: false });
-
-    connections = (data ?? []).map((c) => ({
-      ...c,
-      status: c.status as string,
-    }));
-  }
+  const connections = (data ?? []).map((c) => ({
+    ...c,
+    status: c.status as string,
+  }));
 
   // Parse search params for post-OAuth redirect messages
   const googleError = typeof params.google_error === "string" ? params.google_error : null;
@@ -84,18 +72,13 @@ export default async function SettingsPage({ searchParams }: SettingsPageProps) 
         initialSuccess={googleConnected}
       />
 
-      <Card className="border-gray-200 shadow-none">
-        <CardHeader>
-          <CardTitle className="text-sm font-medium text-gray-700">
-            Workspace
-          </CardTitle>
-        </CardHeader>
-        <CardContent>
-          <p className="text-sm text-gray-500">
-            Workspace details and member management will be available here.
-          </p>
-        </CardContent>
-      </Card>
+      <WorkspaceMembersCard
+        workspaceName={roster.name}
+        currentUserId={user!.id}
+        canInvite={role === "owner" || role === "admin"}
+        members={roster.members}
+        invites={roster.invites}
+      />
     </div>
   );
 }

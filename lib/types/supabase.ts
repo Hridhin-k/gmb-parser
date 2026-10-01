@@ -613,8 +613,50 @@ export type Database = {
           },
         ]
       }
+      grm_workspace_invites: {
+        Row: {
+          accepted_at: string | null
+          created_at: string
+          email: string
+          id: string
+          invited_by: string
+          role: Database["public"]["Enums"]["grm_member_role"]
+          status: string
+          workspace_id: string
+        }
+        Insert: {
+          accepted_at?: string | null
+          created_at?: string
+          email: string
+          id?: string
+          invited_by: string
+          role?: Database["public"]["Enums"]["grm_member_role"]
+          status?: string
+          workspace_id: string
+        }
+        Update: {
+          accepted_at?: string | null
+          created_at?: string
+          email?: string
+          id?: string
+          invited_by?: string
+          role?: Database["public"]["Enums"]["grm_member_role"]
+          status?: string
+          workspace_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "grm_workspace_invites_workspace_id_fkey"
+            columns: ["workspace_id"]
+            isOneToOne: false
+            referencedRelation: "grm_workspaces"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       grm_workspace_members: {
         Row: {
+          active: boolean
           created_at: string
           id: string
           invited_by: string | null
@@ -624,6 +666,7 @@ export type Database = {
           workspace_id: string
         }
         Insert: {
+          active?: boolean
           created_at?: string
           id?: string
           invited_by?: string | null
@@ -633,6 +676,7 @@ export type Database = {
           workspace_id: string
         }
         Update: {
+          active?: boolean
           created_at?: string
           id?: string
           invited_by?: string | null
@@ -712,6 +756,7 @@ export type Database = {
 export type GrmTables = Database["public"]["Tables"]
 
 export type GrmWorkspace        = GrmTables["grm_workspaces"]["Row"]
+export type GrmWorkspaceInvite  = GrmTables["grm_workspace_invites"]["Row"]
 export type GrmWorkspaceMember  = GrmTables["grm_workspace_members"]["Row"]
 export type GrmClient           = GrmTables["grm_clients"]["Row"]
 export type GrmGoogleConnection = GrmTables["grm_google_connections"]["Row"]

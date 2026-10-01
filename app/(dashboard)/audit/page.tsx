@@ -1,5 +1,6 @@
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { ensurePersonalWorkspace } from "@/lib/services/workspace";
 import { PageHeader } from "@/components/page-header";
 import { EmptyState } from "@/components/empty-state";
 import { Badge } from "@/components/ui/badge";
@@ -105,25 +106,7 @@ export default async function AuditPage({ searchParams }: AuditPageProps) {
   const { data: { user } } = await supabase.auth.getUser();
 
   const admin = createAdminClient();
-  const { data: membership } = await admin
-    .from("grm_workspace_members")
-    .select("workspace_id")
-    .eq("user_id", user!.id)
-    .limit(1)
-    .single();
-
-  if (!membership) {
-    return (
-      <div className="space-y-6">
-        <PageHeader title="Audit Log" />
-        <EmptyState
-          icon={ClipboardList}
-          title="No workspace found"
-          description="Contact support to set up your workspace."
-        />
-      </div>
-    );
-  }
+  const membership = await ensurePersonalWorkspace(user!);
 
   const { workspace_id: workspaceId } = membership;
 

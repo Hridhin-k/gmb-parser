@@ -1,6 +1,7 @@
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { getDashboardData } from "@/lib/services/dashboard";
+import { ensurePersonalWorkspace, canApproveReplies, getMemberRole } from "@/lib/services/workspace";
 import { PageHeader } from "@/components/page-header";
 import { EmptyState } from "@/components/empty-state";
 import { SyncButton } from "@/components/sync-button";
@@ -78,25 +79,10 @@ export default async function ReviewsPage({ searchParams }: ReviewsPageProps) {
   } = await supabase.auth.getUser();
 
   const admin = createAdminClient();
-  const { data: membership } = await admin
-    .from("grm_workspace_members")
-    .select("workspace_id")
-    .eq("user_id", user!.id)
-    .limit(1)
-    .single();
-
-  if (!membership) {
-    return (
-      <div className="space-y-6">
-        <PageHeader title="Reviews" />
-        <EmptyState
-          icon={MessageSquareText}
-          title="No workspace found"
-          description="Contact support to set up your workspace."
-        />
-      </div>
-    );
-  }
+  const membership = await ensurePersonalWorkspace(user!);
+  const canApprove = canApproveReplies(
+    await getMemberRole(user!.id, membership.workspace_id)
+  );
 
   const filterParam = [
     "all",
@@ -218,7 +204,11 @@ export default async function ReviewsPage({ searchParams }: ReviewsPageProps) {
           <p className="text-[12px] tabular-nums text-gray-400">
             {data.totalReviewCount} matching
           </p>
-          <ReviewList reviews={data.reviews} replies={data.replies} />
+          <ReviewList
+            reviews={data.reviews}
+            replies={data.replies}
+            canApprove={canApprove}
+          />
           {totalPages > 1 && (
             <PaginationBar
               currentPage={currentPage}

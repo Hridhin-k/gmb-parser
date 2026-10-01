@@ -13,3 +13,4 @@ export {
 } from "./unassigned-client";
 export { LocationInsightService } from "./location-insights";
 export { getDashboardData } from "./dashboard";
+export { ensurePersonalWorkspace } from "./workspace";

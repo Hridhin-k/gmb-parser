@@ -1,6 +1,7 @@
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { GoogleBusinessProfileService } from "@/lib/services/google-business-profile";
+import { ensurePersonalWorkspace } from "@/lib/services/workspace";
 import { PageHeader } from "@/components/page-header";
 import { EmptyState } from "@/components/empty-state";
 import { CreateClientDialog } from "@/components/create-client-dialog";
@@ -17,25 +18,7 @@ export default async function ClientsPage() {
   } = await supabase.auth.getUser();
 
   const admin = createAdminClient();
-  const { data: membership } = await admin
-    .from("grm_workspace_members")
-    .select("workspace_id")
-    .eq("user_id", user!.id)
-    .limit(1)
-    .single();
-
-  if (!membership) {
-    return (
-      <div className="space-y-6">
-        <PageHeader title="Clients" />
-        <EmptyState
-          icon={Building2}
-          title="No workspace found"
-          description="Contact your administrator to be added to a workspace."
-        />
-      </div>
-    );
-  }
+  const membership = await ensurePersonalWorkspace(user!);
 
   const [{ data: connections }, clients, unassignedLocations] = await Promise.all([
     admin
