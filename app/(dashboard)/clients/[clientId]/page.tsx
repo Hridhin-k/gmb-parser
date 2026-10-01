@@ -67,11 +67,11 @@ export default async function ClientDetailPage({
   const connectedLocations = connectedLocationsRaw.data ?? [];
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-10">
       <div className="flex items-center gap-2">
         <Link
           href="/clients"
-          className="flex items-center gap-1 text-sm text-gray-500 hover:text-gray-700"
+          className="flex items-center gap-1 text-sm font-medium text-[#18161a] hover:text-[#18161a]"
         >
           <ArrowLeft className="h-3.5 w-3.5" />
           Clients
@@ -84,7 +84,7 @@ export default async function ClientDetailPage({
       >
         <Link
           href={`/reviews?client=${clientId}`}
-          className="inline-flex h-7 items-center gap-1.5 rounded-lg border border-border bg-background px-2.5 text-[0.8rem] font-medium hover:bg-muted"
+          className="inline-flex h-10 items-center gap-1.5 rounded-full border border-[#e4e2de] bg-white px-4 text-sm font-semibold text-[#18161a] hover:border-[#18161a]"
         >
           <MessageSquareText className="h-3.5 w-3.5" />
           View reviews
@@ -92,7 +92,7 @@ export default async function ClientDetailPage({
       </PageHeader>
 
       {connectedLocations.length === 0 && (
-        <div className="rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
+        <div className="rounded-[20px] border border-[#e4e2de] bg-[#f3f1ee] px-5 py-4 text-sm text-[#18161a]">
           No locations on this client yet. On the{" "}
           <Link href="/clients" className="font-medium underline">
             Clients

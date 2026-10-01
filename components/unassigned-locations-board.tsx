@@ -93,13 +93,16 @@ export function UnassignedLocationsBoard({
   }
 
   return (
-    <div className="space-y-3 rounded-lg border border-gray-200 bg-white p-4">
+    <div className="space-y-4 rounded-[20px] border border-[#e4e2de] bg-white p-5">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
-          <p className="text-sm font-medium text-gray-900">
+          <p
+            className="text-[22px] leading-[1.3] tracking-[-0.02em] text-[#18161a]"
+            style={{ fontFamily: "var(--font-plus-jakarta), sans-serif" }}
+          >
             Unassigned Google locations
           </p>
-          <p className="mt-0.5 text-xs text-gray-500">
+          <p className="mt-1 text-sm font-light text-[#898b91]">
             Sync pulls every profile you manage into this pool. Create a client
             for each business, then assign its location(s) here.
           </p>
@@ -131,7 +134,7 @@ export function UnassignedLocationsBoard({
       )}
 
       {locations.length === 0 ? (
-        <div className="flex flex-col items-center justify-center rounded-md border border-dashed border-gray-200 py-8 text-center">
+        <div className="flex flex-col items-center justify-center rounded-[20px] border border-[#e4e2de] py-10 text-center">
           <MapPin className="h-7 w-7 text-gray-300" />
           <p className="mt-2 text-sm font-medium text-gray-700">
             No unassigned locations
@@ -168,7 +171,7 @@ export function UnassignedLocationsBoard({
                       [loc.id]: e.target.value,
                     }))
                   }
-                  className="h-8 rounded-md border border-gray-200 bg-white px-2 text-[13px] text-gray-700"
+                  className="h-10 rounded-full border border-[#e4e2de] bg-white px-3 text-sm text-[#18161a]"
                   aria-label={`Assign ${loc.location_title} to client`}
                   disabled={clients.length === 0}
                 >

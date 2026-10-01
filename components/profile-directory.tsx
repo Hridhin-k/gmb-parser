@@ -5,6 +5,7 @@ import { useEffect, useState, useTransition } from "react";
 import { cn } from "@/lib/utils";
 import { Star, Search, AlertCircle, ChevronLeft, ChevronRight } from "lucide-react";
 import type { ProfileRow } from "@/lib/services/dashboard";
+import { ratingStarClass, ratingTextClass } from "@/lib/ui/rating-color";
 
 const SORT_OPTIONS = [
   { key: "attention", label: "Needs attention" },
@@ -80,10 +81,14 @@ export function ProfileDirectory({
     >
       <div className="flex flex-wrap items-end justify-between gap-2">
         <div>
-          <h2 id="profiles-heading" className="text-sm font-semibold text-gray-900">
+          <h2
+            id="profiles-heading"
+            className="text-[22px] leading-[1.3] tracking-[-0.02em] text-[#18161a]"
+            style={{ fontFamily: "var(--font-plus-jakarta), sans-serif" }}
+          >
             Profiles
           </h2>
-          <p className="text-[12px] text-gray-500">
+          <p className="text-sm font-light text-[#898b91]">
             {total.toLocaleString()} managed · search & sort · open one for AI
             insight + inbox
           </p>
@@ -101,7 +106,7 @@ export function ProfileDirectory({
             value={q}
             onChange={(e) => setQ(e.target.value)}
             placeholder="Search profiles…"
-            className="h-8 w-full rounded-md border border-gray-200 bg-white pl-8 pr-3 text-[13px] text-gray-700 placeholder:text-gray-400 focus:border-ring focus:outline-none focus:ring-1 focus:ring-ring"
+            className="h-10 w-full rounded-full border border-[#e4e2de] bg-white pl-9 pr-4 text-sm text-[#18161a] placeholder:text-[#898b91] focus:border-[#18161a] focus:outline-none focus:ring-2 focus:ring-[#f3f1ee]"
             aria-label="Search profiles by name"
           />
         </div>
@@ -113,7 +118,7 @@ export function ProfileDirectory({
               params.delete("pp");
             })
           }
-          className="h-8 rounded-md border border-gray-200 bg-white px-2.5 text-[13px] text-gray-700 focus:border-ring focus:outline-none focus:ring-1 focus:ring-ring"
+          className="h-10 rounded-full border border-[#e4e2de] bg-white px-4 text-sm text-[#18161a] focus:border-[#18161a] focus:outline-none focus:ring-2 focus:ring-[#f3f1ee]"
           aria-label="Sort profiles"
         >
           {SORT_OPTIONS.map((o) => (
@@ -124,10 +129,10 @@ export function ProfileDirectory({
         </select>
       </div>
 
-      <div className="overflow-hidden rounded-lg border border-gray-200 bg-white">
+      <div className="overflow-hidden rounded-[20px] border border-[#e4e2de] bg-white">
         <div className="max-h-[min(420px,50vh)] overflow-auto">
           <table className="w-full text-left text-[13px]">
-            <thead className="sticky top-0 z-10 border-b border-gray-100 bg-gray-50/95 text-[11px] uppercase tracking-wider text-gray-400 backdrop-blur">
+            <thead className="sticky top-0 z-10 border-b border-[#f3f1ee] bg-[#fafaf8] text-[11px] font-medium uppercase tracking-[0.06em] text-[#8a877f]">
               <tr>
                 <th className="px-3 py-2 font-medium">Profile</th>
                 <th className="px-2 py-2 font-medium tabular-nums">Avg</th>
@@ -153,10 +158,10 @@ export function ProfileDirectory({
                     <tr
                       key={p.id}
                       className={cn(
-                        "cursor-pointer border-b border-gray-50 transition-colors last:border-0",
+                        "cursor-pointer border-b border-[#f3f1ee] transition-colors last:border-0",
                         selected
-                          ? "bg-gray-900 text-white"
-                          : "hover:bg-gray-50"
+                          ? "bg-[#f3f1ee] text-[#18161a]"
+                          : "hover:bg-[#f3f1ee]/40"
                       )}
                       onClick={() => selectProfile(p.id)}
                       onKeyDown={(e) => {
@@ -172,7 +177,7 @@ export function ProfileDirectory({
                         <p
                           className={cn(
                             "truncate font-medium",
-                            selected ? "text-white" : "text-gray-900"
+                            "text-[#18161a]"
                           )}
                         >
                           {p.title}
@@ -180,21 +185,19 @@ export function ProfileDirectory({
                         <p
                           className={cn(
                             "truncate text-[11px]",
-                            selected ? "text-gray-300" : "text-gray-400"
+                            "text-[#898b91]"
                           )}
                         >
                           {p.clientName ?? "—"}
                         </p>
                       </td>
                       <td className="px-2 py-2 tabular-nums">
-                        <span className="inline-flex items-center gap-0.5">
+                        <span className={cn("inline-flex items-center gap-0.5", p.avgRating != null && ratingTextClass(p.avgRating))}>
                           {p.avgRating != null ? p.avgRating.toFixed(1) : "—"}
                           <Star
                             className={cn(
                               "h-3 w-3",
-                              selected
-                                ? "fill-amber-300 text-amber-300"
-                                : "fill-amber-400 text-amber-400"
+                              p.avgRating != null ? ratingStarClass(p.avgRating) : "fill-[#e4e2de] text-[#e4e2de]"
                             )}
                             aria-hidden
                           />
@@ -206,7 +209,7 @@ export function ProfileDirectory({
                           <span
                             className={cn(
                               "inline-flex items-center gap-0.5 font-medium",
-                              selected ? "text-orange-300" : "text-orange-600"
+                              "text-[#18161a]"
                             )}
                           >
                             <AlertCircle className="h-3 w-3" aria-hidden />
@@ -215,7 +218,7 @@ export function ProfileDirectory({
                         ) : (
                           <span
                             className={
-                              selected ? "text-gray-400" : "text-gray-300"
+                              "text-[#898b91]"
                             }
                           >
                             0
@@ -234,7 +237,7 @@ export function ProfileDirectory({
                         ) : (
                           <span
                             className={
-                              selected ? "text-gray-400" : "text-gray-300"
+                              "text-[#898b91]"
                             }
                           >
                             0

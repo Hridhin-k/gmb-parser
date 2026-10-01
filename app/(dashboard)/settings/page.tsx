@@ -60,7 +60,7 @@ export default async function SettingsPage({ searchParams }: SettingsPageProps) 
     : null;
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-10">
       <PageHeader
         title="Settings"
         description="Manage your Google account connections and workspace settings."

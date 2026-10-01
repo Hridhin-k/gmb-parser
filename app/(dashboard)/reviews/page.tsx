@@ -148,7 +148,7 @@ export default async function ReviewsPage({ searchParams }: ReviewsPageProps) {
   }
 
   return (
-    <div className="space-y-5">
+    <div className="space-y-10">
       <PageHeader
         title="Reviews"
         description="Full review inbox with the same filters and actions as the dashboard."

@@ -14,12 +14,13 @@ import {
 import { Button } from "@/components/ui/button";
 import type { ProfileRow } from "@/lib/services/dashboard";
 import type { LocationInsight } from "@/lib/services/location-insights";
+import { ratingStarClass, ratingTextClass } from "@/lib/ui/rating-color";
 
 const SENTIMENT_STYLES: Record<string, string> = {
-  positive: "bg-emerald-50 text-emerald-700 border-emerald-100",
-  mixed: "bg-amber-50 text-amber-800 border-amber-100",
-  negative: "bg-red-50 text-red-700 border-red-100",
-  neutral: "bg-gray-50 text-gray-600 border-gray-100",
+  positive: "bg-[#f3f1ee] text-[#18161a] border-[#e4e2de]",
+  mixed: "bg-[#f3f1ee] text-[#18161a] border-[#e4e2de]",
+  negative: "bg-[#f6eee9] text-[#9a3412] border-[#e4e2de]",
+  neutral: "bg-[#f3f1ee] text-[#18161a] border-[#e4e2de]",
 };
 
 interface ProfileInsightPanelProps {
@@ -84,17 +85,18 @@ export function ProfileInsightPanel({
 
   return (
     <section
-      className="rounded-lg border border-gray-200 bg-white p-4"
+      className="rounded-[20px] border border-[#e4e2de] bg-white p-5"
       aria-labelledby="selected-profile-heading"
     >
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0">
-          <p className="text-[11px] text-gray-400 truncate">
+          <p className="truncate text-[12px] font-medium uppercase tracking-[0.06em] text-[#8a877f]">
             {profile.clientName ?? "Profile"}
           </p>
           <h2
             id="selected-profile-heading"
-            className="truncate text-[15px] font-semibold text-gray-900"
+            className="mt-1 truncate text-[22px] leading-[1.3] tracking-[-0.02em] text-[#18161a]"
+            style={{ fontFamily: "var(--font-plus-jakarta), sans-serif" }}
           >
             {profile.title}
           </h2>
@@ -102,7 +104,7 @@ export function ProfileInsightPanel({
         <div className="flex shrink-0 items-center gap-2">
           <span
             className={cn(
-              "rounded-md border px-2 py-0.5 text-[11px] font-medium capitalize",
+              "rounded-full border px-2.5 py-0.5 text-[11px] font-semibold capitalize",
               SENTIMENT_STYLES[sentiment] ?? SENTIMENT_STYLES.neutral
             )}
           >
@@ -121,8 +123,16 @@ export function ProfileInsightPanel({
 
       <div className="mt-2 flex flex-wrap items-center gap-3 text-[12px] text-gray-600">
         <span className="inline-flex items-center gap-1">
-          <Star className="h-3.5 w-3.5 fill-amber-400 text-amber-400" aria-hidden />
-          {profile.avgRating != null ? profile.avgRating.toFixed(1) : "—"}
+          <Star
+            className={cn(
+              "h-3.5 w-3.5",
+              profile.avgRating != null ? ratingStarClass(profile.avgRating) : "fill-[#e4e2de] text-[#e4e2de]"
+            )}
+            aria-hidden
+          />
+          <span className={profile.avgRating != null ? ratingTextClass(profile.avgRating) : undefined}>
+            {profile.avgRating != null ? profile.avgRating.toFixed(1) : "—"}
+          </span>
         </span>
         <span>{profile.reviewCount} reviews</span>
         {profile.unanswered > 0 && (

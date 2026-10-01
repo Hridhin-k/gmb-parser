@@ -53,7 +53,7 @@ export function UnlinkedLocationsPanel({
   if (locations.length === 0) return null;
 
   return (
-    <div className="rounded-lg border border-blue-200 bg-blue-50">
+    <div className="rounded-[20px] border border-[#e4e2de] bg-[#f3f1ee]">
       <button
         type="button"
         className="flex w-full items-center justify-between px-4 py-3 text-left"
@@ -61,24 +61,24 @@ export function UnlinkedLocationsPanel({
         aria-expanded={expanded}
       >
         <div>
-          <p className="text-sm font-medium text-blue-900">
+          <p className="text-sm font-medium text-[#18161a]">
             {locations.length} unassigned location
             {locations.length !== 1 ? "s" : ""} you can add here
           </p>
-          <p className="text-xs text-blue-700">
+          <p className="text-xs text-[#898b91]">
             Assign these Google profiles to this client. A client can have
             multiple locations.
           </p>
         </div>
         {expanded ? (
-          <ChevronUp className="h-4 w-4 text-blue-700" />
+          <ChevronUp className="h-4 w-4 text-[#18161a]" />
         ) : (
-          <ChevronDown className="h-4 w-4 text-blue-700" />
+          <ChevronDown className="h-4 w-4 text-[#18161a]" />
         )}
       </button>
 
       {expanded && (
-        <div className="border-t border-blue-200 px-4 pb-4 pt-2 space-y-2">
+        <div className="space-y-2 border-t border-[#e4e2de] px-4 pb-4 pt-2">
           {error && (
             <p className="text-sm text-red-600">{error}</p>
           )}

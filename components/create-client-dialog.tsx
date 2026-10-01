@@ -84,7 +84,7 @@ export function CreateClientDialog() {
               onChange={(e) => setName(e.target.value)}
               placeholder="e.g. Kalyan Restaurants"
               required
-              className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm shadow-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+              className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm shadow-sm focus:border-[#18161a] focus:outline-none focus:ring-2 focus:ring-[#18161a]/10"
             />
           </div>
           <div className="space-y-1">
@@ -100,7 +100,7 @@ export function CreateClientDialog() {
               onChange={(e) => setNotes(e.target.value)}
               placeholder="Optional notes about this client"
               rows={3}
-              className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm shadow-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+              className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm shadow-sm focus:border-[#18161a] focus:outline-none focus:ring-2 focus:ring-[#18161a]/10"
             />
           </div>
           {error && <p className="text-sm text-red-600">{error}</p>}

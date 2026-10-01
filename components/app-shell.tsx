@@ -5,6 +5,7 @@ import { usePathname, useRouter } from "next/navigation";
 import { useState, useEffect, useCallback } from "react";
 import type { User } from "@supabase/supabase-js";
 import { cn } from "@/lib/utils";
+import { createClient } from "@/lib/supabase/client";
 import {
   LayoutDashboard,
   Building2,
@@ -50,6 +51,14 @@ export function AppShell({
   const router = useRouter();
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [switching, setSwitching] = useState(false);
+  const [signingOut, setSigningOut] = useState(false);
+
+  async function signOut() {
+    setSigningOut(true);
+    const supabase = createClient();
+    await supabase.auth.signOut();
+    window.location.assign("/login");
+  }
   const initials = (user.email ?? "U").slice(0, 2).toUpperCase();
 
   // Close sidebar on Escape
@@ -76,9 +85,9 @@ export function AppShell({
       )}
 
       {/* Sidebar */}
-      <aside
+        <aside
         className={cn(
-          "fixed inset-y-0 left-0 z-50 flex w-52 flex-col border-r border-sidebar-border bg-sidebar transition-transform duration-150 ease-out lg:static lg:translate-x-0",
+          "fixed inset-y-0 left-0 z-50 flex w-60 flex-col border-r border-[#f3f1ee] bg-white transition-transform duration-150 ease-out lg:static lg:translate-x-0",
           sidebarOpen ? "translate-x-0" : "-translate-x-full"
         )}
         aria-label="Main navigation"
@@ -87,9 +96,10 @@ export function AppShell({
         <div className="flex h-12 shrink-0 items-center justify-between border-b border-sidebar-border px-4">
           <Link
             href="/dashboard"
-            className="flex items-center gap-1.5 text-[13px] font-semibold tracking-tight text-gray-900"
+            className="flex items-center gap-2 text-lg tracking-[-0.03em] text-[#18161a]"
+            style={{ fontFamily: "var(--font-plus-jakarta), sans-serif" }}
           >
-            <span className="flex h-5 w-5 items-center justify-center rounded bg-primary text-[10px] font-bold text-primary-foreground">
+            <span className="flex h-7 w-7 items-center justify-center rounded-full bg-[#4823ff] text-[11px] font-bold text-white">
               G
             </span>
             GRM
@@ -125,7 +135,7 @@ export function AppShell({
                     setSwitching(false);
                   }
                 }}
-                className="w-full truncate rounded-md border border-gray-200 bg-white px-2 py-1.5 text-[12px] text-gray-700"
+                className="w-full truncate rounded-full border border-[#e4e2de] bg-white px-3 py-2 text-sm text-[#18161a]"
               >
                 {workspaces.map((workspace) => (
                   <option key={workspace.id} value={workspace.id}>
@@ -135,7 +145,7 @@ export function AppShell({
               </select>
             </label>
           ) : (
-            <p className="truncate text-[12px] text-gray-500">{workspaceName}</p>
+            <p className="truncate text-sm font-medium text-[#18161a]">{workspaceName}</p>
           )}
         </div>
 
@@ -149,10 +159,10 @@ export function AppShell({
                 href={item.href}
                 onClick={() => setSidebarOpen(false)}
                 className={cn(
-                  "flex items-center gap-2 rounded-md px-2.5 py-[7px] text-[13px] font-medium transition-colors",
+                  "flex items-center gap-2 rounded-full px-3 py-2 text-[14px] font-medium transition-colors",
                   active
-                    ? "bg-sidebar-accent text-sidebar-accent-foreground"
-                    : "text-gray-600 hover:bg-gray-50 hover:text-gray-900"
+                    ? "bg-[#f3f1ee] text-[#4823ff]"
+                    : "text-[#18161a] hover:bg-[#f3f1ee]/60"
                 )}
                 aria-current={active ? "page" : undefined}
               >
@@ -165,8 +175,16 @@ export function AppShell({
 
         {/* User section */}
         <div className="border-t border-sidebar-border p-2">
+          <div className="mb-1 flex gap-3 px-2.5 text-xs text-[#898b91]">
+            <a href="/privacy" className="hover:text-[#4823ff]">
+              Privacy
+            </a>
+            <a href="/terms" className="hover:text-[#4823ff]">
+              Terms
+            </a>
+          </div>
           <DropdownMenu>
-            <DropdownMenuTrigger className="flex w-full items-center gap-2 rounded-md px-2.5 py-[7px] text-left text-[13px] text-gray-600 hover:bg-gray-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
+            <DropdownMenuTrigger className="flex w-full items-center gap-2 rounded-full px-2.5 py-2 text-left text-sm text-[#18161a] hover:bg-[#f3f1ee] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
               <Avatar className="h-5 w-5">
                 <AvatarFallback className="bg-primary text-[8px] font-medium text-primary-foreground">
                   {initials}
@@ -177,12 +195,13 @@ export function AppShell({
             <DropdownMenuContent align="start" side="top" className="w-44">
               <DropdownMenuItem
                 className="cursor-pointer text-[13px]"
-                onSelect={() => {
-                  router.push("/api/auth/signout");
+                disabled={signingOut}
+                onClick={() => {
+                  void signOut();
                 }}
               >
                 <LogOut className="mr-1.5 h-3.5 w-3.5" />
-                Sign out
+                {signingOut ? "Signing out…" : "Sign out"}
               </DropdownMenuItem>
             </DropdownMenuContent>
           </DropdownMenu>
@@ -192,7 +211,7 @@ export function AppShell({
       {/* Main area */}
       <div className="flex flex-1 flex-col overflow-hidden">
         {/* Top header bar */}
-        <header className="flex h-11 shrink-0 items-center border-b border-border bg-white px-4 lg:px-6">
+        <header className="flex h-14 shrink-0 items-center border-b border-[#f3f1ee] bg-[#fafaf8] px-4 lg:hidden">
           <button
             className="mr-3 rounded p-1 text-gray-400 hover:text-gray-600 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring lg:hidden"
             onClick={() => setSidebarOpen(true)}
@@ -200,22 +219,12 @@ export function AppShell({
           >
             <Menu className="h-5 w-5" />
           </button>
-          {/* Breadcrumb-style page title from current route */}
-          <nav className="flex items-center gap-1 text-[13px] text-gray-500" aria-label="Breadcrumb">
-            {NAV_ITEMS.filter(
-              (item) => pathname === item.href || pathname.startsWith(item.href + "/")
-            ).map((item) => (
-              <span key={item.href} className="font-medium text-gray-700">
-                {item.label}
-              </span>
-            ))}
-          </nav>
           <div className="flex-1" />
         </header>
 
         {/* Page content */}
-        <main className="flex-1 overflow-y-auto" id="main-content">
-          <div className="mx-auto max-w-6xl px-4 py-5 lg:px-8 lg:py-6">
+        <main className="flex-1 overflow-y-auto bg-[#fafaf8]" id="main-content">
+          <div className="mx-auto max-w-[1200px] px-5 py-8 lg:px-8 lg:py-10">
             {children}
           </div>
         </main>

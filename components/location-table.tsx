@@ -98,7 +98,7 @@ export function LocationTable({
       )}
 
       {locations.length === 0 ? (
-        <div className="flex flex-col items-center justify-center rounded-lg border border-dashed border-gray-300 bg-white py-10 text-center">
+        <div className="flex flex-col items-center justify-center rounded-[20px] border border-[#e4e2de] bg-white py-12 text-center">
           <MapPin className="h-8 w-8 text-gray-300" />
           <p className="mt-2 text-sm font-medium text-gray-700">
             No locations on this client
@@ -108,23 +108,23 @@ export function LocationTable({
           </p>
         </div>
       ) : (
-        <div className="rounded-lg border border-gray-200 bg-white">
+        <div className="overflow-hidden rounded-[20px] border border-[#e4e2de] bg-white">
           <Table>
             <TableHeader>
-              <TableRow className="border-b border-gray-200 bg-gray-50">
-                <TableHead className="text-xs font-medium text-gray-500">
+              <TableRow className="border-b border-[#f3f1ee] bg-[#fafaf8]">
+                <TableHead className="text-[11px] font-medium uppercase tracking-[0.06em] text-[#8a877f]">
                   Business Name
                 </TableHead>
-                <TableHead className="text-xs font-medium text-gray-500">
+                <TableHead className="text-[11px] font-medium uppercase tracking-[0.06em] text-[#8a877f]">
                   Address
                 </TableHead>
-                <TableHead className="text-xs font-medium text-gray-500">
+                <TableHead className="text-[11px] font-medium uppercase tracking-[0.06em] text-[#8a877f]">
                   Google Location ID
                 </TableHead>
-                <TableHead className="text-xs font-medium text-gray-500">
+                <TableHead className="text-[11px] font-medium uppercase tracking-[0.06em] text-[#8a877f]">
                   Status
                 </TableHead>
-                <TableHead className="text-xs font-medium text-gray-500">
+                <TableHead className="text-[11px] font-medium uppercase tracking-[0.06em] text-[#8a877f]">
                   Last Synced
                 </TableHead>
                 <TableHead className="w-16" />

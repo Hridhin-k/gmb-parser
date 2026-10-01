@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { cn } from "@/lib/utils";
 import type { DashboardKpis } from "@/lib/services/dashboard";
+import { ratingBarClass, ratingTextClass } from "@/lib/ui/rating-color";
 import {
   MessageSquareText,
   AlertCircle,
@@ -8,7 +9,6 @@ import {
   Send,
   CheckCircle2,
   Star,
-  MapPin,
 } from "lucide-react";
 
 interface DashboardStatsProps {
@@ -32,15 +32,18 @@ function StatLink({
   return (
     <Link
       href={href}
-      className="rounded-lg border border-gray-200 bg-white px-3.5 py-3 shadow-none transition-colors hover:border-gray-300 hover:bg-gray-50/80"
+      className="rounded-[20px] border border-[#e4e2de] bg-white p-5 transition-colors hover:border-[#18161a]"
     >
       <div className="flex items-center justify-between gap-2">
-        <p className="text-[11px] font-medium uppercase tracking-wider text-gray-400">
+        <p className="text-[12px] font-medium uppercase tracking-[0.06em] text-[#8a877f]">
           {label}
         </p>
-        <Icon className={cn("h-4 w-4 opacity-60", tone)} aria-hidden />
+        <Icon className={cn("h-4 w-4 text-[#18161a]", tone)} aria-hidden />
       </div>
-      <p className="mt-1 text-xl font-semibold tabular-nums text-gray-900">
+      <p
+        className="mt-3 text-[31px] leading-none tracking-[-0.032em] text-[#18161a]"
+        style={{ fontFamily: "var(--font-plus-jakarta), sans-serif" }}
+      >
         {value}
       </p>
     </Link>
@@ -57,83 +60,78 @@ export function DashboardStats({
   );
 
   return (
-    <div className="space-y-3">
-      <div className="grid gap-2.5 sm:grid-cols-2 lg:grid-cols-4 xl:grid-cols-8">
-        <StatLink
-          href={`${basePath}?filter=all`}
-          label="Reviews"
-          value={kpis.totalReviews}
-          icon={MessageSquareText}
-          tone="text-blue-500"
-        />
+    <div className="space-y-5">
+      <div className="grid gap-5 sm:grid-cols-2 lg:grid-cols-4">
         <StatLink
           href={`${basePath}?filter=unanswered`}
           label="Needs reply"
           value={kpis.unanswered}
           icon={AlertCircle}
-          tone={kpis.unanswered > 0 ? "text-orange-500" : "text-green-500"}
-        />
-        <StatLink
-          href={`${basePath}#profiles`}
-          label="Profiles open"
-          value={kpis.profilesNeedingReply}
-          icon={MapPin}
-          tone={kpis.profilesNeedingReply > 0 ? "text-orange-500" : "text-gray-400"}
         />
         <StatLink
           href={`${basePath}?stars=negative`}
           label="Critical"
           value={kpis.criticalReviews}
           icon={AlertCircle}
-          tone={kpis.criticalReviews > 0 ? "text-red-500" : "text-gray-400"}
-        />
-        <StatLink
-          href={`${basePath}?filter=draft`}
-          label="Drafts"
-          value={kpis.drafts}
-          icon={Pencil}
-          tone="text-gray-500"
         />
         <StatLink
           href={`${basePath}?filter=approved`}
           label="Ready"
           value={kpis.approved}
           icon={Send}
-          tone="text-blue-600"
         />
         <StatLink
           href={`${basePath}?filter=failed`}
           label="Failed"
           value={kpis.failed}
           icon={AlertCircle}
-          tone={kpis.failed > 0 ? "text-red-500" : "text-gray-400"}
+        />
+      </div>
+
+      <div className="grid gap-5 sm:grid-cols-2 lg:grid-cols-4">
+        <StatLink
+          href={`${basePath}?filter=all`}
+          label="Reviews"
+          value={kpis.totalReviews}
+          icon={MessageSquareText}
+        />
+        <StatLink
+          href={`${basePath}?filter=draft`}
+          label="Drafts"
+          value={kpis.drafts}
+          icon={Pencil}
         />
         <StatLink
           href={`${basePath}?filter=published`}
           label="Published"
           value={kpis.published}
           icon={CheckCircle2}
-          tone="text-green-600"
         />
-        <div className="rounded-lg border border-gray-200 bg-white px-3.5 py-3">
-          <div className="flex items-center justify-between gap-2">
-            <p className="text-[11px] font-medium uppercase tracking-wider text-gray-400">
-              Avg / profiles
-            </p>
-            <Star className="h-4 w-4 text-amber-400 opacity-70" aria-hidden />
-          </div>
-          <p className="mt-1 text-xl font-semibold tabular-nums text-gray-900">
+        <div className="rounded-[20px] border border-[#e4e2de] bg-white p-5">
+          <p className="text-[12px] font-medium uppercase tracking-[0.06em] text-[#8a877f]">
+            Average
+          </p>
+          <p
+            className="mt-3 text-[31px] leading-none tracking-[-0.032em] text-[#18161a]"
+            style={{ fontFamily: "var(--font-plus-jakarta), sans-serif" }}
+          >
             {kpis.avgRating != null ? kpis.avgRating.toFixed(1) : "—"}
-            <span className="ml-1 text-sm font-normal text-gray-400">
-              · {kpis.locationsActive}
+            <span className="ml-2 text-base font-light text-[#898b91]">
+              {kpis.locationsActive} profiles
             </span>
           </p>
+          <Link
+            href={`${basePath}#profiles`}
+            className="mt-3 inline-block text-sm font-medium text-[#4823ff]"
+          >
+            {kpis.profilesNeedingReply} still open
+          </Link>
         </div>
       </div>
 
-      <div className="grid gap-3 lg:grid-cols-[1.2fr_1fr]">
-        <div className="rounded-lg border border-gray-200 bg-white px-4 py-3">
-          <p className="text-[12px] font-medium text-gray-700">
+      <div className="grid gap-5 lg:grid-cols-[1.2fr_1fr]">
+        <div className="rounded-[20px] border border-[#e4e2de] bg-white p-5">
+          <p className="text-[12px] font-medium uppercase tracking-[0.06em] text-[#8a877f]">
             Rating distribution
           </p>
           <div className="mt-3 space-y-1.5">
@@ -146,12 +144,12 @@ export function DashboardStats({
                   href={`${basePath}?rating=${star}`}
                   className="group flex items-center gap-2"
                 >
-                  <span className="w-6 text-right text-[12px] tabular-nums text-gray-500">
+                  <span className={cn("w-6 text-right text-[12px] tabular-nums", ratingTextClass(star))}>
                     {star}★
                   </span>
-                  <div className="h-2 flex-1 overflow-hidden rounded-full bg-gray-100">
+                  <div className="h-2 flex-1 overflow-hidden rounded-full bg-[#f3f1ee]">
                     <div
-                      className="h-full rounded-full bg-amber-400 transition-all group-hover:bg-amber-500"
+                      className={cn("h-full rounded-full transition-opacity group-hover:opacity-80", ratingBarClass(star))}
                       style={{ width: `${pct}%` }}
                     />
                   </div>
@@ -164,50 +162,52 @@ export function DashboardStats({
           </div>
         </div>
 
-        <div className="rounded-lg border border-gray-200 bg-white px-4 py-3">
-          <p className="text-[12px] font-medium text-gray-700">Recent volume</p>
+        <div className="rounded-[20px] border border-[#e4e2de] bg-white p-5">
+          <p className="text-[12px] font-medium uppercase tracking-[0.06em] text-[#8a877f]">
+            Recent volume
+          </p>
           <div className="mt-3 grid grid-cols-2 gap-3">
             <Link
               href={`${basePath}?period=7d`}
-              className="rounded-md bg-gray-50 px-3 py-2.5 hover:bg-gray-100"
+              className="rounded-[12px] bg-[#f3f1ee]/60 px-3 py-3 hover:bg-[#f3f1ee]"
             >
-              <p className="text-[11px] uppercase tracking-wider text-gray-400">
+              <p className="text-[11px] font-bold uppercase tracking-[0.08em] text-[#898b91]">
                 Last 7 days
               </p>
-              <p className="mt-0.5 text-lg font-semibold tabular-nums text-gray-900">
+              <p className="mt-1 text-[22px] leading-none tracking-[-0.02em] text-[#18161a]" style={{ fontFamily: "var(--font-plus-jakarta), sans-serif" }}>
                 {kpis.reviewsLast7d}
               </p>
             </Link>
             <Link
               href={`${basePath}?period=30d`}
-              className="rounded-md bg-gray-50 px-3 py-2.5 hover:bg-gray-100"
+              className="rounded-[12px] bg-[#f3f1ee]/60 px-3 py-3 hover:bg-[#f3f1ee]"
             >
-              <p className="text-[11px] uppercase tracking-wider text-gray-400">
+              <p className="text-[11px] font-bold uppercase tracking-[0.08em] text-[#898b91]">
                 Last 30 days
               </p>
-              <p className="mt-0.5 text-lg font-semibold tabular-nums text-gray-900">
+              <p className="mt-1 text-[22px] leading-none tracking-[-0.02em] text-[#18161a]" style={{ fontFamily: "var(--font-plus-jakarta), sans-serif" }}>
                 {kpis.reviewsLast30d}
               </p>
             </Link>
             <Link
               href={`${basePath}?stars=negative`}
-              className="rounded-md bg-red-50/70 px-3 py-2.5 hover:bg-red-50"
+              className="rounded-[12px] border border-[#e4e2de] px-3 py-3 hover:border-[#18161a]"
             >
-              <p className="text-[11px] uppercase tracking-wider text-red-400">
+              <p className="text-[11px] font-medium uppercase tracking-[0.06em] text-[#8a877f]">
                 Critical (1–2★)
               </p>
-              <p className="mt-0.5 text-lg font-semibold tabular-nums text-red-800">
+              <p className="mt-1 text-[22px] leading-none tracking-[-0.02em] text-[#18161a]" style={{ fontFamily: "var(--font-plus-jakarta), sans-serif" }}>
                 {kpis.ratingDistribution[1] + kpis.ratingDistribution[2]}
               </p>
             </Link>
             <Link
               href={`${basePath}?stars=positive`}
-              className="rounded-md bg-emerald-50/70 px-3 py-2.5 hover:bg-emerald-50"
+              className="rounded-[12px] border border-[#e4e2de] px-3 py-3 hover:border-[#18161a]"
             >
-              <p className="text-[11px] uppercase tracking-wider text-emerald-500">
+              <p className="text-[11px] font-medium uppercase tracking-[0.06em] text-[#8a877f]">
                 Positive (4–5★)
               </p>
-              <p className="mt-0.5 text-lg font-semibold tabular-nums text-emerald-800">
+              <p className="mt-1 text-[22px] leading-none tracking-[-0.02em] text-[#18161a]" style={{ fontFamily: "var(--font-plus-jakarta), sans-serif" }}>
                 {kpis.ratingDistribution[4] + kpis.ratingDistribution[5]}
               </p>
             </Link>

@@ -54,7 +54,7 @@ export function AuditLogFilters({
       <select
         value={currentAction}
         onChange={(e) => updateParam("action", e.target.value)}
-        className="h-8 rounded-md border border-gray-200 bg-white px-2.5 text-sm text-gray-700 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+        className="h-10 rounded-full border border-[#e4e2de] bg-white px-4 text-sm text-[#18161a] focus:border-[#18161a] focus:outline-none focus:ring-2 focus:ring-[#f3f1ee]"
         aria-label="Filter by action"
       >
         <option value="">All actions</option>
@@ -70,7 +70,7 @@ export function AuditLogFilters({
         <select
           value={currentEntity}
           onChange={(e) => updateParam("entity", e.target.value)}
-          className="h-8 rounded-md border border-gray-200 bg-white px-2.5 text-sm text-gray-700 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+          className="h-10 rounded-full border border-[#e4e2de] bg-white px-4 text-sm text-[#18161a] focus:border-[#18161a] focus:outline-none focus:ring-2 focus:ring-[#f3f1ee]"
           aria-label="Filter by entity type"
         >
           <option value="">All entities</option>
@@ -84,7 +84,7 @@ export function AuditLogFilters({
 
       {/* Date range */}
       <div className="flex items-center gap-1">
-        <label className="text-xs text-gray-500" htmlFor="audit-from">
+        <label className="text-xs font-medium text-[#898b91]" htmlFor="audit-from">
           From
         </label>
         <input
@@ -92,12 +92,12 @@ export function AuditLogFilters({
           type="date"
           value={currentFrom}
           onChange={(e) => updateParam("from", e.target.value)}
-          className="h-8 rounded-md border border-gray-200 bg-white px-2 text-sm text-gray-700 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+          className="h-10 rounded-full border border-[#e4e2de] bg-white px-3 text-sm text-[#18161a] focus:border-[#18161a] focus:outline-none focus:ring-2 focus:ring-[#f3f1ee]"
           aria-label="Filter from date"
         />
       </div>
       <div className="flex items-center gap-1">
-        <label className="text-xs text-gray-500" htmlFor="audit-to">
+        <label className="text-xs font-medium text-[#898b91]" htmlFor="audit-to">
           To
         </label>
         <input
@@ -105,7 +105,7 @@ export function AuditLogFilters({
           type="date"
           value={currentTo}
           onChange={(e) => updateParam("to", e.target.value)}
-          className="h-8 rounded-md border border-gray-200 bg-white px-2 text-sm text-gray-700 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+          className="h-10 rounded-full border border-[#e4e2de] bg-white px-3 text-sm text-[#18161a] focus:border-[#18161a] focus:outline-none focus:ring-2 focus:ring-[#f3f1ee]"
           aria-label="Filter to date"
         />
       </div>
@@ -115,7 +115,7 @@ export function AuditLogFilters({
         <button
           type="button"
           onClick={clearAll}
-          className="h-8 rounded-md px-2.5 text-xs text-gray-500 hover:text-gray-700 underline"
+          className="h-10 rounded-full px-3 text-sm font-medium text-[#18161a] hover:text-[#18161a]"
         >
           Clear filters
         </button>

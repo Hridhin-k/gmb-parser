@@ -7,8 +7,12 @@ import { createClient } from "@/lib/supabase/client";
 export function LoginForm() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [acceptedTerms, setAcceptedTerms] = useState(false);
+  const [acceptedAi, setAcceptedAi] = useState(false);
+  const canContinue = acceptedTerms && acceptedAi && !loading;
 
   async function handleSignIn() {
+    if (!acceptedTerms || !acceptedAi) return;
     setLoading(true);
     setError(null);
 
@@ -27,18 +31,20 @@ export function LoginForm() {
   }
 
   return (
-    <div className="w-full max-w-sm">
-      <div className="rounded-lg border border-gray-200 bg-white px-6 py-8 shadow-sm">
-        {/* Logo */}
-        <div className="mb-6 text-center">
-          <div className="mx-auto flex h-9 w-9 items-center justify-center rounded-lg bg-primary text-sm font-bold text-primary-foreground">
+    <div className="w-full max-w-lg">
+      <div className="rounded-[20px] border border-[#e4e2de] bg-white px-8 py-10">
+        <div className="mb-8">
+          <div className="flex h-9 w-9 items-center justify-center rounded-full bg-[#4823ff] text-sm font-bold text-white">
             G
           </div>
-          <h1 className="mt-3 text-base font-semibold text-gray-900">
+          <h1
+            className="mt-5 text-[31px] leading-[1.2] tracking-[-0.032em] text-[#18161a]"
+            style={{ fontFamily: "var(--font-plus-jakarta), sans-serif" }}
+          >
             Sign in to GRM
           </h1>
-          <p className="mt-1 text-[13px] text-gray-500">
-            Google Business Profile review management
+          <p className="mt-2 text-base font-light text-[#898b91]">
+            Then connect the Google account that manages your businesses.
           </p>
         </div>
 
@@ -48,9 +54,45 @@ export function LoginForm() {
           </div>
         )}
 
+        <div className="mb-5 space-y-3">
+          <label className="flex items-start gap-3 text-sm leading-snug text-[#18161a]">
+            <input
+              type="checkbox"
+              checked={acceptedTerms}
+              onChange={(event) => setAcceptedTerms(event.target.checked)}
+              className="mt-0.5 rounded border-[#e4e2de]"
+            />
+            <span>
+              I agree to the{" "}
+              <a href="/terms" className="font-medium text-[#4823ff]">
+                Terms of Service
+              </a>{" "}
+              and{" "}
+              <a href="/privacy" className="font-medium text-[#4823ff]">
+                Privacy Policy
+              </a>
+              .
+            </span>
+          </label>
+          <label className="flex items-start gap-3 text-sm leading-snug text-[#18161a]">
+            <input
+              type="checkbox"
+              checked={acceptedAi}
+              onChange={(event) => setAcceptedAi(event.target.checked)}
+              className="mt-0.5 rounded border-[#e4e2de]"
+            />
+            <span>
+              I understand GRM can send review text to Google Gemini to draft
+              a reply or a location summary. A person must review a draft
+              before it is published, and a published reply appears on Google
+              as the business’s reply.
+            </span>
+          </label>
+        </div>
+
         <Button
           onClick={handleSignIn}
-          disabled={loading}
+          disabled={!canContinue}
           className="w-full gap-2"
           size="lg"
         >
@@ -65,8 +107,10 @@ export function LoginForm() {
         </Button>
       </div>
 
-      <p className="mt-4 text-center text-[11px] text-gray-400">
-        By signing in you agree to the terms of service.
+      <p className="mt-5 text-sm text-[#898b91]">
+        <a href="/" className="font-medium text-[#4823ff]">
+          Back to GRM
+        </a>
       </p>
     </div>
   );

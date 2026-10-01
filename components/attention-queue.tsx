@@ -2,7 +2,9 @@
 
 import { useRouter, usePathname, useSearchParams } from "next/navigation";
 import { Star, AlertCircle } from "lucide-react";
+import { cn } from "@/lib/utils";
 import type { ProfileRow } from "@/lib/services/dashboard";
+import { ratingStarClass, ratingTextClass } from "@/lib/ui/rating-color";
 
 interface AttentionQueueProps {
   profiles: ProfileRow[];
@@ -28,50 +30,40 @@ export function AttentionQueue({
   }
 
   return (
-    <section
-      className="space-y-2"
-      aria-labelledby="attention-heading"
-    >
-      <div className="flex flex-wrap items-baseline justify-between gap-2">
-        <h2
-          id="attention-heading"
-          className="text-sm font-semibold text-gray-900"
-        >
+    <section className="rounded-[20px] border border-[#e4e2de] bg-white p-5" aria-labelledby="attention-heading">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <h2 id="attention-heading" className="text-sm font-medium text-[#18161a]">
           Needs attention
         </h2>
-        <p className="text-[12px] text-gray-500">
-          Top {profiles.length}
-          {totalNeedingReply > profiles.length
-            ? ` of ${totalNeedingReply} profiles with open replies`
-            : " · highest priority first"}
-        </p>
+        <span className="rounded-full bg-[#e7ff6e] px-3 py-1 text-xs font-semibold text-[#18161a]">
+          {totalNeedingReply} open
+        </span>
       </div>
-      <ul className="divide-y divide-gray-100 overflow-hidden rounded-lg border border-gray-200 bg-white">
+      <ul className="mt-4 space-y-1">
         {profiles.map((p) => (
           <li key={p.id}>
             <button
               type="button"
               onClick={() => open(p.id)}
-              className="flex w-full items-center gap-3 px-3 py-2.5 text-left transition-colors hover:bg-gray-50"
+              className="flex w-full items-center gap-3 rounded-2xl px-2 py-2.5 text-left transition-colors hover:bg-[#f3f1ee]"
             >
+              <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-[#f3f1ee] text-[11px] font-semibold text-[#18161a]">
+                {p.title.slice(0, 2).toUpperCase()}
+              </span>
               <div className="min-w-0 flex-1">
-                <p className="truncate text-[13px] font-medium text-gray-900">
-                  {p.title}
-                </p>
-                <p className="truncate text-[11px] text-gray-400">
-                  {p.clientName ?? "—"}
+                <p className="truncate text-sm font-medium text-[#18161a]">{p.title}</p>
+                <p className="truncate text-xs font-light text-[#898b91]">
+                  {p.clientName ?? "Unassigned"}
                 </p>
               </div>
-              <span className="inline-flex shrink-0 items-center gap-0.5 text-[12px] tabular-nums text-gray-600">
+              <span className={cn("inline-flex shrink-0 items-center gap-0.5 text-xs tabular-nums", p.avgRating != null ? ratingTextClass(p.avgRating) : "text-[#898b91]")}>
                 {p.avgRating != null ? p.avgRating.toFixed(1) : "—"}
-                <Star className="h-3 w-3 fill-amber-400 text-amber-400" aria-hidden />
+                <Star
+                  className={cn("h-3 w-3", p.avgRating != null ? ratingStarClass(p.avgRating) : "fill-[#e4e2de] text-[#e4e2de]")}
+                  aria-hidden
+                />
               </span>
-              {p.critical > 0 && (
-                <span className="shrink-0 text-[12px] font-medium tabular-nums text-red-600">
-                  {p.critical}★↓
-                </span>
-              )}
-              <span className="inline-flex shrink-0 items-center gap-1 text-[12px] font-medium tabular-nums text-orange-600">
+              <span className="inline-flex shrink-0 items-center gap-1 text-xs font-medium tabular-nums text-[#18161a]">
                 <AlertCircle className="h-3.5 w-3.5" aria-hidden />
                 {p.unanswered}
               </span>

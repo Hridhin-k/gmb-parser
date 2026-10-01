@@ -45,16 +45,16 @@ function PaginationBar({
   const next = currentPage < totalPages ? currentPage + 1 : null;
 
   return (
-    <div className="flex items-center justify-center gap-3 py-2 text-sm text-gray-600">
+    <div className="flex items-center justify-center gap-3 py-2 text-sm text-[#898b91]">
       {prev ? (
         <a
           href={hrefFor(prev)}
-          className="rounded border border-gray-200 bg-white px-3 py-1.5 hover:bg-gray-50"
+          className="rounded-full border border-[#e4e2de] bg-white px-4 py-2 font-medium text-[#18161a] hover:border-[#18161a]"
         >
           Previous
         </a>
       ) : (
-        <span className="rounded border border-gray-100 bg-gray-50 px-3 py-1.5 text-gray-300">
+        <span className="rounded-full border border-[#f3f1ee] px-4 py-2 text-[#e4e2de]">
           Previous
         </span>
       )}
@@ -64,12 +64,12 @@ function PaginationBar({
       {next ? (
         <a
           href={hrefFor(next)}
-          className="rounded border border-gray-200 bg-white px-3 py-1.5 hover:bg-gray-50"
+          className="rounded-full border border-[#e4e2de] bg-white px-4 py-2 font-medium text-[#18161a] hover:border-[#18161a]"
         >
           Next
         </a>
       ) : (
-        <span className="rounded border border-gray-100 bg-gray-50 px-3 py-1.5 text-gray-300">
+        <span className="rounded-full border border-[#f3f1ee] px-4 py-2 text-[#e4e2de]">
           Next
         </span>
       )}
@@ -176,7 +176,7 @@ export default async function DashboardPage({ searchParams }: DashboardPageProps
     data.kpis.totalReviews === 0 && data.kpis.locationsActive === 0;
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-10">
       <PageHeader
         title="Dashboard"
         description="Built for scale — find what needs work across hundreds of profiles, then act in place."
@@ -223,57 +223,47 @@ export default async function DashboardPage({ searchParams }: DashboardPageProps
         <>
           <DashboardStats kpis={data.kpis} basePath="/dashboard" />
 
-          <div className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_minmax(0,1.15fr)]">
-            <div className="space-y-5">
-              <AttentionQueue
-                profiles={data.attentionQueue}
-                totalNeedingReply={data.kpis.profilesNeedingReply}
-              />
-              <ProfileDirectory
-                profiles={data.profileDirectory}
-                total={data.profileTotal}
-                pageSize={data.profilePageSize}
-                currentPage={profilePage}
-                currentSort={profileSort}
-                currentQuery={profileQ}
-                selectedLocationId={locationParam}
-              />
-            </div>
+          <div className="space-y-5">
+            <AttentionQueue
+              profiles={data.attentionQueue}
+              totalNeedingReply={data.kpis.profilesNeedingReply}
+            />
+            <ProfileDirectory
+              profiles={data.profileDirectory}
+              total={data.profileTotal}
+              pageSize={data.profilePageSize}
+              currentPage={profilePage}
+              currentSort={profileSort}
+              currentQuery={profileQ}
+              selectedLocationId={locationParam}
+            />
+          </div>
 
-            <div className="space-y-4">
-              {data.selectedProfile ? (
-                <ProfileInsightPanel
-                  profile={data.selectedProfile}
-                  insight={data.selectedInsight}
-                  heuristicSummary={data.selectedHeuristic}
-                />
-              ) : (
-                <div className="rounded-lg border border-dashed border-gray-200 bg-gray-50/60 px-4 py-6 text-center">
-                  <p className="text-[13px] font-medium text-gray-700">
-                    Select a profile
-                  </p>
-                  <p className="mt-1 text-[12px] text-gray-500">
-                    Open one from Needs attention or the directory to see its AI
-                    summary and scoped inbox — never loads AI for all{" "}
-                    {data.kpis.locationsActive} profiles at once.
-                  </p>
-                </div>
-              )}
+          {data.selectedProfile ? (
+            <ProfileInsightPanel
+              profile={data.selectedProfile}
+              insight={data.selectedInsight}
+              heuristicSummary={data.selectedHeuristic}
+            />
+          ) : null}
 
-              <section id="inbox" className="scroll-mt-4 space-y-3">
+          <section id="inbox" className="scroll-mt-4 space-y-5">
                 <div className="flex flex-wrap items-end justify-between gap-2">
                   <div>
-                    <h2 className="text-sm font-semibold text-gray-900">
+                    <h2
+                      className="text-[31px] leading-[1.2] tracking-[-0.032em] text-[#18161a]"
+                      style={{ fontFamily: "var(--font-plus-jakarta), sans-serif" }}
+                    >
                       Review inbox
                       {data.selectedProfile
                         ? ` · ${data.selectedProfile.title}`
                         : ""}
                     </h2>
-                    <p className="text-[12px] text-gray-500">
+                    <p className="text-sm font-light text-[#898b91]">
                       Draft, approve, and publish without leaving the dashboard.
                     </p>
                   </div>
-                  <p className="text-[12px] tabular-nums text-gray-400">
+                  <p className="text-sm tabular-nums text-[#898b91]">
                     {data.totalReviewCount} matching
                   </p>
                 </div>
@@ -316,9 +306,7 @@ export default async function DashboardPage({ searchParams }: DashboardPageProps
                     )}
                   </>
                 )}
-              </section>
-            </div>
-          </div>
+          </section>
         </>
       )}
     </div>

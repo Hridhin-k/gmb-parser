@@ -46,39 +46,38 @@
 }
 
 :root {
-  --background: oklch(0.98 0.002 247);
-  --foreground: oklch(0.18 0.01 260);
-  --card: oklch(1 0 0);
-  --card-foreground: oklch(0.18 0.01 260);
-  --popover: oklch(1 0 0);
-  --popover-foreground: oklch(0.18 0.01 260);
-  /* Google Blue #1a73e8 approximation in oklch */
-  --primary: oklch(0.55 0.19 264);
-  --primary-foreground: oklch(0.99 0 0);
-  --secondary: oklch(0.97 0.003 260);
-  --secondary-foreground: oklch(0.24 0.01 260);
-  --muted: oklch(0.96 0.003 260);
-  --muted-foreground: oklch(0.52 0.01 260);
-  --accent: oklch(0.96 0.012 264);
-  --accent-foreground: oklch(0.24 0.01 260);
-  --destructive: oklch(0.55 0.22 25);
-  --border: oklch(0.92 0.003 260);
-  --input: oklch(0.92 0.003 260);
-  --ring: oklch(0.55 0.19 264);
+  --background: #fafaf8;
+  --foreground: #18161a;
+  --card: #ffffff;
+  --card-foreground: #18161a;
+  --popover: #ffffff;
+  --popover-foreground: #18161a;
+  --primary: #4823ff;
+  --primary-foreground: #ffffff;
+  --secondary: #f3f1ee;
+  --secondary-foreground: #18161a;
+  --muted: #f3f1ee;
+  --muted-foreground: #898b91;
+  --accent: #f3f1ee;
+  --accent-foreground: #18161a;
+  --destructive: #c2410c;
+  --border: #e4e2de;
+  --input: #e4e2de;
+  --ring: #4823ff;
   --chart-1: oklch(0.87 0 0);
   --chart-2: oklch(0.556 0 0);
   --chart-3: oklch(0.439 0 0);
   --chart-4: oklch(0.371 0 0);
   --chart-5: oklch(0.269 0 0);
-  --radius: 0.375rem;
-  --sidebar: oklch(1 0 0);
-  --sidebar-foreground: oklch(0.18 0.01 260);
-  --sidebar-primary: oklch(0.55 0.19 264);
-  --sidebar-primary-foreground: oklch(0.99 0 0);
-  --sidebar-accent: oklch(0.96 0.018 264);
-  --sidebar-accent-foreground: oklch(0.35 0.12 264);
-  --sidebar-border: oklch(0.93 0.003 260);
-  --sidebar-ring: oklch(0.55 0.19 264);
+  --radius: 1.25rem;
+  --sidebar: #ffffff;
+  --sidebar-foreground: #18161a;
+  --sidebar-primary: #4823ff;
+  --sidebar-primary-foreground: #ffffff;
+  --sidebar-accent: #f3f1ee;
+  --sidebar-accent-foreground: #18161a;
+  --sidebar-border: #e4e2de;
+  --sidebar-ring: #4823ff;
 }
 
 @layer base {
@@ -95,6 +94,6 @@
     @apply outline-2 outline-offset-2 outline-ring;
   }
   ::selection {
-    background-color: oklch(0.88 0.06 264);
+    background-color: #f3f1ee;
   }
 }

@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { cn } from "@/lib/utils";
 import {
@@ -15,6 +15,7 @@ import {
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { ReviewDetailPanel } from "@/components/review-detail-panel";
+import { ratingStarClass, ratingTextClass } from "@/lib/ui/rating-color";
 
 interface ReviewItem {
   id: string;
@@ -70,10 +71,10 @@ function StarRating({ rating }: { rating: number }) {
         <Star
           key={i}
           className={cn(
-            "h-3 w-3",
+            "h-3.5 w-3.5",
             i < rating
-              ? "fill-amber-400 text-amber-400"
-              : "fill-gray-200 text-gray-200"
+              ? ratingStarClass(rating)
+              : "fill-[#e4e2de] text-[#e4e2de]"
           )}
           aria-hidden
         />
@@ -83,11 +84,11 @@ function StarRating({ rating }: { rating: number }) {
 }
 
 const STATUS_CONFIG: Record<string, { label: string; className: string; Icon: typeof CheckCircle2 }> = {
-  published:       { label: "Published", className: "text-green-600",  Icon: CheckCircle2 },
-  approved:        { label: "Approved",  className: "text-blue-600",   Icon: CheckCircle2 },
-  draft:           { label: "Draft",     className: "text-gray-400",   Icon: Pencil },
-  failed:          { label: "Failed",    className: "text-red-500",    Icon: AlertCircle },
-  pending_publish: { label: "Publishing", className: "text-amber-500", Icon: Clock },
+  published:       { label: "Published", className: "bg-[#f3f1ee] text-[#18161a]",  Icon: CheckCircle2 },
+  approved:        { label: "Ready",  className: "bg-[#18161a] text-white",   Icon: CheckCircle2 },
+  draft:           { label: "Draft",     className: "bg-white text-[#898b91] border border-[#e4e2de]",   Icon: Pencil },
+  failed:          { label: "Failed",    className: "bg-[#f6eee9] text-[#9a3412]",    Icon: AlertCircle },
+  pending_publish: { label: "Publishing", className: "bg-[#f3f1ee] text-[#18161a]", Icon: Clock },
 };
 
 function ReplyStatusPill({ status, source }: { status: string; source?: string }) {
@@ -95,11 +96,11 @@ function ReplyStatusPill({ status, source }: { status: string; source?: string }
   if (!cfg) return null;
   const { Icon, className, label } = cfg;
   return (
-    <span className={cn("inline-flex items-center gap-1 text-[11px] font-medium", className)}>
+    <span className={cn("inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-[11px] font-semibold", className)}>
       <Icon className="h-3 w-3" aria-hidden />
       {label}
       {source === "ai" && status !== "published" && (
-        <Sparkles className="ml-0.5 h-2.5 w-2.5 text-purple-400" aria-hidden />
+        <Sparkles className="ml-0.5 h-2.5 w-2.5" aria-hidden />
       )}
     </span>
   );
@@ -115,6 +116,15 @@ export function ReviewList({ reviews, replies, canApprove }: ReviewListProps) {
 
   const selectedReview = reviews.find((r) => r.id === selectedId) ?? null;
   const selectedReply = selectedId ? (replies[selectedId] ?? null) : null;
+
+  useEffect(() => {
+    if (!selectedId) return;
+    function onKey(event: KeyboardEvent) {
+      if (event.key === "Escape") setSelectedId(null);
+    }
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [selectedId]);
 
   const selectedIds = useMemo(
     () => Object.entries(checked).filter(([, v]) => v).map(([id]) => id),
@@ -165,8 +175,8 @@ export function ReviewList({ reviews, replies, canApprove }: ReviewListProps) {
 
   return (
     <div className="space-y-3">
-      <div className="flex flex-wrap items-center gap-2 rounded-lg border border-gray-200 bg-white px-3 py-2">
-        <label className="flex items-center gap-2 text-[12px] text-gray-600">
+      <div className="flex flex-wrap items-center gap-2 rounded-[20px] border border-[#e4e2de] bg-white px-4 py-3">
+        <label className="flex items-center gap-2 text-sm text-[#18161a]">
           <input
             type="checkbox"
             checked={allChecked}
@@ -175,7 +185,7 @@ export function ReviewList({ reviews, replies, canApprove }: ReviewListProps) {
           />
           Select all on page
         </label>
-        <span className="text-[12px] text-gray-400">
+        <span className="text-sm text-[#898b91]">
           {selectedIds.length} selected
         </span>
         <div className="ml-auto flex flex-wrap gap-1.5">
@@ -238,30 +248,37 @@ export function ReviewList({ reviews, replies, canApprove }: ReviewListProps) {
         </p>
       )}
 
-      <div className="flex min-h-[min(70vh,640px)] overflow-hidden rounded-lg border border-gray-200 bg-white">
-        <div
-          className={cn(
-            "divide-y divide-gray-100 overflow-y-auto",
-            selectedReview ? "hidden lg:block lg:w-[55%]" : "w-full"
-          )}
-          role="listbox"
-          aria-label="Reviews"
-        >
-          {reviews.map((review) => {
-            const isActive = review.id === selectedId;
-            const reply = replies[review.id];
-            const hasGoogleReply = !!review.google_reply_comment;
+      <div
+        className="grid gap-5 sm:grid-cols-2 xl:grid-cols-3"
+        role="list"
+        aria-label="Reviews"
+      >
+        {reviews.map((review) => {
+          const isActive = review.id === selectedId;
+          const reply = replies[review.id];
+          const hasGoogleReply = !!review.google_reply_comment;
+          const name = review.reviewer_is_anonymous
+            ? "Anonymous"
+            : review.reviewer_display_name || "Unknown reviewer";
+          const initials = name
+            .split(" ")
+            .filter(Boolean)
+            .slice(0, 2)
+            .map((part) => part[0]?.toUpperCase() ?? "")
+            .join("");
 
-            return (
-              <div
-                key={review.id}
-                className={cn(
-                  "flex w-full items-start gap-2 px-3 py-3 transition-colors",
-                  isActive
-                    ? "bg-blue-50/70 border-l-2 border-l-primary"
-                    : "border-l-2 border-l-transparent hover:bg-gray-50/80"
-                )}
-              >
+          return (
+            <article
+              key={review.id}
+              role="listitem"
+              className={cn(
+                "flex flex-col rounded-[20px] border bg-white p-5 text-left transition-colors",
+                isActive
+                  ? "border-[#4823ff]"
+                  : "border-[#e4e2de] hover:border-[#cfcbc4]"
+              )}
+            >
+              <div className="flex items-start gap-3">
                 <input
                   type="checkbox"
                   checked={!!checked[review.id]}
@@ -272,80 +289,83 @@ export function ReviewList({ reviews, replies, canApprove }: ReviewListProps) {
                     }))
                   }
                   onClick={(e) => e.stopPropagation()}
-                  className="mt-2 rounded border-gray-300"
-                  aria-label={`Select review by ${review.reviewer_display_name}`}
+                  className="mt-1 rounded border-[#e4e2de]"
+                  aria-label={`Select review by ${name}`}
                 />
-                <button
-                  type="button"
-                  onClick={() => setSelectedId(review.id)}
-                  className="flex min-w-0 flex-1 items-start gap-3 text-left focus-visible:outline-none"
-                  role="option"
-                  aria-selected={isActive}
+                <span
+                  className={cn(
+                    "flex h-10 w-10 shrink-0 items-center justify-center rounded-full text-xs font-semibold",
+                    "bg-[#f3f1ee] text-[#18161a]"
+                  )}
                 >
-                  <div className="flex shrink-0 flex-col items-center gap-1.5 pt-0.5">
-                    <div
-                      className={cn(
-                        "flex h-8 w-8 items-center justify-center rounded-full text-sm font-semibold",
-                        review.star_rating >= 4
-                          ? "bg-green-50 text-green-700"
-                          : review.star_rating === 3
-                            ? "bg-amber-50 text-amber-700"
-                            : "bg-red-50 text-red-700"
-                      )}
-                    >
-                      {review.star_rating}
-                    </div>
+                  {initials || review.star_rating}
+                </span>
+                <div className="min-w-0 flex-1">
+                  <div className="flex items-start justify-between gap-2">
+                    <p className="truncate text-sm font-medium text-[#18161a]">
+                      {name}
+                    </p>
+                    <span className={cn("shrink-0 text-xs font-medium tabular-nums", ratingTextClass(review.star_rating))}>
+                      {review.star_rating}/5
+                    </span>
                   </div>
-
-                  <div className="min-w-0 flex-1">
-                    <div className="flex items-center justify-between gap-2">
-                      <p className="truncate text-[13px] font-medium text-gray-900">
-                        {review.reviewer_is_anonymous
-                          ? "Anonymous"
-                          : review.reviewer_display_name || "Unknown reviewer"}
-                      </p>
-                      <span className="shrink-0 text-[11px] text-gray-400">
-                        {formatRelativeDate(review.review_create_time)}
-                      </span>
-                    </div>
-
-                    <div className="mt-0.5 flex items-center gap-1.5">
-                      <StarRating rating={review.star_rating} />
-                      <span className="text-[11px] text-gray-300">·</span>
-                      <span className="truncate text-[11px] text-gray-400">
-                        {review.location_title}
-                      </span>
-                    </div>
-
-                    {review.comment && (
-                      <p className="mt-1 line-clamp-2 text-xs leading-relaxed text-gray-500">
-                        {review.comment}
-                      </p>
-                    )}
-
-                    <div className="mt-1.5 flex items-center gap-2">
-                      {hasGoogleReply && (
-                        <span className="inline-flex items-center gap-0.5 text-[11px] font-medium text-green-600">
-                          <MessageSquare className="h-2.5 w-2.5" aria-hidden />
-                          Replied on Google
-                        </span>
-                      )}
-                      {review.reply_status !== "none" && (
-                        <ReplyStatusPill
-                          status={review.reply_status}
-                          source={reply?.source}
-                        />
-                      )}
-                    </div>
-                  </div>
-                </button>
+                  <p className="mt-0.5 truncate text-xs font-light text-[#898b91]">
+                    {formatRelativeDate(review.review_create_time)}
+                    {" · "}
+                    {review.location_title}
+                  </p>
+                </div>
               </div>
-            );
-          })}
-        </div>
 
-        {selectedReview && (
-          <div className="flex w-full min-h-0 flex-col border-l border-gray-200 lg:w-[45%] lg:min-w-[380px]">
+              <button
+                type="button"
+                onClick={() => setSelectedId(review.id)}
+                className="mt-4 flex flex-1 flex-col text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#18161a]"
+                aria-label={`Open review by ${name}`}
+              >
+                <StarRating rating={review.star_rating} />
+                <p className="mt-3 line-clamp-5 min-h-[7.5rem] text-sm font-light leading-relaxed text-[#18161a]">
+                  {review.comment || "Rating only — no written comment."}
+                </p>
+              </button>
+
+              <div className="mt-4 flex flex-wrap items-center gap-2">
+                {hasGoogleReply && (
+                  <span className="inline-flex items-center gap-1 rounded-full border border-[#e4e2de] px-2.5 py-1 text-[11px] font-medium text-[#18161a]">
+                    <MessageSquare className="h-3 w-3" aria-hidden />
+                    On Google
+                  </span>
+                )}
+                {review.reply_status !== "none" && (
+                  <ReplyStatusPill
+                    status={review.reply_status}
+                    source={reply?.source}
+                  />
+                )}
+                {review.reply_status === "none" && !hasGoogleReply && (
+                  <span className="text-xs font-light text-[#898b91]">
+                    Needs a reply
+                  </span>
+                )}
+              </div>
+            </article>
+          );
+        })}
+      </div>
+
+      {selectedReview && (
+        <div
+          className="fixed inset-0 z-50 flex items-end justify-center bg-[#18161a]/45 p-3 sm:items-center sm:p-6"
+          role="presentation"
+          onClick={() => setSelectedId(null)}
+        >
+          <div
+            role="dialog"
+            aria-modal="true"
+            aria-label={`Review by ${selectedReview.reviewer_display_name || "reviewer"}`}
+            className="flex h-[min(92vh,860px)] w-full max-w-2xl flex-col overflow-hidden rounded-[20px] border border-[#e4e2de] bg-white shadow-none"
+            onClick={(event) => event.stopPropagation()}
+          >
             <ReviewDetailPanel
               review={selectedReview}
               reply={selectedReply}
@@ -353,8 +373,8 @@ export function ReviewList({ reviews, replies, canApprove }: ReviewListProps) {
               onClose={() => setSelectedId(null)}
             />
           </div>
-        )}
-      </div>
+        </div>
+      )}
     </div>
   );
 }

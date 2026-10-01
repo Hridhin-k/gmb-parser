@@ -24,11 +24,11 @@ interface GoogleConnectionCardProps {
 function getStatusBadge(status: string) {
   switch (status) {
     case "active":
-      return <Badge variant="default" className="bg-emerald-50 text-emerald-700 border-emerald-200 hover:bg-emerald-50">Connected</Badge>;
+      return <Badge variant="default" className="border-[#e4e2de] bg-[#f3f1ee] text-[#18161a] hover:bg-[#f3f1ee]">Connected</Badge>;
     case "expired":
-      return <Badge variant="default" className="bg-amber-50 text-amber-700 border-amber-200 hover:bg-amber-50">Expired</Badge>;
+      return <Badge variant="default" className="border-[#e4e2de] bg-[#f6eee9] text-[#9a3412] hover:bg-[#f6eee9]">Expired</Badge>;
     case "revoked":
-      return <Badge variant="default" className="bg-red-50 text-red-700 border-red-200 hover:bg-red-50">Revoked</Badge>;
+      return <Badge variant="default" className="border-[#e4e2de] bg-[#f6eee9] text-[#9a3412] hover:bg-[#f6eee9]">Revoked</Badge>;
     default:
       return <Badge variant="secondary">{status}</Badge>;
   }
@@ -71,13 +71,16 @@ export function GoogleConnectionCard({
   }
 
   return (
-    <Card className="border-gray-200 shadow-none">
+    <Card>
       <CardHeader className="flex flex-row items-center justify-between space-y-0">
         <div>
-          <CardTitle className="text-sm font-medium text-gray-700">
+          <CardTitle
+            className="text-[22px] leading-[1.3] tracking-[-0.02em] text-[#18161a]"
+            style={{ fontFamily: "var(--font-plus-jakarta), sans-serif" }}
+          >
             Google Business Profile
           </CardTitle>
-          <p className="mt-0.5 text-xs text-gray-500">
+          <p className="mt-1 text-sm font-light text-[#898b91]">
             Connect your Google account to manage reviews
           </p>
         </div>
@@ -87,7 +90,7 @@ export function GoogleConnectionCard({
             setError(null);
             setSuccess(false);
           }}
-          className="inline-flex shrink-0 items-center justify-center rounded-lg bg-primary px-3 py-1.5 text-sm font-medium text-primary-foreground hover:bg-primary/80 transition-colors"
+          className="inline-flex shrink-0 items-center justify-center rounded-full bg-[#4823ff] px-4 py-2 text-sm font-semibold text-white hover:bg-[#3a1ad6]"
         >
           <ExternalLink className="mr-1.5 h-3.5 w-3.5" />
           Connect Google
@@ -96,7 +99,7 @@ export function GoogleConnectionCard({
 
       <CardContent className="space-y-3">
         {success && (
-          <div className="rounded-md bg-emerald-50 px-3 py-2 text-sm text-emerald-700 border border-emerald-200">
+          <div className="rounded-md border border-[#e4e2de] bg-[#f3f1ee] px-3 py-2 text-sm text-[#18161a]">
             Google Business Profile connected successfully.
           </div>
         )}
@@ -108,7 +111,7 @@ export function GoogleConnectionCard({
         )}
 
         {activeConnections.length === 0 && !error && !success && (
-          <p className="text-sm text-gray-500 py-2">
+          <p className="py-2 text-sm font-light text-[#898b91]">
             No Google accounts connected. Click &ldquo;Connect Google&rdquo; to
             get started.
           </p>
@@ -117,7 +120,7 @@ export function GoogleConnectionCard({
         {activeConnections.map((conn) => (
           <div
             key={conn.id}
-            className="flex items-center justify-between rounded-md border border-gray-200 px-3 py-2.5"
+            className="flex items-center justify-between rounded-[12px] border border-[#e4e2de] px-4 py-3"
           >
             <div className="flex items-center gap-3">
               <svg viewBox="0 0 24 24" className="h-5 w-5 shrink-0" aria-hidden="true">
@@ -139,10 +142,10 @@ export function GoogleConnectionCard({
                 />
               </svg>
               <div>
-                <p className="text-sm font-medium text-gray-900">
+                <p className="text-sm font-medium text-[#18161a]">
                   {conn.google_email}
                 </p>
-                <p className="text-xs text-gray-500">
+                <p className="text-xs font-light text-[#898b91]">
                   Connected{" "}
                   {new Date(conn.created_at).toLocaleDateString("en-US", {
                     month: "short",

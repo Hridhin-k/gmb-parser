@@ -24,23 +24,23 @@ function formatDate(iso: string): string {
 
 // Human-readable action labels — safe to display
 const ACTION_LABELS: Record<string, { label: string; color: string }> = {
-  "google_connection.created":  { label: "Google connected",       color: "bg-green-100 text-green-700" },
-  "google_connection.failed":   { label: "Google connect failed",   color: "bg-red-100 text-red-700" },
-  "google_connection.revoked":  { label: "Google disconnected",     color: "bg-gray-100 text-gray-700" },
-  "google_sync.completed":      { label: "Locations synced",        color: "bg-blue-100 text-blue-700" },
-  "client.created":             { label: "Client created",          color: "bg-blue-100 text-blue-700" },
-  "location.connected":         { label: "Location connected",      color: "bg-green-100 text-green-700" },
-  "location.disconnected":      { label: "Location disconnected",   color: "bg-gray-100 text-gray-700" },
-  "review.sync_started":        { label: "Review sync started",     color: "bg-blue-100 text-blue-700" },
-  "review.synced":              { label: "Reviews synced",          color: "bg-green-100 text-green-700" },
-  "review.sync_failed":         { label: "Review sync failed",      color: "bg-red-100 text-red-700" },
-  "reply.ai_generated":         { label: "AI draft generated",      color: "bg-purple-100 text-purple-700" },
-  "reply.edited":               { label: "Reply edited",            color: "bg-blue-100 text-blue-700" },
-  "reply.approved":             { label: "Reply approved",          color: "bg-green-100 text-green-700" },
-  "reply.publish_attempted":    { label: "Publish started",         color: "bg-yellow-100 text-yellow-700" },
-  "reply.published":            { label: "Reply published",         color: "bg-green-100 text-green-700" },
-  "reply.publish_failed":       { label: "Publish failed",          color: "bg-red-100 text-red-700" },
-  "reply.deleted":              { label: "Reply deleted",           color: "bg-gray-100 text-gray-700" },
+  "google_connection.created":  { label: "Google connected",       color: "bg-[#f3f1ee] text-[#18161a]" },
+  "google_connection.failed":   { label: "Google connect failed",   color: "bg-[#f6eee9] text-[#9a3412]" },
+  "google_connection.revoked":  { label: "Google disconnected",     color: "bg-[#f3f1ee] text-[#18161a]" },
+  "google_sync.completed":      { label: "Locations synced",        color: "bg-[#f3f1ee] text-[#18161a]" },
+  "client.created":             { label: "Client created",          color: "bg-[#f3f1ee] text-[#18161a]" },
+  "location.connected":         { label: "Location connected",      color: "bg-[#f3f1ee] text-[#18161a]" },
+  "location.disconnected":      { label: "Location disconnected",   color: "bg-[#f3f1ee] text-[#18161a]" },
+  "review.sync_started":        { label: "Review sync started",     color: "bg-[#f3f1ee] text-[#18161a]" },
+  "review.synced":              { label: "Reviews synced",          color: "bg-[#f3f1ee] text-[#18161a]" },
+  "review.sync_failed":         { label: "Review sync failed",      color: "bg-[#f6eee9] text-[#9a3412]" },
+  "reply.ai_generated":         { label: "AI draft generated",      color: "bg-[#f3f1ee] text-[#18161a]" },
+  "reply.edited":               { label: "Reply edited",            color: "bg-[#f3f1ee] text-[#18161a]" },
+  "reply.approved":             { label: "Reply approved",          color: "bg-[#f3f1ee] text-[#18161a]" },
+  "reply.publish_attempted":    { label: "Publish started",         color: "bg-[#f3f1ee] text-[#18161a]" },
+  "reply.published":            { label: "Reply published",         color: "bg-[#f3f1ee] text-[#18161a]" },
+  "reply.publish_failed":       { label: "Publish failed",          color: "bg-[#f6eee9] text-[#9a3412]" },
+  "reply.deleted":              { label: "Reply deleted",           color: "bg-[#f3f1ee] text-[#18161a]" },
 };
 
 function ActionBadge({ action }: { action: string }) {
@@ -169,7 +169,7 @@ export default async function AuditPage({ searchParams }: AuditPageProps) {
   ];
 
   return (
-    <div className="space-y-5">
+    <div className="space-y-10">
       <PageHeader
         title="Audit Log"
         description="Immutable record of all important operations in your workspace."
@@ -203,31 +203,31 @@ export default async function AuditPage({ searchParams }: AuditPageProps) {
           }
         />
       ) : (
-        <div className="rounded-lg border border-gray-200 bg-white">
+        <div className="overflow-hidden rounded-[20px] border border-[#e4e2de] bg-white">
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
               <thead>
-                <tr className="border-b border-gray-200 bg-gray-50">
-                  <th className="px-4 py-2.5 text-left text-xs font-medium text-gray-500 whitespace-nowrap">
+                <tr className="border-b border-[#f3f1ee] bg-[#fafaf8]">
+                  <th className="whitespace-nowrap px-4 py-3 text-left text-[11px] font-medium uppercase tracking-[0.06em] text-[#8a877f]">
                     Timestamp
                   </th>
-                  <th className="px-4 py-2.5 text-left text-xs font-medium text-gray-500">
+                  <th className="px-4 py-3 text-left text-[11px] font-medium uppercase tracking-[0.06em] text-[#8a877f]">
                     Action
                   </th>
-                  <th className="px-4 py-2.5 text-left text-xs font-medium text-gray-500">
+                  <th className="px-4 py-3 text-left text-[11px] font-medium uppercase tracking-[0.06em] text-[#8a877f]">
                     Entity
                   </th>
-                  <th className="px-4 py-2.5 text-left text-xs font-medium text-gray-500">
+                  <th className="px-4 py-3 text-left text-[11px] font-medium uppercase tracking-[0.06em] text-[#8a877f]">
                     Details
                   </th>
-                  <th className="px-4 py-2.5 text-left text-xs font-medium text-gray-500 whitespace-nowrap">
+                  <th className="whitespace-nowrap px-4 py-3 text-left text-[11px] font-medium uppercase tracking-[0.06em] text-[#8a877f]">
                     User
                   </th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-100">
                 {(logs ?? []).map((log) => (
-                  <tr key={log.id} className="hover:bg-gray-50">
+                  <tr key={log.id} className="hover:bg-[#f3f1ee]/40">
                     <td className="px-4 py-3 align-top whitespace-nowrap text-xs text-gray-500">
                       {formatDate(log.created_at)}
                     </td>
