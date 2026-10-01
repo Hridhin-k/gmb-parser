@@ -1,0 +1,1010 @@
+GRM — UI/UX DESIGN BRIEF
+Production Figma specification
+Audience: product designer
+Source of truth: the shipped GRM application (Google Review Management)
+Date: 25 September 2026
+
+This document describes what the product does, every screen that must be designed,
+every state of those screens, and the visual standard the Figma file should meet.
+Design the product as it works today, at a production finish. A short section at
+the end lists improvements that are worth designing if time allows. Do not invent
+new product areas beyond that list.
+
+
+================================================================================
+1. PRODUCT
+================================================================================
+
+GRM is an internal web app for a digital agency that manages Google Business
+Profile reviews for many client businesses.
+
+One workspace. One signed-in operator. One connected Google account that can see
+dozens or hundreds of Business Profile locations. The operator’s job is to notice
+which locations need a reply, draft a response (by hand or with AI), approve it,
+and publish it back to Google.
+
+The product is a work tool. People open it on a weekday morning and stay in it
+for a reply session. It is not a marketing site, not a consumer app, and not an
+analytics product with charts as the hero.
+
+Primary job, in order:
+  1. See what needs a human today (unanswered, critical, failed publishes).
+  2. Open one location, understand the pattern of reviews, and reply.
+  3. Publish approved replies to Google.
+  4. Keep clients and locations correctly mapped.
+  5. Prove what happened (audit log).
+
+Two different Google connections exist. Do not merge them in the UI.
+  - Sign-in Google: who the operator is. Happens on the login page.
+  - Business Profile Google: which locations the workspace can read and reply to.
+    Happens in Settings. This is the connection that powers sync and publishing.
+
+
+================================================================================
+2. WHO USES IT
+================================================================================
+
+Primary user
+  Agency operator (owner or admin). Example: Maya Kapoor, maya@explained.digital.
+  Manages reviews across client brands. Works mostly on a laptop at 1440px.
+  Needs speed, scanability, and confidence before something is posted publicly.
+
+Secondary user
+  Workspace member. Same screens. Fewer people, same tools. Roles exist in the
+  data model (owner, admin, member) but the current UI does not change by role.
+  Design one set of screens. Do not design a separate member experience.
+
+Context
+  Workspace name in sample designs: Explained Digital.
+  Connected Google account: ops@explained.digital.
+  The operator is trusted. Destructive actions still need a confirm.
+
+
+================================================================================
+3. LANGUAGE (use these words in the UI)
+================================================================================
+
+Workspace     The agency’s account. One per customer of GRM.
+Client        A business the agency manages. Example: Harbor Dental.
+Location      One Google Business Profile place. Example: Harbor Dental — Downtown.
+              Also called a “profile” on the dashboard. Pick one word per surface
+              and stay consistent. Recommended: “location” everywhere, with the
+              Google place name as the title.
+Review        A Google review: stars, optional comment, reviewer name, date.
+Reply         The business response. Lives in GRM until it is published to Google.
+Draft         A reply that has been written and saved, not yet approved.
+Approved      A reply a human has accepted. Safe to publish. Not on Google yet.
+Published     The reply is live on Google.
+Failed        Publish was attempted and Google (or the connection) rejected it.
+Unassigned    A location synced from Google that is not attached to a client.
+Critical      A 1-star or 2-star review.
+AI draft      A reply written by the model. Always labeled. Never auto-published.
+
+Do not show database ids, UUIDs, or raw Google resource names in the primary UI.
+Google location ids may appear as secondary metadata on the client detail table
+only, in a muted monospace style.
+
+
+================================================================================
+4. INFORMATION ARCHITECTURE
+================================================================================
+
+/login                          Sign in
+/dashboard                      Command center (default after login)
+/clients                        Client list + unassigned locations
+/clients/{clientId}             One client and its locations
+/reviews                        Full review inbox
+/audit                          Audit log
+/settings                       Google connection + workspace placeholder
+
+Global navigation, top to bottom:
+  Dashboard
+  Clients
+  Reviews
+  Audit Log
+  Settings
+
+Home (/) redirects to /dashboard. There is no public marketing page.
+
+First-run order the UI must make obvious:
+  1. Sign in.
+  2. Settings → Connect Google (Business Profile).
+  3. Clients → Sync profiles (creates one client per business automatically).
+  4. Clients → assign any locations that landed in Unassigned.
+  5. Dashboard or Reviews → Sync reviews.
+  6. Reply.
+
+
+================================================================================
+5. APP SHELL (design once, reuse on every authenticated screen)
+================================================================================
+
+Desktop frame: 1440 × 900. Also deliver 1280 and a 390-wide mobile frame for
+Dashboard, Reviews, and Clients.
+
+Sidebar
+  Width 220px. White. 1px right border.
+  Top: 20px rounded square mark, white “G” on the primary blue, wordmark “GRM”.
+  The mark links to Dashboard.
+  Nav items: 15px icon + 13px medium label. Active item: pale blue background,
+  blue text. Inactive: gray text, hover pale gray.
+  Bottom: avatar with two initials, truncated email, menu opens upward with
+  “Sign out” only.
+  Mobile: sidebar is off-canvas. A menu button in the top bar opens it. A dim
+  scrim closes it. Escape closes it.
+
+Top bar
+  Height 44px. White. Bottom border.
+  Left: breadcrumb of the current section (Dashboard, Clients, Reviews,
+  Audit Log, Settings). On a client detail page, show Clients / Harbor Dental.
+  Right: empty in the current product. Do not add a fake notification bell
+  unless you are designing the optional improvement in section 12.
+
+Main
+  Scrolls independently of the sidebar. Page padding 24px mobile, 32px desktop.
+  Content max width about 1152–1280px, left aligned inside the main column.
+  Page title 20px semibold. Optional one-line description in 13px secondary.
+  Primary and secondary actions sit on the right of the title row, wrap on small
+  screens.
+
+Do not design a second header, a hero, or a footer.
+
+
+================================================================================
+6. SCREENS TO DESIGN
+================================================================================
+
+Design every frame listed under a screen. Name Figma frames exactly as written
+so engineering can map them.
+
+--------------------------------------------------------------------------------
+6.1  Sign in                                          frames: 2
+--------------------------------------------------------------------------------
+
+Purpose
+  Authenticate the operator with Google. If already signed in, they never see
+  this page.
+
+Layout
+  Full viewport, background matches the app background. No sidebar.
+  Centered card, max 400px, white, 1px border, 12px radius, 32px padding.
+
+Content
+  Mark.
+  Title: “Sign in to GRM”
+  Subtitle: “Google Business Profile review management”
+  Error alert (error frame only).
+  Primary button, full width, 40px: “Continue with Google” with the real
+  multicolor Google G icon.
+  Under the card, 12px tertiary: “By signing in you agree to the terms of service.”
+
+Frames
+  01 Sign in / default
+  02 Sign in / error
+     Alert: “Unable to sign in. Google sign-in was cancelled.”
+
+Loading: button label becomes “Redirecting…” and the button is disabled.
+Do not design email/password fields. Sign-in is Google only.
+
+--------------------------------------------------------------------------------
+6.2  Dashboard                                        frames: 6
+--------------------------------------------------------------------------------
+
+Purpose
+  Morning triage. KPIs, which locations need attention, one open location’s AI
+  summary, and the review inbox scoped by filters.
+
+Header
+  Title: “Dashboard”
+  Description: “Reputation command center — insights, filters, and replies in one place.”
+  Action, when Google is connected: “Sync reviews”
+
+Populated layout, top to bottom
+
+  A. KPI row
+     Eight metrics. Each is a clickable white card (clicking applies a filter).
+     Label 11px uppercase tertiary. Value 20–24px semibold tabular.
+     1. Reviews            total count
+     2. Needs reply        unanswered count. Amber when > 0.
+     3. Profiles open      locations that still have unanswered reviews.
+     4. Critical           unanswered 1–2 star reviews. Red when > 0.
+     5. Drafts
+     6. Ready              approved, not published. Blue.
+     7. Failed             red when > 0.
+     8. Published          green.
+     The eighth visual slot in the current app is “Avg / profiles”: average
+     rating to one decimal, a star, and the active location count. Design this
+     as a ninth quiet stat or fold average + location count into a secondary
+     strip so the eight status numbers are not crushed. Production requirement:
+     Needs reply, Critical, and Failed must be visually louder than Published.
+     Do not give all nine tiles equal weight.
+
+  B. Two summary panels side by side
+     Left: “Rating distribution”. Rows 5★ to 1★. Amber bar, count at the right.
+     Each row filters the inbox to that star.
+     Right: “Recent volume”. Four cells:
+       Last 7 days, Last 30 days, Critical (1–2★), Positive (4–5★).
+     These cells are filters, not dead numbers.
+
+  C. Two columns on wide screens. Stack on tablet and mobile.
+     Left column, about 42%:
+       “Needs attention”
+         Ranked list of locations, highest priority first. Show up to 12.
+         Row: location name, client name, average rating + star, critical count
+         if > 0 (red), unanswered count (amber).
+         Clicking a row filters the inbox to that location’s unanswered reviews.
+         Meta line: “Top 6 of 12 locations with open replies” or
+         “highest priority first”.
+       “Profiles”
+         Search “Search profiles…”.
+         Sort: Needs attention (default), Unanswered, Lowest rating,
+         Most reviews, Name A–Z.
+         Table columns: Profile, Avg, Reviews, Open, 1–2★.
+         Selected row has a pale blue background and a blue left border.
+         Sticky header. Internal scroll, do not let this table become the page.
+         Pagination: previous / next, “1–25 of 86”.
+         Empty search: “No profiles match this search.”
+     Right column:
+       If nothing is selected:
+         Dashed empty panel.
+         Title: “Select a profile”
+         Body: “Open one from Needs attention or the directory to see its AI
+         summary and scoped inbox.”
+       If a location is selected: Profile insight panel (see components).
+       Then “Review inbox”
+         Title + “Filter, draft, approve, and publish without leaving the dashboard.”
+         Count: “37 matching”
+         Filters (see 7.4)
+         Review list with inspector (see 7.5)
+         Pagination when more than 30 reviews: “Page 1 of 4”
+
+Frames
+  03 Dashboard / populated, no location selected
+  04 Dashboard / location selected, insight loaded, inbox scoped
+  05 Dashboard / first run, Google not connected
+  06 Dashboard / Google connected, no clients yet
+  07 Dashboard / clients exist, no reviews yet
+  08 Dashboard / filters return zero reviews
+
+Empty copy, use as written
+  No workspace: “No workspace found” / “Contact your administrator to be added
+  to a workspace.”
+  No reviews, no connection: “Connect Google in Settings to get started.”
+  Button: “Connect Google”
+  No reviews, connected, no clients: “Sync profiles on Clients to auto-create
+  clients, then sync reviews.” Button: “Sync profiles”
+  No reviews, connected, clients exist: “Sync reviews to populate insights and
+  your reply inbox.” Button: “Sync reviews now”
+  Filters empty: “No reviews match these filters” / “Clear filters or sync more
+  reviews from Google.”
+
+--------------------------------------------------------------------------------
+6.3  Reviews                                          frames: 4
+--------------------------------------------------------------------------------
+
+Purpose
+  The same inbox as the dashboard, without KPIs, attention queue, or insights.
+  This is the deep work surface: filter hard, multi-select, bulk act.
+
+Header
+  Title: “Reviews”
+  Description: “Full review inbox with the same filters and actions as the dashboard.”
+  Action: “Sync all” when Google is connected.
+  Count above the list: “37 matching”
+
+Body
+  Filters.
+  Bulk bar (always visible in the current app; buttons disabled at 0 selected).
+  Review list + inspector.
+  Pagination.
+
+Frames
+  09 Reviews / default populated, inspector closed
+  10 Reviews / one review open in the inspector
+  11 Reviews / 3 rows selected, bulk bar active
+  12 Reviews / empty, nothing synced
+  13 Reviews / empty, filters active
+     Title: “No reviews match your filters”
+     Body: “Try adjusting your filters or search terms.”
+
+--------------------------------------------------------------------------------
+6.4  Clients                                          frames: 3
+--------------------------------------------------------------------------------
+
+Purpose
+  See every client. Pull locations from Google. Assign stragglers.
+
+Header
+  Title: “Clients”
+  Description: “Click Sync profiles to pull every Google Business Profile you
+  manage and create a client for each one automatically.”
+  Actions: “Sync profiles” (only if Google is connected), “New Client”
+
+Unassigned board
+  Show only when at least one location has no client.
+  White card.
+  Title: “Unassigned Google locations”
+  Short explanation that these profiles were found on Google and need a client.
+  Secondary danger action: “Reset assignments”
+    Confirm before running: “Move every location back to Unassigned so you can
+    re-map them to the correct clients?”
+  Each row: map pin, location title, address, client dropdown, “Assign” button.
+  Success: “Location assigned.”
+  Error: “Choose a client before assigning.”
+
+Client grid
+  1 column mobile, 2 on small tablet, 3 on desktop.
+  Card: client name, “4 locations” or “No locations yet”, a count pill with a
+  map pin. Whole card is a link to the client.
+  Hover: slight border darkening. No imagery.
+
+New Client dialog
+  Title: “Create Client”
+  Fields: Name (required), Notes (optional, textarea).
+  Actions: Cancel, “Create” (disabled while saving; label “Creating…”).
+  Error inline: “Client name is required.” or server error.
+
+Frames
+  14 Clients / grid + unassigned board
+  15 Clients / empty, Google connected
+     “No clients yet” / “Click Sync profiles. We will create one client per
+     Google Business Profile you manage.”
+  16 Clients / empty, Google not connected
+     “Connect a Google account in Settings first, then sync profiles.”
+  17 Clients / New Client dialog open
+
+--------------------------------------------------------------------------------
+6.5  Client detail                                    frames: 3
+--------------------------------------------------------------------------------
+
+Purpose
+  Operate one client’s locations: see sync state, sync reviews, unassign.
+
+Header
+  Back link: “Clients”
+  Title: client name, e.g. “Harbor Dental”
+  Description: “Locations assigned to this business. Sync reviews, then reply
+  from the Reviews page.”
+  Action: “View reviews” → /reviews?client={id}
+
+Warning banner when this client has zero locations
+  Amber. “No locations on this client yet. On the Clients page, assign profiles
+  from the Unassigned pool to Harbor Dental.”
+
+Unlinked locations panel
+  Shown when the workspace still has unassigned locations.
+  Lets the operator attach one of those locations to this client.
+  Row: title, address, Google account name, “Add” (or equivalent assign) action.
+
+Location table
+  Meta: “4 locations” and a “Sync all reviews” button.
+  Columns:
+    Business Name     title, and store code as “#1042” when present
+    Address
+    Google Location ID    last path segment only, muted monospace
+    Status            Active (green) or Inactive (gray)
+    Last Synced       date, or “Never”, plus a per-row “Sync” button
+    Row action        unlink icon, destructive, tooltip “Unassign location”
+  Unassign does not delete the location. It returns it to Unassigned.
+  Phone exists in the data (primary phone). The current table does not show it.
+  Show phone as secondary text under the address. It is useful and already stored.
+
+Empty table
+  Dashed box. Pin icon. “No locations on this client” / “Assign Google profiles
+  from the Unassigned pool on the Clients page.”
+
+Frames
+  18 Client / locations table
+  19 Client / no locations, amber banner + empty table
+  20 Client / unassign in progress or error
+     Error banner: “Failed to disconnect location.”
+
+--------------------------------------------------------------------------------
+6.6  Audit log                                        frames: 2
+--------------------------------------------------------------------------------
+
+Purpose
+  An immutable history of important actions. Operators use it to answer
+  “who published that?” and “did sync fail?”.
+
+Header
+  Title: “Audit Log”
+  Description: “Immutable record of all important operations in your workspace.”
+
+Filters
+  Action (dropdown of known actions, human labels)
+  User (text field; current UI filters by user id — design it as a person
+  select if you have names, otherwise “Filter by user” as a search field)
+  Entity type
+  From date, To date
+
+Table columns
+  Timestamp     “25 Sep 2026, 09:16:02”  Do not use relative time here.
+  Action        colored badge, human label (list below)
+  Entity        type, and a short id only as tertiary if you must
+  Details       a few safe key/value lines (reviews synced, model, error class)
+  User          design as a person’s name. The current app shows a raw user id.
+                Replace that. Raw ids are not acceptable in a production design.
+
+Footer
+  “Showing 48 most recent entries”
+  When the cap is hit: “Showing 200 most recent entries (limited to 200 — use
+  filters to narrow)”
+
+Action badge labels and tone
+  Google connected            green
+  Google connect failed       red
+  Google disconnected         gray
+  Locations synced            blue
+  Client created              blue
+  Location connected          green
+  Location disconnected       gray
+  Review sync started         blue
+  Reviews synced              green
+  Review sync failed          red
+  AI draft generated          violet
+  Reply edited                blue
+  Reply approved              green
+  Publish started             amber
+  Reply published             green
+  Publish failed              red
+  Reply deleted               gray
+
+Frames
+  21 Audit / populated
+  22 Audit / empty
+     “No audit events yet” / “Audit events are created as you use the platform.”
+  23 Audit / filters match nothing
+     “No log entries match your filters”
+
+--------------------------------------------------------------------------------
+6.7  Settings                                         frames: 3
+--------------------------------------------------------------------------------
+
+Purpose
+  Connect or disconnect the Business Profile Google account.
+  Workspace membership is not built. Design the placeholder honestly, and also
+  design the intended member UI from section 12 as a separate frame marked
+  “proposed”, so it is not confused with what exists.
+
+Google Business Profile card
+  Title: “Google Business Profile”
+  Subtitle: “Connect your Google account to manage reviews”
+  Header action: “Connect Google”
+  Empty: “No Google accounts connected. Click Connect Google to get started.”
+  Connected row: multicolor Google G, email, “Connected 12 Aug 2026”,
+  status pill, “Disconnect”.
+  Status pills: Connected (green), Expired (amber), Revoked (red).
+  Success banner: “Google Business Profile connected successfully.”
+  Error banner: one of the real messages in section 8.
+
+Workspace card (current, must be designed)
+  Title: “Workspace”
+  Body: “Workspace details and member management will be available here.”
+  Do not fake a working member table on this frame.
+
+Frames
+  24 Settings / not connected
+  25 Settings / connected, success banner
+  26 Settings / connection error
+  27 Settings / proposed workspace members   (optional, see section 12)
+
+
+================================================================================
+7. COMPONENTS AND INTERACTION
+================================================================================
+
+--------------------------------------------------------------------------------
+7.1  Reply status
+--------------------------------------------------------------------------------
+
+A review always has exactly one of these. Show a dot + label. Color is meaning.
+
+  No reply         gray
+  Draft            gray, and a violet “AI” spark if source is AI
+  Approved         blue     (“Ready” in KPI language; “Approved” on the review)
+  Publishing       amber    label “Publishing…”
+  Published        green
+  Publish failed   red
+
+A review can also show “Replied on Google” when Google already has a reply text,
+including replies that were posted outside GRM. That is separate from GRM status.
+Show it as a green “Replied on Google” line, and show the published text in a
+green inset in the inspector.
+
+--------------------------------------------------------------------------------
+7.2  Review inspector
+--------------------------------------------------------------------------------
+
+Opens inside the list, right side, not a modal.
+Desktop: list ~55%, inspector ~45%, inspector min width 380px.
+Below the lg breakpoint: the list hides and the inspector is full width, with
+a close button returning to the list.
+
+Header
+  Reviewer name, or “Anonymous”
+  Second line: location · client
+  Close.
+
+Body
+  5-star display (filled amber, empty gray) and full timestamp.
+  Review text, 14px, comfortable line height.
+  If there is no comment: italic secondary “Rating only — no written comment.”
+  If Google already has a reply: green inset “Published on Google · {time}” and
+  the reply text.
+  Status row.
+  Then the composer, which changes with state:
+
+  No reply
+    Primary: “Generate AI Response”
+    Secondary: “Write manually”
+    While generating: spinner, “Generating…”, helper “AI is drafting a response.
+    This usually takes a few seconds.”
+
+  Writing manually (no saved draft yet)
+    Label “Draft reply”
+    Textarea, placeholder “Write your reply…”
+    Primary “Save draft” (disabled when empty)
+    Ghost “Cancel”
+
+  Draft saved
+    Reply text in a violet-tinted box if AI, neutral if manual.
+    If AI: “AI-generated draft — review before publishing”
+    Actions, in this order:
+      Primary “Approve & publish”
+      Secondary “Approve only”
+      Secondary “Edit”
+      Secondary “Regenerate”
+      Ghost trash icon, accessible name “Reject draft”
+
+  Approved
+    Primary “Publish to Google”
+    Secondary “Edit”
+    Ghost trash “Reject draft”
+
+  Publishing
+    Buttons disabled. Status reads “Publishing…”.
+
+  Published
+    Green box. “Published to Google · {time}”. No publish button.
+    The text is the reply. Do not offer delete of a live Google reply in the
+    main action row. The current product does not expose un-publish.
+
+  Failed
+    Red box. Title “Publishing failed”. The error string. Helper: “You can edit
+    the reply and try publishing again.”
+    Primary “Retry publish”
+    Secondary “Edit”
+
+  Editing an existing reply
+    Textarea.
+    Primary “Save changes”
+    Ghost “Cancel” (restores the previous text)
+
+Any failed action
+  Red alert. Title “Action failed”. The message underneath.
+
+AI rules the designer should reflect in helper text, not in a settings dump
+  Replies are 2–4 sentences, specific to the comment, professional.
+  1–2 stars: acknowledge, do not argue, do not invent refunds or discounts.
+  The operator must be able to read and edit before anything hits Google.
+  Label every AI reply until it is published.
+
+--------------------------------------------------------------------------------
+7.3  Review row
+--------------------------------------------------------------------------------
+
+Checkbox.
+Star number in a circle: green if 4–5, amber if 3, red if 1–2.
+Name (or Anonymous), relative time (Today, Yesterday, 3d ago, 2w ago, or
+“Sep 2, 2026”).
+Star icons + location name.
+Comment, 2-line clamp. Omit the comment block when the review is rating-only.
+Status pills as in 7.1.
+Selected row: pale blue background, 2px blue left border.
+Hover: pale gray.
+The checkbox does not open the inspector. The rest of the row does.
+
+--------------------------------------------------------------------------------
+7.4  Filters
+--------------------------------------------------------------------------------
+
+All filters are visible. They are not hidden in a drawer on desktop.
+Changing a filter updates the list. Provide a “Clear” text button when any
+filter is on.
+
+Row 1
+  Client select, default “All profiles”. If there are more than 25 clients,
+  this becomes a search field “Search profiles…” with suggestions.
+  Location select, default “All locations”. Options narrow to the chosen client.
+  Period: All time, 7 days, 30 days, 90 days.
+
+Row 2, chips
+  All, Needs reply, Drafts, Ready to publish, Failed, Published, Any reply.
+  Active chip: near-black background, white text.
+
+Row 3, chips
+  “1–2★ Critical” (red when on)
+  “4–5★ Positive” (green when on)
+  Divider
+  5, 4, 3, 2, 1 with a star icon (amber when that exact star is on)
+  Divider
+  “Has comment”
+
+Row 4
+  Search field, full width up to ~320px. Placeholder: “Search reviewer or
+  review text…”. Search applies after a short pause while typing.
+
+--------------------------------------------------------------------------------
+7.5  Bulk bar
+--------------------------------------------------------------------------------
+
+Sits above the list.
+“Select all on page” checkbox.
+“3 selected”
+Actions, right aligned:
+  “AI draft”
+  “Approve”
+  “Approve & publish”   (primary)
+  “Reject drafts”       (red text, ghost)
+Disabled when nothing is selected.
+While running, the active button shows a spinner and the set is disabled.
+Result line: green “publish: 3 succeeded” or red error.
+Partial failure: “generate: 2 succeeded, 1 failed”
+
+--------------------------------------------------------------------------------
+7.6  Profile insight panel
+--------------------------------------------------------------------------------
+
+White card.
+Client name, 11px tertiary.
+Location title, 15px semibold.
+Sentiment pill: Positive (green), Mixed (amber), Negative (red), Neutral (gray).
+Close (clears the selection).
+Meta: average rating, “214 reviews”, “6 need reply” as a link that scopes the
+inbox to unanswered, “2 critical” in red when > 0.
+Summary paragraph, 13px.
+Theme chips, up to a handful, gray.
+Up to 3 risks as a short red list.
+Actions:
+  No summary yet: “Generate AI summary” (disabled if the location has 0 reviews)
+  Summary exists and is current: “Refresh AI summary”
+  Summary exists and reviews have changed: “Update AI summary” plus amber
+  “Out of date”
+Helper, always: “Insights generate only for the open profile (quota-safe).”
+Error under the button if generation fails.
+
+The summary can include themes, highlights, and risks. Current UI shows themes
+and risks. Also design a Highlights list (neutral or green) so both sides of
+the summary are visible. Cap each list at 3 items.
+
+--------------------------------------------------------------------------------
+7.7  Sync buttons
+--------------------------------------------------------------------------------
+
+“Sync reviews”, “Sync all”, “Sync”, “Sync profiles”, “Sync all reviews”.
+They are buttons, not links. While a sync runs, show a spinner and disable the
+button. On failure, an error toast or an inline alert. Do not navigate away.
+
+--------------------------------------------------------------------------------
+7.8  Dialogs, toasts, confirms
+--------------------------------------------------------------------------------
+
+New Client is a centered dialog, max about 448px, with a visible close control
+and a click-outside or Escape to dismiss when not submitting.
+
+Reset assignments uses a confirm. Design it as a small confirm dialog, not a
+browser alert:
+  Title: “Reset location assignments?”
+  Body: “Every location moves back to Unassigned. Clients stay. You can map
+  them again.”
+  Actions: “Cancel”, destructive “Reset”.
+
+Toasts (top or bottom corner, one at a time):
+  Success, short. Example: “Location assigned.”
+  Error, short, with the server message.
+
+--------------------------------------------------------------------------------
+7.9  Empty state pattern
+--------------------------------------------------------------------------------
+
+One component. Centered in the page or section. 32px muted icon. 14px semibold
+title. 13px secondary description. Optional buttons under the text. Plenty of
+vertical padding. No illustration scene.
+
+
+================================================================================
+8. REAL ERROR COPY (use these, do not invent softer versions)
+================================================================================
+
+Google connect
+  access denied
+    “You denied access to your Google account. You can try again when ready.”
+  auth failed
+    “Google authorization failed. Please try again.”
+  incomplete response
+    “The authorization response was incomplete. Please try again.”
+  invalid or tampered
+    “The authorization request was invalid or tampered with. Please try again.”
+  expired
+    “The authorization request expired. Please try again.”
+  token exchange failed
+    “Could not complete authorization with Google. Please try again.”
+  no offline access
+    “Google did not grant offline access. Please revoke access in your Google
+    account settings and try again.”
+  code already used
+    “The authorization code was invalid or already used. Please try again.”
+  unknown
+    “An unexpected error occurred. Please try again.”
+
+Reply and sync
+  “Action failed” plus the specific message.
+  “Publishing failed” plus the Google or network error, and “You can edit the
+  reply and try publishing again.”
+  “Unable to reach the server” for insight generation when the request never
+  returns.
+  “Choose a client before assigning.”
+
+
+================================================================================
+9. SAMPLE CONTENT (use this data in every populated frame)
+================================================================================
+
+Workspace: Explained Digital
+Operator: Maya Kapoor, MK, maya@explained.digital
+Google: ops@explained.digital, connected, last refreshed today 9:02 AM
+
+Clients
+  Harbor Dental          4 locations
+  Northline Fitness      2 locations
+  Elm Street Coffee      1 location
+
+Locations
+  Harbor Dental — Downtown     120 King St, San Francisco     4.1   214 reviews   6 open   2 critical
+  Harbor Dental — Westside     88 Oak Ave                     4.4   96 reviews    4 open   0 critical
+  Harbor Dental — Mission      501 Valencia St                4.6   140 reviews  1 open   0 critical
+  Harbor Dental — Soma         90 Folsom St                   3.9   58 reviews    3 open   1 critical
+  Northline Fitness — Midtown  400 Market St                  3.2   80 reviews    5 open   3 critical
+  Northline Fitness — Uptown   88 Mercer St                   unassigned
+  Elm Street Coffee            14 Elm St                      4.7   310 reviews   1 open   0 critical
+  Harbor Dental — Airport      4100 Airport Blvd              unassigned
+
+KPI sample
+  Reviews 1,284
+  Needs reply 37
+  Profiles open 12
+  Critical 8
+  Drafts 9
+  Ready 14
+  Failed 3
+  Published 1,102
+  Average 4.4 across 9 locations
+  Last 7 days 64
+  Last 30 days 241
+  Stars: 5★ 812, 4★ 301, 3★ 96, 2★ 41, 1★ 34
+
+Reviews to place in the inbox
+  1. Priya Shah, 2★, Yesterday, Harbor Dental — Downtown
+     “Charged for a cleaning I was told was included. Nobody called me back.”
+     Status: No reply
+  2. James Okonkwo, 1★, 2d ago, Northline Fitness — Midtown
+     “On hold for 26 minutes to move an appointment. The person who answered
+     was polite, but this keeps happening.”
+     Status: Draft, AI
+     Draft text: “James, I’m sorry you spent that long on hold — that’s not the
+     experience we want when you’re trying to reschedule. I’ve shared this with
+     our front office so we can look at hold times. You’re welcome to call the
+     club directly and we’ll move the appointment for you.”
+  3. Anonymous, 5★, 4d ago, Elm Street Coffee
+     No written comment.
+     Status: Published
+     Google reply: “Thanks for the visit — glad you stopped in.”
+  4. Lena Ortiz, 4★, 6d ago, Harbor Dental — Westside
+     “Hygienist was great. Front desk still took a while to confirm my next
+     visit.”
+     Status: Approved
+  5. Chris Dalton, 1★, 8d ago, Harbor Dental — Downtown
+     “Billing department never returned two calls.”
+     Status: Failed
+     Error: “Google rejected the reply. The Business Profile connection needs
+     to be refreshed.”
+  6. Amina Farouk, 3★, 12d ago, Northline Fitness — Midtown
+     “Classes are good. Locker room was not clean on Tuesday.”
+     Status: Publishing
+
+Insight sample, Harbor Dental — Downtown, sentiment Mixed
+  Summary: “Guests praise the front desk and short wait times. The last three
+  weeks concentrate on billing surprises and a long hold when rescheduling.
+  Two 1-star reviews this week are still unanswered.”
+  Themes: Billing, Scheduling, Front desk
+  Highlights: Short wait times. Hygienist called out by name.
+  Risks: Surprise cleaning charges. Hold times when rescheduling.
+
+Audit sample rows
+  Today 9:16 AM    Reply published        Harbor Dental — Downtown, Priya Shah     Maya Kapoor
+  Today 9:14 AM    Reviews synced         128 new, 14 updated                      Maya Kapoor
+  Today 9:02 AM    AI draft generated     James Okonkwo, 1 star                    Maya Kapoor
+  Yesterday 4:40 PM  Publish failed       Elm Street Coffee                        Maya Kapoor
+  Yesterday 11:05 AM Google connected     ops@explained.digital                    Maya Kapoor
+
+
+================================================================================
+10. VISUAL STANDARD
+================================================================================
+
+Design a production interface, not a concept poster. The current app is a
+working internal tool: small type, equal-weight cards, gray borders, almost no
+hierarchy. The Figma file should keep that operational density and raise the
+finish.
+
+Reference feel
+  Linear, Attio, or a well-made Stripe internal tool.
+  Quiet, fast to scan, obvious primary action, no decoration.
+
+Color
+  Background        #F6F7F9
+  Surface           #FFFFFF
+  Border            #E6E8EC
+  Text primary      #111827
+  Text secondary    #6B7280
+  Text tertiary     #9CA3AF
+  Primary           #1A56DB     buttons, active nav, links, focus
+  Primary tint      #EEF3FC     selected nav and selected rows
+  Amber             needs reply, publishing, mixed sentiment, out of date
+  Red               critical, failed, destructive
+  Green             published, connected, positive
+  Violet            AI only. A small spark or a tinted draft. Never a large
+                    purple panel.
+  Star fill         #F5B400
+  Star empty        #E5E7EB
+
+Do not use gradients, glass, mesh backgrounds, illustrated empty states,
+or more than one accent hue.
+
+Type
+  Inter, or the closest neutral grotesque already in the Figma library.
+  Page title     20 / 28 semibold
+  Section title  14 / 20 semibold
+  Body           13 / 20
+  Review body    14 / 22
+  Meta           12 / 16
+  Label          11 / 16 medium, uppercase, tracking 0.04em, tertiary color
+  All counts and ratings: tabular numbers.
+
+Space and shape
+  8px grid.
+  Card radius 8px. Button and input radius 6px. Pills radius 999px only for
+  status, not for every button.
+  Card shadow: none, or 0 1px 2px rgba(16, 24, 40, 0.04). Borders do the work.
+  Page sections separated by 24px.
+  Hit target minimum 32px height. Primary buttons 32px on dense toolbars, 40px
+  on sign-in.
+
+Focus
+  2px primary ring, 2px offset, on every interactive control. Design the focus
+  state on buttons, inputs, nav items, and rows. Do not remove outlines.
+
+Density
+  This is a list product. Rows around 64–88px for a review, 40–44px for a
+  profile table row. Do not turn reviews into large social cards.
+
+Iconography
+  Lucide, 16px in buttons, 15px in nav, 1.5px stroke. Do not mix icon sets.
+
+
+================================================================================
+11. RESPONSIVE AND ACCESSIBILITY
+================================================================================
+
+Breakpoints to deliver
+  1440   full shell, dashboard two columns, inspector beside the list
+  1280   same, KPI tiles wrap to two rows rather than shrinking type below 20px
+  768    sidebar becomes a drawer. Dashboard stacks: KPIs, then attention,
+         then insight, then inbox.
+  390    one column. Review inspector replaces the list. Filters wrap. Bulk
+         actions wrap under the select-all line. Client cards are one column.
+
+Accessibility
+  Color is never the only status signal. Pair it with a word (Failed, Published).
+  Star ratings have an accessible name “2 out of 5 stars”, not five unlabeled icons.
+  Icon-only buttons (close, unlink, reject) have a visible tooltip and an
+  accessible name.
+  Dialogs trap focus. Escape closes sidebar, dialogs, and the inspector.
+  Contrast of body text on white at least 4.5:1. Tertiary labels at least 3:1
+  if they are not essential; if a label is essential, use secondary text instead.
+  Do not rely on placeholder text as the only field label.
+
+
+================================================================================
+12. DESIGN THESE IF TIME ALLOWS (proposed, mark frames “proposed”)
+================================================================================
+
+These are real gaps. Keep them in a separate Figma page so they are not mistaken
+for the current product.
+
+  A. First-run checklist on the empty dashboard
+     Three steps: Google connected, Sync profiles, Sync reviews.
+     Completed step shows a check and the account email. The current step has
+     the action button. Later steps are muted.
+
+  B. Settings → Workspace members
+     Workspace name “Explained Digital”, slug “explained-digital”.
+     Table: name, email, role (Owner, Admin, Member).
+     Maya is Owner and cannot be demoted in the UI.
+     Invite by email + “Send invite”.
+     Roles already exist in the product model. The page does not.
+
+  C. Reply voice
+     One workspace default textarea:
+     “Warm, specific, and brief. Never offer refunds, discounts, or legal
+     admissions. Invite the reviewer to continue offline on 1–3 star reviews.”
+     Note that a per-client voice can override it later. Do not design per-client
+     voice editors unless asked.
+
+  D. Audit readability
+     Replace user ids with names.
+     Sentence-style event: “Maya published a reply on Harbor Dental — Downtown.”
+     Optional “Export CSV” as a quiet text button. Not built today.
+
+  E. Stronger hierarchy on the dashboard
+     Four loud metrics (Needs reply, Critical, Ready, Failed) and a quiet strip
+     for volume, average, and star distribution. Same data as section 6.2.
+     This is a presentation change, not a new feature.
+
+Do not design: billing, notifications, competitor tracking, review solicitation
+campaigns, white-label client portals, or mobile native apps.
+
+
+================================================================================
+13. FIGMA FILE STRUCTURE
+================================================================================
+
+Page 1  Cover
+        Product name, one-paragraph description, frame index.
+
+Page 2  Foundations
+        Color, type, space, radius, icons, status colors, star rating.
+
+Page 3  Shell
+        Sidebar expanded, sidebar collapsed (mobile drawer), top bar, user menu.
+
+Page 4  Components
+        Buttons, inputs, selects, chips, badges, review row, KPI tile, empty
+        state, dialog, confirm, toast, insight panel, bulk bar, pagination.
+        Each component: default, hover, focus, disabled, and the semantic
+        variants that exist (destructive, AI).
+
+Page 5  Sign in
+Page 6  Dashboard
+Page 7  Reviews
+Page 8  Clients
+Page 9  Client detail
+Page 10 Audit
+Page 11 Settings
+Page 12 Proposed
+
+Name every frame with the numbers in section 6, for example
+“04 Dashboard / location selected”.
+
+Use auto layout. Text must be real copy from section 9, not lorem ipsum.
+Components must be instances, not detached one-offs, so engineering can see
+what repeats.
+
+
+================================================================================
+14. DONE WHEN
+================================================================================
+
+  Every numbered frame in section 6 exists, including empty and error frames.
+  A reviewer can follow: sign in → connect Google → sync profiles → assign a
+  location → open dashboard → generate a draft → approve and publish, using
+  only the frames, without a verbal walkthrough.
+  Needs reply, Critical, and Failed are identifiable within one second on the
+  dashboard.
+  AI content is always labeled, and publish is a separate deliberate action.
+  No raw user ids or database ids in primary UI.
+  Focus, hover, disabled, and loading are specified on buttons that trigger
+  sync, generate, approve, and publish.
+  Mobile frames exist for Dashboard, Reviews, and Clients.
+  Proposed work is on its own page and labeled proposed.

@@ -1,0 +1,585 @@
+---
+alwaysApply: true
+---
+
+# Next.js Fetch Architecture Rules
+Version: 1.0
+
+---
+
+# Goal
+
+Design every fetch in this project so that the application feels **instant**.
+
+The user should never experience:
+
+Loading page
+↓
+
+Skeleton
+↓
+
+Browser fetches API
+↓
+
+Content appears
+
+Instead:
+
+Request
+↓
+
+Server fetches everything
+↓
+
+HTML already contains data
+↓
+
+Instant paint
+
+---
+
+# Golden Rule
+
+**If data is required to render the page, it MUST be fetched on the server.**
+
+Never fetch page content inside:
+
+- useEffect
+- useLayoutEffect
+- component mount
+- SWR
+- React Query
+
+unless the feature explicitly requires live updates.
+
+---
+
+# Preferred Architecture
+
+Browser
+
+↓
+
+Server Component
+
+↓
+
+API Layer
+
+↓
+
+Database / External API
+
+NOT
+
+Browser
+
+↓
+
+Client Component
+
+↓
+
+fetch()
+
+↓
+
+API
+
+---
+
+# Fetch Hierarchy
+
+app/
+
+layout.tsx
+↓
+
+page.tsx
+↓
+
+server helpers
+↓
+
+fetch()
+
+↓
+
+API
+
+Client Components only receive props.
+
+Client Components never own page data.
+
+---
+
+# Server Components
+
+Every page should be:
+
+```tsx
+export default async function Page() {
+    const data = await getData();
+
+    return <PageView data={data} />;
+}
+```
+
+Never:
+
+```tsx
+"use client";
+
+useEffect(() => {
+   fetch(...)
+})
+```
+
+---
+
+# API Layer
+
+Never call fetch directly from pages.
+
+Instead:
+
+lib/
+
+api/
+
+cms.ts
+
+users.ts
+
+dashboard.ts
+
+analytics.ts
+
+Every endpoint should have a typed helper.
+
+Example:
+
+```ts
+export async function getProjects() {}
+
+export async function getUsers() {}
+
+export async function getDashboard()
+```
+
+Pages should never know URLs.
+
+---
+
+# Native Fetch Only
+
+Always prefer:
+
+```ts
+await fetch(...)
+```
+
+instead of Axios.
+
+Reason:
+
+Native fetch integrates with:
+
+- Next Cache
+- Revalidation
+- Tags
+- Streaming
+- Server Components
+
+---
+
+# Cache Rules
+
+Every fetch must intentionally choose one strategy.
+
+Static content
+
+```ts
+next: {
+   revalidate: 3600
+}
+```
+
+Semi-dynamic
+
+```ts
+next: {
+   revalidate: 300
+}
+```
+
+Frequently changing
+
+```ts
+next: {
+   revalidate: 30
+}
+```
+
+Always fresh
+
+```ts
+cache: "no-store"
+```
+
+Never omit caching intentionally.
+
+Every fetch must declare how it should behave.
+
+---
+
+# Parallel Fetching
+
+Never:
+
+```ts
+const a = await getA();
+
+const b = await getB();
+
+const c = await getC();
+```
+
+Always:
+
+```ts
+const [a,b,c] = await Promise.all([
+   getA(),
+   getB(),
+   getC()
+]);
+```
+
+Sequential fetching is allowed ONLY when:
+
+B depends on A.
+
+---
+
+# Global Data
+
+Anything used across multiple pages belongs in layout.tsx.
+
+Examples:
+
+Navbar
+
+Footer
+
+Sidebar
+
+User
+
+Notifications
+
+Settings
+
+Workspace
+
+Theme
+
+Company
+
+Do NOT fetch them repeatedly on every page.
+
+---
+
+# Client Components
+
+Client Components exist only for:
+
+Animations
+
+Forms
+
+Dropdowns
+
+Dialogs
+
+Tabs
+
+Local State
+
+Framer Motion
+
+Input Handling
+
+Drag & Drop
+
+Realtime UI
+
+They receive data.
+
+They do not fetch page data.
+
+---
+
+# User Actions
+
+Fetching after hydration is allowed ONLY for:
+
+Submitting forms
+
+Saving data
+
+Deleting
+
+Editing
+
+Infinite scrolling
+
+Realtime polling
+
+WebSockets
+
+Search autocomplete
+
+Everything else belongs on the server.
+
+---
+
+# Route Structure
+
+Good
+
+app/
+
+dashboard/
+
+page.tsx
+
+↓
+
+lib/dashboard.ts
+
+↓
+
+fetch()
+
+Bad
+
+Dashboard.tsx
+
+↓
+
+useEffect()
+
+↓
+
+fetch()
+
+---
+
+# URL Driven State
+
+Filtering
+
+Sorting
+
+Pagination
+
+Search
+
+should be reflected in the URL.
+
+Example
+
+/dashboard?page=2
+
+/products?category=laptop
+
+/search?q=iphone
+
+The server should render the correct result.
+
+Do not fetch after changing local state.
+
+---
+
+# Data Ownership
+
+Server owns:
+
+Business data
+
+CMS
+
+Database
+
+API responses
+
+Authentication
+
+Permissions
+
+Client owns:
+
+Open modal
+
+Expanded sidebar
+
+Current tab
+
+Hovered item
+
+Input values
+
+Animations
+
+---
+
+# Loading UI
+
+Loading UI should only exist for:
+
+Streaming
+
+Slow nested routes
+
+Lazy imports
+
+Never because data is fetched in useEffect.
+
+---
+
+# Folder Structure
+
+lib/
+
+api/
+
+users.ts
+
+dashboard.ts
+
+analytics.ts
+
+posts.ts
+
+comments.ts
+
+auth.ts
+
+cache.ts
+
+types.ts
+
+Every file exports typed functions.
+
+No component should know endpoint URLs.
+
+---
+
+# Error Handling
+
+Every fetch helper should:
+
+Validate response
+
+Throw typed errors
+
+Never return undefined
+
+Example
+
+```ts
+if (!response.ok) {
+   throw new Error("Failed to fetch dashboard");
+}
+```
+
+---
+
+# Authentication
+
+Read session on the server.
+
+Never fetch user information after hydration if the page depends on it.
+
+---
+
+# Performance Rules
+
+✅ Server Components first
+
+✅ Native fetch
+
+✅ Promise.all
+
+✅ Cache intentionally
+
+✅ Revalidate intentionally
+
+✅ Layout owns shared data
+
+✅ URL-driven state
+
+✅ Client only for interaction
+
+---
+
+# Anti Patterns
+
+❌ useEffect fetching page content
+
+❌ Axios everywhere
+
+❌ Duplicate API calls
+
+❌ Client fetching user/session
+
+❌ Nested sequential fetches
+
+❌ Passing URLs into components
+
+❌ Business logic inside UI
+
+❌ Fetching Navbar/Footer repeatedly
+
+❌ Loading spinners for normal pages
+
+---
+
+# Code Review Checklist
+
+Before merging, verify:
+
+[ ] Is this page a Server Component?
+
+[ ] Is page data fetched on the server?
+
+[ ] Is fetch centralized?
+
+[ ] Is caching intentional?
+
+[ ] Is Promise.all used?
+
+[ ] Is shared data fetched in layout?
+
+[ ] Is this client fetch actually necessary?
+
+[ ] Can this become a Server Component?
+
+[ ] Can duplicate requests be removed?
+
+[ ] Does first HTML already contain all important content?
+
+---
+
+# Ultimate Principle
+
+The browser should receive a fully-rendered page.
+
+Client-side fetching is the exception.
+
+Server-side fetching is the default.
+
+Design every page so that the first paint already contains meaningful content.
+
+If a user can see a loading spinner because the browser is waiting for data, reconsider the architecture.
