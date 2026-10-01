@@ -106,7 +106,8 @@ export async function getDashboardData(
     { data: allClients },
     { data: allLocations },
     { data: connections },
-    allReviewsLite,
+    locationStats,
+    { data: unassignedClients },
   ] = await Promise.all([
     admin
       .from("grm_clients")
@@ -130,22 +131,19 @@ export async function getDashboardData(
       .eq("workspace_id", workspaceId)
       .eq("status", "active")
       .limit(1),
-    // Aggregate fields only — not full review bodies
+    admin.rpc("grm_location_review_stats", { p_workspace_id: workspaceId }),
     admin
-      .from("grm_reviews")
-      .select("location_id, star_rating, reply_status, review_create_time")
-      .eq("workspace_id", workspaceId),
+      .from("grm_clients")
+      .select("id")
+      .eq("workspace_id", workspaceId)
+      .eq("notes", UNASSIGNED_CLIENT_MARKER),
   ]);
 
-  const unassignedIds = new Set(
-    (
-      await admin
-        .from("grm_clients")
-        .select("id")
-        .eq("workspace_id", workspaceId)
-        .eq("notes", UNASSIGNED_CLIENT_MARKER)
-    ).data?.map((c) => c.id) ?? []
-  );
+  if (locationStats.error) {
+    throw new Error(`Failed to load review stats: ${locationStats.error.message}`);
+  }
+
+  const unassignedIds = new Set((unassignedClients ?? []).map((c) => c.id));
 
   const locations = (allLocations ?? []).filter((l) => {
     if (!l.client_id || unassignedIds.has(l.client_id)) return false;
@@ -156,7 +154,8 @@ export async function getDashboardData(
     );
   });
 
-  const reviewsLite = allReviewsLite.data ?? [];
+  const statsRows = locationStats.data ?? [];
+  const byLocStats = new Map(statsRows.map((s) => [s.location_id, s]));
 
   const ratingDistribution: Record<1 | 2 | 3 | 4 | 5, number> = {
     1: 0,
@@ -165,79 +164,50 @@ export async function getDashboardData(
     4: 0,
     5: 0,
   };
+  let totalReviews = 0;
   let ratingSum = 0;
   let unanswered = 0;
   let drafts = 0;
   let approved = 0;
   let failed = 0;
   let published = 0;
-  const now = Date.now();
   let reviewsLast7d = 0;
   let reviewsLast30d = 0;
   let criticalReviews = 0;
 
-  type LocAgg = {
-    count: number;
-    unanswered: number;
-    critical: number;
-    sum: number;
-    lastAt: string | null;
-  };
-  const byLocStats = new Map<string, LocAgg>();
-  for (const l of locations) {
-    byLocStats.set(l.id, {
-      count: 0,
-      unanswered: 0,
-      critical: 0,
-      sum: 0,
-      lastAt: null,
-    });
-  }
-
-  for (const r of reviewsLite) {
-    const star = r.star_rating as 1 | 2 | 3 | 4 | 5;
-    if (star >= 1 && star <= 5) ratingDistribution[star] += 1;
-    ratingSum += r.star_rating;
-    if (r.star_rating <= 2) criticalReviews += 1;
-    if (r.reply_status === "none") unanswered += 1;
-    else if (r.reply_status === "draft") drafts += 1;
-    else if (
-      r.reply_status === "approved" ||
-      r.reply_status === "pending_publish"
-    )
-      approved += 1;
-    else if (r.reply_status === "failed") failed += 1;
-    else if (r.reply_status === "published") published += 1;
-
-    const t = new Date(r.review_create_time).getTime();
-    if (now - t <= 7 * 86400000) reviewsLast7d += 1;
-    if (now - t <= 30 * 86400000) reviewsLast30d += 1;
-
-    const s = byLocStats.get(r.location_id);
-    if (!s) continue;
-    s.count += 1;
-    s.sum += r.star_rating;
-    if (r.reply_status === "none") s.unanswered += 1;
-    if (r.star_rating <= 2) s.critical += 1;
-    if (!s.lastAt || r.review_create_time > s.lastAt) {
-      s.lastAt = r.review_create_time;
-    }
+  for (const s of statsRows) {
+    totalReviews += s.review_count;
+    ratingSum += Number(s.rating_sum);
+    unanswered += s.unanswered;
+    drafts += s.drafts;
+    approved += s.approved;
+    failed += s.failed;
+    published += s.published;
+    criticalReviews += s.critical;
+    reviewsLast7d += s.last_7d;
+    reviewsLast30d += s.last_30d;
+    ratingDistribution[1] += s.r1;
+    ratingDistribution[2] += s.r2;
+    ratingDistribution[3] += s.r3;
+    ratingDistribution[4] += s.r4;
+    ratingDistribution[5] += s.r5;
   }
 
   const allProfiles: ProfileRow[] = locations.map((l) => {
     const client = Array.isArray(l.grm_clients) ? l.grm_clients[0] : l.grm_clients;
     const clientName = (client as { name?: string } | null)?.name ?? null;
-    const s = byLocStats.get(l.id)!;
+    const s = byLocStats.get(l.id);
+    const count = s?.review_count ?? 0;
     const row = {
       id: l.id,
       title: l.location_title,
       clientId: l.client_id,
       clientName,
-      reviewCount: s.count,
-      unanswered: s.unanswered,
-      critical: s.critical,
-      avgRating: s.count > 0 ? s.sum / s.count : null,
-      lastReviewAt: s.lastAt,
+      reviewCount: count,
+      unanswered: s?.unanswered ?? 0,
+      critical: s?.critical ?? 0,
+      avgRating: s && count > 0 ? Number(s.rating_sum) / count : null,
+      lastReviewAt: s?.last_review_at ?? null,
       attentionScore: 0,
     };
     row.attentionScore = attentionScore(row);
@@ -247,13 +217,13 @@ export async function getDashboardData(
   const profilesNeedingReply = allProfiles.filter((p) => p.unanswered > 0).length;
 
   const kpis: DashboardKpis = {
-    totalReviews: reviewsLite.length,
+    totalReviews,
     unanswered,
     drafts,
     approved,
     failed,
     published,
-    avgRating: reviewsLite.length > 0 ? ratingSum / reviewsLite.length : null,
+    avgRating: totalReviews > 0 ? ratingSum / totalReviews : null,
     ratingDistribution,
     clientsActive: (allClients ?? []).length,
     locationsActive: locations.length,
@@ -271,7 +241,7 @@ export async function getDashboardData(
 
   // Profile directory — search + sort + paginate
   const pq = filters.profileQ.trim().toLowerCase();
-  let directory = allProfiles.filter((p) => {
+  const directory = allProfiles.filter((p) => {
     if (filters.clientId && p.clientId !== filters.clientId) return false;
     if (!pq) return true;
     return (

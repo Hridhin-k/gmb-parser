@@ -3,6 +3,7 @@ import { AppError, AuthorizationError, ValidationError } from "@/lib/errors";
 import { AuditService } from "@/lib/services/audit";
 import { logger } from "@/lib/logger";
 import type { GrmMemberRole } from "@/lib/types";
+import { canManageMember } from "@/lib/roles";
 
 const WORKSPACE_SLUG = /^[a-z0-9][a-z0-9-]{0,61}[a-z0-9]$/;
 
@@ -394,7 +395,11 @@ async function findUserIdByEmail(email: string): Promise<string | null> {
   return match?.id ?? null;
 }
 
-async function requireManager(userId: string, workspaceId: string): Promise<GrmMemberRole> {
+async function requireManager(
+  userId: string,
+  workspaceId: string,
+  deniedMessage = "Only an owner or admin can invite people."
+): Promise<GrmMemberRole> {
   const admin = createAdminClient();
   const { data, error } = await admin
     .from("grm_workspace_members")
@@ -409,9 +414,130 @@ async function requireManager(userId: string, workspaceId: string): Promise<GrmM
     });
   }
   if (!data || (data.role !== "owner" && data.role !== "admin")) {
-    throw new AuthorizationError("Only an owner or admin can invite people.");
+    throw new AuthorizationError(deniedMessage);
   }
   return data.role;
+}
+
+async function loadTargetMember(workspaceId: string, targetUserId: string) {
+  const admin = createAdminClient();
+  const { data, error } = await admin
+    .from("grm_workspace_members")
+    .select("user_id, role")
+    .eq("workspace_id", workspaceId)
+    .eq("user_id", targetUserId)
+    .maybeSingle();
+  if (error) {
+    throw new AppError("Could not load workspace members.", "DB_ERROR", 500, {
+      dbError: error.message,
+    });
+  }
+  if (!data) {
+    throw new ValidationError("That person is no longer in this workspace.");
+  }
+  return data;
+}
+
+export async function changeMemberRole(input: {
+  workspaceId: string;
+  actorId: string;
+  targetUserId: string;
+  role: "admin" | "member";
+}): Promise<void> {
+  if (input.actorId === input.targetUserId) {
+    throw new ValidationError("You cannot change your own role.");
+  }
+  const actorRole = await requireManager(
+    input.actorId,
+    input.workspaceId,
+    "Only an owner or admin can change roles."
+  );
+  const target = await loadTargetMember(input.workspaceId, input.targetUserId);
+
+  if (!canManageMember(actorRole, target.role)) {
+    throw new AuthorizationError(
+      target.role === "owner"
+        ? "The workspace owner's role cannot be changed."
+        : "Only the owner can change an admin's role."
+    );
+  }
+  if (actorRole === "admin" && input.role === "admin") {
+    throw new AuthorizationError("Only the owner can make someone an admin.");
+  }
+  if (target.role === input.role) return;
+
+  const admin = createAdminClient();
+  const { error } = await admin
+    .from("grm_workspace_members")
+    .update({ role: input.role })
+    .eq("workspace_id", input.workspaceId)
+    .eq("user_id", input.targetUserId);
+  if (error) {
+    throw new AppError("Could not change the role.", "DB_ERROR", 500, {
+      dbError: error.message,
+    });
+  }
+
+  await AuditService.log({
+    workspaceId: input.workspaceId,
+    userId: input.actorId,
+    action: "workspace.member_role_changed",
+    entityType: "grm_workspace_members",
+    entityId: input.targetUserId,
+    metadata: { role: input.role, previousRole: target.role } as Record<string, unknown>,
+  });
+}
+
+export async function removeMember(input: {
+  workspaceId: string;
+  actorId: string;
+  targetUserId: string;
+}): Promise<void> {
+  const leaving = input.actorId === input.targetUserId;
+  const target = await loadTargetMember(input.workspaceId, input.targetUserId);
+
+  if (leaving) {
+    if (target.role === "owner") {
+      throw new ValidationError("The owner cannot leave their own workspace.");
+    }
+  } else {
+    const actorRole = await requireManager(
+      input.actorId,
+      input.workspaceId,
+      "Only an owner or admin can remove people."
+    );
+    if (!canManageMember(actorRole, target.role)) {
+      throw new AuthorizationError(
+        target.role === "owner"
+          ? "The workspace owner cannot be removed."
+          : "Only the owner can remove an admin."
+      );
+    }
+  }
+
+  const admin = createAdminClient();
+  const { error } = await admin
+    .from("grm_workspace_members")
+    .delete()
+    .eq("workspace_id", input.workspaceId)
+    .eq("user_id", input.targetUserId);
+  if (error) {
+    throw new AppError(
+      leaving ? "Could not leave the workspace." : "Could not remove that person.",
+      "DB_ERROR",
+      500,
+      { dbError: error.message }
+    );
+  }
+
+  await AuditService.log({
+    workspaceId: input.workspaceId,
+    userId: input.actorId,
+    action: leaving ? "workspace.member_left" : "workspace.member_removed",
+    entityType: "grm_workspace_members",
+    entityId: input.targetUserId,
+    metadata: { role: target.role } as Record<string, unknown>,
+  });
 }
 
 export async function inviteToWorkspace(input: {
@@ -425,7 +551,10 @@ export async function inviteToWorkspace(input: {
     throw new ValidationError("Enter a valid email address.");
   }
 
-  await requireManager(input.inviterId, input.workspaceId);
+  const inviterRole = await requireManager(input.inviterId, input.workspaceId);
+  if (input.role === "admin" && inviterRole !== "owner") {
+    throw new AuthorizationError("Only the owner can invite an admin.");
+  }
 
   const admin = createAdminClient();
   const { data: inviter } = await admin.auth.admin.getUserById(input.inviterId);

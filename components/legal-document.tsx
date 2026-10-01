@@ -33,7 +33,7 @@ export function LegalDocument({
           {updated}
         </p>
         <h1
-          className="mt-3 text-[40px] leading-[1.1] tracking-[-0.032em]"
+          className="mt-3 text-[32px] leading-[1.1] tracking-[-0.032em] sm:text-[40px]"
           style={{ fontFamily: "var(--font-plus-jakarta), sans-serif" }}
         >
           {title}

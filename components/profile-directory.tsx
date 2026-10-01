@@ -37,9 +37,13 @@ export function ProfileDirectory({
   const pathname = usePathname();
   const searchParams = useSearchParams();
   const [q, setQ] = useState(currentQuery);
+  const [syncedQuery, setSyncedQuery] = useState(currentQuery);
   const [, startTransition] = useTransition();
 
-  useEffect(() => setQ(currentQuery), [currentQuery]);
+  if (syncedQuery !== currentQuery) {
+    setSyncedQuery(currentQuery);
+    setQ(currentQuery);
+  }
 
   useEffect(() => {
     if (q === currentQuery) return;
@@ -94,10 +98,10 @@ export function ProfileDirectory({
         </div>
       </div>
 
-      <div className="flex flex-wrap items-center gap-2">
-        <div className="relative min-w-[200px] flex-1 sm:max-w-xs">
+      <div className="grid grid-cols-1 gap-2 sm:flex sm:flex-wrap sm:items-center">
+        <div className="relative min-w-0 sm:min-w-[200px] sm:max-w-xs sm:flex-1">
           <Search
-            className="absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-gray-400"
+            className="absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-[#898b91]"
             aria-hidden
           />
           <input
@@ -117,7 +121,7 @@ export function ProfileDirectory({
               params.delete("pp");
             })
           }
-          className="h-10 rounded-full border border-[#d9d2ff] bg-white px-4 text-sm text-[#18161a] focus:border-[#4823ff] focus:outline-none focus:ring-2 focus:ring-[#ede9ff]"
+          className="h-10 w-full rounded-full border border-[#d9d2ff] bg-white px-4 text-sm text-[#18161a] focus:border-[#4823ff] focus:outline-none focus:ring-2 focus:ring-[#ede9ff] sm:w-auto"
           aria-label="Sort profiles"
         >
           {SORT_OPTIONS.map((o) => (
@@ -145,7 +149,7 @@ export function ProfileDirectory({
                 <tr>
                   <td
                     colSpan={5}
-                    className="px-3 py-8 text-center text-gray-400"
+                    className="px-3 py-8 text-center text-[#898b91]"
                   >
                     No profiles match this search.
                   </td>
@@ -258,7 +262,7 @@ export function ProfileDirectory({
         </div>
 
         {totalPages > 1 && (
-          <div className="flex items-center justify-between border-t border-gray-100 px-3 py-2 text-[12px] text-gray-500">
+          <div className="flex items-center justify-between border-t border-[#f0eeeb] px-3 py-2 text-[12px] text-[#898b91]">
             <span>
               {(profileFromLabel(currentPage, pageSize) + 1).toLocaleString()}–
               {Math.min(currentPage * pageSize, total).toLocaleString()} of{" "}
@@ -268,7 +272,7 @@ export function ProfileDirectory({
               <button
                 type="button"
                 disabled={currentPage <= 1}
-                className="rounded p-1 hover:bg-gray-100 disabled:opacity-30"
+                className="rounded p-1 hover:bg-[#f3f2ef] disabled:opacity-30"
                 onClick={() =>
                   push((params) => {
                     const next = currentPage - 1;
@@ -286,7 +290,7 @@ export function ProfileDirectory({
               <button
                 type="button"
                 disabled={currentPage >= totalPages}
-                className="rounded p-1 hover:bg-gray-100 disabled:opacity-30"
+                className="rounded p-1 hover:bg-[#f3f2ef] disabled:opacity-30"
                 onClick={() =>
                   push((params) => {
                     params.set("pp", String(currentPage + 1));

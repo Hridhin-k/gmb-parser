@@ -55,11 +55,13 @@ export function ReviewFilters({
   const pathname = usePathname();
   const searchParams = useSearchParams();
   const [searchValue, setSearchValue] = useState(currentSearch);
+  const [syncedSearch, setSyncedSearch] = useState(currentSearch);
   const [, startTransition] = useTransition();
 
-  useEffect(() => {
+  if (syncedSearch !== currentSearch) {
+    setSyncedSearch(currentSearch);
     setSearchValue(currentSearch);
-  }, [currentSearch]);
+  }
 
   useEffect(() => {
     if (searchValue === currentSearch) return;
@@ -124,10 +126,12 @@ export function ReviewFilters({
     clients.find((c) => c.id === currentClientId)?.name ?? "";
   const useClientSearch = clients.length > 25;
   const [clientQuery, setClientQuery] = useState(clientName);
+  const [syncedClientName, setSyncedClientName] = useState(clientName);
 
-  useEffect(() => {
+  if (syncedClientName !== clientName) {
+    setSyncedClientName(clientName);
     setClientQuery(clientName);
-  }, [clientName]);
+  }
 
   const matchedClients =
     useClientSearch && clientQuery.trim()
@@ -140,7 +144,7 @@ export function ReviewFilters({
 
   return (
     <div className={cn("space-y-2.5", compact && "space-y-2")}>
-      <div className="flex flex-wrap items-center gap-2">
+      <div className="grid grid-cols-1 gap-2 sm:flex sm:flex-wrap sm:items-center">
         {useClientSearch ? (
           <div className="relative">
             <input
@@ -166,7 +170,7 @@ export function ReviewFilters({
                   });
                 }
               }}
-              className="h-10 w-48 rounded-full border border-[#d9d2ff] bg-white px-4 text-sm text-[#18161a] focus:border-[#4823ff] focus:outline-none focus:ring-2 focus:ring-[#ede9ff] sm:w-56"
+              className="h-10 w-full rounded-full border border-[#d9d2ff] bg-white px-4 text-sm text-[#18161a] focus:border-[#4823ff] focus:outline-none focus:ring-2 focus:ring-[#ede9ff] sm:w-56"
               aria-label="Search and filter by profile"
             />
             <datalist id="dashboard-client-options">
@@ -185,7 +189,7 @@ export function ReviewFilters({
                 else params.delete("client");
               });
             }}
-            className="h-10 rounded-full border border-[#d9d2ff] bg-white px-4 text-sm text-[#18161a] focus:border-[#4823ff] focus:outline-none focus:ring-2 focus:ring-[#ede9ff]"
+            className="h-10 w-full rounded-full border border-[#d9d2ff] bg-white px-4 text-sm text-[#18161a] focus:border-[#4823ff] focus:outline-none focus:ring-2 focus:ring-[#ede9ff] sm:w-auto"
             aria-label="Filter by client"
           >
             <option value="">All profiles</option>
@@ -201,7 +205,7 @@ export function ReviewFilters({
           <select
             value={currentLocationId}
             onChange={(e) => updateParam("location", e.target.value)}
-            className="h-10 rounded-full border border-[#d9d2ff] bg-white px-4 text-sm text-[#18161a] focus:border-[#4823ff] focus:outline-none focus:ring-2 focus:ring-[#ede9ff]"
+            className="h-10 w-full rounded-full border border-[#d9d2ff] bg-white px-4 text-sm text-[#18161a] focus:border-[#4823ff] focus:outline-none focus:ring-2 focus:ring-[#ede9ff] sm:w-auto"
             aria-label="Filter by location"
           >
             <option value="">All locations</option>
@@ -216,7 +220,7 @@ export function ReviewFilters({
         <select
           value={currentPeriod}
           onChange={(e) => updateParam("period", e.target.value)}
-          className="h-10 rounded-full border border-[#d9d2ff] bg-white px-4 text-sm text-[#18161a] focus:border-[#4823ff] focus:outline-none focus:ring-2 focus:ring-[#ede9ff]"
+          className="h-10 w-full rounded-full border border-[#d9d2ff] bg-white px-4 text-sm text-[#18161a] focus:border-[#4823ff] focus:outline-none focus:ring-2 focus:ring-[#ede9ff] sm:w-auto"
           aria-label="Filter by time period"
         >
           {PERIOD_FILTERS.map((p) => (

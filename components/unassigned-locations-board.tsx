@@ -2,6 +2,8 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
+import { toast } from "sonner";
+import { ConfirmDialog } from "@/components/confirm-dialog";
 import { Button } from "@/components/ui/button";
 import { Link2, MapPin } from "lucide-react";
 
@@ -31,8 +33,8 @@ export function UnassignedLocationsBoard({
   const [assignments, setAssignments] = useState<Record<string, string>>({});
   const [loadingId, setLoadingId] = useState<string | null>(null);
   const [resetting, setResetting] = useState(false);
+  const [confirmReset, setConfirmReset] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [message, setMessage] = useState<string | null>(null);
 
   async function handleAssign(locationId: string) {
     const clientId = assignments[locationId];
@@ -42,7 +44,6 @@ export function UnassignedLocationsBoard({
     }
 
     setError(null);
-    setMessage(null);
     setLoadingId(locationId);
     try {
       const response = await fetch(
@@ -54,7 +55,8 @@ export function UnassignedLocationsBoard({
         setError(data.error ?? "Failed to assign location.");
         return;
       }
-      setMessage("Location assigned.");
+      const clientName = clients.find((c) => c.id === clientId)?.name;
+      toast.success(clientName ? `Assigned to ${clientName}` : "Location assigned");
       router.refresh();
     } catch {
       setError("Unable to assign location.");
@@ -64,16 +66,8 @@ export function UnassignedLocationsBoard({
   }
 
   async function handleResetAll() {
-    if (
-      !confirm(
-        "Move every location back to Unassigned so you can re-map them to the correct clients?"
-      )
-    ) {
-      return;
-    }
     setResetting(true);
     setError(null);
-    setMessage(null);
     try {
       const response = await fetch("/api/google/locations/reset", {
         method: "POST",
@@ -83,7 +77,7 @@ export function UnassignedLocationsBoard({
         setError(data.error ?? "Failed to reset assignments.");
         return;
       }
-      setMessage(`Moved ${data.reset ?? 0} location(s) to Unassigned.`);
+      toast.success(`Moved ${data.reset ?? 0} location(s) to Unassigned`);
       router.refresh();
     } catch {
       setError("Unable to reset assignments.");
@@ -113,7 +107,7 @@ export function UnassignedLocationsBoard({
               type="button"
               variant="outline"
               size="sm"
-              onClick={handleResetAll}
+              onClick={() => setConfirmReset(true)}
               disabled={resetting}
             >
               {resetting ? "Resetting…" : "Reset all to Unassigned"}
@@ -127,42 +121,37 @@ export function UnassignedLocationsBoard({
           {error}
         </p>
       )}
-      {message && (
-        <p className="text-sm text-emerald-700" role="status">
-          {message}
-        </p>
-      )}
 
       {locations.length === 0 ? (
         <div className="flex flex-col items-center justify-center rounded-[20px] border border-[#d9d2ff] py-10 text-center">
-          <MapPin className="h-7 w-7 text-gray-300" />
-          <p className="mt-2 text-sm font-medium text-gray-700">
+          <MapPin className="h-7 w-7 text-[#c9c7c3]" />
+          <p className="mt-2 text-sm font-medium text-[#18161a]">
             No unassigned locations
           </p>
-          <p className="mt-1 max-w-sm text-xs text-gray-500">
+          <p className="mt-1 max-w-sm text-xs text-[#898b91]">
             {connectionId
               ? "Open a client and sync locations from Google, or reset assignments if everything was dumped onto one client."
               : "Connect Google in Settings first, then sync locations."}
           </p>
         </div>
       ) : (
-        <ul className="divide-y divide-gray-100 rounded-md border border-gray-100">
+        <ul className="divide-y divide-[#f0eeeb] rounded-md border border-[#f0eeeb]">
           {locations.map((loc) => (
             <li
               key={loc.id}
               className="flex flex-col gap-2 px-3 py-3 sm:flex-row sm:items-center sm:justify-between"
             >
               <div className="min-w-0">
-                <p className="truncate text-sm font-medium text-gray-900">
+                <p className="truncate text-sm font-medium text-[#18161a]">
                   {loc.location_title}
                 </p>
                 {loc.address_formatted && (
-                  <p className="truncate text-xs text-gray-500">
+                  <p className="truncate text-xs text-[#898b91]">
                     {loc.address_formatted}
                   </p>
                 )}
               </div>
-              <div className="flex shrink-0 items-center gap-2">
+              <div className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row sm:items-center">
                 <select
                   value={assignments[loc.id] ?? ""}
                   onChange={(e) =>
@@ -171,7 +160,7 @@ export function UnassignedLocationsBoard({
                       [loc.id]: e.target.value,
                     }))
                   }
-                  className="h-10 rounded-full border border-[#d9d2ff] bg-white px-3 text-sm text-[#18161a]"
+                  className="h-10 w-full rounded-full border border-[#d9d2ff] bg-white px-3 text-sm text-[#18161a] sm:w-auto"
                   aria-label={`Assign ${loc.location_title} to client`}
                   disabled={clients.length === 0}
                 >
@@ -198,6 +187,16 @@ export function UnassignedLocationsBoard({
           ))}
         </ul>
       )}
+      <ConfirmDialog
+        open={confirmReset}
+        onOpenChange={setConfirmReset}
+        title="Reset all assignments?"
+        description="Every location moves back to Unassigned so you can map it to the right client again. Reviews and replies stay as they are."
+        confirmLabel="Reset all"
+        pendingLabel="Resetting…"
+        tone="danger"
+        onConfirm={handleResetAll}
+      />
     </div>
   );
 }

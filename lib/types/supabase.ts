@@ -613,6 +613,27 @@ export type Database = {
           },
         ]
       }
+      grm_user_consents: {
+        Row: {
+          ai_accepted_at: string
+          created_at: string
+          terms_accepted_at: string
+          user_id: string
+        }
+        Insert: {
+          ai_accepted_at: string
+          created_at?: string
+          terms_accepted_at: string
+          user_id: string
+        }
+        Update: {
+          ai_accepted_at?: string
+          created_at?: string
+          terms_accepted_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       grm_workspace_invites: {
         Row: {
           accepted_at: string | null
@@ -725,6 +746,40 @@ export type Database = {
     }
     Functions: {
       grm_my_workspace_ids: { Args: Record<PropertyKey, never>; Returns: string[] }
+      grm_location_review_stats: {
+        Args: { p_workspace_id: string }
+        Returns: {
+          location_id: string
+          review_count: number
+          unanswered: number
+          drafts: number
+          approved: number
+          failed: number
+          published: number
+          critical: number
+          rating_sum: number
+          r1: number
+          r2: number
+          r3: number
+          r4: number
+          r5: number
+          last_7d: number
+          last_30d: number
+          last_review_at: string | null
+        }[]
+      }
+      grm_review_trends: {
+        Args: { p_workspace_id: string; p_months?: number; p_client_id?: string | null }
+        Returns: {
+          month: string
+          review_count: number
+          avg_rating: number | null
+          negative: number
+          positive: number
+          replied: number
+          avg_response_hours: number | null
+        }[]
+      }
     }
     Enums: {
       grm_ai_draft_status: "generated" | "edited" | "discarded"
@@ -755,6 +810,7 @@ export type Database = {
 // Convenience helpers
 export type GrmTables = Database["public"]["Tables"]
 
+export type GrmUserConsent     = GrmTables["grm_user_consents"]["Row"]
 export type GrmWorkspace        = GrmTables["grm_workspaces"]["Row"]
 export type GrmWorkspaceInvite  = GrmTables["grm_workspace_invites"]["Row"]
 export type GrmWorkspaceMember  = GrmTables["grm_workspace_members"]["Row"]

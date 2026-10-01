@@ -2,6 +2,8 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
+import { toast } from "sonner";
+import { ConfirmDialog } from "@/components/confirm-dialog";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -41,6 +43,7 @@ export function GoogleConnectionCard({
 }: GoogleConnectionCardProps) {
   const router = useRouter();
   const [disconnecting, setDisconnecting] = useState<string | null>(null);
+  const [confirmTarget, setConfirmTarget] = useState<{ id: string; email: string } | null>(null);
   const [error, setError] = useState<string | null>(initialMessage ?? null);
   const [success, setSuccess] = useState(initialSuccess ?? false);
 
@@ -62,6 +65,7 @@ export function GoogleConnectionCard({
         throw new Error(data.error ?? "Failed to disconnect");
       }
 
+      toast.success("Google account disconnected");
       router.refresh();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to disconnect");
@@ -72,7 +76,7 @@ export function GoogleConnectionCard({
 
   return (
     <Card>
-      <CardHeader className="flex flex-row items-center justify-between space-y-0">
+      <CardHeader className="flex flex-col gap-3 space-y-0 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <CardTitle
             className="text-[22px] leading-[1.3] tracking-[-0.02em] text-[#18161a]"
@@ -120,9 +124,9 @@ export function GoogleConnectionCard({
         {activeConnections.map((conn) => (
           <div
             key={conn.id}
-            className="flex items-center justify-between rounded-[12px] border border-[#d9d2ff] px-4 py-3"
+            className="flex flex-col gap-3 rounded-[12px] border border-[#d9d2ff] px-4 py-3 sm:flex-row sm:items-center sm:justify-between"
           >
-            <div className="flex items-center gap-3">
+            <div className="flex min-w-0 items-center gap-3">
               <svg viewBox="0 0 24 24" className="h-5 w-5 shrink-0" aria-hidden="true">
                 <path
                   d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92a5.06 5.06 0 0 1-2.2 3.32v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.1z"
@@ -141,8 +145,8 @@ export function GoogleConnectionCard({
                   fill="#EA4335"
                 />
               </svg>
-              <div>
-                <p className="text-sm font-medium text-[#18161a]">
+              <div className="min-w-0">
+                <p className="truncate text-sm font-medium text-[#18161a]">
                   {conn.google_email}
                 </p>
                 <p className="text-xs font-light text-[#898b91]">
@@ -160,8 +164,8 @@ export function GoogleConnectionCard({
               variant="outline"
               size="sm"
               disabled={disconnecting === conn.id}
-              onClick={() => handleDisconnect(conn.id)}
-              className="text-gray-600"
+              onClick={() => setConfirmTarget({ id: conn.id, email: conn.google_email })}
+              className="text-[#5f6168]"
             >
               <Unplug className="mr-1.5 h-3.5 w-3.5" />
               {disconnecting === conn.id ? "Disconnecting…" : "Disconnect"}
@@ -169,6 +173,26 @@ export function GoogleConnectionCard({
           </div>
         ))}
       </CardContent>
+      <ConfirmDialog
+        open={confirmTarget !== null}
+        onOpenChange={(open) => {
+          if (!open) setConfirmTarget(null);
+        }}
+        title="Disconnect this Google account?"
+        description={
+          <>
+            GRM stops syncing reviews and publishing replies for{" "}
+            <span className="font-medium text-[#18161a]">{confirmTarget?.email}</span>. Reviews
+            already synced stay in GRM. You can reconnect at any time.
+          </>
+        }
+        confirmLabel="Disconnect"
+        pendingLabel="Disconnecting…"
+        tone="danger"
+        onConfirm={async () => {
+          if (confirmTarget) await handleDisconnect(confirmTarget.id);
+        }}
+      />
     </Card>
   );
 }

@@ -15,6 +15,7 @@ import {
   X,
   LogOut,
   ClipboardList,
+  BarChart3,
 } from "lucide-react";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import {
@@ -28,6 +29,7 @@ const NAV_ITEMS = [
   { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
   { href: "/clients",   label: "Clients",   icon: Building2 },
   { href: "/reviews",   label: "Reviews",   icon: MessageSquareText },
+  { href: "/analytics", label: "Analytics", icon: BarChart3 },
   { href: "/audit",     label: "Audit Log", icon: ClipboardList },
   { href: "/settings",  label: "Settings",  icon: Settings },
 ] as const;
@@ -57,6 +59,8 @@ export function AppShell({
     setSigningOut(true);
     const supabase = createClient();
     await supabase.auth.signOut();
+    // A full reload drops the cached RSC payload of the signed-in session.
+    // eslint-disable-next-line @next/next/no-location-assign-relative-destination
     window.location.assign("/login");
   }
   const initials = (user.email ?? "U").slice(0, 2).toUpperCase();
@@ -67,14 +71,18 @@ export function AppShell({
   }, []);
 
   useEffect(() => {
-    if (sidebarOpen) {
-      document.addEventListener("keydown", handleKeyDown);
-      return () => document.removeEventListener("keydown", handleKeyDown);
-    }
+    if (!sidebarOpen) return;
+    const previous = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    document.addEventListener("keydown", handleKeyDown);
+    return () => {
+      document.body.style.overflow = previous;
+      document.removeEventListener("keydown", handleKeyDown);
+    };
   }, [sidebarOpen, handleKeyDown]);
 
   return (
-    <div className="flex h-screen overflow-hidden">
+    <div className="flex h-dvh overflow-hidden">
       {/* Mobile overlay */}
       {sidebarOpen && (
         <div
@@ -87,7 +95,7 @@ export function AppShell({
       {/* Sidebar */}
         <aside
         className={cn(
-          "fixed inset-y-0 left-0 z-50 flex w-60 flex-col border-r border-[#ede9ff] bg-white transition-transform duration-150 ease-out lg:static lg:translate-x-0",
+          "fixed inset-y-0 left-0 z-50 flex w-[min(100%,18rem)] flex-col border-r border-[#ede9ff] bg-white transition-transform duration-150 ease-out lg:static lg:w-60 lg:translate-x-0",
           sidebarOpen ? "translate-x-0" : "-translate-x-full"
         )}
         aria-label="Main navigation"
@@ -105,7 +113,7 @@ export function AppShell({
             GRM
           </Link>
           <button
-            className="rounded p-1 text-gray-400 hover:text-gray-600 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring lg:hidden"
+            className="rounded p-1 text-[#898b91] hover:text-[#5f6168] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring lg:hidden"
             onClick={() => setSidebarOpen(false)}
             aria-label="Close navigation"
           >
@@ -159,7 +167,7 @@ export function AppShell({
                 href={item.href}
                 onClick={() => setSidebarOpen(false)}
                 className={cn(
-                  "flex items-center gap-2 rounded-full px-3 py-2 text-[14px] font-medium transition-colors",
+                  "flex items-center gap-2 rounded-full px-3 py-3 text-[15px] font-medium transition-colors lg:py-2 lg:text-[14px]",
                   active
                     ? "bg-[#ede9ff] text-[#4823ff]"
                     : "text-[#18161a] hover:bg-[#ede9ff]/60"
@@ -209,22 +217,26 @@ export function AppShell({
       </aside>
 
       {/* Main area */}
-      <div className="flex flex-1 flex-col overflow-hidden">
+      <div className="flex min-w-0 flex-1 flex-col overflow-hidden">
         {/* Top header bar */}
-        <header className="flex h-14 shrink-0 items-center border-b border-[#ede9ff] bg-[#fafaf8] px-4 lg:hidden">
+        <header className="flex h-14 shrink-0 items-center border-b border-[#ede9ff] bg-[#fafaf8] px-3 lg:hidden">
           <button
-            className="mr-3 rounded p-1 text-gray-400 hover:text-gray-600 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring lg:hidden"
+            className="mr-2 rounded-full p-2 text-[#18161a] hover:bg-[#ede9ff] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
             onClick={() => setSidebarOpen(true)}
             aria-label="Open navigation"
           >
             <Menu className="h-5 w-5" />
           </button>
-          <div className="flex-1" />
+          <p className="truncate text-sm font-medium text-[#18161a]">
+            {NAV_ITEMS.find(
+              (item) => pathname === item.href || pathname.startsWith(item.href + "/")
+            )?.label ?? "GRM"}
+          </p>
         </header>
 
         {/* Page content */}
         <main className="flex-1 overflow-y-auto bg-[#fafaf8]" id="main-content">
-          <div className="mx-auto max-w-[1200px] px-5 py-5 lg:px-8 lg:py-6">
+          <div className="mx-auto max-w-[1200px] px-4 py-4 sm:px-5 sm:py-5 lg:px-8 lg:py-6">
             {children}
           </div>
         </main>

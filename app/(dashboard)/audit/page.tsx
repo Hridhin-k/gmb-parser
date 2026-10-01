@@ -1,15 +1,13 @@
-import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
-import { ensurePersonalWorkspace } from "@/lib/services/workspace";
+import { getActiveWorkspace } from "@/lib/services/session";
+import { getWorkspaceRoster } from "@/lib/services/workspace";
 import { PageHeader } from "@/components/page-header";
 import { EmptyState } from "@/components/empty-state";
-import { Badge } from "@/components/ui/badge";
 import { AuditLogFilters } from "@/components/audit-log-filters";
 import { ClipboardList } from "lucide-react";
+import { cn } from "@/lib/utils";
 
-// ---------------------------------------------------------------------------
-// Helpers
-// ---------------------------------------------------------------------------
+const AUDIT_LIMIT = 200;
 
 function formatDate(iso: string): string {
   return new Date(iso).toLocaleString("en-US", {
@@ -18,252 +16,225 @@ function formatDate(iso: string): string {
     year: "numeric",
     hour: "2-digit",
     minute: "2-digit",
-    second: "2-digit",
   });
 }
 
-// Human-readable action labels — safe to display
-const ACTION_LABELS: Record<string, { label: string; color: string }> = {
-  "google_connection.created":  { label: "Google connected",       color: "bg-green-100 text-green-700" },
-  "google_connection.failed":   { label: "Google connect failed",   color: "bg-red-100 text-red-700" },
-  "google_connection.revoked":  { label: "Google disconnected",     color: "bg-gray-100 text-gray-700" },
-  "google_sync.completed":      { label: "Locations synced",        color: "bg-blue-100 text-blue-700" },
-  "client.created":             { label: "Client created",          color: "bg-blue-100 text-blue-700" },
-  "location.connected":         { label: "Location connected",      color: "bg-green-100 text-green-700" },
-  "location.disconnected":      { label: "Location disconnected",   color: "bg-gray-100 text-gray-700" },
-  "review.sync_started":        { label: "Review sync started",     color: "bg-blue-100 text-blue-700" },
-  "review.synced":              { label: "Reviews synced",          color: "bg-green-100 text-green-700" },
-  "review.sync_failed":         { label: "Review sync failed",      color: "bg-red-100 text-red-700" },
-  "reply.ai_generated":         { label: "AI draft generated",      color: "bg-purple-100 text-purple-700" },
-  "reply.edited":               { label: "Reply edited",            color: "bg-blue-100 text-blue-700" },
-  "reply.approved":             { label: "Reply approved",          color: "bg-green-100 text-green-700" },
-  "reply.publish_attempted":    { label: "Publish started",         color: "bg-yellow-100 text-yellow-700" },
-  "reply.published":            { label: "Reply published",         color: "bg-green-100 text-green-700" },
-  "reply.publish_failed":       { label: "Publish failed",          color: "bg-red-100 text-red-700" },
-  "reply.deleted":              { label: "Reply deleted",           color: "bg-gray-100 text-gray-700" },
+type Tone = "good" | "bad" | "neutral" | "info";
+
+const ACTION_LABELS: Record<string, { label: string; tone: Tone }> = {
+  "google_connection.created": { label: "Connected a Google account", tone: "good" },
+  "google_connection.failed": { label: "Google connection failed", tone: "bad" },
+  "google_connection.revoked": { label: "Disconnected a Google account", tone: "neutral" },
+  "google_sync.completed": { label: "Imported Google locations", tone: "info" },
+  "client.created": { label: "Created a client", tone: "info" },
+  "location.connected": { label: "Assigned a location to a client", tone: "good" },
+  "location.disconnected": { label: "Removed a location from a client", tone: "neutral" },
+  "locations.reset_unassigned": { label: "Reset unassigned locations", tone: "neutral" },
+  "location_insight.generated": { label: "Generated a location insight", tone: "info" },
+  "review.sync_started": { label: "Started a review sync", tone: "info" },
+  "review.synced": { label: "Synced reviews", tone: "good" },
+  "review.sync_failed": { label: "Review sync failed", tone: "bad" },
+  "reply.ai_generated": { label: "Generated an AI draft", tone: "info" },
+  "reply.edited": { label: "Edited a reply", tone: "info" },
+  "reply.approved": { label: "Approved a reply", tone: "good" },
+  "reply.publish_attempted": { label: "Started publishing a reply", tone: "neutral" },
+  "reply.published": { label: "Published a reply to Google", tone: "good" },
+  "reply.publish_failed": { label: "Reply publish failed", tone: "bad" },
+  "reply.deleted": { label: "Deleted a reply", tone: "neutral" },
+  "workspace.invite_created": { label: "Invited someone", tone: "info" },
+  "workspace.invite_accepted": { label: "Joined from an invite", tone: "good" },
+  "workspace.invite_revoked": { label: "Cancelled an invite", tone: "neutral" },
+  "workspace.member_role_changed": { label: "Changed a member's role", tone: "info" },
+  "workspace.member_removed": { label: "Removed a member", tone: "neutral" },
+  "workspace.member_left": { label: "Left the workspace", tone: "neutral" },
 };
 
-function ActionBadge({ action }: { action: string }) {
-  const cfg = ACTION_LABELS[action];
-  if (!cfg) {
-    return (
-      <Badge className="bg-gray-100 text-gray-600 hover:bg-gray-100 font-mono text-[10px]">
-        {action}
-      </Badge>
-    );
-  }
+const ENTITY_LABELS: Record<string, string> = {
+  grm_clients: "Client",
+  grm_google_connections: "Google account",
+  grm_google_locations: "Location",
+  grm_location_insights: "Insight",
+  grm_review_ai_drafts: "AI draft",
+  grm_review_replies: "Reply",
+  grm_reviews: "Review",
+  grm_workspace_invites: "Invite",
+  grm_workspace_members: "Member",
+};
+
+const TONE_CLASSES: Record<Tone, string> = {
+  good: "bg-green-50 text-green-700",
+  bad: "bg-red-50 text-red-700",
+  neutral: "bg-[#f3f2ef] text-[#5f6168]",
+  info: "bg-[#ede9ff] text-[#4823ff]",
+};
+
+const METADATA_LABELS: Record<string, string> = {
+  reviewsSynced: "New reviews",
+  reviewsUpdated: "Updated",
+  pagesProcessed: "Pages",
+  status: "Status",
+  errorClass: "Error",
+  publishedAt: "Published",
+  model: "Model",
+  googleEmail: "Google account",
+  email: "Email",
+  role: "Role",
+  previousRole: "Previous role",
+};
+
+function readableAction(action: string) {
   return (
-    <Badge className={`${cfg.color} hover:${cfg.color}`}>
-      {cfg.label}
-    </Badge>
+    ACTION_LABELS[action] ?? {
+      label: action.replaceAll("_", " ").replace(".", ": "),
+      tone: "neutral" as Tone,
+    }
   );
 }
 
-// Safe subset of metadata to show — never expose tokens or keys
-const SAFE_METADATA_KEYS = new Set([
-  "reviewsSynced",
-  "reviewsUpdated",
-  "pagesProcessed",
-  "status",
-  "errorClass",
-  "reviewId",
-  "locationId",
-  "clientId",
-  "publishedAt",
-  "model",
-  "promptVersion",
-  "googleEmail",
-]);
-
-function SafeMetadata({ metadata }: { metadata: Record<string, unknown> }) {
+function MetadataLine({ metadata }: { metadata: Record<string, unknown> }) {
   const entries = Object.entries(metadata).filter(
-    ([k, v]) => SAFE_METADATA_KEYS.has(k) && v !== null && v !== undefined
+    ([k, v]) => k in METADATA_LABELS && v !== null && v !== undefined && v !== ""
   );
   if (entries.length === 0) return null;
   return (
-    <dl className="mt-1 space-y-0.5">
+    <p className="mt-1 flex flex-wrap gap-x-3 gap-y-0.5 text-xs text-[#898b91]">
       {entries.map(([k, v]) => (
-        <div key={k} className="flex gap-1 text-[11px]">
-          <dt className="text-gray-400">{k}:</dt>
-          <dd className="truncate text-gray-600">{String(v)}</dd>
-        </div>
+        <span key={k}>
+          {METADATA_LABELS[k]}: <span className="text-[#18161a]">{String(v)}</span>
+        </span>
       ))}
-    </dl>
+    </p>
   );
 }
-
-// ---------------------------------------------------------------------------
-// Page
-// ---------------------------------------------------------------------------
 
 interface AuditPageProps {
   searchParams: Promise<Record<string, string | string[] | undefined>>;
 }
 
 export default async function AuditPage({ searchParams }: AuditPageProps) {
-  const params = await searchParams;
-  const supabase = await createClient();
-  const { data: { user } } = await supabase.auth.getUser();
-
+  const [params, { workspaceId }] = await Promise.all([
+    searchParams,
+    getActiveWorkspace(),
+  ]);
   const admin = createAdminClient();
-  const membership = await ensurePersonalWorkspace(user!);
 
-  const { workspace_id: workspaceId } = membership;
+  const actionFilter = typeof params.action === "string" ? params.action : "";
+  const userFilter = typeof params.user === "string" ? params.user : "";
+  const fromDate = typeof params.from === "string" ? params.from : "";
+  const toDate = typeof params.to === "string" ? params.to : "";
+  const entityFilter = typeof params.entity === "string" ? params.entity : "";
 
-  // Parse filters
-  const actionFilter  = typeof params.action   === "string" ? params.action   : "";
-  const userFilter    = typeof params.user      === "string" ? params.user     : "";
-  const fromDate      = typeof params.from      === "string" ? params.from     : "";
-  const toDate        = typeof params.to        === "string" ? params.to       : "";
-  const entityFilter  = typeof params.entity    === "string" ? params.entity   : "";
-
-  // Build audit query
   let query = admin
     .from("grm_audit_logs")
-    .select("id, action, entity_type, entity_id, metadata, user_id, created_at, ip_address")
+    .select("id, action, entity_type, entity_id, metadata, user_id, created_at")
     .eq("workspace_id", workspaceId)
     .order("created_at", { ascending: false })
-    .limit(200);
+    .limit(AUDIT_LIMIT);
 
-  if (actionFilter) {
-    query = query.eq("action", actionFilter);
-  }
-  if (userFilter) {
+  if (actionFilter) query = query.eq("action", actionFilter);
+  if (userFilter && /^[0-9a-f-]{36}$/i.test(userFilter)) {
     query = query.eq("user_id", userFilter);
   }
-  if (entityFilter) {
-    query = query.eq("entity_type", entityFilter);
-  }
-  if (fromDate) {
+  if (entityFilter) query = query.eq("entity_type", entityFilter);
+  if (fromDate && !Number.isNaN(Date.parse(fromDate))) {
     query = query.gte("created_at", new Date(fromDate).toISOString());
   }
-  if (toDate) {
-    // Include the full to-date day
+  if (toDate && !Number.isNaN(Date.parse(toDate))) {
     const end = new Date(toDate);
     end.setDate(end.getDate() + 1);
     query = query.lt("created_at", end.toISOString());
   }
 
-  const { data: logs } = await query;
+  const [{ data: logs }, roster] = await Promise.all([
+    query,
+    getWorkspaceRoster(workspaceId),
+  ]);
 
-  // Distinct action values for the filter dropdown
-  const { data: distinctActions } = await admin
-    .from("grm_audit_logs")
-    .select("action")
-    .eq("workspace_id", workspaceId)
-    .order("action");
-
-  const actionOptions = [
-    ...new Set((distinctActions ?? []).map((r) => r.action)),
-  ];
-
-  // Distinct entity types
-  const { data: distinctEntities } = await admin
-    .from("grm_audit_logs")
-    .select("entity_type")
-    .eq("workspace_id", workspaceId)
-    .order("entity_type");
-
-  const entityOptions = [
-    ...new Set((distinctEntities ?? []).map((r) => r.entity_type)),
-  ];
+  const emailById = new Map(roster.members.map((m) => [m.userId, m.email]));
+  const rows = logs ?? [];
+  const hasFilters = !!(actionFilter || userFilter || entityFilter || fromDate || toDate);
 
   return (
-    <div className="space-y-10">
+    <div className="space-y-6">
       <PageHeader
-        title="Audit Log"
-        description="Immutable record of all important operations in your workspace."
+        title="Audit log"
+        description="Every connection, sync, draft, approval, and publish in this workspace, with who did it."
       />
 
-      {/* Filters */}
       <AuditLogFilters
         currentAction={actionFilter}
         currentUser={userFilter}
         currentEntity={entityFilter}
         currentFrom={fromDate}
         currentTo={toDate}
-        actionOptions={actionOptions}
-        entityOptions={entityOptions}
-        actionLabels={Object.fromEntries(
-          Object.entries(ACTION_LABELS).map(([k, v]) => [k, v.label])
-        )}
+        actionOptions={Object.entries(ACTION_LABELS).map(([value, v]) => ({
+          value,
+          label: v.label,
+        }))}
+        entityOptions={Object.entries(ENTITY_LABELS).map(([value, label]) => ({
+          value,
+          label,
+        }))}
+        memberOptions={roster.members.map((m) => ({ value: m.userId, label: m.email }))}
       />
 
-      {/* Table */}
-      {(logs?.length ?? 0) === 0 ? (
+      {rows.length === 0 ? (
         <EmptyState
           icon={ClipboardList}
-          title={actionFilter || userFilter || entityFilter || fromDate || toDate
-            ? "No log entries match your filters"
-            : "No audit events yet"}
+          title={hasFilters ? "No entries match your filters" : "No activity yet"}
           description={
-            actionFilter || userFilter || entityFilter || fromDate || toDate
-              ? "Try adjusting the filters."
-              : "Audit events are created as you use the platform."
+            hasFilters
+              ? "Try a wider date range or clear the filters."
+              : "Entries appear here as your team connects accounts, syncs, and replies."
           }
         />
       ) : (
-        <div className="overflow-hidden rounded-[20px] border border-[#d9d2ff] bg-white">
-          <div className="overflow-x-auto">
-            <table className="w-full text-sm">
-              <thead>
-                <tr className="border-b border-[#ede9ff] bg-[#fafaf8]">
-                  <th className="whitespace-nowrap px-4 py-3 text-left text-[11px] font-bold uppercase tracking-[0.08em] text-[#4823ff]">
-                    Timestamp
-                  </th>
-                  <th className="px-4 py-3 text-left text-[11px] font-bold uppercase tracking-[0.08em] text-[#4823ff]">
-                    Action
-                  </th>
-                  <th className="px-4 py-3 text-left text-[11px] font-bold uppercase tracking-[0.08em] text-[#4823ff]">
-                    Entity
-                  </th>
-                  <th className="px-4 py-3 text-left text-[11px] font-bold uppercase tracking-[0.08em] text-[#4823ff]">
-                    Details
-                  </th>
-                  <th className="whitespace-nowrap px-4 py-3 text-left text-[11px] font-bold uppercase tracking-[0.08em] text-[#4823ff]">
-                    User
-                  </th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-gray-100">
-                {(logs ?? []).map((log) => (
-                  <tr key={log.id} className="hover:bg-[#ede9ff]/40">
-                    <td className="px-4 py-3 align-top whitespace-nowrap text-xs text-gray-500">
-                      {formatDate(log.created_at)}
-                    </td>
-                    <td className="px-4 py-3 align-top">
-                      <ActionBadge action={log.action} />
-                    </td>
-                    <td className="px-4 py-3 align-top">
-                      <p className="text-xs font-mono text-gray-600">
-                        {log.entity_type}
-                      </p>
-                      {log.entity_id && (
-                        <p className="text-[10px] font-mono text-gray-400 truncate max-w-[120px]">
-                          {log.entity_id}
-                        </p>
-                      )}
-                    </td>
-                    <td className="px-4 py-3 align-top max-w-xs">
-                      <SafeMetadata
-                        metadata={
-                          (log.metadata ?? {}) as Record<string, unknown>
-                        }
-                      />
-                    </td>
-                    <td className="px-4 py-3 align-top whitespace-nowrap">
-                      <p className="text-[10px] font-mono text-gray-400 truncate max-w-[120px]">
-                        {log.user_id}
-                      </p>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-          <div className="border-t border-gray-200 px-4 py-2.5 text-xs text-gray-400">
-            Showing {(logs ?? []).length} most recent entries
-            {(logs?.length ?? 0) === 200 && " (limited to 200 — use filters to narrow)"}
+        <div className="overflow-hidden rounded-[20px] border border-[#e6e4e1] bg-white">
+          <ul className="divide-y divide-[#f0eeeb]">
+            {rows.map((log) => {
+              const action = readableAction(log.action);
+              const actor = log.user_id
+                ? (emailById.get(log.user_id) ?? "Former member")
+                : "System";
+              return (
+                <li
+                  key={log.id}
+                  className="flex flex-col gap-2 px-4 py-3.5 sm:flex-row sm:items-start sm:gap-4 sm:px-5"
+                >
+                  <time
+                    dateTime={log.created_at}
+                    className="shrink-0 text-xs tabular-nums text-[#898b91] sm:w-40 sm:pt-0.5"
+                  >
+                    {formatDate(log.created_at)}
+                  </time>
+                  <div className="min-w-0 flex-1">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <span
+                        className={cn(
+                          "rounded-full px-2.5 py-0.5 text-xs font-medium",
+                          TONE_CLASSES[action.tone]
+                        )}
+                      >
+                        {action.label}
+                      </span>
+                      <span className="text-xs text-[#898b91]">
+                        {ENTITY_LABELS[log.entity_type] ?? log.entity_type}
+                      </span>
+                    </div>
+                    <MetadataLine
+                      metadata={(log.metadata ?? {}) as Record<string, unknown>}
+                    />
+                  </div>
+                  <p className="truncate text-sm text-[#18161a] sm:max-w-[220px] sm:text-right">
+                    {actor}
+                  </p>
+                </li>
+              );
+            })}
+          </ul>
+          <div className="border-t border-[#f0eeeb] px-5 py-2.5 text-xs text-[#898b91]">
+            Showing {rows.length} most recent entries
+            {rows.length === AUDIT_LIMIT && ". Use the filters to narrow the list."}
           </div>
         </div>
       )}

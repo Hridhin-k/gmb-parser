@@ -1,9 +1,8 @@
 import { notFound } from "next/navigation";
-import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { GoogleBusinessProfileService } from "@/lib/services/google-business-profile";
 import { isUnassignedClient } from "@/lib/services/unassigned-client";
-import { ensurePersonalWorkspace } from "@/lib/services/workspace";
+import { getActiveWorkspace } from "@/lib/services/session";
 import { PageHeader } from "@/components/page-header";
 import { LocationTable } from "@/components/location-table";
 import { UnlinkedLocationsPanel } from "@/components/unlinked-locations-panel";
@@ -17,46 +16,45 @@ interface ClientDetailPageProps {
 export default async function ClientDetailPage({
   params,
 }: ClientDetailPageProps) {
-  const { clientId } = await params;
-
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-
+  const [{ clientId }, { workspaceId }] = await Promise.all([
+    params,
+    getActiveWorkspace(),
+  ]);
   const admin = createAdminClient();
-  const membership = await ensurePersonalWorkspace(user!);
 
-  const { data: clientRow } = await admin
-    .from("grm_clients")
-    .select("id, name, notes, is_active, created_at")
-    .eq("id", clientId)
-    .eq("workspace_id", membership.workspace_id)
-    .single();
-
-  if (!clientRow || isUnassignedClient(clientRow.notes)) notFound();
-
-  const { data: connections } = await admin
-    .from("grm_google_connections")
-    .select("id")
-    .eq("workspace_id", membership.workspace_id)
-    .eq("status", "active")
-    .limit(1);
-
-  const connectionId = connections?.[0]?.id ?? null;
-
-  const [connectedLocationsRaw, unlinkedLocations] = await Promise.all([
+  const [
+    { data: clientRow },
+    { data: connections },
+    connectedLocationsRaw,
+    unlinkedLocations,
+  ] = await Promise.all([
+    admin
+      .from("grm_clients")
+      .select("id, name, notes, is_active, created_at")
+      .eq("id", clientId)
+      .eq("workspace_id", workspaceId)
+      .single(),
+    admin
+      .from("grm_google_connections")
+      .select("id")
+      .eq("workspace_id", workspaceId)
+      .eq("status", "active")
+      .limit(1),
     admin
       .from("grm_google_locations")
       .select(
         `id, google_location_name, location_title, address_formatted,
          primary_phone, store_code, is_active, last_synced_at, client_id`
       )
-      .eq("workspace_id", membership.workspace_id)
+      .eq("workspace_id", workspaceId)
       .eq("client_id", clientId)
       .order("location_title"),
-    GoogleBusinessProfileService.getUnlinkedLocations(membership.workspace_id),
+    GoogleBusinessProfileService.getUnlinkedLocations(workspaceId),
   ]);
+
+  if (!clientRow || isUnassignedClient(clientRow.notes)) notFound();
+
+  const connectionId = connections?.[0]?.id ?? null;
 
   if (connectedLocationsRaw.error) {
     throw new Error(

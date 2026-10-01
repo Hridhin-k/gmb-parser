@@ -112,7 +112,7 @@ export function ProfileInsightPanel({
           <button
             type="button"
             onClick={clearSelection}
-            className="rounded p-1 text-gray-400 hover:bg-gray-100 hover:text-gray-700"
+            className="rounded p-1 text-[#898b91] hover:bg-[#f3f2ef] hover:text-[#18161a]"
             aria-label="Clear profile selection"
           >
             <X className="h-4 w-4" />
@@ -120,7 +120,7 @@ export function ProfileInsightPanel({
         </div>
       </div>
 
-      <div className="mt-2 flex flex-wrap items-center gap-3 text-[12px] text-gray-600">
+      <div className="mt-2 flex flex-wrap items-center gap-3 text-[12px] text-[#5f6168]">
         <span className="inline-flex items-center gap-1">
           <Star
             className={cn(
@@ -153,14 +153,14 @@ export function ProfileInsightPanel({
         )}
       </div>
 
-      <p className="mt-3 text-[13px] leading-relaxed text-gray-700">{summary}</p>
+      <p className="mt-3 text-[13px] leading-relaxed text-[#18161a]">{summary}</p>
 
       {(active?.themes?.length ?? 0) > 0 && (
         <div className="mt-2 flex flex-wrap gap-1">
           {active!.themes.map((t) => (
             <span
               key={t}
-              className="rounded bg-gray-100 px-1.5 py-0.5 text-[11px] text-gray-600"
+              className="rounded bg-[#f3f2ef] px-1.5 py-0.5 text-[11px] text-[#5f6168]"
             >
               {t}
             </span>
@@ -210,7 +210,7 @@ export function ProfileInsightPanel({
         {stale && active && (
           <span className="text-[11px] text-amber-600">Out of date</span>
         )}
-        <span className="text-[11px] text-gray-400">
+        <span className="text-[11px] text-[#898b91]">
           Insights generate only for the open profile (quota-safe).
         </span>
       </div>

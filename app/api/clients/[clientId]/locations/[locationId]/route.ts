@@ -1,6 +1,5 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
-import { createAdminClient } from "@/lib/supabase/admin";
 import { GoogleBusinessProfileService } from "@/lib/services/google-business-profile";
 import { AuditService } from "@/lib/services/audit";
 import { AppError } from "@/lib/errors";
@@ -35,7 +34,6 @@ export async function PUT(_request: Request, { params }: RouteParams) {
     return NextResponse.json({ error: "Not authenticated" }, { status: 401 });
   }
 
-  const admin = createAdminClient();
   const membership = await ensurePersonalWorkspace(user);
 
   try {
@@ -91,7 +89,6 @@ export async function DELETE(_request: Request, { params }: RouteParams) {
     return NextResponse.json({ error: "Not authenticated" }, { status: 401 });
   }
 
-  const admin = createAdminClient();
   const membership = await ensurePersonalWorkspace(user);
 
   try {

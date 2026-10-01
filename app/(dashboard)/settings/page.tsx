@@ -1,6 +1,6 @@
-import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
-import { ensurePersonalWorkspace, getMemberRole, getWorkspaceRoster } from "@/lib/services/workspace";
+import { getWorkspaceRoster } from "@/lib/services/workspace";
+import { getActiveRole, getActiveWorkspace } from "@/lib/services/session";
 import { PageHeader } from "@/components/page-header";
 import { GoogleConnectionCard } from "@/components/google-connection-card";
 import { WorkspaceMembersCard } from "@/components/workspace-members-card";
@@ -26,25 +26,22 @@ interface SettingsPageProps {
 }
 
 export default async function SettingsPage({ searchParams }: SettingsPageProps) {
-  const params = await searchParams;
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-
-  const admin = createAdminClient();
-  const membership = await ensurePersonalWorkspace(user!);
-  const [role, roster] = await Promise.all([
-    getMemberRole(user!.id, membership.workspace_id),
-    getWorkspaceRoster(membership.workspace_id),
+  const [params, { user, workspaceId }] = await Promise.all([
+    searchParams,
+    getActiveWorkspace(),
   ]);
+  const admin = createAdminClient();
 
-  const { data } = await admin
-    .from("grm_google_connections")
-    .select("id, google_email, status, created_at, last_refreshed_at")
-    .eq("workspace_id", membership.workspace_id)
-    .neq("status", "revoked")
-    .order("created_at", { ascending: false });
+  const [role, roster, { data }] = await Promise.all([
+    getActiveRole(),
+    getWorkspaceRoster(workspaceId),
+    admin
+      .from("grm_google_connections")
+      .select("id, google_email, status, created_at, last_refreshed_at")
+      .eq("workspace_id", workspaceId)
+      .neq("status", "revoked")
+      .order("created_at", { ascending: false }),
+  ]);
 
   const connections = (data ?? []).map((c) => ({
     ...c,
@@ -74,8 +71,8 @@ export default async function SettingsPage({ searchParams }: SettingsPageProps) 
 
       <WorkspaceMembersCard
         workspaceName={roster.name}
-        currentUserId={user!.id}
-        canInvite={role === "owner" || role === "admin"}
+        currentUserId={user.id}
+        currentRole={role}
         members={roster.members}
         invites={roster.invites}
       />

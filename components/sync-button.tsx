@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
+import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { RefreshCw } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -40,12 +41,30 @@ export function SyncButton({
         body: JSON.stringify(body),
       });
 
+      const data = (await response.json()) as {
+        error?: string;
+        totalReviewsSynced?: number;
+        reviewsSynced?: number;
+        locationsFailed?: number;
+      };
       if (!response.ok) {
-        const data = (await response.json()) as { error?: string };
         setError(data.error ?? "Sync failed. Please try again.");
         return;
       }
 
+      const synced = data.totalReviewsSynced ?? data.reviewsSynced ?? 0;
+      const failed = data.locationsFailed ?? 0;
+      if (failed > 0) {
+        toast.warning(`Synced ${synced} new review${synced === 1 ? "" : "s"}`, {
+          description: `${failed} location${failed === 1 ? "" : "s"} could not be synced. Check the audit log.`,
+        });
+      } else {
+        toast.success(
+          synced > 0
+            ? `${synced} new review${synced === 1 ? "" : "s"} synced`
+            : "Everything is up to date"
+        );
+      }
       router.refresh();
     } catch {
       setError("Unable to connect to the server. Please check your connection.");

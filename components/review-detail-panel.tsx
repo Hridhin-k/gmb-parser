@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
+import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import {
@@ -96,9 +97,9 @@ const REPLY_STATUS_MAP: Record<
   string,
   { label: string; className: string; dotColor: string }
 > = {
-  none:            { label: "No reply",       className: "text-gray-500",   dotColor: "bg-gray-300" },
-  draft:           { label: "Draft",          className: "text-gray-600",   dotColor: "bg-gray-400" },
-  approved:        { label: "Approved",       className: "text-blue-700",   dotColor: "bg-blue-500" },
+  none:            { label: "No reply",       className: "text-[#898b91]",  dotColor: "bg-[#d9d2ff]" },
+  draft:           { label: "Draft",          className: "text-[#5f6168]",  dotColor: "bg-[#898b91]" },
+  approved:        { label: "Approved",       className: "text-[#4823ff]",  dotColor: "bg-[#4823ff]" },
   pending_publish: { label: "Publishing...",  className: "text-amber-700",  dotColor: "bg-amber-500" },
   published:       { label: "Published",      className: "text-green-700",  dotColor: "bg-green-500" },
   failed:          { label: "Publish failed", className: "text-red-700",    dotColor: "bg-red-500" },
@@ -151,6 +152,7 @@ export function ReviewDetailPanel({
         content: draftContent.trim(),
       });
       setIsCreating(false);
+      toast.success("Draft saved");
       router.refresh();
     } catch (e) {
       setError(e instanceof Error ? e.message : "Failed to create reply");
@@ -169,6 +171,7 @@ export function ReviewDetailPanel({
         content: draftContent.trim(),
       });
       setIsEditing(false);
+      toast.success("Changes saved");
       router.refresh();
     } catch (e) {
       setError(e instanceof Error ? e.message : "Failed to save edit");
@@ -185,6 +188,7 @@ export function ReviewDetailPanel({
       await apiCall(`/api/reviews/${review.id}/reply/approve`, "POST", {
         replyId: reply.id,
       });
+      toast.success("Reply approved", { description: "It is ready to publish." });
       router.refresh();
     } catch (e) {
       setError(e instanceof Error ? e.message : "Failed to approve reply");
@@ -201,6 +205,7 @@ export function ReviewDetailPanel({
       await apiCall(`/api/reviews/${review.id}/reply/publish`, "POST", {
         replyId: reply.id,
       });
+      toast.success("Published to Google");
       router.refresh();
     } catch (e) {
       setError(e instanceof Error ? e.message : "Failed to publish reply");
@@ -223,6 +228,7 @@ export function ReviewDetailPanel({
       await apiCall(`/api/reviews/${review.id}/reply/publish`, "POST", {
         replyId: reply.id,
       });
+      toast.success("Published to Google");
       router.refresh();
     } catch (e) {
       setError(
@@ -238,6 +244,7 @@ export function ReviewDetailPanel({
     setLoading("generate");
     try {
       await apiCall(`/api/reviews/${review.id}/generate`, "POST");
+      toast.success("AI draft ready", { description: "Read it and edit before approving." });
       router.refresh();
     } catch (e) {
       setError(e instanceof Error ? e.message : "Failed to generate AI response");
@@ -255,6 +262,7 @@ export function ReviewDetailPanel({
         replyId: reply.id,
       });
       setDraftContent("");
+      toast.success("Draft deleted");
       router.refresh();
     } catch (e) {
       setError(e instanceof Error ? e.message : "Failed to delete reply");
@@ -276,14 +284,14 @@ export function ReviewDetailPanel({
           <p className="text-xs text-[#898b91]">
             {review.location_title}
             {review.client_name && (
-              <span className="text-gray-300"> · </span>
+              <span className="text-[#c9c7c3]"> · </span>
             )}
             {review.client_name}
           </p>
         </div>
         <button
           onClick={onClose}
-          className="ml-2 shrink-0 rounded p-1 text-gray-400 hover:bg-gray-100 hover:text-gray-600 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+          className="ml-2 shrink-0 rounded p-1 text-[#898b91] hover:bg-[#f3f2ef] hover:text-[#5f6168] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
           aria-label="Close review detail"
         >
           <X className="h-4 w-4" />
@@ -295,7 +303,7 @@ export function ReviewDetailPanel({
         {/* Rating + date row */}
         <div className="flex items-center justify-between">
           <StarDisplay rating={review.star_rating} />
-          <span className="text-[11px] text-gray-400">
+          <span className="text-[11px] text-[#898b91]">
             {formatDate(review.review_create_time)}
           </span>
         </div>
@@ -306,7 +314,7 @@ export function ReviewDetailPanel({
             {review.comment}
           </p>
         ) : (
-          <p className="text-sm italic text-gray-400">
+          <p className="text-sm italic text-[#898b91]">
             Rating only — no written comment.
           </p>
         )}
@@ -390,7 +398,7 @@ export function ReviewDetailPanel({
               </Button>
             </div>
             {loading === "generate" && (
-              <p className="text-xs text-gray-500">
+              <p className="text-xs text-[#898b91]">
                 AI is drafting a response. This usually takes a few seconds.
               </p>
             )}
@@ -400,7 +408,7 @@ export function ReviewDetailPanel({
         {/* Create form */}
         {isCreating && !reply && (
           <div className="space-y-3">
-            <label htmlFor="draft-reply" className="block text-xs font-medium text-gray-500">
+            <label htmlFor="draft-reply" className="block text-xs font-medium text-[#898b91]">
               Draft reply
             </label>
             <Textarea
@@ -444,7 +452,7 @@ export function ReviewDetailPanel({
           <div className="space-y-3">
             {isEditing ? (
               <>
-                <label htmlFor="edit-reply" className="block text-xs font-medium text-gray-500">
+                <label htmlFor="edit-reply" className="block text-xs font-medium text-[#898b91]">
                   Edit reply
                 </label>
                 <Textarea
@@ -487,7 +495,7 @@ export function ReviewDetailPanel({
                   ? "border-green-200 bg-green-50/40"
                   : reply.source === "ai"
                   ? "border-purple-100 bg-purple-50/30"
-                  : "border-gray-200 bg-gray-50/50"
+                  : "border-[#e6e4e1] bg-[#fafaf8]/50"
               )}>
                 {reply.source === "ai" && reply.status !== "published" && (
                   <p className="mb-1.5 flex items-center gap-1 text-[10px] font-medium text-purple-600">
@@ -504,7 +512,7 @@ export function ReviewDetailPanel({
                     )}
                   </p>
                 )}
-                <p className="whitespace-pre-wrap text-sm leading-relaxed text-gray-700">
+                <p className="whitespace-pre-wrap text-sm leading-relaxed text-[#18161a]">
                   {reply.content}
                 </p>
                 {/* Keep primary actions next to the draft so they are not clipped */}
@@ -543,7 +551,7 @@ export function ReviewDetailPanel({
                         </Button>
                       </>
                     ) : (
-                      <p className="w-full text-xs text-gray-500">
+                      <p className="w-full text-xs text-[#898b91]">
                         An owner or admin needs to approve this draft before it can be published.
                       </p>
                     )}
@@ -573,7 +581,7 @@ export function ReviewDetailPanel({
                     <Button
                       size="sm"
                       variant="ghost"
-                      className="text-gray-400 hover:text-red-600"
+                      className="text-[#898b91] hover:text-red-600"
                       onClick={handleDelete}
                       disabled={loading !== null}
                       aria-label="Reject draft"
@@ -613,7 +621,7 @@ export function ReviewDetailPanel({
                     <Button
                       size="sm"
                       variant="ghost"
-                      className="text-gray-400 hover:text-red-600"
+                      className="text-[#898b91] hover:text-red-600"
                       onClick={handleDelete}
                       disabled={loading !== null}
                       aria-label="Reject draft"

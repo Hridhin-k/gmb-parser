@@ -6,10 +6,10 @@ interface PageHeaderProps {
 
 export function PageHeader({ title, description, children }: PageHeaderProps) {
   return (
-    <div className="flex items-start justify-between gap-4">
-      <div>
+    <div className="flex flex-col items-start gap-3 sm:flex-row sm:items-start sm:justify-between sm:gap-4">
+      <div className="min-w-0">
         <h1
-          className="text-[31px] leading-[1.2] tracking-[-0.032em] text-[#18161a]"
+          className="text-[26px] leading-[1.2] tracking-[-0.032em] text-[#18161a] sm:text-[31px]"
           style={{ fontFamily: "var(--font-plus-jakarta), sans-serif" }}
         >
           {title}
@@ -18,7 +18,11 @@ export function PageHeader({ title, description, children }: PageHeaderProps) {
           <p className="mt-1 max-w-xl text-sm font-light text-[#898b91]">{description}</p>
         )}
       </div>
-      {children && <div className="flex shrink-0 items-center gap-2">{children}</div>}
+      {children && (
+        <div className="flex w-full flex-wrap items-center gap-2 sm:w-auto sm:shrink-0">
+          {children}
+        </div>
+      )}
     </div>
   );
 }

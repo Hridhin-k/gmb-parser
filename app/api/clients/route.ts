@@ -1,7 +1,6 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { createClient } from "@/lib/supabase/server";
-import { createAdminClient } from "@/lib/supabase/admin";
 import { ensurePersonalWorkspace } from "@/lib/services/workspace";
 import { GoogleBusinessProfileService } from "@/lib/services/google-business-profile";
 import { AuditService } from "@/lib/services/audit";
@@ -32,7 +31,6 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Client name is required" }, { status: 400 });
   }
 
-  const admin = createAdminClient();
   const membership = await ensurePersonalWorkspace(user);
 
   try {

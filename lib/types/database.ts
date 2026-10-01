@@ -51,4 +51,7 @@ export type AuditAction =
   | "location_insight.generated"
   | "workspace.invite_created"
   | "workspace.invite_revoked"
+  | "workspace.member_role_changed"
+  | "workspace.member_removed"
+  | "workspace.member_left"
   | "workspace.invite_accepted";

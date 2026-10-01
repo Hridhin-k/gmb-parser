@@ -1,7 +1,6 @@
-import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { GoogleBusinessProfileService } from "@/lib/services/google-business-profile";
-import { ensurePersonalWorkspace } from "@/lib/services/workspace";
+import { getActiveWorkspace } from "@/lib/services/session";
 import { PageHeader } from "@/components/page-header";
 import { EmptyState } from "@/components/empty-state";
 import { CreateClientDialog } from "@/components/create-client-dialog";
@@ -12,23 +11,18 @@ import { Building2, MapPin } from "lucide-react";
 import Link from "next/link";
 
 export default async function ClientsPage() {
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-
+  const { workspaceId } = await getActiveWorkspace();
   const admin = createAdminClient();
-  const membership = await ensurePersonalWorkspace(user!);
 
   const [{ data: connections }, clients, unassignedLocations] = await Promise.all([
     admin
       .from("grm_google_connections")
       .select("id")
-      .eq("workspace_id", membership.workspace_id)
+      .eq("workspace_id", workspaceId)
       .eq("status", "active")
       .limit(1),
-    GoogleBusinessProfileService.getWorkspaceClients(membership.workspace_id),
-    GoogleBusinessProfileService.getUnlinkedLocations(membership.workspace_id),
+    GoogleBusinessProfileService.getWorkspaceClients(workspaceId),
+    GoogleBusinessProfileService.getUnlinkedLocations(workspaceId),
   ]);
 
   const connectionId = connections?.[0]?.id ?? null;

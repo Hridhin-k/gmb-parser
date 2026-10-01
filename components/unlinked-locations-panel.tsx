@@ -88,10 +88,10 @@ export function UnlinkedLocationsPanel({
               className="flex items-center justify-between rounded-md bg-white px-3 py-2.5 shadow-sm"
             >
               <div className="min-w-0">
-                <p className="truncate text-sm font-medium text-gray-900">
+                <p className="truncate text-sm font-medium text-[#18161a]">
                   {loc.location_title}
                 </p>
-                <p className="truncate text-xs text-gray-500">
+                <p className="truncate text-xs text-[#898b91]">
                   {loc.address_formatted ??
                     loc.grm_google_accounts?.account_display_name ??
                     loc.google_location_name}

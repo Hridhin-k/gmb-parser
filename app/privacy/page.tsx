@@ -102,10 +102,10 @@ export default function PrivacyPage() {
             retry is not a new approval.
           </li>
           <li>
-            The instruction to the model asks it not to say the reply was
-            written by AI, so the text that reaches Google reads as the
-            business. You still have to read it. Gemini can be wrong, generic,
-            or off-tone.
+            The instruction to the model asks it to write in the business’s
+            voice, without commentary about how the draft was made. A person
+            on your team reads, edits, and approves every reply before it is
+            published. Gemini can be wrong, generic, or off-tone.
           </li>
           <li>
             We do not use your reviews to train a model of our own. The text

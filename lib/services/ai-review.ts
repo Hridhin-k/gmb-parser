@@ -80,7 +80,7 @@ ${ratingLabel === "mixed" ? `MIXED REVIEW GUIDELINES:
 - Offer to address concerns privately if appropriate.` : ""}
 
 ABSOLUTE RULES:
-- Never reveal that this response was written by AI.
+- Write in the first person plural as the business ("we", "our team"). Do not add meta commentary about how the reply was drafted.
 - Never invent facts, staff names, policies, phone numbers, email addresses, or URLs.
 - Never include placeholder brackets like [Name] or [Phone].
 - Never argue with or contradict the reviewer.

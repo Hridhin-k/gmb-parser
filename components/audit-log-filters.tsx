@@ -3,16 +3,24 @@
 import { useRouter, usePathname, useSearchParams } from "next/navigation";
 import { useCallback } from "react";
 
+interface Option {
+  value: string;
+  label: string;
+}
+
 interface AuditLogFiltersProps {
   currentAction: string;
   currentUser: string;
   currentEntity: string;
   currentFrom: string;
   currentTo: string;
-  actionOptions: string[];
-  entityOptions: string[];
-  actionLabels: Record<string, string>;
+  actionOptions: Option[];
+  entityOptions: Option[];
+  memberOptions: Option[];
 }
+
+const FIELD =
+  "h-10 w-full rounded-full border border-[#d9d2ff] bg-white px-4 text-sm text-[#18161a] focus:border-[#4823ff] focus:outline-none focus:ring-2 focus:ring-[#ede9ff] sm:w-auto";
 
 export function AuditLogFilters({
   currentAction,
@@ -22,7 +30,7 @@ export function AuditLogFilters({
   currentTo,
   actionOptions,
   entityOptions,
-  actionLabels,
+  memberOptions,
 }: AuditLogFiltersProps) {
   const router = useRouter();
   const pathname = usePathname();
@@ -31,11 +39,8 @@ export function AuditLogFilters({
   const updateParam = useCallback(
     (key: string, value: string) => {
       const params = new URLSearchParams(searchParams.toString());
-      if (value) {
-        params.set(key, value);
-      } else {
-        params.delete(key);
-      }
+      if (value) params.set(key, value);
+      else params.delete(key);
       router.push(`${pathname}?${params.toString()}`);
     },
     [router, pathname, searchParams]
@@ -44,46 +49,53 @@ export function AuditLogFilters({
   const hasFilters =
     currentAction || currentUser || currentEntity || currentFrom || currentTo;
 
-  function clearAll() {
-    router.push(pathname);
-  }
-
   return (
-    <div className="flex flex-wrap items-center gap-2">
-      {/* Action filter */}
+    <div className="grid grid-cols-1 gap-2 sm:flex sm:flex-wrap sm:items-center">
       <select
         value={currentAction}
         onChange={(e) => updateParam("action", e.target.value)}
-        className="h-10 rounded-full border border-[#d9d2ff] bg-white px-4 text-sm text-[#18161a] focus:border-[#4823ff] focus:outline-none focus:ring-2 focus:ring-[#ede9ff]"
+        className={FIELD}
         aria-label="Filter by action"
       >
         <option value="">All actions</option>
-        {actionOptions.map((a) => (
-          <option key={a} value={a}>
-            {actionLabels[a] ?? a}
+        {actionOptions.map((o) => (
+          <option key={o.value} value={o.value}>
+            {o.label}
           </option>
         ))}
       </select>
 
-      {/* Entity type filter */}
-      {entityOptions.length > 0 && (
+      <select
+        value={currentEntity}
+        onChange={(e) => updateParam("entity", e.target.value)}
+        className={FIELD}
+        aria-label="Filter by item type"
+      >
+        <option value="">All items</option>
+        {entityOptions.map((o) => (
+          <option key={o.value} value={o.value}>
+            {o.label}
+          </option>
+        ))}
+      </select>
+
+      {memberOptions.length > 1 && (
         <select
-          value={currentEntity}
-          onChange={(e) => updateParam("entity", e.target.value)}
-          className="h-10 rounded-full border border-[#d9d2ff] bg-white px-4 text-sm text-[#18161a] focus:border-[#4823ff] focus:outline-none focus:ring-2 focus:ring-[#ede9ff]"
-          aria-label="Filter by entity type"
+          value={currentUser}
+          onChange={(e) => updateParam("user", e.target.value)}
+          className={FIELD}
+          aria-label="Filter by team member"
         >
-          <option value="">All entities</option>
-          {entityOptions.map((e) => (
-            <option key={e} value={e}>
-              {e.replace("grm_", "").replaceAll("_", " ")}
+          <option value="">Everyone</option>
+          {memberOptions.map((o) => (
+            <option key={o.value} value={o.value}>
+              {o.label}
             </option>
           ))}
         </select>
       )}
 
-      {/* Date range */}
-      <div className="flex items-center gap-1">
+      <div className="flex items-center gap-2">
         <label className="text-xs font-medium text-[#898b91]" htmlFor="audit-from">
           From
         </label>
@@ -92,11 +104,10 @@ export function AuditLogFilters({
           type="date"
           value={currentFrom}
           onChange={(e) => updateParam("from", e.target.value)}
-          className="h-10 rounded-full border border-[#d9d2ff] bg-white px-3 text-sm text-[#18161a] focus:border-[#4823ff] focus:outline-none focus:ring-2 focus:ring-[#ede9ff]"
-          aria-label="Filter from date"
+          className={FIELD}
         />
       </div>
-      <div className="flex items-center gap-1">
+      <div className="flex items-center gap-2">
         <label className="text-xs font-medium text-[#898b91]" htmlFor="audit-to">
           To
         </label>
@@ -105,16 +116,14 @@ export function AuditLogFilters({
           type="date"
           value={currentTo}
           onChange={(e) => updateParam("to", e.target.value)}
-          className="h-10 rounded-full border border-[#d9d2ff] bg-white px-3 text-sm text-[#18161a] focus:border-[#4823ff] focus:outline-none focus:ring-2 focus:ring-[#ede9ff]"
-          aria-label="Filter to date"
+          className={FIELD}
         />
       </div>
 
-      {/* Clear filters */}
       {hasFilters && (
         <button
           type="button"
-          onClick={clearAll}
+          onClick={() => router.push(pathname)}
           className="h-10 rounded-full px-3 text-sm font-medium text-[#4823ff] hover:text-[#7e78ff]"
         >
           Clear filters

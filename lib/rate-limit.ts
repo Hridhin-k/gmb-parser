@@ -107,3 +107,9 @@ export const PUBLISH_LIMIT: RateLimitConfig = {
   limit: 20,
   windowMs: 60_000,
 };
+
+/** CSV export: max 5 per user per minute */
+export const EXPORT_LIMIT: RateLimitConfig = {
+  limit: 5,
+  windowMs: 60_000,
+};

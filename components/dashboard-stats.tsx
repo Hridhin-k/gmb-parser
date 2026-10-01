@@ -63,7 +63,7 @@ export function DashboardStats({
 
   return (
     <section className="overflow-hidden rounded-[20px] border border-[#e6e4e1] bg-white">
-      <div className="grid grid-cols-2 sm:grid-cols-4 sm:divide-x sm:divide-[#eee]">
+      <div className="grid grid-cols-2 divide-x divide-y divide-[#eee] sm:grid-cols-4 sm:divide-y-0">
         <Metric
           href={`${basePath}?filter=unanswered`}
           label="Needs reply"
@@ -95,7 +95,7 @@ export function DashboardStats({
         />
       </div>
 
-      <div className="grid grid-cols-2 border-t border-[#eee] sm:grid-cols-4 sm:divide-x sm:divide-[#eee]">
+      <div className="grid grid-cols-2 divide-x divide-y divide-[#eee] border-t border-[#eee] sm:grid-cols-4 sm:divide-y-0">
         <Metric
           href={`${basePath}?filter=all`}
           label="Reviews"

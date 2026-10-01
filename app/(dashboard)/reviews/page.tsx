@@ -1,13 +1,13 @@
-import { createClient } from "@/lib/supabase/server";
-import { createAdminClient } from "@/lib/supabase/admin";
 import { getDashboardData } from "@/lib/services/dashboard";
-import { ensurePersonalWorkspace, canApproveReplies, getMemberRole } from "@/lib/services/workspace";
+import { canApproveReplies } from "@/lib/services/workspace";
+import { getActiveRole, getActiveWorkspace } from "@/lib/services/session";
 import { PageHeader } from "@/components/page-header";
 import { EmptyState } from "@/components/empty-state";
 import { SyncButton } from "@/components/sync-button";
 import { ReviewFilters } from "@/components/review-filters";
 import { ReviewList } from "@/components/review-list";
-import { MessageSquareText } from "lucide-react";
+import { PaginationBar } from "@/components/pagination-bar";
+import { Download, MessageSquareText } from "lucide-react";
 import {
   validatePage,
   validateRatingFilter,
@@ -18,71 +18,11 @@ interface ReviewsPageProps {
   searchParams: Promise<Record<string, string | string[] | undefined>>;
 }
 
-function PaginationBar({
-  currentPage,
-  totalPages,
-  searchParams,
-}: {
-  currentPage: number;
-  totalPages: number;
-  searchParams: URLSearchParams;
-}) {
-  function hrefFor(page: number) {
-    const p = new URLSearchParams(searchParams.toString());
-    if (page <= 1) p.delete("page");
-    else p.set("page", String(page));
-    const qs = p.toString();
-    return qs ? `/reviews?${qs}` : "/reviews";
-  }
-
-  const prev = currentPage > 1 ? currentPage - 1 : null;
-  const next = currentPage < totalPages ? currentPage + 1 : null;
-
-  return (
-    <div className="flex items-center justify-center gap-3 py-2 text-sm text-gray-600">
-      {prev ? (
-        <a
-          href={hrefFor(prev)}
-          className="rounded border border-gray-200 bg-white px-3 py-1.5 hover:bg-gray-50"
-        >
-          Previous
-        </a>
-      ) : (
-        <span className="rounded border border-gray-100 bg-gray-50 px-3 py-1.5 text-gray-300">
-          Previous
-        </span>
-      )}
-      <span>
-        Page {currentPage} of {totalPages}
-      </span>
-      {next ? (
-        <a
-          href={hrefFor(next)}
-          className="rounded border border-gray-200 bg-white px-3 py-1.5 hover:bg-gray-50"
-        >
-          Next
-        </a>
-      ) : (
-        <span className="rounded border border-gray-100 bg-gray-50 px-3 py-1.5 text-gray-300">
-          Next
-        </span>
-      )}
-    </div>
-  );
-}
-
 export default async function ReviewsPage({ searchParams }: ReviewsPageProps) {
-  const params = await searchParams;
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-
-  const admin = createAdminClient();
-  const membership = await ensurePersonalWorkspace(user!);
-  const canApprove = canApproveReplies(
-    await getMemberRole(user!.id, membership.workspace_id)
-  );
+  const [params, { workspaceId }] = await Promise.all([
+    searchParams,
+    getActiveWorkspace(),
+  ]);
 
   const filterParam = [
     "all",
@@ -113,20 +53,24 @@ export default async function ReviewsPage({ searchParams }: ReviewsPageProps) {
   const hasComment = params.comment === "1" || params.comment === "true";
   const currentPage = validatePage(params.page);
 
-  const data = await getDashboardData(membership.workspace_id, {
-    filter: filterParam,
-    rating: ratingParam,
-    ratingBucket: starsParam || undefined,
-    q: searchParam,
-    clientId: clientParam,
-    locationId: locationParam,
-    period: periodParam,
-    hasComment: hasComment || undefined,
-    page: currentPage,
-    profileQ: "",
-    profileSort: "attention",
-    profilePage: 1,
-  });
+  const [role, data] = await Promise.all([
+    getActiveRole(),
+    getDashboardData(workspaceId, {
+      filter: filterParam,
+      rating: ratingParam,
+      ratingBucket: starsParam || undefined,
+      q: searchParam,
+      clientId: clientParam,
+      locationId: locationParam,
+      period: periodParam,
+      hasComment: hasComment || undefined,
+      page: currentPage,
+      profileQ: "",
+      profileSort: "attention",
+      profilePage: 1,
+    }),
+  ]);
+  const canApprove = canApproveReplies(role);
 
   const totalPages = Math.max(
     1,
@@ -148,14 +92,25 @@ export default async function ReviewsPage({ searchParams }: ReviewsPageProps) {
   }
 
   return (
-    <div className="space-y-10">
+    <div className="space-y-6">
       <PageHeader
         title="Reviews"
-        description="Full review inbox with the same filters and actions as the dashboard."
+        description="Every review across your locations. Filter, draft, approve, and publish."
       >
-        {data.hasConnections && (
-          <SyncButton syncAll label="Sync all" size="sm" />
-        )}
+        <div className="flex flex-wrap gap-2">
+          {data.totalReviewCount > 0 && (
+            <a
+              href={`/api/reviews/export?${queryForPagination.toString()}`}
+              className="inline-flex h-9 items-center gap-1.5 rounded-full border border-[#d9d2ff] bg-white px-4 text-sm font-medium text-[#18161a] hover:border-[#4823ff]"
+            >
+              <Download className="h-3.5 w-3.5" aria-hidden />
+              Export CSV
+            </a>
+          )}
+          {data.hasConnections && (
+            <SyncButton syncAll label="Sync all" size="sm" />
+          )}
+        </div>
       </PageHeader>
 
       <ReviewFilters
@@ -201,7 +156,7 @@ export default async function ReviewsPage({ searchParams }: ReviewsPageProps) {
         />
       ) : (
         <>
-          <p className="text-[12px] tabular-nums text-gray-400">
+          <p className="text-[12px] tabular-nums text-[#898b91]">
             {data.totalReviewCount} matching
           </p>
           <ReviewList
@@ -211,6 +166,7 @@ export default async function ReviewsPage({ searchParams }: ReviewsPageProps) {
           />
           {totalPages > 1 && (
             <PaginationBar
+              basePath="/reviews"
               currentPage={currentPage}
               totalPages={totalPages}
               searchParams={queryForPagination}

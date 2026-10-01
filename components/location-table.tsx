@@ -77,7 +77,7 @@ export function LocationTable({
   return (
     <div className="space-y-3">
       <div className="flex items-center justify-between">
-        <p className="text-sm text-gray-500">
+        <p className="text-sm text-[#898b91]">
           {locations.length} location{locations.length !== 1 ? "s" : ""}
         </p>
         {connectionId && (
@@ -99,11 +99,11 @@ export function LocationTable({
 
       {locations.length === 0 ? (
         <div className="flex flex-col items-center justify-center rounded-[20px] border border-[#d9d2ff] bg-white py-12 text-center">
-          <MapPin className="h-8 w-8 text-gray-300" />
-          <p className="mt-2 text-sm font-medium text-gray-700">
+          <MapPin className="h-8 w-8 text-[#c9c7c3]" />
+          <p className="mt-2 text-sm font-medium text-[#18161a]">
             No locations on this client
           </p>
-          <p className="mt-1 text-xs text-gray-500">
+          <p className="mt-1 text-xs text-[#898b91]">
             Assign Google profiles from the Unassigned pool on the Clients page.
           </p>
         </div>
@@ -132,22 +132,22 @@ export function LocationTable({
             </TableHeader>
             <TableBody>
               {locations.map((loc) => (
-                <TableRow key={loc.id} className="border-b border-gray-100">
+                <TableRow key={loc.id} className="border-b border-[#f0eeeb]">
                   <TableCell className="py-3">
-                    <p className="text-sm font-medium text-gray-900">
+                    <p className="text-sm font-medium text-[#18161a]">
                       {loc.location_title}
                     </p>
                     {loc.store_code && (
-                      <p className="text-xs text-gray-500">#{loc.store_code}</p>
+                      <p className="text-xs text-[#898b91]">#{loc.store_code}</p>
                     )}
                   </TableCell>
                   <TableCell className="py-3">
-                    <p className="max-w-xs text-sm text-gray-600">
+                    <p className="max-w-xs text-sm text-[#5f6168]">
                       {loc.address_formatted ?? "—"}
                     </p>
                   </TableCell>
                   <TableCell className="py-3">
-                    <code className="text-xs text-gray-500">
+                    <code className="text-xs text-[#898b91]">
                       {loc.google_location_name.split("/").pop()}
                     </code>
                   </TableCell>
@@ -157,7 +157,7 @@ export function LocationTable({
                       className={
                         loc.is_active
                           ? "bg-green-100 text-green-700 hover:bg-green-100"
-                          : "bg-gray-100 text-gray-600"
+                          : "bg-[#f3f2ef] text-[#5f6168]"
                       }
                     >
                       {loc.is_active ? "Active" : "Inactive"}
@@ -165,7 +165,7 @@ export function LocationTable({
                   </TableCell>
                   <TableCell className="py-3">
                     <div className="space-y-1">
-                      <span className="text-sm text-gray-500">
+                      <span className="text-sm text-[#898b91]">
                         {formatSyncDate(loc.last_synced_at)}
                       </span>
                       {connectionId && (

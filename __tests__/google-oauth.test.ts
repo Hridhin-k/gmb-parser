@@ -1,5 +1,4 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import crypto from "crypto";
 
 // ---------------------------------------------------------------------------
 // Set env before any module import

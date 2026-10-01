@@ -73,7 +73,7 @@ export function CreateClientDialog() {
           <div className="space-y-1">
             <label
               htmlFor="client-name"
-              className="block text-sm font-medium text-gray-700"
+              className="block text-sm font-medium text-[#18161a]"
             >
               Name <span className="text-red-500">*</span>
             </label>
@@ -84,13 +84,13 @@ export function CreateClientDialog() {
               onChange={(e) => setName(e.target.value)}
               placeholder="e.g. Kalyan Restaurants"
               required
-              className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm shadow-sm focus:border-[#18161a] focus:outline-none focus:ring-2 focus:ring-[#18161a]/10"
+              className="w-full rounded-md border border-[#d9d7d3] px-3 py-2 text-sm shadow-sm focus:border-[#18161a] focus:outline-none focus:ring-2 focus:ring-[#18161a]/10"
             />
           </div>
           <div className="space-y-1">
             <label
               htmlFor="client-notes"
-              className="block text-sm font-medium text-gray-700"
+              className="block text-sm font-medium text-[#18161a]"
             >
               Notes
             </label>
@@ -100,7 +100,7 @@ export function CreateClientDialog() {
               onChange={(e) => setNotes(e.target.value)}
               placeholder="Optional notes about this client"
               rows={3}
-              className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm shadow-sm focus:border-[#18161a] focus:outline-none focus:ring-2 focus:ring-[#18161a]/10"
+              className="w-full rounded-md border border-[#d9d7d3] px-3 py-2 text-sm shadow-sm focus:border-[#18161a] focus:outline-none focus:ring-2 focus:ring-[#18161a]/10"
             />
           </div>
           {error && <p className="text-sm text-red-600">{error}</p>}

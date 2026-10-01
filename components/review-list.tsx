@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
+import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import {
   Star,
@@ -115,7 +116,6 @@ export function ReviewList({ reviews, replies, canApprove }: ReviewListProps) {
   const [checked, setChecked] = useState<Record<string, boolean>>({});
   const [bulkLoading, setBulkLoading] = useState<BulkAction | null>(null);
   const [bulkError, setBulkError] = useState<string | null>(null);
-  const [bulkMessage, setBulkMessage] = useState<string | null>(null);
 
   const selectedReview = reviews.find((r) => r.id === selectedId) ?? null;
   const selectedReply = selectedId ? (replies[selectedId] ?? null) : null;
@@ -146,7 +146,6 @@ export function ReviewList({ reviews, replies, canApprove }: ReviewListProps) {
   async function runBulk(action: BulkAction) {
     if (selectedIds.length === 0) return;
     setBulkError(null);
-    setBulkMessage(null);
     setBulkLoading(action);
     try {
       const response = await fetch("/api/reviews/bulk", {
@@ -163,10 +162,21 @@ export function ReviewList({ reviews, replies, canApprove }: ReviewListProps) {
         setBulkError(data.error ?? "Bulk action failed");
         return;
       }
-      setBulkMessage(
-        `${action}: ${data.succeeded ?? 0} succeeded` +
-          ((data.failed ?? 0) > 0 ? `, ${data.failed} failed` : "")
-      );
+      const verb = {
+        generate: "drafted",
+        approve: "approved",
+        publish: "published",
+        discard: "discarded",
+      }[action];
+      const ok = data.succeeded ?? 0;
+      const bad = data.failed ?? 0;
+      if (bad > 0) {
+        toast.warning(`${ok} ${verb}, ${bad} failed`, {
+          description: "Open a failed review to see why.",
+        });
+      } else {
+        toast.success(`${ok} review${ok === 1 ? "" : "s"} ${verb}`);
+      }
       setChecked({});
       router.refresh();
     } catch {
@@ -178,20 +188,20 @@ export function ReviewList({ reviews, replies, canApprove }: ReviewListProps) {
 
   return (
     <div className="space-y-3">
-      <div className="flex flex-wrap items-center gap-2 rounded-[20px] border border-[#d9d2ff] bg-white px-4 py-3">
+      <div className="flex flex-col gap-3 rounded-[20px] border border-[#d9d2ff] bg-white px-3 py-3 sm:flex-row sm:flex-wrap sm:items-center sm:px-4">
         <label className="flex items-center gap-2 text-sm text-[#18161a]">
           <input
             type="checkbox"
             checked={allChecked}
             onChange={(e) => toggleAll(e.target.checked)}
-            className="rounded border-gray-300"
+            className="rounded border-[#d9d7d3]"
           />
           Select all on page
         </label>
         <span className="text-sm text-[#898b91]">
           {selectedIds.length} selected
         </span>
-        <div className="ml-auto flex flex-wrap gap-1.5">
+        <div className="flex flex-wrap gap-1.5 sm:ml-auto">
           <Button
             size="xs"
             variant="outline"
@@ -239,20 +249,14 @@ export function ReviewList({ reviews, replies, canApprove }: ReviewListProps) {
         </div>
       </div>
 
-      {(bulkError || bulkMessage) && (
-        <p
-          className={cn(
-            "text-xs",
-            bulkError ? "text-red-600" : "text-emerald-700"
-          )}
-          role={bulkError ? "alert" : "status"}
-        >
-          {bulkError ?? bulkMessage}
+      {bulkError && (
+        <p className="text-xs text-red-600" role="alert">
+          {bulkError}
         </p>
       )}
 
       <div
-        className="grid gap-5 sm:grid-cols-2 xl:grid-cols-3"
+        className="grid gap-3 sm:grid-cols-2 sm:gap-5 xl:grid-cols-3"
         role="list"
         aria-label="Reviews"
       >
@@ -340,7 +344,7 @@ export function ReviewList({ reviews, replies, canApprove }: ReviewListProps) {
                 aria-label={`Open review by ${name}`}
               >
                 <StarRating rating={review.star_rating} />
-                <p className="mt-3 line-clamp-5 min-h-[7.5rem] text-sm font-light leading-relaxed text-[#18161a]">
+                <p className="mt-3 line-clamp-4 text-sm font-light leading-relaxed text-[#18161a] sm:line-clamp-5 sm:min-h-[7.5rem]">
                   {review.comment || "Rating only — no written comment."}
                 </p>
               </button>
@@ -371,7 +375,7 @@ export function ReviewList({ reviews, replies, canApprove }: ReviewListProps) {
 
       {selectedReview && (
         <div
-          className="fixed inset-0 z-50 flex items-end justify-center bg-[#18161a]/45 p-3 sm:items-center sm:p-6"
+          className="fixed inset-0 z-50 flex items-stretch justify-center bg-[#18161a]/45 sm:items-center sm:p-6"
           role="presentation"
           onClick={() => setSelectedId(null)}
         >
@@ -379,7 +383,7 @@ export function ReviewList({ reviews, replies, canApprove }: ReviewListProps) {
             role="dialog"
             aria-modal="true"
             aria-label={`Review by ${selectedReview.reviewer_display_name || "reviewer"}`}
-            className="flex h-[min(92vh,860px)] w-full max-w-2xl flex-col overflow-hidden rounded-[20px] border border-[#d9d2ff] bg-white shadow-none"
+            className="flex h-dvh w-full max-w-2xl flex-col overflow-hidden bg-white sm:h-[min(92dvh,860px)] sm:rounded-[20px] sm:border sm:border-[#d9d2ff]"
             onClick={(event) => event.stopPropagation()}
           >
             <ReviewDetailPanel

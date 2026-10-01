@@ -11,19 +11,19 @@ export default function GlobalError({
   reset: () => void;
 }) {
   return (
-    <div className="flex min-h-screen items-center justify-center bg-gray-50 px-4">
+    <div className="flex min-h-screen items-center justify-center bg-[#fafaf8] px-4">
       <div className="text-center">
         <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-full bg-red-50">
           <AlertTriangle className="h-6 w-6 text-red-500" aria-hidden />
         </div>
-        <h1 className="mt-4 text-base font-semibold text-gray-900">
+        <h1 className="mt-4 text-base font-semibold text-[#18161a]">
           Unable to load the application
         </h1>
-        <p className="mt-1 max-w-sm text-[13px] text-gray-500">
+        <p className="mt-1 max-w-sm text-[13px] text-[#898b91]">
           {error.message || "An unexpected error occurred. Please try again."}
         </p>
         {error.digest && (
-          <p className="mt-2 font-mono text-[11px] text-gray-400">
+          <p className="mt-2 font-mono text-[11px] text-[#898b91]">
             Reference: {error.digest}
           </p>
         )}

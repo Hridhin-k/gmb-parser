@@ -1,7 +1,6 @@
-import { createClient } from "@/lib/supabase/server";
-import { createAdminClient } from "@/lib/supabase/admin";
 import { getDashboardData } from "@/lib/services/dashboard";
-import { ensurePersonalWorkspace, canApproveReplies, getMemberRole } from "@/lib/services/workspace";
+import { canApproveReplies } from "@/lib/services/workspace";
+import { getActiveRole, getActiveWorkspace } from "@/lib/services/session";
 import { PageHeader } from "@/components/page-header";
 import { EmptyState } from "@/components/empty-state";
 import { SyncButton } from "@/components/sync-button";
@@ -11,6 +10,8 @@ import { ProfileDirectory } from "@/components/profile-directory";
 import { ProfileInsightPanel } from "@/components/profile-insight-panel";
 import { ReviewFilters } from "@/components/review-filters";
 import { ReviewList } from "@/components/review-list";
+import { PaginationBar } from "@/components/pagination-bar";
+import { SetupChecklist } from "@/components/setup-checklist";
 import { MessageSquareText, Building2 } from "lucide-react";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
@@ -24,71 +25,11 @@ interface DashboardPageProps {
   searchParams: Promise<Record<string, string | string[] | undefined>>;
 }
 
-function PaginationBar({
-  currentPage,
-  totalPages,
-  searchParams,
-}: {
-  currentPage: number;
-  totalPages: number;
-  searchParams: URLSearchParams;
-}) {
-  function hrefFor(page: number) {
-    const p = new URLSearchParams(searchParams.toString());
-    if (page <= 1) p.delete("page");
-    else p.set("page", String(page));
-    const qs = p.toString();
-    return qs ? `/dashboard?${qs}` : "/dashboard";
-  }
-
-  const prev = currentPage > 1 ? currentPage - 1 : null;
-  const next = currentPage < totalPages ? currentPage + 1 : null;
-
-  return (
-    <div className="flex items-center justify-center gap-3 py-2 text-sm text-[#898b91]">
-      {prev ? (
-        <a
-          href={hrefFor(prev)}
-          className="rounded-full border border-[#d9d2ff] bg-white px-4 py-2 font-medium text-[#18161a] hover:border-[#4823ff]"
-        >
-          Previous
-        </a>
-      ) : (
-        <span className="rounded-full border border-[#ede9ff] px-4 py-2 text-[#d9d2ff]">
-          Previous
-        </span>
-      )}
-      <span>
-        Page {currentPage} of {totalPages}
-      </span>
-      {next ? (
-        <a
-          href={hrefFor(next)}
-          className="rounded-full border border-[#d9d2ff] bg-white px-4 py-2 font-medium text-[#18161a] hover:border-[#4823ff]"
-        >
-          Next
-        </a>
-      ) : (
-        <span className="rounded-full border border-[#ede9ff] px-4 py-2 text-[#d9d2ff]">
-          Next
-        </span>
-      )}
-    </div>
-  );
-}
-
 export default async function DashboardPage({ searchParams }: DashboardPageProps) {
-  const params = await searchParams;
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-
-  const admin = createAdminClient();
-  const membership = await ensurePersonalWorkspace(user!);
-  const canApprove = canApproveReplies(
-    await getMemberRole(user!.id, membership.workspace_id)
-  );
+  const [params, { workspaceId }] = await Promise.all([
+    searchParams,
+    getActiveWorkspace(),
+  ]);
 
   const filterParam = [
     "all",
@@ -135,20 +76,24 @@ export default async function DashboardPage({ searchParams }: DashboardPageProps
     : "attention";
   const profilePage = validatePage(params.pp);
 
-  const data = await getDashboardData(membership.workspace_id, {
-    filter: filterParam,
-    rating: ratingParam,
-    ratingBucket: starsParam || undefined,
-    q: searchParam,
-    clientId: clientParam,
-    locationId: locationParam,
-    period: periodParam,
-    hasComment: hasComment || undefined,
-    page: currentPage,
-    profileQ,
-    profileSort,
-    profilePage,
-  });
+  const [role, data] = await Promise.all([
+    getActiveRole(),
+    getDashboardData(workspaceId, {
+      filter: filterParam,
+      rating: ratingParam,
+      ratingBucket: starsParam || undefined,
+      q: searchParam,
+      clientId: clientParam,
+      locationId: locationParam,
+      period: periodParam,
+      hasComment: hasComment || undefined,
+      page: currentPage,
+      profileQ,
+      profileSort,
+      profilePage,
+    }),
+  ]);
+  const canApprove = canApproveReplies(role);
 
   const totalPages = Math.max(
     1,
@@ -185,6 +130,14 @@ export default async function DashboardPage({ searchParams }: DashboardPageProps
           <SyncButton syncAll label="Sync reviews" size="sm" />
         )}
       </PageHeader>
+
+      <SetupChecklist
+        workspaceId={workspaceId}
+        hasConnection={data.hasConnections}
+        hasLocations={data.kpis.locationsActive > 0}
+        hasReviews={data.kpis.totalReviews > 0}
+        hasPublished={data.kpis.published > 0}
+      />
 
       {empty ? (
         <EmptyState
@@ -251,7 +204,7 @@ export default async function DashboardPage({ searchParams }: DashboardPageProps
                 <div className="flex flex-wrap items-end justify-between gap-2">
                   <div>
                     <h2
-                      className="text-[31px] leading-[1.2] tracking-[-0.032em] text-[#18161a]"
+                      className="text-[26px] leading-[1.2] tracking-[-0.032em] text-[#18161a] sm:text-[31px]"
                       style={{ fontFamily: "var(--font-plus-jakarta), sans-serif" }}
                     >
                       Review inbox
@@ -299,6 +252,7 @@ export default async function DashboardPage({ searchParams }: DashboardPageProps
                     />
                     {totalPages > 1 && (
                       <PaginationBar
+                        basePath="/dashboard"
                         currentPage={currentPage}
                         totalPages={totalPages}
                         searchParams={queryForPagination}

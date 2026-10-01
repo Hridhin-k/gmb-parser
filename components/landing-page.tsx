@@ -55,7 +55,7 @@ export function LandingPage({ signedIn }: { signedIn: boolean }) {
             GRM
           </span>
         </Link>
-        <nav className="hidden items-center gap-6 text-[15px] font-medium sm:flex" aria-label="Page">
+        <nav className="hidden items-center gap-6 text-[15px] font-medium md:flex" aria-label="Page">
           <a href="#how" className="hover:text-[#4823ff]">How it works</a>
           <a href="#product" className="hover:text-[#4823ff]">Product</a>
           <a href="#team" className="hover:text-[#4823ff]">Team</a>
@@ -75,7 +75,7 @@ export function LandingPage({ signedIn }: { signedIn: boolean }) {
             </>
           ) : (
             <>
-              <Link href="/login" className="hidden px-3 text-[15px] font-medium sm:inline">
+              <Link href="/login" className="hidden px-3 text-[15px] font-medium md:inline">
                 Sign in
               </Link>
               <Link
@@ -88,15 +88,25 @@ export function LandingPage({ signedIn }: { signedIn: boolean }) {
           )}
         </div>
       </header>
+      <nav
+        className="mx-auto flex max-w-[1200px] gap-4 overflow-x-auto px-5 pb-2 text-sm font-medium md:hidden"
+        aria-label="Page"
+      >
+        <a href="#how" className="shrink-0">How it works</a>
+        <a href="#product" className="shrink-0">Product</a>
+        <a href="#team" className="shrink-0">Team</a>
+        <a href="/privacy" className="shrink-0">Privacy</a>
+        <a href="/terms" className="shrink-0">Terms</a>
+      </nav>
 
       <main>
-        <section className="mx-auto grid max-w-[1200px] items-center gap-12 px-5 pt-10 pb-20 lg:grid-cols-2 lg:pt-16">
+        <section className="mx-auto grid max-w-[1200px] items-center gap-8 px-4 pt-6 pb-12 sm:px-5 sm:pt-10 sm:pb-16 lg:grid-cols-2 lg:gap-12 lg:pt-16 lg:pb-20">
           <div>
             <p className="text-[12px] font-bold tracking-[0.08em] text-[#4823ff] uppercase">
               Google reviews
             </p>
             <h1
-              className="mt-4 text-[44px] leading-none tracking-[-0.04em] text-[#18161a] sm:text-[63px]"
+              className="mt-4 text-[36px] leading-[1.05] tracking-[-0.04em] text-[#18161a] sm:text-[52px] lg:text-[63px]"
               style={{ fontFamily: "var(--font-plus-jakarta), sans-serif" }}
             >
               Every Google review, one workspace.
@@ -154,7 +164,7 @@ export function LandingPage({ signedIn }: { signedIn: boolean }) {
         </section>
 
         <section id="how" className="bg-[#ede9ff]">
-          <div className="mx-auto max-w-[1200px] px-5 py-20">
+          <div className="mx-auto max-w-[1200px] px-5 py-12 sm:py-20">
             <p className="text-[12px] font-bold tracking-[0.08em] text-[#4823ff] uppercase">
               How it works
             </p>
@@ -176,7 +186,7 @@ export function LandingPage({ signedIn }: { signedIn: boolean }) {
           </div>
         </section>
 
-        <section id="product" className="mx-auto max-w-[1200px] px-5 py-20">
+        <section id="product" className="mx-auto max-w-[1200px] px-5 py-12 sm:py-20">
           <p className="text-[12px] font-bold tracking-[0.08em] text-[#4823ff] uppercase">
             Product
           </p>
@@ -197,7 +207,7 @@ export function LandingPage({ signedIn }: { signedIn: boolean }) {
         </section>
 
         <section id="team" className="border-t border-[#ede9ff]">
-          <div className="mx-auto grid max-w-[1200px] gap-8 px-5 py-20 lg:grid-cols-[1fr_1fr] lg:items-center">
+          <div className="mx-auto grid max-w-[1200px] gap-8 px-5 py-12 sm:py-20 lg:grid-cols-[1fr_1fr] lg:items-center">
             <div>
               <p className="text-[12px] font-bold tracking-[0.08em] text-[#4823ff] uppercase">
                 Team

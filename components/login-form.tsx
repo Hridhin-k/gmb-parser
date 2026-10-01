@@ -1,18 +1,15 @@
 "use client";
 
 import { useState } from "react";
+import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { createClient } from "@/lib/supabase/client";
 
 export function LoginForm() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [acceptedTerms, setAcceptedTerms] = useState(false);
-  const [acceptedAi, setAcceptedAi] = useState(false);
-  const canContinue = acceptedTerms && acceptedAi && !loading;
 
   async function handleSignIn() {
-    if (!acceptedTerms || !acceptedAi) return;
     setLoading(true);
     setError(null);
 
@@ -32,7 +29,7 @@ export function LoginForm() {
 
   return (
     <div className="w-full max-w-lg">
-      <div className="rounded-[20px] border border-[#d9d2ff] bg-white px-8 py-10">
+      <div className="rounded-[20px] border border-[#d9d2ff] bg-white px-5 py-8 sm:px-8 sm:py-10">
         <div className="mb-8">
           <div className="flex h-9 w-9 items-center justify-center rounded-full bg-[#4823ff] text-sm font-bold text-white">
             G
@@ -54,45 +51,9 @@ export function LoginForm() {
           </div>
         )}
 
-        <div className="mb-5 space-y-3">
-          <label className="flex items-start gap-3 text-sm leading-snug text-[#18161a]">
-            <input
-              type="checkbox"
-              checked={acceptedTerms}
-              onChange={(event) => setAcceptedTerms(event.target.checked)}
-              className="mt-0.5 rounded border-[#d9d2ff]"
-            />
-            <span>
-              I agree to the{" "}
-              <a href="/terms" className="font-medium text-[#4823ff]">
-                Terms of Service
-              </a>{" "}
-              and{" "}
-              <a href="/privacy" className="font-medium text-[#4823ff]">
-                Privacy Policy
-              </a>
-              .
-            </span>
-          </label>
-          <label className="flex items-start gap-3 text-sm leading-snug text-[#18161a]">
-            <input
-              type="checkbox"
-              checked={acceptedAi}
-              onChange={(event) => setAcceptedAi(event.target.checked)}
-              className="mt-0.5 rounded border-[#d9d2ff]"
-            />
-            <span>
-              I understand GRM can send review text to Google Gemini to draft
-              a reply or a location summary. A person must review a draft
-              before it is published, and a published reply appears on Google
-              as the business’s reply.
-            </span>
-          </label>
-        </div>
-
         <Button
           onClick={handleSignIn}
-          disabled={!canContinue}
+          disabled={loading}
           className="w-full gap-2"
           size="lg"
         >
@@ -105,12 +66,23 @@ export function LoginForm() {
           </svg>
           {loading ? "Redirecting..." : "Continue with Google"}
         </Button>
+        <p className="mt-4 text-sm leading-relaxed text-[#898b91]">
+          The first time you sign in, you’ll confirm the{" "}
+          <Link href="/terms" className="font-medium text-[#4823ff]">
+            Terms
+          </Link>{" "}
+          and{" "}
+          <Link href="/privacy" className="font-medium text-[#4823ff]">
+            Privacy Policy
+          </Link>
+          , including how AI drafts are used. That step is saved to your account.
+        </p>
       </div>
 
       <p className="mt-5 text-sm text-[#898b91]">
-        <a href="/" className="font-medium text-[#4823ff]">
+        <Link href="/" className="font-medium text-[#4823ff]">
           Back to GRM
-        </a>
+        </Link>
       </p>
     </div>
   );
