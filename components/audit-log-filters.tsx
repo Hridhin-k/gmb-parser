@@ -54,7 +54,7 @@ export function AuditLogFilters({
       <select
         value={currentAction}
         onChange={(e) => updateParam("action", e.target.value)}
-        className="h-10 rounded-full border border-[#e4e2de] bg-white px-4 text-sm text-[#18161a] focus:border-[#18161a] focus:outline-none focus:ring-2 focus:ring-[#f3f1ee]"
+        className="h-10 rounded-full border border-[#d9d2ff] bg-white px-4 text-sm text-[#18161a] focus:border-[#4823ff] focus:outline-none focus:ring-2 focus:ring-[#ede9ff]"
         aria-label="Filter by action"
       >
         <option value="">All actions</option>
@@ -70,7 +70,7 @@ export function AuditLogFilters({
         <select
           value={currentEntity}
           onChange={(e) => updateParam("entity", e.target.value)}
-          className="h-10 rounded-full border border-[#e4e2de] bg-white px-4 text-sm text-[#18161a] focus:border-[#18161a] focus:outline-none focus:ring-2 focus:ring-[#f3f1ee]"
+          className="h-10 rounded-full border border-[#d9d2ff] bg-white px-4 text-sm text-[#18161a] focus:border-[#4823ff] focus:outline-none focus:ring-2 focus:ring-[#ede9ff]"
           aria-label="Filter by entity type"
         >
           <option value="">All entities</option>
@@ -92,7 +92,7 @@ export function AuditLogFilters({
           type="date"
           value={currentFrom}
           onChange={(e) => updateParam("from", e.target.value)}
-          className="h-10 rounded-full border border-[#e4e2de] bg-white px-3 text-sm text-[#18161a] focus:border-[#18161a] focus:outline-none focus:ring-2 focus:ring-[#f3f1ee]"
+          className="h-10 rounded-full border border-[#d9d2ff] bg-white px-3 text-sm text-[#18161a] focus:border-[#4823ff] focus:outline-none focus:ring-2 focus:ring-[#ede9ff]"
           aria-label="Filter from date"
         />
       </div>
@@ -105,7 +105,7 @@ export function AuditLogFilters({
           type="date"
           value={currentTo}
           onChange={(e) => updateParam("to", e.target.value)}
-          className="h-10 rounded-full border border-[#e4e2de] bg-white px-3 text-sm text-[#18161a] focus:border-[#18161a] focus:outline-none focus:ring-2 focus:ring-[#f3f1ee]"
+          className="h-10 rounded-full border border-[#d9d2ff] bg-white px-3 text-sm text-[#18161a] focus:border-[#4823ff] focus:outline-none focus:ring-2 focus:ring-[#ede9ff]"
           aria-label="Filter to date"
         />
       </div>
@@ -115,7 +115,7 @@ export function AuditLogFilters({
         <button
           type="button"
           onClick={clearAll}
-          className="h-10 rounded-full px-3 text-sm font-medium text-[#18161a] hover:text-[#18161a]"
+          className="h-10 rounded-full px-3 text-sm font-medium text-[#4823ff] hover:text-[#7e78ff]"
         >
           Clear filters
         </button>

@@ -49,12 +49,12 @@ function PaginationBar({
       {prev ? (
         <a
           href={hrefFor(prev)}
-          className="rounded-full border border-[#e4e2de] bg-white px-4 py-2 font-medium text-[#18161a] hover:border-[#18161a]"
+          className="rounded-full border border-[#d9d2ff] bg-white px-4 py-2 font-medium text-[#18161a] hover:border-[#4823ff]"
         >
           Previous
         </a>
       ) : (
-        <span className="rounded-full border border-[#f3f1ee] px-4 py-2 text-[#e4e2de]">
+        <span className="rounded-full border border-[#ede9ff] px-4 py-2 text-[#d9d2ff]">
           Previous
         </span>
       )}
@@ -64,12 +64,12 @@ function PaginationBar({
       {next ? (
         <a
           href={hrefFor(next)}
-          className="rounded-full border border-[#e4e2de] bg-white px-4 py-2 font-medium text-[#18161a] hover:border-[#18161a]"
+          className="rounded-full border border-[#d9d2ff] bg-white px-4 py-2 font-medium text-[#18161a] hover:border-[#4823ff]"
         >
           Next
         </a>
       ) : (
-        <span className="rounded-full border border-[#f3f1ee] px-4 py-2 text-[#e4e2de]">
+        <span className="rounded-full border border-[#ede9ff] px-4 py-2 text-[#d9d2ff]">
           Next
         </span>
       )}
@@ -176,7 +176,7 @@ export default async function DashboardPage({ searchParams }: DashboardPageProps
     data.kpis.totalReviews === 0 && data.kpis.locationsActive === 0;
 
   return (
-    <div className="space-y-10">
+    <div className="space-y-6">
       <PageHeader
         title="Dashboard"
         description="Built for scale — find what needs work across hundreds of profiles, then act in place."
@@ -247,7 +247,7 @@ export default async function DashboardPage({ searchParams }: DashboardPageProps
             />
           ) : null}
 
-          <section id="inbox" className="scroll-mt-4 space-y-5">
+          <section id="inbox" className="scroll-mt-4 space-y-3">
                 <div className="flex flex-wrap items-end justify-between gap-2">
                   <div>
                     <h2

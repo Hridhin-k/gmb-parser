@@ -24,11 +24,11 @@ interface GoogleConnectionCardProps {
 function getStatusBadge(status: string) {
   switch (status) {
     case "active":
-      return <Badge variant="default" className="border-[#e4e2de] bg-[#f3f1ee] text-[#18161a] hover:bg-[#f3f1ee]">Connected</Badge>;
+      return <Badge variant="default" className="bg-emerald-50 text-emerald-700 border-emerald-200 hover:bg-emerald-50">Connected</Badge>;
     case "expired":
-      return <Badge variant="default" className="border-[#e4e2de] bg-[#f6eee9] text-[#9a3412] hover:bg-[#f6eee9]">Expired</Badge>;
+      return <Badge variant="default" className="bg-amber-50 text-amber-700 border-amber-200 hover:bg-amber-50">Expired</Badge>;
     case "revoked":
-      return <Badge variant="default" className="border-[#e4e2de] bg-[#f6eee9] text-[#9a3412] hover:bg-[#f6eee9]">Revoked</Badge>;
+      return <Badge variant="default" className="bg-red-50 text-red-700 border-red-200 hover:bg-red-50">Revoked</Badge>;
     default:
       return <Badge variant="secondary">{status}</Badge>;
   }
@@ -90,7 +90,7 @@ export function GoogleConnectionCard({
             setError(null);
             setSuccess(false);
           }}
-          className="inline-flex shrink-0 items-center justify-center rounded-full bg-[#4823ff] px-4 py-2 text-sm font-semibold text-white hover:bg-[#3a1ad6]"
+          className="inline-flex shrink-0 items-center justify-center rounded-full bg-[#4823ff] px-4 py-2 text-sm font-semibold text-white hover:bg-[#7e78ff]"
         >
           <ExternalLink className="mr-1.5 h-3.5 w-3.5" />
           Connect Google
@@ -99,7 +99,7 @@ export function GoogleConnectionCard({
 
       <CardContent className="space-y-3">
         {success && (
-          <div className="rounded-md border border-[#e4e2de] bg-[#f3f1ee] px-3 py-2 text-sm text-[#18161a]">
+          <div className="rounded-md bg-emerald-50 px-3 py-2 text-sm text-emerald-700 border border-emerald-200">
             Google Business Profile connected successfully.
           </div>
         )}
@@ -120,7 +120,7 @@ export function GoogleConnectionCard({
         {activeConnections.map((conn) => (
           <div
             key={conn.id}
-            className="flex items-center justify-between rounded-[12px] border border-[#e4e2de] px-4 py-3"
+            className="flex items-center justify-between rounded-[12px] border border-[#d9d2ff] px-4 py-3"
           >
             <div className="flex items-center gap-3">
               <svg viewBox="0 0 24 24" className="h-5 w-5 shrink-0" aria-hidden="true">

@@ -4,7 +4,6 @@ import { useRouter, usePathname, useSearchParams } from "next/navigation";
 import { useCallback, useEffect, useState, useTransition } from "react";
 import { cn } from "@/lib/utils";
 import { Star, Search, X } from "lucide-react";
-import { ratingStarClass } from "@/lib/ui/rating-color";
 
 const STATUS_FILTERS = [
   { key: "all", label: "All" },
@@ -167,7 +166,7 @@ export function ReviewFilters({
                   });
                 }
               }}
-              className="h-10 w-48 rounded-full border border-[#e4e2de] bg-white px-4 text-sm text-[#18161a] focus:border-[#18161a] focus:outline-none focus:ring-2 focus:ring-[#f3f1ee] sm:w-56"
+              className="h-10 w-48 rounded-full border border-[#d9d2ff] bg-white px-4 text-sm text-[#18161a] focus:border-[#4823ff] focus:outline-none focus:ring-2 focus:ring-[#ede9ff] sm:w-56"
               aria-label="Search and filter by profile"
             />
             <datalist id="dashboard-client-options">
@@ -186,7 +185,7 @@ export function ReviewFilters({
                 else params.delete("client");
               });
             }}
-            className="h-10 rounded-full border border-[#e4e2de] bg-white px-4 text-sm text-[#18161a] focus:border-[#18161a] focus:outline-none focus:ring-2 focus:ring-[#f3f1ee]"
+            className="h-10 rounded-full border border-[#d9d2ff] bg-white px-4 text-sm text-[#18161a] focus:border-[#4823ff] focus:outline-none focus:ring-2 focus:ring-[#ede9ff]"
             aria-label="Filter by client"
           >
             <option value="">All profiles</option>
@@ -202,7 +201,7 @@ export function ReviewFilters({
           <select
             value={currentLocationId}
             onChange={(e) => updateParam("location", e.target.value)}
-            className="h-10 rounded-full border border-[#e4e2de] bg-white px-4 text-sm text-[#18161a] focus:border-[#18161a] focus:outline-none focus:ring-2 focus:ring-[#f3f1ee]"
+            className="h-10 rounded-full border border-[#d9d2ff] bg-white px-4 text-sm text-[#18161a] focus:border-[#4823ff] focus:outline-none focus:ring-2 focus:ring-[#ede9ff]"
             aria-label="Filter by location"
           >
             <option value="">All locations</option>
@@ -217,7 +216,7 @@ export function ReviewFilters({
         <select
           value={currentPeriod}
           onChange={(e) => updateParam("period", e.target.value)}
-          className="h-10 rounded-full border border-[#e4e2de] bg-white px-4 text-sm text-[#18161a] focus:border-[#18161a] focus:outline-none focus:ring-2 focus:ring-[#f3f1ee]"
+          className="h-10 rounded-full border border-[#d9d2ff] bg-white px-4 text-sm text-[#18161a] focus:border-[#4823ff] focus:outline-none focus:ring-2 focus:ring-[#ede9ff]"
           aria-label="Filter by time period"
         >
           {PERIOD_FILTERS.map((p) => (
@@ -231,7 +230,7 @@ export function ReviewFilters({
           <button
             type="button"
             onClick={clearAll}
-            className="inline-flex h-10 items-center gap-1 rounded-full px-3 text-sm text-[#898b91] hover:bg-[#f3f1ee] hover:text-[#18161a]"
+            className="inline-flex h-10 items-center gap-1 rounded-full px-3 text-sm text-[#898b91] hover:bg-[#ede9ff] hover:text-[#4823ff]"
           >
             <X className="h-3.5 w-3.5" aria-hidden />
             Clear
@@ -249,7 +248,7 @@ export function ReviewFilters({
               "rounded-full px-3 py-1.5 text-[13px] font-medium transition-colors",
               currentFilter === f.key
                 ? "bg-[#4823ff] text-white"
-                : "bg-[#f3f1ee] text-[#18161a] hover:bg-[#e4e2de]"
+                : "bg-[#ede9ff] text-[#18161a] hover:bg-[#d9d2ff]"
             )}
           >
             {f.label}
@@ -270,8 +269,8 @@ export function ReviewFilters({
           className={cn(
             "rounded-full px-3 py-1.5 text-[13px] font-medium transition-colors",
             currentRatingBucket === "negative"
-              ? "bg-[#4823ff] text-white"
-              : "bg-[#f3f1ee] text-[#18161a] hover:bg-[#e4e2de]"
+              ? "bg-[#1e1b22] text-white"
+              : "bg-[#ede9ff] text-[#18161a] hover:bg-[#d9d2ff]"
           )}
         >
           1–2★ Critical
@@ -289,13 +288,13 @@ export function ReviewFilters({
             "rounded-full px-3 py-1.5 text-[13px] font-medium transition-colors",
             currentRatingBucket === "positive"
               ? "bg-[#4823ff] text-white"
-              : "bg-[#f3f1ee] text-[#18161a] hover:bg-[#e4e2de]"
+              : "bg-[#ede9ff] text-[#18161a] hover:bg-[#d9d2ff]"
           )}
         >
           4–5★ Positive
         </button>
 
-        <div className="mx-1 h-4 w-px bg-[#e4e2de]" aria-hidden />
+        <div className="mx-1 h-4 w-px bg-[#d9d2ff]" aria-hidden />
 
         {RATING_FILTERS.map((r) => (
           <button
@@ -312,21 +311,15 @@ export function ReviewFilters({
               "flex items-center gap-0.5 rounded-full px-3 py-1.5 text-[13px] font-medium transition-colors",
               currentRating === String(r)
                 ? "bg-[#4823ff] text-white"
-                : "bg-[#f3f1ee] text-[#18161a] hover:bg-[#e4e2de]"
+                : "bg-[#ede9ff] text-[#18161a] hover:bg-[#d9d2ff]"
             )}
           >
             {r}
-            <Star
-              className={cn(
-                "h-3 w-3",
-                currentRating === String(r) ? "fill-current" : ratingStarClass(r)
-              )}
-              aria-hidden
-            />
+            <Star className="h-3 w-3 fill-current" aria-hidden />
           </button>
         ))}
 
-        <div className="mx-1 h-4 w-px bg-[#e4e2de]" aria-hidden />
+        <div className="mx-1 h-4 w-px bg-[#d9d2ff]" aria-hidden />
 
         <button
           type="button"
@@ -340,7 +333,7 @@ export function ReviewFilters({
             "rounded-full px-3 py-1.5 text-[13px] font-medium transition-colors",
             currentHasComment
               ? "bg-[#4823ff] text-white"
-              : "bg-[#f3f1ee] text-[#18161a] hover:bg-[#e4e2de]"
+              : "bg-[#ede9ff] text-[#18161a] hover:bg-[#d9d2ff]"
           )}
         >
           Has comment
@@ -357,7 +350,7 @@ export function ReviewFilters({
           placeholder="Search reviewer or review text…"
           value={searchValue}
           onChange={(e) => setSearchValue(e.target.value)}
-          className="h-10 w-full rounded-full border border-[#e4e2de] bg-white pl-9 pr-4 text-sm text-[#18161a] placeholder:text-[#898b91] focus:border-[#18161a] focus:outline-none focus:ring-2 focus:ring-[#f3f1ee] sm:max-w-sm"
+          className="h-10 w-full rounded-full border border-[#d9d2ff] bg-white pl-9 pr-4 text-sm text-[#18161a] placeholder:text-[#898b91] focus:border-[#4823ff] focus:outline-none focus:ring-2 focus:ring-[#ede9ff] sm:max-w-sm"
           aria-label="Search reviews"
         />
       </div>

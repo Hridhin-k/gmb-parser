@@ -1,159 +1,164 @@
 import Link from "next/link";
 import { cn } from "@/lib/utils";
 import type { DashboardKpis } from "@/lib/services/dashboard";
-import { ratingBarClass, ratingTextClass } from "@/lib/ui/rating-color";
-import {
-  MessageSquareText,
-  AlertCircle,
-  Pencil,
-  Send,
-  CheckCircle2,
-  Star,
-} from "lucide-react";
 
 interface DashboardStatsProps {
   kpis: DashboardKpis;
   basePath?: string;
 }
 
-function StatLink({
+function Metric({
   href,
   label,
   value,
-  icon: Icon,
-  tone,
+  hint,
+  valueClassName,
 }: {
   href: string;
   label: string;
   value: string | number;
-  icon: typeof Star;
-  tone?: string;
+  hint?: string;
+  valueClassName?: string;
 }) {
   return (
-    <Link
-      href={href}
-      className="rounded-[20px] border border-[#e4e2de] bg-white p-5 transition-colors hover:border-[#18161a]"
-    >
-      <div className="flex items-center justify-between gap-2">
-        <p className="text-[12px] font-medium uppercase tracking-[0.06em] text-[#8a877f]">
-          {label}
-        </p>
-        <Icon className={cn("h-4 w-4 text-[#18161a]", tone)} aria-hidden />
-      </div>
+    <Link href={href} className="px-4 py-3 hover:bg-[#fafaf8]">
+      <p className="text-xs text-[#898b91]">{label}</p>
       <p
-        className="mt-3 text-[31px] leading-none tracking-[-0.032em] text-[#18161a]"
+        className={cn(
+          "mt-0.5 text-[26px] leading-none tracking-[-0.03em] text-[#18161a]",
+          valueClassName
+        )}
         style={{ fontFamily: "var(--font-plus-jakarta), sans-serif" }}
       >
         {value}
       </p>
+      {hint ? <p className="mt-1 text-xs text-[#898b91]">{hint}</p> : null}
     </Link>
   );
+}
+
+function starBar(star: number) {
+  if (star >= 4) return { bar: "bg-green-500", track: "bg-green-100" };
+  if (star === 3) return { bar: "bg-yellow-400", track: "bg-yellow-100" };
+  return { bar: "bg-red-500", track: "bg-red-100" };
 }
 
 export function DashboardStats({
   kpis,
   basePath = "/dashboard",
 }: DashboardStatsProps) {
-  const maxBar = Math.max(
-    1,
-    ...Object.values(kpis.ratingDistribution)
-  );
+  const maxBar = Math.max(1, ...Object.values(kpis.ratingDistribution));
+  const average =
+    kpis.avgRating != null ? kpis.avgRating.toFixed(1) : "—";
+  const averageClass =
+    kpis.avgRating == null
+      ? undefined
+      : kpis.avgRating >= 4
+        ? "text-green-600"
+        : kpis.avgRating >= 3
+          ? "text-yellow-600"
+          : "text-red-600";
+  const criticalStars = kpis.ratingDistribution[1] + kpis.ratingDistribution[2];
+  const positiveStars = kpis.ratingDistribution[4] + kpis.ratingDistribution[5];
 
   return (
-    <div className="space-y-5">
-      <div className="grid gap-5 sm:grid-cols-2 lg:grid-cols-4">
-        <StatLink
+    <section className="overflow-hidden rounded-[20px] border border-[#e6e4e1] bg-white">
+      <div className="grid grid-cols-2 sm:grid-cols-4 sm:divide-x sm:divide-[#eee]">
+        <Metric
           href={`${basePath}?filter=unanswered`}
           label="Needs reply"
           value={kpis.unanswered}
-          icon={AlertCircle}
+          hint={
+            kpis.profilesNeedingReply > 0
+              ? `${kpis.profilesNeedingReply} profile${kpis.profilesNeedingReply === 1 ? "" : "s"}`
+              : undefined
+          }
+          valueClassName={kpis.unanswered > 0 ? "text-amber-600" : undefined}
         />
-        <StatLink
+        <Metric
           href={`${basePath}?stars=negative`}
           label="Critical"
           value={kpis.criticalReviews}
-          icon={AlertCircle}
+          valueClassName={kpis.criticalReviews > 0 ? "text-red-600" : undefined}
         />
-        <StatLink
+        <Metric
           href={`${basePath}?filter=approved`}
           label="Ready"
           value={kpis.approved}
-          icon={Send}
+          valueClassName={kpis.approved > 0 ? "text-green-600" : undefined}
         />
-        <StatLink
+        <Metric
           href={`${basePath}?filter=failed`}
           label="Failed"
           value={kpis.failed}
-          icon={AlertCircle}
+          valueClassName={kpis.failed > 0 ? "text-red-600" : undefined}
         />
       </div>
 
-      <div className="grid gap-5 sm:grid-cols-2 lg:grid-cols-4">
-        <StatLink
+      <div className="grid grid-cols-2 border-t border-[#eee] sm:grid-cols-4 sm:divide-x sm:divide-[#eee]">
+        <Metric
           href={`${basePath}?filter=all`}
           label="Reviews"
           value={kpis.totalReviews}
-          icon={MessageSquareText}
         />
-        <StatLink
+        <Metric
           href={`${basePath}?filter=draft`}
           label="Drafts"
           value={kpis.drafts}
-          icon={Pencil}
         />
-        <StatLink
+        <Metric
           href={`${basePath}?filter=published`}
           label="Published"
           value={kpis.published}
-          icon={CheckCircle2}
+          valueClassName={kpis.published > 0 ? "text-green-600" : undefined}
         />
-        <div className="rounded-[20px] border border-[#e4e2de] bg-white p-5">
-          <p className="text-[12px] font-medium uppercase tracking-[0.06em] text-[#8a877f]">
-            Average
-          </p>
-          <p
-            className="mt-3 text-[31px] leading-none tracking-[-0.032em] text-[#18161a]"
-            style={{ fontFamily: "var(--font-plus-jakarta), sans-serif" }}
-          >
-            {kpis.avgRating != null ? kpis.avgRating.toFixed(1) : "—"}
-            <span className="ml-2 text-base font-light text-[#898b91]">
-              {kpis.locationsActive} profiles
-            </span>
-          </p>
-          <Link
-            href={`${basePath}#profiles`}
-            className="mt-3 inline-block text-sm font-medium text-[#4823ff]"
-          >
-            {kpis.profilesNeedingReply} still open
-          </Link>
-        </div>
+        <Metric
+          href={`${basePath}#profiles`}
+          label="Average"
+          value={average}
+          hint={`${kpis.locationsActive} profiles`}
+          valueClassName={averageClass}
+        />
       </div>
 
-      <div className="grid gap-5 lg:grid-cols-[1.2fr_1fr]">
-        <div className="rounded-[20px] border border-[#e4e2de] bg-white p-5">
-          <p className="text-[12px] font-medium uppercase tracking-[0.06em] text-[#8a877f]">
-            Rating distribution
-          </p>
-          <div className="mt-3 space-y-1.5">
+      <div className="grid border-t border-[#eee] lg:grid-cols-[1.35fr_1fr]">
+        <div className="px-4 py-3">
+          <p className="text-xs text-[#898b91]">Rating distribution</p>
+          <div className="mt-2 space-y-1">
             {([5, 4, 3, 2, 1] as const).map((star) => {
               const count = kpis.ratingDistribution[star];
               const pct = Math.round((count / maxBar) * 100);
+              const colors = starBar(star);
               return (
                 <Link
                   key={star}
                   href={`${basePath}?rating=${star}`}
-                  className="group flex items-center gap-2"
+                  className="flex items-center gap-2 rounded-md px-1 py-0.5 hover:bg-[#fafaf8]"
                 >
-                  <span className={cn("w-6 text-right text-[12px] tabular-nums", ratingTextClass(star))}>
+                  <span
+                    className={cn(
+                      "w-7 text-right text-xs tabular-nums",
+                      star >= 4
+                        ? "text-green-600"
+                        : star === 3
+                          ? "text-yellow-600"
+                          : "text-red-600"
+                    )}
+                  >
                     {star}★
                   </span>
-                  <div className="h-2 flex-1 overflow-hidden rounded-full bg-[#f3f1ee]">
+                  <div
+                    className={cn(
+                      "h-1.5 flex-1 overflow-hidden rounded-full",
+                      colors.track
+                    )}
+                  >
                     <div
-                      className={cn("h-full rounded-full transition-opacity group-hover:opacity-80", ratingBarClass(star))}
+                      className={cn("h-full rounded-full", colors.bar)}
                       style={{ width: `${pct}%` }}
                     />
                   </div>
-                  <span className="w-8 text-right text-[12px] tabular-nums text-gray-500">
+                  <span className="w-8 text-right text-xs tabular-nums text-[#18161a]">
                     {count}
                   </span>
                 </Link>
@@ -162,58 +167,31 @@ export function DashboardStats({
           </div>
         </div>
 
-        <div className="rounded-[20px] border border-[#e4e2de] bg-white p-5">
-          <p className="text-[12px] font-medium uppercase tracking-[0.06em] text-[#8a877f]">
-            Recent volume
-          </p>
-          <div className="mt-3 grid grid-cols-2 gap-3">
-            <Link
-              href={`${basePath}?period=7d`}
-              className="rounded-[12px] bg-[#f3f1ee]/60 px-3 py-3 hover:bg-[#f3f1ee]"
-            >
-              <p className="text-[11px] font-bold uppercase tracking-[0.08em] text-[#898b91]">
-                Last 7 days
-              </p>
-              <p className="mt-1 text-[22px] leading-none tracking-[-0.02em] text-[#18161a]" style={{ fontFamily: "var(--font-plus-jakarta), sans-serif" }}>
-                {kpis.reviewsLast7d}
-              </p>
-            </Link>
-            <Link
-              href={`${basePath}?period=30d`}
-              className="rounded-[12px] bg-[#f3f1ee]/60 px-3 py-3 hover:bg-[#f3f1ee]"
-            >
-              <p className="text-[11px] font-bold uppercase tracking-[0.08em] text-[#898b91]">
-                Last 30 days
-              </p>
-              <p className="mt-1 text-[22px] leading-none tracking-[-0.02em] text-[#18161a]" style={{ fontFamily: "var(--font-plus-jakarta), sans-serif" }}>
-                {kpis.reviewsLast30d}
-              </p>
-            </Link>
-            <Link
-              href={`${basePath}?stars=negative`}
-              className="rounded-[12px] border border-[#e4e2de] px-3 py-3 hover:border-[#18161a]"
-            >
-              <p className="text-[11px] font-medium uppercase tracking-[0.06em] text-[#8a877f]">
-                Critical (1–2★)
-              </p>
-              <p className="mt-1 text-[22px] leading-none tracking-[-0.02em] text-[#18161a]" style={{ fontFamily: "var(--font-plus-jakarta), sans-serif" }}>
-                {kpis.ratingDistribution[1] + kpis.ratingDistribution[2]}
-              </p>
-            </Link>
-            <Link
-              href={`${basePath}?stars=positive`}
-              className="rounded-[12px] border border-[#e4e2de] px-3 py-3 hover:border-[#18161a]"
-            >
-              <p className="text-[11px] font-medium uppercase tracking-[0.06em] text-[#8a877f]">
-                Positive (4–5★)
-              </p>
-              <p className="mt-1 text-[22px] leading-none tracking-[-0.02em] text-[#18161a]" style={{ fontFamily: "var(--font-plus-jakarta), sans-serif" }}>
-                {kpis.ratingDistribution[4] + kpis.ratingDistribution[5]}
-              </p>
-            </Link>
-          </div>
+        <div className="grid grid-cols-2 border-t border-[#eee] lg:border-t-0 lg:border-l">
+          <Metric
+            href={`${basePath}?period=7d`}
+            label="Last 7 days"
+            value={kpis.reviewsLast7d}
+          />
+          <Metric
+            href={`${basePath}?period=30d`}
+            label="Last 30 days"
+            value={kpis.reviewsLast30d}
+          />
+          <Metric
+            href={`${basePath}?stars=negative`}
+            label="1–2★"
+            value={criticalStars}
+            valueClassName={criticalStars > 0 ? "text-red-600" : undefined}
+          />
+          <Metric
+            href={`${basePath}?stars=positive`}
+            label="4–5★"
+            value={positiveStars}
+            valueClassName={positiveStars > 0 ? "text-green-600" : undefined}
+          />
         </div>
       </div>
-    </div>
+    </section>
   );
 }

@@ -32,7 +32,7 @@ export function LoginForm() {
 
   return (
     <div className="w-full max-w-lg">
-      <div className="rounded-[20px] border border-[#e4e2de] bg-white px-8 py-10">
+      <div className="rounded-[20px] border border-[#d9d2ff] bg-white px-8 py-10">
         <div className="mb-8">
           <div className="flex h-9 w-9 items-center justify-center rounded-full bg-[#4823ff] text-sm font-bold text-white">
             G
@@ -60,7 +60,7 @@ export function LoginForm() {
               type="checkbox"
               checked={acceptedTerms}
               onChange={(event) => setAcceptedTerms(event.target.checked)}
-              className="mt-0.5 rounded border-[#e4e2de]"
+              className="mt-0.5 rounded border-[#d9d2ff]"
             />
             <span>
               I agree to the{" "}
@@ -79,7 +79,7 @@ export function LoginForm() {
               type="checkbox"
               checked={acceptedAi}
               onChange={(event) => setAcceptedAi(event.target.checked)}
-              className="mt-0.5 rounded border-[#e4e2de]"
+              className="mt-0.5 rounded border-[#d9d2ff]"
             />
             <span>
               I understand GRM can send review text to Google Gemini to draft

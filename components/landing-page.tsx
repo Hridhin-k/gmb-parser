@@ -39,7 +39,7 @@ export function LandingPage({ signedIn }: { signedIn: boolean }) {
 
   return (
     <div className="min-h-screen bg-[#fafaf8] text-[#18161a]">
-      <div className="border-b border-[#e4e2de] px-4 py-2.5 text-center text-sm text-[#18161a]">
+      <div className="bg-[#e7ff6e] px-4 py-2.5 text-center text-sm font-medium">
         Sign in, then connect the Google account that manages your businesses.
       </div>
 
@@ -56,9 +56,9 @@ export function LandingPage({ signedIn }: { signedIn: boolean }) {
           </span>
         </Link>
         <nav className="hidden items-center gap-6 text-[15px] font-medium sm:flex" aria-label="Page">
-          <a href="#how" className="hover:text-[#18161a]">How it works</a>
-          <a href="#product" className="hover:text-[#18161a]">Product</a>
-          <a href="#team" className="hover:text-[#18161a]">Team</a>
+          <a href="#how" className="hover:text-[#4823ff]">How it works</a>
+          <a href="#product" className="hover:text-[#4823ff]">Product</a>
+          <a href="#team" className="hover:text-[#4823ff]">Team</a>
         </nav>
         <div className="flex items-center gap-2">
           {signedIn ? (
@@ -68,7 +68,7 @@ export function LandingPage({ signedIn }: { signedIn: boolean }) {
               </a>
               <Link
                 href="/dashboard"
-                className="inline-flex h-10 items-center rounded-full bg-[#4823ff] px-5 text-[15px] font-semibold text-white hover:bg-[#3a1ad6]"
+                className="inline-flex h-10 items-center rounded-full bg-[#4823ff] px-5 text-[15px] font-semibold text-white hover:bg-[#7e78ff]"
               >
                 Open workspace
               </Link>
@@ -80,7 +80,7 @@ export function LandingPage({ signedIn }: { signedIn: boolean }) {
               </Link>
               <Link
                 href="/login"
-                className="inline-flex h-10 items-center rounded-full border border-[#e4e2de] bg-white px-5 text-[15px] font-semibold text-[#18161a] hover:border-[#18161a]"
+                className="inline-flex h-10 items-center rounded-full border-[1.5px] border-[#4823ff] px-5 text-[15px] font-semibold text-[#4823ff] hover:bg-[#ede9ff]"
               >
                 Get started
               </Link>
@@ -92,7 +92,7 @@ export function LandingPage({ signedIn }: { signedIn: boolean }) {
       <main>
         <section className="mx-auto grid max-w-[1200px] items-center gap-12 px-5 pt-10 pb-20 lg:grid-cols-2 lg:pt-16">
           <div>
-            <p className="text-[12px] font-medium tracking-[0.06em] text-[#8a877f] uppercase">
+            <p className="text-[12px] font-bold tracking-[0.08em] text-[#4823ff] uppercase">
               Google reviews
             </p>
             <h1
@@ -107,7 +107,7 @@ export function LandingPage({ signedIn }: { signedIn: boolean }) {
             <div className="mt-8 flex flex-wrap items-center gap-3">
               <Link
                 href={primaryHref}
-                className="inline-flex h-12 items-center rounded-full bg-[#4823ff] px-6 text-base font-semibold text-white hover:bg-[#3a1ad6]"
+                className="inline-flex h-12 items-center rounded-full bg-[#4823ff] px-6 text-base font-semibold text-white hover:bg-[#7e78ff]"
               >
                 {primaryLabel}
               </Link>
@@ -131,18 +131,18 @@ export function LandingPage({ signedIn }: { signedIn: boolean }) {
                 ["Elm Street Coffee", "4", "Oat latte was perfect.", "ES"],
               ].map(([place, stars, quote, initials]) => (
                 <li key={place} className="flex items-start gap-3">
-                  <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-white/10 text-xs font-semibold">
+                  <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-[#4823ff] text-xs font-semibold">
                     {initials}
                   </span>
                   <div className="min-w-0 flex-1">
                     <div className="flex items-center justify-between gap-3">
                       <p className="truncate text-sm font-medium">{place}</p>
-                      <p className="text-xs text-white/70">{stars} / 5</p>
+                      <p className="text-xs text-[#e7ff6e]">{stars} / 5</p>
                     </div>
                     <p className="mt-1 text-sm font-light text-white/80">{quote}</p>
                     <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-white/10">
                       <div
-                        className="h-full rounded-full bg-white/50"
+                        className="h-full rounded-full bg-[#7e78ff]"
                         style={{ width: `${Number(stars) * 20}%` }}
                       />
                     </div>
@@ -153,9 +153,9 @@ export function LandingPage({ signedIn }: { signedIn: boolean }) {
           </div>
         </section>
 
-        <section id="how" className="bg-[#f3f1ee]">
+        <section id="how" className="bg-[#ede9ff]">
           <div className="mx-auto max-w-[1200px] px-5 py-20">
-            <p className="text-[12px] font-medium tracking-[0.06em] text-[#8a877f] uppercase">
+            <p className="text-[12px] font-bold tracking-[0.08em] text-[#4823ff] uppercase">
               How it works
             </p>
             <h2
@@ -166,8 +166,8 @@ export function LandingPage({ signedIn }: { signedIn: boolean }) {
             </h2>
             <ol className="mt-10 grid gap-5 md:grid-cols-3">
               {STEPS.map((step) => (
-                <li key={step.n} className="rounded-[20px] border border-[#e4e2de] bg-white p-5">
-                  <p className="text-sm font-semibold text-[#18161a]">{step.n}</p>
+                <li key={step.n} className="rounded-[20px] border border-[#d9d2ff] bg-white p-5">
+                  <p className="text-sm font-semibold text-[#4823ff]">{step.n}</p>
                   <h3 className="mt-3 text-xl font-medium tracking-[-0.01em]">{step.title}</h3>
                   <p className="mt-2 text-base leading-relaxed text-[#18161a]/80">{step.body}</p>
                 </li>
@@ -177,7 +177,7 @@ export function LandingPage({ signedIn }: { signedIn: boolean }) {
         </section>
 
         <section id="product" className="mx-auto max-w-[1200px] px-5 py-20">
-          <p className="text-[12px] font-medium tracking-[0.06em] text-[#8a877f] uppercase">
+          <p className="text-[12px] font-bold tracking-[0.08em] text-[#4823ff] uppercase">
             Product
           </p>
           <h2
@@ -188,7 +188,7 @@ export function LandingPage({ signedIn }: { signedIn: boolean }) {
           </h2>
           <div className="mt-10 grid gap-5 md:grid-cols-3">
             {FEATURES.map((feature) => (
-              <article key={feature.title} className="rounded-[20px] border border-[#e4e2de] bg-white p-5">
+              <article key={feature.title} className="rounded-[20px] border border-[#d9d2ff] bg-white p-5">
                 <h3 className="text-xl font-medium tracking-[-0.01em]">{feature.title}</h3>
                 <p className="mt-3 text-base leading-relaxed text-[#18161a]/80">{feature.body}</p>
               </article>
@@ -196,10 +196,10 @@ export function LandingPage({ signedIn }: { signedIn: boolean }) {
           </div>
         </section>
 
-        <section id="team" className="border-t border-[#f3f1ee]">
+        <section id="team" className="border-t border-[#ede9ff]">
           <div className="mx-auto grid max-w-[1200px] gap-8 px-5 py-20 lg:grid-cols-[1fr_1fr] lg:items-center">
             <div>
-              <p className="text-[12px] font-medium tracking-[0.06em] text-[#8a877f] uppercase">
+              <p className="text-[12px] font-bold tracking-[0.08em] text-[#4823ff] uppercase">
                 Team
               </p>
               <h2
@@ -212,14 +212,14 @@ export function LandingPage({ signedIn }: { signedIn: boolean }) {
                 Invite someone with the Google email they will use to sign in. They see your clients and reviews. They cannot approve a draft.
               </p>
             </div>
-            <ul className="rounded-[20px] border border-[#e4e2de] bg-white p-2">
+            <ul className="rounded-[20px] border border-[#d9d2ff] bg-white p-2">
               {[
                 ["Owner", "Connects Google, invites people, approves replies."],
                 ["Admin", "Approves replies and can invite teammates."],
                 ["Member", "Drafts replies and publishes them after approval."],
               ].map(([role, detail]) => (
                 <li key={role} className="flex gap-4 rounded-2xl px-4 py-4">
-                  <span className="mt-0.5 h-2.5 w-2.5 shrink-0 rounded-full bg-[#18161a]" />
+                  <span className="mt-0.5 h-2.5 w-2.5 shrink-0 rounded-full bg-[#4823ff]" />
                   <div>
                     <p className="font-semibold">{role}</p>
                     <p className="mt-1 text-sm text-[#898b91]">{detail}</p>
@@ -231,7 +231,7 @@ export function LandingPage({ signedIn }: { signedIn: boolean }) {
         </section>
       </main>
 
-      <footer className="border-t border-[#f3f1ee]">
+      <footer className="border-t border-[#ede9ff]">
         <div className="mx-auto flex max-w-[1200px] flex-wrap items-center justify-between gap-3 px-5 py-8 text-sm text-[#898b91]">
           <p>GRM — Google review management</p>
           <div className="flex flex-wrap items-center gap-4">

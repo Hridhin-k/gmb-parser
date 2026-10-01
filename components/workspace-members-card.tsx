@@ -110,7 +110,7 @@ export function WorkspaceMembersCard({
         <p className="mt-1 text-sm font-light text-[#898b91]">{workspaceName}</p>
       </CardHeader>
       <CardContent className="space-y-5">
-        <ul className="divide-y divide-[#f3f1ee] rounded-md border border-[#e4e2de]">
+        <ul className="divide-y divide-[#ede9ff] rounded-md border border-[#d9d2ff]">
           {members.map((member) => (
             <li
               key={member.userId}
@@ -132,7 +132,7 @@ export function WorkspaceMembersCard({
         {invites.length > 0 ? (
           <div className="space-y-2">
             <p className="text-xs font-medium text-[#898b91]">Pending invites</p>
-            <ul className="divide-y divide-[#f3f1ee] rounded-md border border-[#e4e2de]">
+            <ul className="divide-y divide-[#ede9ff] rounded-md border border-[#d9d2ff]">
               {invites.map((invite) => (
                 <li
                   key={invite.id}
@@ -172,7 +172,7 @@ export function WorkspaceMembersCard({
                 value={email}
                 onChange={(event) => setEmail(event.target.value)}
                 placeholder="name@company.com"
-                className="w-full rounded-md border border-[#e4e2de] px-3 py-2 text-sm shadow-sm focus:border-[#18161a] focus:outline-none focus:ring-2 focus:ring-[#f3f1ee]"
+                className="w-full rounded-md border border-[#d9d2ff] px-3 py-2 text-sm shadow-sm focus:border-[#4823ff] focus:outline-none focus:ring-2 focus:ring-[#ede9ff]"
               />
               <label className="sr-only" htmlFor="invite-role">
                 Role
@@ -181,7 +181,7 @@ export function WorkspaceMembersCard({
                 id="invite-role"
                 value={role}
                 onChange={(event) => setRole(event.target.value as "member" | "admin")}
-                className="rounded-md border border-[#e4e2de] px-3 py-2 text-sm shadow-sm focus:border-[#18161a] focus:outline-none focus:ring-2 focus:ring-[#f3f1ee]"
+                className="rounded-md border border-[#d9d2ff] px-3 py-2 text-sm shadow-sm focus:border-[#4823ff] focus:outline-none focus:ring-2 focus:ring-[#ede9ff]"
               >
                 <option value="member">Member</option>
                 <option value="admin">Admin</option>

@@ -5,7 +5,6 @@ import { useEffect, useState, useTransition } from "react";
 import { cn } from "@/lib/utils";
 import { Star, Search, AlertCircle, ChevronLeft, ChevronRight } from "lucide-react";
 import type { ProfileRow } from "@/lib/services/dashboard";
-import { ratingStarClass, ratingTextClass } from "@/lib/ui/rating-color";
 
 const SORT_OPTIONS = [
   { key: "attention", label: "Needs attention" },
@@ -106,7 +105,7 @@ export function ProfileDirectory({
             value={q}
             onChange={(e) => setQ(e.target.value)}
             placeholder="Search profiles…"
-            className="h-10 w-full rounded-full border border-[#e4e2de] bg-white pl-9 pr-4 text-sm text-[#18161a] placeholder:text-[#898b91] focus:border-[#18161a] focus:outline-none focus:ring-2 focus:ring-[#f3f1ee]"
+            className="h-10 w-full rounded-full border border-[#d9d2ff] bg-white pl-9 pr-4 text-sm text-[#18161a] placeholder:text-[#898b91] focus:border-[#4823ff] focus:outline-none focus:ring-2 focus:ring-[#ede9ff]"
             aria-label="Search profiles by name"
           />
         </div>
@@ -118,7 +117,7 @@ export function ProfileDirectory({
               params.delete("pp");
             })
           }
-          className="h-10 rounded-full border border-[#e4e2de] bg-white px-4 text-sm text-[#18161a] focus:border-[#18161a] focus:outline-none focus:ring-2 focus:ring-[#f3f1ee]"
+          className="h-10 rounded-full border border-[#d9d2ff] bg-white px-4 text-sm text-[#18161a] focus:border-[#4823ff] focus:outline-none focus:ring-2 focus:ring-[#ede9ff]"
           aria-label="Sort profiles"
         >
           {SORT_OPTIONS.map((o) => (
@@ -129,10 +128,10 @@ export function ProfileDirectory({
         </select>
       </div>
 
-      <div className="overflow-hidden rounded-[20px] border border-[#e4e2de] bg-white">
+      <div className="overflow-hidden rounded-[20px] border border-[#d9d2ff] bg-white">
         <div className="max-h-[min(420px,50vh)] overflow-auto">
           <table className="w-full text-left text-[13px]">
-            <thead className="sticky top-0 z-10 border-b border-[#f3f1ee] bg-[#fafaf8] text-[11px] font-medium uppercase tracking-[0.06em] text-[#8a877f]">
+            <thead className="sticky top-0 z-10 border-b border-[#eee] bg-[#fafaf8] text-[11px] font-medium uppercase tracking-[0.06em] text-[#898b91]">
               <tr>
                 <th className="px-3 py-2 font-medium">Profile</th>
                 <th className="px-2 py-2 font-medium tabular-nums">Avg</th>
@@ -158,10 +157,10 @@ export function ProfileDirectory({
                     <tr
                       key={p.id}
                       className={cn(
-                        "cursor-pointer border-b border-[#f3f1ee] transition-colors last:border-0",
+                        "cursor-pointer border-b border-[#ede9ff] transition-colors last:border-0",
                         selected
-                          ? "bg-[#f3f1ee] text-[#18161a]"
-                          : "hover:bg-[#f3f1ee]/40"
+                          ? "bg-[#ede9ff] text-[#18161a]"
+                          : "hover:bg-[#ede9ff]/40"
                       )}
                       onClick={() => selectProfile(p.id)}
                       onKeyDown={(e) => {
@@ -192,12 +191,18 @@ export function ProfileDirectory({
                         </p>
                       </td>
                       <td className="px-2 py-2 tabular-nums">
-                        <span className={cn("inline-flex items-center gap-0.5", p.avgRating != null && ratingTextClass(p.avgRating))}>
+                        <span className="inline-flex items-center gap-0.5">
                           {p.avgRating != null ? p.avgRating.toFixed(1) : "—"}
                           <Star
                             className={cn(
                               "h-3 w-3",
-                              p.avgRating != null ? ratingStarClass(p.avgRating) : "fill-[#e4e2de] text-[#e4e2de]"
+                              p.avgRating == null
+                                ? "fill-[#eceae6] text-[#eceae6]"
+                                : p.avgRating >= 4
+                                  ? "fill-green-500 text-green-500"
+                                  : p.avgRating >= 3
+                                    ? "fill-yellow-400 text-yellow-500"
+                                    : "fill-red-500 text-red-500"
                             )}
                             aria-hidden
                           />
@@ -209,7 +214,7 @@ export function ProfileDirectory({
                           <span
                             className={cn(
                               "inline-flex items-center gap-0.5 font-medium",
-                              "text-[#18161a]"
+                              "text-amber-600"
                             )}
                           >
                             <AlertCircle className="h-3 w-3" aria-hidden />

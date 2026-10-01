@@ -14,13 +14,12 @@ import {
 import { Button } from "@/components/ui/button";
 import type { ProfileRow } from "@/lib/services/dashboard";
 import type { LocationInsight } from "@/lib/services/location-insights";
-import { ratingStarClass, ratingTextClass } from "@/lib/ui/rating-color";
 
 const SENTIMENT_STYLES: Record<string, string> = {
-  positive: "bg-[#f3f1ee] text-[#18161a] border-[#e4e2de]",
-  mixed: "bg-[#f3f1ee] text-[#18161a] border-[#e4e2de]",
-  negative: "bg-[#f6eee9] text-[#9a3412] border-[#e4e2de]",
-  neutral: "bg-[#f3f1ee] text-[#18161a] border-[#e4e2de]",
+  positive: "bg-emerald-50 text-emerald-700 border-emerald-100",
+  mixed: "bg-amber-50 text-amber-800 border-amber-100",
+  negative: "bg-red-50 text-red-700 border-red-100",
+  neutral: "bg-[#ede9ff] text-[#4823ff] border-[#d9d2ff]",
 };
 
 interface ProfileInsightPanelProps {
@@ -85,12 +84,12 @@ export function ProfileInsightPanel({
 
   return (
     <section
-      className="rounded-[20px] border border-[#e4e2de] bg-white p-5"
+      className="rounded-[20px] border border-[#d9d2ff] bg-white p-5"
       aria-labelledby="selected-profile-heading"
     >
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0">
-          <p className="truncate text-[12px] font-medium uppercase tracking-[0.06em] text-[#8a877f]">
+          <p className="truncate text-[12px] font-bold uppercase tracking-[0.08em] text-[#4823ff]">
             {profile.clientName ?? "Profile"}
           </p>
           <h2
@@ -126,13 +125,17 @@ export function ProfileInsightPanel({
           <Star
             className={cn(
               "h-3.5 w-3.5",
-              profile.avgRating != null ? ratingStarClass(profile.avgRating) : "fill-[#e4e2de] text-[#e4e2de]"
+              profile.avgRating == null
+                ? "fill-[#eceae6] text-[#eceae6]"
+                : profile.avgRating >= 4
+                  ? "fill-green-500 text-green-500"
+                  : profile.avgRating >= 3
+                    ? "fill-yellow-400 text-yellow-500"
+                    : "fill-red-500 text-red-500"
             )}
             aria-hidden
           />
-          <span className={profile.avgRating != null ? ratingTextClass(profile.avgRating) : undefined}>
-            {profile.avgRating != null ? profile.avgRating.toFixed(1) : "—"}
-          </span>
+          {profile.avgRating != null ? profile.avgRating.toFixed(1) : "—"}
         </span>
         <span>{profile.reviewCount} reviews</span>
         {profile.unanswered > 0 && (

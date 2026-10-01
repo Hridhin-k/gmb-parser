@@ -87,7 +87,7 @@ export function AppShell({
       {/* Sidebar */}
         <aside
         className={cn(
-          "fixed inset-y-0 left-0 z-50 flex w-60 flex-col border-r border-[#f3f1ee] bg-white transition-transform duration-150 ease-out lg:static lg:translate-x-0",
+          "fixed inset-y-0 left-0 z-50 flex w-60 flex-col border-r border-[#ede9ff] bg-white transition-transform duration-150 ease-out lg:static lg:translate-x-0",
           sidebarOpen ? "translate-x-0" : "-translate-x-full"
         )}
         aria-label="Main navigation"
@@ -135,7 +135,7 @@ export function AppShell({
                     setSwitching(false);
                   }
                 }}
-                className="w-full truncate rounded-full border border-[#e4e2de] bg-white px-3 py-2 text-sm text-[#18161a]"
+                className="w-full truncate rounded-full border border-[#d9d2ff] bg-white px-3 py-2 text-sm text-[#18161a]"
               >
                 {workspaces.map((workspace) => (
                   <option key={workspace.id} value={workspace.id}>
@@ -161,8 +161,8 @@ export function AppShell({
                 className={cn(
                   "flex items-center gap-2 rounded-full px-3 py-2 text-[14px] font-medium transition-colors",
                   active
-                    ? "bg-[#f3f1ee] text-[#4823ff]"
-                    : "text-[#18161a] hover:bg-[#f3f1ee]/60"
+                    ? "bg-[#ede9ff] text-[#4823ff]"
+                    : "text-[#18161a] hover:bg-[#ede9ff]/60"
                 )}
                 aria-current={active ? "page" : undefined}
               >
@@ -184,7 +184,7 @@ export function AppShell({
             </a>
           </div>
           <DropdownMenu>
-            <DropdownMenuTrigger className="flex w-full items-center gap-2 rounded-full px-2.5 py-2 text-left text-sm text-[#18161a] hover:bg-[#f3f1ee] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
+            <DropdownMenuTrigger className="flex w-full items-center gap-2 rounded-full px-2.5 py-2 text-left text-sm text-[#18161a] hover:bg-[#ede9ff] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
               <Avatar className="h-5 w-5">
                 <AvatarFallback className="bg-primary text-[8px] font-medium text-primary-foreground">
                   {initials}
@@ -211,7 +211,7 @@ export function AppShell({
       {/* Main area */}
       <div className="flex flex-1 flex-col overflow-hidden">
         {/* Top header bar */}
-        <header className="flex h-14 shrink-0 items-center border-b border-[#f3f1ee] bg-[#fafaf8] px-4 lg:hidden">
+        <header className="flex h-14 shrink-0 items-center border-b border-[#ede9ff] bg-[#fafaf8] px-4 lg:hidden">
           <button
             className="mr-3 rounded p-1 text-gray-400 hover:text-gray-600 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring lg:hidden"
             onClick={() => setSidebarOpen(true)}
@@ -224,7 +224,7 @@ export function AppShell({
 
         {/* Page content */}
         <main className="flex-1 overflow-y-auto bg-[#fafaf8]" id="main-content">
-          <div className="mx-auto max-w-[1200px] px-5 py-8 lg:px-8 lg:py-10">
+          <div className="mx-auto max-w-[1200px] px-5 py-5 lg:px-8 lg:py-6">
             {children}
           </div>
         </main>

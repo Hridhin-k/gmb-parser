@@ -93,7 +93,7 @@ export function UnassignedLocationsBoard({
   }
 
   return (
-    <div className="space-y-4 rounded-[20px] border border-[#e4e2de] bg-white p-5">
+    <div className="space-y-4 rounded-[20px] border border-[#d9d2ff] bg-white p-5">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
           <p
@@ -134,7 +134,7 @@ export function UnassignedLocationsBoard({
       )}
 
       {locations.length === 0 ? (
-        <div className="flex flex-col items-center justify-center rounded-[20px] border border-[#e4e2de] py-10 text-center">
+        <div className="flex flex-col items-center justify-center rounded-[20px] border border-[#d9d2ff] py-10 text-center">
           <MapPin className="h-7 w-7 text-gray-300" />
           <p className="mt-2 text-sm font-medium text-gray-700">
             No unassigned locations
@@ -171,7 +171,7 @@ export function UnassignedLocationsBoard({
                       [loc.id]: e.target.value,
                     }))
                   }
-                  className="h-10 rounded-full border border-[#e4e2de] bg-white px-3 text-sm text-[#18161a]"
+                  className="h-10 rounded-full border border-[#d9d2ff] bg-white px-3 text-sm text-[#18161a]"
                   aria-label={`Assign ${loc.location_title} to client`}
                   disabled={clients.length === 0}
                 >

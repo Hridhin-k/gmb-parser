@@ -76,7 +76,7 @@ export default async function ClientsPage() {
 
             return (
               <Link key={client.id} href={`/clients/${client.id}`}>
-                <Card className="cursor-pointer transition-colors hover:border-[#18161a]">
+                <Card className="cursor-pointer transition-colors hover:border-[#4823ff]">
                   <CardContent className="p-5">
                     <div className="flex items-start justify-between gap-2">
                       <div className="min-w-0">
@@ -89,7 +89,7 @@ export default async function ClientsPage() {
                             : `${locationCount} location${locationCount === 1 ? "" : "s"}`}
                         </p>
                       </div>
-                      <div className="flex shrink-0 items-center gap-1 rounded-full bg-[#f3f1ee] px-2.5 py-1 text-xs font-semibold text-[#18161a]">
+                      <div className="flex shrink-0 items-center gap-1 rounded-full bg-[#ede9ff] px-2.5 py-1 text-xs font-semibold text-[#4823ff]">
                         <MapPin className="h-3 w-3" />
                         {locationCount}
                       </div>

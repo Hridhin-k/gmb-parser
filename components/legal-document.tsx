@@ -11,7 +11,7 @@ export function LegalDocument({
 }) {
   return (
     <div className="min-h-screen bg-[#fafaf8] text-[#18161a]">
-      <header className="border-b border-[#f3f1ee]">
+      <header className="border-b border-[#ede9ff]">
         <div className="mx-auto flex max-w-[800px] items-center justify-between px-5 py-5">
           <Link
             href="/"
@@ -29,7 +29,7 @@ export function LegalDocument({
         </div>
       </header>
       <main className="mx-auto max-w-[800px] px-5 py-12">
-        <p className="text-[12px] font-medium uppercase tracking-[0.06em] text-[#8a877f]">
+        <p className="text-[12px] font-bold uppercase tracking-[0.08em] text-[#4823ff]">
           {updated}
         </p>
         <h1

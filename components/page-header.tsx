@@ -15,7 +15,7 @@ export function PageHeader({ title, description, children }: PageHeaderProps) {
           {title}
         </h1>
         {description && (
-          <p className="mt-2 max-w-xl text-base font-light leading-relaxed text-[#898b91]">{description}</p>
+          <p className="mt-1 max-w-xl text-sm font-light text-[#898b91]">{description}</p>
         )}
       </div>
       {children && <div className="flex shrink-0 items-center gap-2">{children}</div>}

@@ -16,7 +16,6 @@ import {
   RotateCw,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { ratingStarClass } from "@/lib/ui/rating-color";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -68,8 +67,12 @@ function StarDisplay({ rating }: { rating: number }) {
           className={cn(
             "h-4 w-4",
             i < rating
-              ? ratingStarClass(rating)
-              : "fill-[#e4e2de] text-[#e4e2de]"
+              ? rating >= 4
+                ? "fill-green-500 text-green-500"
+                : rating === 3
+                  ? "fill-yellow-400 text-yellow-500"
+                  : "fill-red-500 text-red-500"
+              : "fill-[#eceae6] text-[#eceae6]"
           )}
           aria-hidden
         />
@@ -95,9 +98,9 @@ const REPLY_STATUS_MAP: Record<
 > = {
   none:            { label: "No reply",       className: "text-gray-500",   dotColor: "bg-gray-300" },
   draft:           { label: "Draft",          className: "text-gray-600",   dotColor: "bg-gray-400" },
-  approved:        { label: "Approved",       className: "text-[#18161a]",   dotColor: "bg-[#18161a]" },
-  pending_publish: { label: "Publishing...",  className: "text-[#8a877f]",  dotColor: "bg-[#8a877f]" },
-  published:       { label: "Published",      className: "text-[#18161a]",  dotColor: "bg-[#18161a]" },
+  approved:        { label: "Approved",       className: "text-blue-700",   dotColor: "bg-blue-500" },
+  pending_publish: { label: "Publishing...",  className: "text-amber-700",  dotColor: "bg-amber-500" },
+  published:       { label: "Published",      className: "text-green-700",  dotColor: "bg-green-500" },
   failed:          { label: "Publish failed", className: "text-red-700",    dotColor: "bg-red-500" },
 };
 
@@ -265,7 +268,7 @@ export function ReviewDetailPanel({
   return (
     <div className="flex h-full flex-col overflow-hidden bg-white">
       {/* Header */}
-      <div className="flex shrink-0 items-center justify-between border-b border-[#f3f1ee] px-5 py-4">
+      <div className="flex shrink-0 items-center justify-between border-b border-[#ede9ff] px-5 py-4">
         <div className="min-w-0">
           <p className="truncate text-sm font-medium text-[#18161a]">
             {reviewerName}
@@ -310,16 +313,16 @@ export function ReviewDetailPanel({
 
         {/* Existing Google reply */}
         {review.google_reply_comment && (
-          <div className="rounded-md border border-[#e4e2de] bg-[#fafaf8] px-3 py-2.5">
-            <p className="mb-1 text-[11px] font-medium text-[#8a877f]">
+          <div className="rounded-md border border-green-200 bg-green-50/60 px-3 py-2.5">
+            <p className="mb-1 text-[11px] font-medium text-green-700">
               Published on Google
               {review.google_reply_update_time && (
-                <span className="ml-1 font-normal">
+                <span className="ml-1 font-normal text-green-600">
                   · {formatDate(review.google_reply_update_time)}
                 </span>
               )}
             </p>
-            <p className="text-sm leading-relaxed text-[#18161a]">
+            <p className="text-sm leading-relaxed text-green-900">
               {review.google_reply_comment}
             </p>
           </div>
@@ -332,7 +335,7 @@ export function ReviewDetailPanel({
             {statusConfig.label}
           </span>
           {reply?.source === "ai" && (
-            <span className="inline-flex items-center gap-1 rounded-full bg-[#f3f1ee] px-2 py-0.5 text-[10px] font-medium text-[#18161a]">
+            <span className="inline-flex items-center gap-1 rounded bg-purple-50 px-1.5 py-0.5 text-[10px] font-medium text-purple-700">
               <Sparkles className="h-2.5 w-2.5" aria-hidden />
               AI generated
             </span>
@@ -478,15 +481,22 @@ export function ReviewDetailPanel({
                 </div>
               </>
             ) : (
-              <div className="rounded-md border border-[#e4e2de] bg-[#fafaf8] px-3 py-2.5">
+              <div className={cn(
+                "rounded-md border px-3 py-2.5",
+                reply.status === "published"
+                  ? "border-green-200 bg-green-50/40"
+                  : reply.source === "ai"
+                  ? "border-purple-100 bg-purple-50/30"
+                  : "border-gray-200 bg-gray-50/50"
+              )}>
                 {reply.source === "ai" && reply.status !== "published" && (
-                  <p className="mb-1.5 flex items-center gap-1 text-[10px] font-medium text-[#8a877f]">
+                  <p className="mb-1.5 flex items-center gap-1 text-[10px] font-medium text-purple-600">
                     <Sparkles className="h-2.5 w-2.5" aria-hidden />
                     AI-generated draft — review before publishing
                   </p>
                 )}
                 {reply.status === "published" && (
-                  <p className="mb-1.5 flex items-center gap-1 text-[10px] font-medium text-[#8a877f]">
+                  <p className="mb-1.5 flex items-center gap-1 text-[10px] font-medium text-green-600">
                     <CheckCircle2 className="h-2.5 w-2.5" aria-hidden />
                     Published to Google
                     {reply.published_at && (

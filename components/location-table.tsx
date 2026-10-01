@@ -98,7 +98,7 @@ export function LocationTable({
       )}
 
       {locations.length === 0 ? (
-        <div className="flex flex-col items-center justify-center rounded-[20px] border border-[#e4e2de] bg-white py-12 text-center">
+        <div className="flex flex-col items-center justify-center rounded-[20px] border border-[#d9d2ff] bg-white py-12 text-center">
           <MapPin className="h-8 w-8 text-gray-300" />
           <p className="mt-2 text-sm font-medium text-gray-700">
             No locations on this client
@@ -108,23 +108,23 @@ export function LocationTable({
           </p>
         </div>
       ) : (
-        <div className="overflow-hidden rounded-[20px] border border-[#e4e2de] bg-white">
+        <div className="overflow-hidden rounded-[20px] border border-[#d9d2ff] bg-white">
           <Table>
             <TableHeader>
-              <TableRow className="border-b border-[#f3f1ee] bg-[#fafaf8]">
-                <TableHead className="text-[11px] font-medium uppercase tracking-[0.06em] text-[#8a877f]">
+              <TableRow className="border-b border-[#ede9ff] bg-[#fafaf8]">
+                <TableHead className="text-[11px] font-bold uppercase tracking-[0.08em] text-[#4823ff]">
                   Business Name
                 </TableHead>
-                <TableHead className="text-[11px] font-medium uppercase tracking-[0.06em] text-[#8a877f]">
+                <TableHead className="text-[11px] font-bold uppercase tracking-[0.08em] text-[#4823ff]">
                   Address
                 </TableHead>
-                <TableHead className="text-[11px] font-medium uppercase tracking-[0.06em] text-[#8a877f]">
+                <TableHead className="text-[11px] font-bold uppercase tracking-[0.08em] text-[#4823ff]">
                   Google Location ID
                 </TableHead>
-                <TableHead className="text-[11px] font-medium uppercase tracking-[0.06em] text-[#8a877f]">
+                <TableHead className="text-[11px] font-bold uppercase tracking-[0.08em] text-[#4823ff]">
                   Status
                 </TableHead>
-                <TableHead className="text-[11px] font-medium uppercase tracking-[0.06em] text-[#8a877f]">
+                <TableHead className="text-[11px] font-bold uppercase tracking-[0.08em] text-[#4823ff]">
                   Last Synced
                 </TableHead>
                 <TableHead className="w-16" />
