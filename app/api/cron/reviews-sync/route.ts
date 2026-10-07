@@ -6,6 +6,7 @@ import { logger } from "@/lib/logger";
 /**
  * GET /api/cron/reviews-sync
  * Incremental catch-up so new reviews arrive without a manual sync.
+ * Vercel Hobby allows one run per day (04:00 UTC). Pro can use a denser schedule.
  * Auth: Authorization: Bearer $CRON_SECRET
  */
 export async function GET(request: Request) {
