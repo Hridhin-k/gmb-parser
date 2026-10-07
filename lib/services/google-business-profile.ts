@@ -562,44 +562,6 @@ export class GoogleBusinessProfileService {
   }
 
   /**
-   * Creates a new client in the workspace.
-   */
-  static async createClient(
-    workspaceId: string,
-    userId: string,
-    name: string,
-    notes?: string
-  ) {
-    const trimmedNotes = notes?.trim() ?? null;
-    if (
-      trimmedNotes === UNASSIGNED_CLIENT_MARKER ||
-      (trimmedNotes?.startsWith("grm:auto:loc:") ?? false) ||
-      (trimmedNotes?.startsWith("grm:auto:org:") ?? false)
-    ) {
-      throw new AppError("Invalid client notes", "VALIDATION_ERROR", 400);
-    }
-
-    const supabase = createAdminClient();
-
-    const { data, error } = await supabase
-      .from("grm_clients")
-      .insert({
-        workspace_id: workspaceId,
-        name: name.trim(),
-        notes: trimmedNotes,
-        created_by: userId,
-      })
-      .select("id, name, notes, is_active, created_at")
-      .single();
-
-    if (error) {
-      throw new AppError("Failed to create client", "DB_ERROR", 500);
-    }
-
-    return data;
-  }
-
-  /**
    * Gets unlinked locations (in the Unassigned pool, or client_id null).
    */
   static async getUnlinkedLocations(workspaceId: string) {

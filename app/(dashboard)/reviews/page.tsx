@@ -5,6 +5,7 @@ import { PageHeader } from "@/components/page-header";
 import { EmptyState } from "@/components/empty-state";
 import { SyncButton } from "@/components/sync-button";
 import { ReviewFilters } from "@/components/review-filters";
+import { PendingRegion, TransitionScope } from "@/components/transition-scope";
 import { ReviewList } from "@/components/review-list";
 import { PaginationBar } from "@/components/pagination-bar";
 import { Download, MessageSquareText } from "lucide-react";
@@ -13,6 +14,7 @@ import {
   validateRatingFilter,
   validateFilterString,
 } from "@/lib/validation";
+import { dateRangeParams, parseDateRange } from "@/lib/date-range";
 
 interface ReviewsPageProps {
   searchParams: Promise<Record<string, string | string[] | undefined>>;
@@ -44,12 +46,8 @@ export default async function ReviewsPage({ searchParams }: ReviewsPageProps) {
   const searchParam = validateFilterString(params.q);
   const clientParam = validateFilterString(params.client);
   const locationParam = validateFilterString(params.location);
-  const periodParam =
-    params.period === "7d" ||
-    params.period === "30d" ||
-    params.period === "90d"
-      ? params.period
-      : "all";
+  const range = parseDateRange(params, "all");
+  const hasRange = range.key !== "all";
   const hasComment = params.comment === "1" || params.comment === "true";
   const currentPage = validatePage(params.page);
 
@@ -62,7 +60,8 @@ export default async function ReviewsPage({ searchParams }: ReviewsPageProps) {
       q: searchParam,
       clientId: clientParam,
       locationId: locationParam,
-      period: periodParam,
+      since: range.start?.toISOString() ?? null,
+      until: range.end?.toISOString() ?? null,
       hasComment: hasComment || undefined,
       page: currentPage,
       profileQ: "",
@@ -74,7 +73,7 @@ export default async function ReviewsPage({ searchParams }: ReviewsPageProps) {
 
   const totalPages = Math.max(
     1,
-    Math.ceil(data.totalReviewCount / data.pageSize)
+    Math.ceil(data.totalReviewCount / data.pageSize),
   );
 
   const queryForPagination = new URLSearchParams();
@@ -85,8 +84,8 @@ export default async function ReviewsPage({ searchParams }: ReviewsPageProps) {
     q: searchParam,
     client: clientParam,
     location: locationParam,
-    period: periodParam !== "all" ? periodParam : "",
     comment: hasComment ? "1" : "",
+    ...dateRangeParams(range, "all"),
   })) {
     if (v) queryForPagination.set(k, v);
   }
@@ -101,7 +100,7 @@ export default async function ReviewsPage({ searchParams }: ReviewsPageProps) {
           {data.totalReviewCount > 0 && (
             <a
               href={`/api/reviews/export?${queryForPagination.toString()}`}
-              className="inline-flex h-9 items-center gap-1.5 rounded-full border border-[#dadce0] bg-white px-4 text-sm font-medium text-[#202124] hover:border-[#1a73e8]"
+              className="inline-flex h-9 items-center gap-1.5 rounded-full border border-silver bg-white px-4 text-sm font-medium text-graphite hover:border-ink"
             >
               <Download className="h-3.5 w-3.5" aria-hidden />
               Export CSV
@@ -113,67 +112,73 @@ export default async function ReviewsPage({ searchParams }: ReviewsPageProps) {
         </div>
       </PageHeader>
 
-      <ReviewFilters
-        currentFilter={filterParam}
-        currentRating={ratingParam !== undefined ? String(ratingParam) : ""}
-        currentRatingBucket={starsParam}
-        currentSearch={searchParam}
-        currentPeriod={periodParam}
-        currentHasComment={hasComment}
-        clients={data.clients}
-        locations={data.locations}
-        currentClientId={clientParam}
-        currentLocationId={locationParam}
-      />
-
-      {data.reviews.length === 0 ? (
-        <EmptyState
-          icon={MessageSquareText}
-          title={
-            filterParam !== "all" ||
-            ratingParam !== undefined ||
-            starsParam ||
-            searchParam ||
-            clientParam ||
-            locationParam ||
-            periodParam !== "all" ||
-            hasComment
-              ? "No reviews match your filters"
-              : "No reviews synced"
-          }
-          description={
-            filterParam !== "all" ||
-            ratingParam !== undefined ||
-            starsParam ||
-            searchParam ||
-            clientParam ||
-            locationParam
-              ? "Try adjusting your filters or search terms."
-              : data.hasConnections
-                ? "Sync reviews from the dashboard to pull Google reviews here."
-                : "Connect a Google account in Settings first."
-          }
+      <TransitionScope>
+        <ReviewFilters
+          currentFilter={filterParam}
+          currentRating={ratingParam !== undefined ? String(ratingParam) : ""}
+          currentRatingBucket={starsParam}
+          currentSearch={searchParam}
+          currentRange={{ key: range.key, from: range.from, to: range.to }}
+          currentHasComment={hasComment}
+          clients={data.clients}
+          locations={data.locations}
+          currentClientId={clientParam}
+          currentLocationId={locationParam}
         />
-      ) : (
-        <>
-          <p className="text-[12px] tabular-nums text-[#5f6368]">
-            {data.totalReviewCount} matching
-          </p>
-          <ReviewList
-            reviews={data.reviews}
-            replies={data.replies}
-            canApprove={canApprove}
-          />
-          {totalPages > 1 && (
-            <PaginationBar
-              basePath="/reviews"
-              currentPage={currentPage}
-              totalPages={totalPages}
-              searchParams={queryForPagination}
+
+        <PendingRegion label="Updating reviews…" className="space-y-4">
+          {data.reviews.length === 0 ? (
+            <EmptyState
+              icon={MessageSquareText}
+              title={
+                filterParam !== "all" ||
+                ratingParam !== undefined ||
+                starsParam ||
+                searchParam ||
+                clientParam ||
+                locationParam ||
+                hasRange ||
+                hasComment
+                  ? "No reviews match your filters"
+                  : "No reviews synced"
+              }
+              description={
+                filterParam !== "all" ||
+                ratingParam !== undefined ||
+                starsParam ||
+                searchParam ||
+                clientParam ||
+                locationParam ||
+                hasRange ||
+                hasComment
+                  ? "Try a wider time range, or clear the filters."
+                  : data.hasConnections
+                    ? "Sync reviews from the dashboard to pull Google reviews here."
+                    : "Connect a Google account in Settings first."
+              }
             />
+          ) : (
+            <>
+              <p className="text-[12px] tabular-nums text-slate">
+                {data.totalReviewCount} matching
+              </p>
+              <ReviewList
+                reviews={data.reviews}
+                replies={data.replies}
+                canApprove={canApprove}
+              />
+              {totalPages > 1 && (
+                <PaginationBar
+                  basePath="/reviews"
+                  currentPage={currentPage}
+                  totalPages={totalPages}
+                  searchParams={queryForPagination}
+                />
+              )}
+            </>
           )}
-        </>
-      )}
+        </PendingRegion>
+      </TransitionScope>
     </div>
   );
 }

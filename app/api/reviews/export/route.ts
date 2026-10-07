@@ -4,34 +4,21 @@ import { ensurePersonalWorkspace } from "@/lib/services/workspace";
 import { reviewCsvLines, type ReviewExportFilters } from "@/lib/services/review-export";
 import { checkRateLimit, EXPORT_LIMIT } from "@/lib/rate-limit";
 import { logger } from "@/lib/logger";
+import { parseDateRange } from "@/lib/date-range";
 
 const UUID = /^[0-9a-f-]{36}$/i;
-const PERIOD_DAYS: Record<string, number> = { "7d": 7, "30d": 30, "90d": 90 };
-const MONTH_PERIODS: Record<string, number> = { "3": 3, "6": 6, "12": 12 };
-
 function parseFilters(params: URLSearchParams): ReviewExportFilters {
   const client = params.get("client");
   const location = params.get("location");
-  const period = params.get("period") ?? "";
-  const months = params.get("months") ?? "";
   const stars = params.get("stars");
   const rating = Number(params.get("rating"));
-
-  let since: string | null = null;
-  if (PERIOD_DAYS[period]) {
-    since = new Date(Date.now() - PERIOD_DAYS[period] * 86_400_000).toISOString();
-  } else if (MONTH_PERIODS[months]) {
-    const d = new Date();
-    d.setUTCDate(1);
-    d.setUTCHours(0, 0, 0, 0);
-    d.setUTCMonth(d.getUTCMonth() - (MONTH_PERIODS[months] - 1));
-    since = d.toISOString();
-  }
+  const range = parseDateRange(Object.fromEntries(params), "all");
 
   return {
     clientId: client && UUID.test(client) ? client : null,
     locationId: location && UUID.test(location) ? location : null,
-    since,
+    since: range.start?.toISOString() ?? null,
+    until: range.end?.toISOString() ?? null,
     replyFilter: params.get("filter") ?? "all",
     ratingBucket: stars === "negative" || stars === "positive" ? stars : null,
     rating: Number.isInteger(rating) && rating >= 1 && rating <= 5 ? rating : null,

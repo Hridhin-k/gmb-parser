@@ -1,6 +1,6 @@
 import { createAdminClient } from "@/lib/supabase/admin";
 import { UNASSIGNED_CLIENT_MARKER } from "@/lib/services/unassigned-client";
-import { formatLocationOption } from "@/lib/ui/location-place";
+import { formatLocationOption, locationDisplayName } from "@/lib/ui/location-place";
 import {
   LocationInsightService,
   type LocationInsight,
@@ -13,7 +13,9 @@ export interface DashboardFilters {
   q: string;
   clientId: string;
   locationId: string;
-  period: "7d" | "30d" | "90d" | "all";
+  /** Review date window [since, until); null bounds are open. */
+  since: string | null;
+  until: string | null;
   hasComment?: boolean;
   page: number;
   /** Profile directory search (name) */
@@ -75,14 +77,6 @@ export interface DashboardReviewRow {
 const INBOX_PAGE_SIZE = 30;
 const PROFILE_PAGE_SIZE = 25;
 const ATTENTION_LIMIT = 12;
-
-function periodStart(period: DashboardFilters["period"]): string | null {
-  if (period === "all") return null;
-  const days = period === "7d" ? 7 : period === "30d" ? 30 : 90;
-  const d = new Date();
-  d.setDate(d.getDate() - days);
-  return d.toISOString();
-}
 
 function attentionScore(row: {
   unanswered: number;
@@ -356,7 +350,7 @@ export async function getDashboardData(
   // Inbox
   const rangeFrom = (filters.page - 1) * INBOX_PAGE_SIZE;
   const rangeTo = rangeFrom + INBOX_PAGE_SIZE - 1;
-  const since = periodStart(filters.period);
+  const { since, until } = filters;
 
   let locationFilterIds: string[] | null = null;
   if (filters.locationId && /^[0-9a-f-]{36}$/i.test(filters.locationId)) {
@@ -397,7 +391,7 @@ export async function getDashboardData(
        google_reply_comment, google_reply_update_time, reply_status, last_synced_at,
        location_id,
        grm_google_locations!inner(
-         id, location_title, client_id,
+         id, location_title, store_code, address_formatted, client_id,
          grm_clients(name)
        )`,
       { count: "exact" }
@@ -410,6 +404,7 @@ export async function getDashboardData(
     reviewQuery = reviewQuery.in("location_id", locationFilterIds);
   }
   if (since) reviewQuery = reviewQuery.gte("review_create_time", since);
+  if (until) reviewQuery = reviewQuery.lt("review_create_time", until);
 
   switch (filters.filter) {
     case "unanswered":
@@ -464,6 +459,8 @@ export async function getDashboardData(
       : r.grm_google_locations;
     const locTyped = loc as {
       location_title?: string;
+      store_code?: string | null;
+      address_formatted?: string | null;
       grm_clients?: { name: string } | Array<{ name: string }> | null;
     } | null;
     const clientData = locTyped?.grm_clients;
@@ -482,7 +479,14 @@ export async function getDashboardData(
       google_reply_comment: r.google_reply_comment,
       google_reply_update_time: r.google_reply_update_time,
       reply_status: r.reply_status as string,
-      location_title: locTyped?.location_title ?? "Unknown",
+      location_title: locTyped?.location_title
+        ? locationDisplayName({
+            title: locTyped.location_title,
+            brand: clientName,
+            storeCode: locTyped.store_code,
+            address: locTyped.address_formatted,
+          })
+        : "Unknown",
       client_name: clientName,
       location_id: r.location_id,
     };
@@ -551,5 +555,74 @@ export async function getDashboardData(
     clients,
     locations: locationsForFilters,
     hasConnections: (connections?.length ?? 0) > 0,
+  };
+}
+
+const LOCATION_ID = /^[0-9a-f-]{36}$/i;
+
+/** Insight panel data for one location. Used on the client page. */
+export async function getLocationInsightView(workspaceId: string, locationId: string) {
+  if (!LOCATION_ID.test(locationId)) return null;
+
+  const admin = createAdminClient();
+  const [{ data: location, error }, statsResult] = await Promise.all([
+    admin
+      .from("grm_google_locations")
+      .select(
+        `id, location_title, store_code, address_formatted, client_id,
+         grm_clients(name, notes)`
+      )
+      .eq("workspace_id", workspaceId)
+      .eq("id", locationId)
+      .maybeSingle(),
+    admin.rpc("grm_location_review_stats", { p_workspace_id: workspaceId }),
+  ]);
+
+  if (error) throw new Error("Failed to load location");
+  if (!location) return null;
+  if (statsResult.error) throw new Error("Failed to load review stats");
+
+  const client = Array.isArray(location.grm_clients)
+    ? location.grm_clients[0]
+    : location.grm_clients;
+  if ((client as { notes?: string | null } | null)?.notes === UNASSIGNED_CLIENT_MARKER) {
+    return null;
+  }
+
+  const stat = (statsResult.data ?? []).find((row) => row.location_id === locationId);
+  const reviewCount = stat?.review_count ?? 0;
+  const profile: ProfileRow = {
+    id: location.id,
+    title: location.location_title,
+    clientId: location.client_id,
+    clientName: (client as { name?: string } | null)?.name ?? null,
+    storeCode: location.store_code,
+    address: location.address_formatted,
+    reviewCount,
+    unanswered: stat?.unanswered ?? 0,
+    critical: stat?.critical ?? 0,
+    avgRating: stat && reviewCount > 0 ? Number(stat.rating_sum) / reviewCount : null,
+    lastReviewAt: stat?.last_review_at ?? null,
+    attentionScore: 0,
+  };
+
+  const statsMap = await LocationInsightService.buildLocationReviewStats(workspaceId, [
+    locationId,
+  ]);
+  const insightStats = statsMap.get(locationId);
+  let insight: LocationInsight | null = null;
+  if (insightStats) {
+    const cached = await LocationInsightService.getCachedInsights(
+      workspaceId,
+      [locationId],
+      new Map([[locationId, insightStats.fingerprint]])
+    );
+    insight = cached.get(locationId) ?? null;
+  }
+
+  return {
+    profile,
+    insight,
+    heuristicSummary: insightStats?.heuristic.summary ?? null,
   };
 }

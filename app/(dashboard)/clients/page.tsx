@@ -3,11 +3,11 @@ import { GoogleBusinessProfileService } from "@/lib/services/google-business-pro
 import { getActiveWorkspace } from "@/lib/services/session";
 import { PageHeader } from "@/components/page-header";
 import { EmptyState } from "@/components/empty-state";
-import { CreateClientDialog } from "@/components/create-client-dialog";
 import { UnassignedLocationsBoard } from "@/components/unassigned-locations-board";
 import { SyncLocationsButton } from "@/components/sync-locations-button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Building2, MapPin } from "lucide-react";
+import { locationDisplayName } from "@/lib/ui/location-place";
 import Link from "next/link";
 
 export default async function ClientsPage() {
@@ -31,12 +31,18 @@ export default async function ClientsPage() {
     <div className="space-y-10">
       <PageHeader
         title="Clients"
-        description="Sync profiles to pull every Google Business Profile you manage. Shops from the same brand (for example every Fazyo location) are grouped under one client."
+        description="Clients come from Google. Sync profiles pulls every Business Profile you manage and groups shops from the same brand (for example every Fazyo location) under one client."
       >
-        <div className="flex flex-wrap items-center gap-2">
-          {connectionId && <SyncLocationsButton connectionId={connectionId} />}
-          <CreateClientDialog />
-        </div>
+        {connectionId ? (
+          <SyncLocationsButton connectionId={connectionId} />
+        ) : (
+          <Link
+            href="/settings"
+            className="inline-flex h-10 items-center rounded-full bg-ink px-4 text-sm font-semibold text-white hover:bg-graphite"
+          >
+            Connect Google
+          </Link>
+        )}
       </PageHeader>
 
       {unassignedLocations.length > 0 && (
@@ -45,7 +51,10 @@ export default async function ClientsPage() {
           clients={clients.map((c) => ({ id: c.id, name: c.name }))}
           locations={unassignedLocations.map((l) => ({
             id: l.id,
-            location_title: l.location_title,
+            location_title: locationDisplayName({
+              title: l.location_title,
+              address: l.address_formatted,
+            }),
             address_formatted: l.address_formatted,
           }))}
         />
@@ -70,20 +79,20 @@ export default async function ClientsPage() {
 
             return (
               <Link key={client.id} href={`/clients/${client.id}`}>
-                <Card className="cursor-pointer transition-colors hover:border-[#1a73e8]">
+                <Card className="cursor-pointer transition-colors hover:border-ink">
                   <CardContent className="p-5">
                     <div className="flex items-start justify-between gap-2">
                       <div className="min-w-0">
-                        <p className="truncate text-base font-medium text-[#202124]">
+                        <p className="truncate text-base font-medium text-graphite">
                           {client.name}
                         </p>
-                        <p className="mt-1 text-sm font-light text-[#5f6368]">
+                        <p className="mt-1 text-sm font-light text-slate">
                           {locationCount === 0
                             ? "No locations yet"
                             : `${locationCount} location${locationCount === 1 ? "" : "s"}`}
                         </p>
                       </div>
-                      <div className="flex shrink-0 items-center gap-1 rounded-full bg-[#e8f0fe] px-2.5 py-1 text-xs font-semibold text-[#1a73e8]">
+                      <div className="flex shrink-0 items-center gap-1 rounded-full bg-paper px-2.5 py-1 text-xs font-semibold text-ink">
                         <MapPin className="h-3 w-3" />
                         {locationCount}
                       </div>

@@ -1,74 +1,96 @@
 "use client";
 
-import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
-import { useTransition } from "react";
+import { useScopedTransition } from "@/components/transition-scope";
+import { ClearFiltersButton } from "@/components/clear-filters-button";
+import { DateRangeFilter } from "@/components/date-range-filter";
+import { SelectField } from "@/components/ui/select-field";
+import type { DateRangeKey } from "@/lib/date-range";
 import { cn } from "@/lib/utils";
 
 interface AnalyticsFiltersProps {
-  period: number;
-  periods: readonly number[];
+  range: { key: DateRangeKey; from: string; to: string };
+  defaultRange: DateRangeKey;
   clientId: string;
   clients: Array<{ id: string; name: string }>;
+  locationId: string;
+  locations: Array<{ id: string; clientId: string; name: string }>;
 }
 
-export function AnalyticsFilters({ period, periods, clientId, clients }: AnalyticsFiltersProps) {
+export function AnalyticsFilters({
+  range,
+  defaultRange,
+  clientId,
+  clients,
+  locationId,
+  locations,
+}: AnalyticsFiltersProps) {
   const router = useRouter();
   const pathname = usePathname();
   const searchParams = useSearchParams();
-  const [pending, startTransition] = useTransition();
+  const { pending, start: startTransition } = useScopedTransition();
 
-  function hrefWith(key: string, value: string | null) {
+  const visibleLocations = clientId
+    ? locations.filter((l) => l.clientId === clientId)
+    : locations;
+
+  const hasActive =
+    !!clientId || !!locationId || range.key !== defaultRange || searchParams.has("months");
+
+  function navigate(changes: Record<string, string | null>) {
     const params = new URLSearchParams(searchParams.toString());
-    if (value) params.set(key, value);
-    else params.delete(key);
+    params.delete("months");
+    for (const [key, value] of Object.entries(changes)) {
+      if (value) params.set(key, value);
+      else params.delete(key);
+    }
     const qs = params.toString();
-    return qs ? `${pathname}?${qs}` : pathname;
+    startTransition(() => router.push(qs ? `${pathname}?${qs}` : pathname));
   }
 
   return (
     <div
       className={cn(
-        "flex flex-col gap-2 sm:flex-row sm:items-center",
+        "flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center",
         pending && "opacity-70"
       )}
     >
-      <div
-        className="inline-flex rounded-full border border-[#dadce0] bg-white p-1"
-        role="group"
-        aria-label="Time range"
-      >
-        {periods.map((p) => (
-          <Link
-            key={p}
-            href={hrefWith("months", p === 6 ? null : String(p))}
-            scroll={false}
-            className={cn(
-              "rounded-full px-4 py-1.5 text-sm font-medium transition-colors",
-              p === period ? "bg-[#202124] text-white" : "text-[#3c4043] hover:text-[#202124]"
-            )}
-            aria-current={p === period ? "true" : undefined}
-          >
-            {p} months
-          </Link>
-        ))}
-      </div>
+      <DateRangeFilter value={range} defaultKey={defaultRange} onChange={navigate} />
 
-      <select
-        aria-label="Filter by client"
+      <SelectField
+        label="Filter by client"
         value={clientId}
-        onChange={(e) =>
-          startTransition(() => router.push(hrefWith("client", e.target.value || null)))
-        }
-        className="h-10 w-full rounded-full border border-[#dadce0] bg-white px-4 text-sm text-[#202124] focus:border-[#1a73e8] focus:outline-none focus:ring-2 focus:ring-[#e8f0fe] sm:w-64"
-      >
-        <option value="">All clients</option>
-        {clients.map((c) => (
-          <option key={c.id} value={c.id}>
-            {c.name}
-          </option>
-        ))}
-      </select>
+        placeholder="All clients"
+        className="sm:w-64"
+        onValueChange={(next) => navigate({ client: next || null, location: null })}
+        options={[
+          { value: "", label: "All clients" },
+          ...clients.map((client) => ({ value: client.id, label: client.name })),
+        ]}
+      />
+
+      <SelectField
+        label="Filter by location"
+        value={visibleLocations.some((location) => location.id === locationId) ? locationId : ""}
+        placeholder="All locations"
+        disabled={visibleLocations.length === 0}
+        className="sm:w-72"
+        onValueChange={(next) => {
+          const owner = locations.find((location) => location.id === next)?.clientId ?? null;
+          navigate(next && !clientId && owner ? { location: next, client: owner } : { location: next || null });
+        }}
+        options={[
+          { value: "", label: "All locations" },
+          ...visibleLocations.map((location) => ({ value: location.id, label: location.name })),
+        ]}
+      />
+
+      {hasActive ? (
+        <ClearFiltersButton
+          onClear={() => startTransition(() => router.push(pathname))}
+          disabled={pending}
+        />
+      ) : null}
     </div>
   );
 }

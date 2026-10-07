@@ -4,6 +4,7 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
+import { ActivityStatus } from "@/components/activity-status";
 import { RefreshCw } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -83,8 +84,15 @@ export function SyncButton({
         className="gap-1.5"
       >
         <RefreshCw className={cn("h-3.5 w-3.5", syncing && "animate-spin")} aria-hidden />
-        {syncing ? "Syncing..." : label}
+        {syncing ? (syncAll ? "Asking Google…" : "Syncing this location…") : label}
       </Button>
+      {syncing ? (
+        <ActivityStatus
+          tone="google"
+          title={syncAll ? "Pulling reviews from Google" : "Syncing this location’s reviews"}
+          detail="GRM is asking Google for reviews. Replies you already wrote stay in place."
+        />
+      ) : null}
       {error && (
         <p className="max-w-xs text-[11px] text-red-600" role="alert">{error}</p>
       )}

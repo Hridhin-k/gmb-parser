@@ -4,6 +4,9 @@ import { useRouter, usePathname, useSearchParams } from "next/navigation";
 import { useEffect, useState, useTransition } from "react";
 import { cn } from "@/lib/utils";
 import { Star, Search, AlertCircle, ChevronLeft, ChevronRight } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { SelectField } from "@/components/ui/select-field";
 import type { ProfileRow } from "@/lib/services/dashboard";
 import { locationPlaceLabel } from "@/lib/ui/location-place";
 
@@ -87,12 +90,12 @@ export function ProfileDirectory({
         <div>
           <h2
             id="profiles-heading"
-            className="text-[22px] leading-[1.3] tracking-[-0.02em] text-[#202124]"
-            style={{ fontFamily: "var(--font-google-sans-display), sans-serif" }}
+            className="text-[22px] leading-[1.3] text-graphite"
+            style={{ fontFamily: "var(--font-heading), sans-serif" }}
           >
             Profiles
           </h2>
-          <p className="text-sm font-light text-[#5f6368]">
+          <p className="text-sm font-light text-slate">
             {total.toLocaleString()} managed · search & sort · open one for AI
             insight + inbox
           </p>
@@ -102,41 +105,39 @@ export function ProfileDirectory({
       <div className="grid grid-cols-1 gap-2 sm:flex sm:flex-wrap sm:items-center">
         <div className="relative min-w-0 sm:min-w-[200px] sm:max-w-xs sm:flex-1">
           <Search
-            className="absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-[#5f6368]"
+            className="absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-slate"
             aria-hidden
           />
-          <input
+          <Input
             type="search"
             value={q}
             onChange={(e) => setQ(e.target.value)}
             placeholder="Search by brand, store code, or address…"
-            className="h-10 w-full rounded-full border border-[#dadce0] bg-white pl-9 pr-4 text-sm text-[#202124] placeholder:text-[#5f6368] focus:border-[#1a73e8] focus:outline-none focus:ring-2 focus:ring-[#e8f0fe]"
+            className="pl-9"
             aria-label="Search profiles by name"
           />
         </div>
-        <select
+        <SelectField
+          label="Sort profiles"
           value={currentSort}
-          onChange={(e) =>
+          className="sm:w-48"
+          onValueChange={(next) =>
             push((params) => {
-              params.set("psort", e.target.value);
+              params.set("psort", next);
               params.delete("pp");
             })
           }
-          className="h-10 w-full rounded-full border border-[#dadce0] bg-white px-4 text-sm text-[#202124] focus:border-[#1a73e8] focus:outline-none focus:ring-2 focus:ring-[#e8f0fe] sm:w-auto"
-          aria-label="Sort profiles"
-        >
-          {SORT_OPTIONS.map((o) => (
-            <option key={o.key} value={o.key}>
-              {o.label}
-            </option>
-          ))}
-        </select>
+          options={SORT_OPTIONS.map((option) => ({
+            value: option.key,
+            label: option.label,
+          }))}
+        />
       </div>
 
-      <div className="overflow-hidden rounded-3xl border border-[#dadce0] bg-white">
+      <div className="overflow-hidden rounded-xl bg-white shadow-card">
         <div className="max-h-[min(420px,50vh)] overflow-auto">
           <table className="w-full text-left text-[13px]">
-            <thead className="sticky top-0 z-10 border-b border-[#eee] bg-[#f8f9fa] text-[11px] font-medium uppercase tracking-[0.06em] text-[#5f6368]">
+            <thead className="sticky top-0 z-10 border-b border-[#eee] bg-paper text-[11px] font-medium uppercase tracking-[0.06em] text-slate">
               <tr>
                 <th className="px-3 py-2 font-medium">Profile</th>
                 <th className="px-2 py-2 font-medium tabular-nums">Avg</th>
@@ -150,7 +151,7 @@ export function ProfileDirectory({
                 <tr>
                   <td
                     colSpan={5}
-                    className="px-3 py-8 text-center text-[#5f6368]"
+                    className="px-3 py-8 text-center text-slate"
                   >
                     No profiles match this search.
                   </td>
@@ -162,10 +163,10 @@ export function ProfileDirectory({
                     <tr
                       key={p.id}
                       className={cn(
-                        "cursor-pointer border-b border-mist transition-colors last:border-0",
+                        "cursor-pointer border-b border-silver transition-colors last:border-0",
                         selected
-                          ? "bg-[#e8f0fe] text-[#202124]"
-                          : "hover:bg-[#e8f0fe]/40"
+                          ? "bg-paper text-graphite"
+                          : "hover:bg-paper/40"
                       )}
                       onClick={() => selectProfile(p.id)}
                       onKeyDown={(e) => {
@@ -178,10 +179,10 @@ export function ProfileDirectory({
                       aria-selected={selected}
                     >
                       <td className="min-w-0 max-w-[280px] px-3 py-2">
-                        <p className="truncate font-medium text-[#202124]">
+                        <p className="truncate font-medium text-graphite">
                           {p.clientName ?? p.title}
                         </p>
-                        <p className="truncate text-[11px] text-[#5f6368]">
+                        <p className="truncate text-[11px] text-slate">
                           {locationPlaceLabel({
                             storeCode: p.storeCode,
                             address: p.address,
@@ -195,7 +196,7 @@ export function ProfileDirectory({
                             className={cn(
                               "h-3 w-3",
                               p.avgRating == null
-                                ? "fill-mist text-mist"
+                                ? "fill-silver text-silver"
                                 : p.avgRating >= 4
                                   ? "fill-green-500 text-green-500"
                                   : p.avgRating >= 3
@@ -221,7 +222,7 @@ export function ProfileDirectory({
                         ) : (
                           <span
                             className={
-                              "text-[#5f6368]"
+                              "text-slate"
                             }
                           >
                             0
@@ -240,7 +241,7 @@ export function ProfileDirectory({
                         ) : (
                           <span
                             className={
-                              "text-[#5f6368]"
+                              "text-slate"
                             }
                           >
                             0
@@ -256,17 +257,18 @@ export function ProfileDirectory({
         </div>
 
         {totalPages > 1 && (
-          <div className="flex items-center justify-between border-t border-[#f8f9fa] px-3 py-2 text-[12px] text-[#5f6368]">
+          <div className="flex items-center justify-between border-t border-silver px-3 py-2 text-[12px] text-slate">
             <span>
               {(profileFromLabel(currentPage, pageSize) + 1).toLocaleString()}–
               {Math.min(currentPage * pageSize, total).toLocaleString()} of{" "}
               {total.toLocaleString()}
             </span>
             <div className="flex items-center gap-1">
-              <button
+              <Button
                 type="button"
+                variant="ghost"
+                size="icon"
                 disabled={currentPage <= 1}
-                className="rounded p-1 hover:bg-[#f8f9fa] disabled:opacity-30"
                 onClick={() =>
                   push((params) => {
                     const next = currentPage - 1;
@@ -277,14 +279,15 @@ export function ProfileDirectory({
                 aria-label="Previous profiles page"
               >
                 <ChevronLeft className="h-4 w-4" />
-              </button>
+              </Button>
               <span className="tabular-nums px-1">
                 {currentPage}/{totalPages}
               </span>
-              <button
+              <Button
                 type="button"
+                variant="ghost"
+                size="icon"
                 disabled={currentPage >= totalPages}
-                className="rounded p-1 hover:bg-[#f8f9fa] disabled:opacity-30"
                 onClick={() =>
                   push((params) => {
                     params.set("pp", String(currentPage + 1));
@@ -293,7 +296,7 @@ export function ProfileDirectory({
                 aria-label="Next profiles page"
               >
                 <ChevronRight className="h-4 w-4" />
-              </button>
+              </Button>
             </div>
           </div>
         )}

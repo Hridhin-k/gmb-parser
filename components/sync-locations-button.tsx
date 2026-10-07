@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
+import { ActivityStatus } from "@/components/activity-status";
 import { RefreshCw } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -90,20 +91,27 @@ export function SyncLocationsButton({
             className={cn("h-3.5 w-3.5", syncing && "animate-spin")}
             aria-hidden
           />
-          {syncing ? "Syncing…" : label}
+          {syncing ? "Reading Google…" : label}
         </Button>
         <Button
           variant="ghost"
           size="sm"
           onClick={() => handleSync(true)}
           disabled={syncing}
-          className="text-xs text-[#5f6368]"
+          className="text-xs text-slate"
         >
           Force refresh
         </Button>
       </div>
+      {syncing ? (
+        <ActivityStatus
+          tone="google"
+          title="Reading Business Profiles from Google"
+          detail="GRM is listing the locations this Google account manages and grouping them into clients. This can take a little while."
+        />
+      ) : null}
       {summary && (
-        <p className="text-xs text-[#3c4043]" role="status">
+        <p className="text-xs text-graphite" role="status">
           {summary}
         </p>
       )}

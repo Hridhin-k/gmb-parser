@@ -1,12 +1,19 @@
 import type { Metadata } from "next";
-import { Inter } from "next/font/google";
+import { Cal_Sans, Inter } from "next/font/google";
 import { Toaster } from "@/components/ui/sonner";
 import "./globals.css";
 
 const inter = Inter({
-  variable: "--font-sans",
+  variable: "--font-inter",
   subsets: ["latin"],
-  weight: ["300", "400", "500", "700"],
+  weight: ["300", "400", "500", "600"],
+});
+
+const calSans = Cal_Sans({
+  variable: "--font-cal-sans",
+  subsets: ["latin"],
+  weight: "400",
+  adjustFontFallback: false,
 });
 
 export const metadata: Metadata = {
@@ -17,8 +24,8 @@ export const metadata: Metadata = {
 
 export default function RootLayout({ children }: LayoutProps<"/">) {
   return (
-    <html lang="en" className={`${inter.variable} h-full antialiased`}>
-      <body className="min-h-full bg-canvas-white font-sans text-charcoal-ink">
+    <html lang="en" className={`${inter.variable} ${calSans.variable} h-full antialiased`}>
+      <body className="min-h-full bg-paper font-sans text-graphite">
         {children}
         <Toaster />
       </body>

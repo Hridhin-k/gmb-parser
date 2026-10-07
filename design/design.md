@@ -1,234 +1,211 @@
-# Google for Education — Style Reference
-> Open notebook in morning light — a digital classroom where whitespace, type, and one blue accent do all the work.
+# Cal.com — Style Reference
+> Monochrome Utility, Human Touch. A system that prioritizes clarity and function with a stark black-and-white palette, but softens it with friendly typography and rounded forms.
 
 **Theme:** light
 
 Source measurements are normalized; roles and recommendations are interpreted. Font summary lists are independent, not paired by position. HTML examples are reconstructions, not source components.
 
-Google for Education operates as a restrained utility surface: a near-white canvas anchored by two type families (Google Sans Text for body and UI, Google Sans Display for headlines) and a single brand blue that functions as the system's only chromatic voice. Hierarchy comes from scale jumps and tracking — the 80px display headline is tightly tracked, while 12–16px body text opens up with positive letter-spacing for small-size legibility. Surfaces avoid decorative gradients and heavy shadows, relying on generous whitespace, 24–28px card radii, and pill-shaped controls to feel approachable rather than corporate. Color is functional punctuation, not atmosphere: green identifies the Classroom brand mark, blue marks links and active states, and everything else stays in a narrow gray scale (#202124 → #3c4043 → #5f6368 → #dadce0).
+The design feels like a pragmatic, high-precision instrument. It's built on a strict and disciplined monochrome palette of black, white, and echelon grays, where color is intentionally excluded from the core UI to emphasize function. The custom font, 'Cal Sans', defines the visual identity with its geometric yet open letterforms, giving headlines a technical but approachable character. Nearly all interactive elements are either solid black or pill-shaped outlines, creating a binary system of action. Cards are the fundamental building block, using soft 8-12px radii and extremely subtle shadows to create a quiet, layered topology on a light gray background.
 
 ## Tokens — Colors
 
 | Name | Value | Token | Role |
 |------|-------|-------|------|
-| Canvas White | `#f8f9fa` | `--color-canvas-white` | Page background, card surfaces, section bands — the off-white ground that prevents harshness against pure white product screenshots |
-| Charcoal Ink | `#202124` | `--color-charcoal-ink` | Primary text, display headlines, active icon strokes — the deepest readable black-blue for maximum hierarchy |
-| Graphite | `#3c4043` | `--color-graphite` | Secondary headings, nav text, strong body — one step lighter than charcoal for sub-headings and navigation labels |
-| Slate | `#5f6368` | `--color-slate` | Muted body text, helper copy, icon glyphs, breadcrumb separators, footer micro-copy |
-| Mist | `#dadce0` | `--color-mist` | Hairline borders, card outlines, input strokes, dividers between sections — the only structural separator in the system |
-| Cloud Shadow | `#c4c6c7` | `--color-cloud-shadow` | Soft elevation on focused inputs and floating chips |
-| Google Blue | `#1a73e8` | `--color-google-blue` | Blue supporting accent for decorative details and low-frequency emphasis. Do not promote it to the primary CTA color |
-| Google Blue Deep | `#1967d2` | `--color-google-blue-deep` | Blue supporting accent for decorative details and low-frequency emphasis. Do not promote it to the primary CTA color |
-| Classroom Green | `#188038` | `--color-classroom-green` | Green supporting accent for decorative details and low-frequency emphasis |
+| Ink | `#101010` | `--color-ink` | Primary CTAs, primary text, active states. Used as the strongest dark tone, providing maximum contrast and visual weight for key actions. |
+| Action Blue | `#0099ff` | `--color-action-blue` | Tertiary links, informational banner text. A rare, functional splash of color reserved for secondary calls to action and informational highlights. |
+| White | `#ffffff` | `--color-white` | Card backgrounds, text on dark buttons. |
+| Paper | `#f4f4f4` | `--color-paper` | Main page background. |
+| Graphite | `#242424` | `--color-graphite` | Headlines, primary body text. |
+| Slate | `#6b7280` | `--color-slate` | Secondary text, descriptive copy, disabled states. |
+| Stone | `#898989` | `--color-stone` | Placeholder text, decorative UI elements. |
+| Silver | `#e5e7eb` | `--color-silver` | Borders, dividers, subtle backgrounds. |
+| Info Banner BG | `#eff6fe` | `--color-info-banner-bg` | Background for the top-of-page informational banner. |
+| Google Blue | `#4285f4` | `--color-google-blue` | Integration logos only. |
+| Google Yellow | `#fbbc04` | `--color-google-yellow` | Integration logos only. |
+| Google Green | `#34a853` | `--color-google-green` | Integration logos only. |
+| Google Red | `#ea4335` | `--color-google-red` | Integration logos only. |
 
 ## Tokens — Typography
 
-### Google Sans Display — Display headlines and section titles. The 80px display weight is the page's signature — tightly tracked and stacked to two lines in the hero. At 48px and below, tracking relaxes toward 0. Substituting with Inter (closest free analog) or Product Sans preserves the geometric warmth; system sans-serif will feel colder. · `--font-google-sans-display`
-- **Substitute:** Inter, Product Sans, or DM Sans
-- **Weights:** 400, 500, 700
-- **Sizes:** 16px, 18px, 20px, 22px, 28px, 48px, 80px
-- **Line height:** 1.09, 1.15, 1.17, 1.20, 1.29, 1.40, 1.50, 1.56, 1.75
-- **Letter spacing:** -0.0100em at 80px, -0.0060em at 48px and below, 0.0010em at 20px, 0.0310em at 16px
-- **Role:** Display headlines and section titles. The 80px display weight is the page's signature — tightly tracked and stacked to two lines in the hero. At 48px and below, tracking relaxes toward 0. Substituting with Inter (closest free analog) or Product Sans preserves the geometric warmth; system sans-serif will feel colder.
+### Cal Sans — Primary headline font. Its geometric forms and slightly wide stance give the brand a unique, technical-yet-friendly voice. Used exclusively for headings to establish hierarchy. · `--font-cal-sans`
+- **Substitute:** Poppins, Gilroy
+- **Weights:** 600
+- **Sizes:** 20px, 24px, 48px, 64px
+- **Line height:** 1.10 - 1.30
+- **Letter spacing:** +0.01em tracking adds airiness at display sizes.
+- **Role:** Primary headline font. Its geometric forms and slightly wide stance give the brand a unique, technical-yet-friendly voice. Used exclusively for headings to establish hierarchy.
 
-### Google Sans Text — Body copy, navigation, buttons, form inputs, helper text, breadcrumbs. Weight 400 is the default; 500 marks emphasis and nav-active states. The positive tracking at small sizes (0.036em at 12px) is anti-convention — it adds air to prevent the dense, gray-on-gray feel that typical SaaS body copy produces. · `--font-google-sans-text`
-- **Substitute:** Inter, Roboto, or Noto Sans
-- **Weights:** 300, 400, 500
-- **Sizes:** 12px, 14px, 16px, 18px
-- **Line height:** 1.00, 1.44, 1.50, 1.56, 1.63, 1.67, 1.71
-- **Letter spacing:** 0.0060em at 18px, 0.0170em at 16px, 0.0360em at 12px — tracking opens as size shrinks, the opposite of most systems
-- **Role:** Body copy, navigation, buttons, form inputs, helper text, breadcrumbs. Weight 400 is the default; 500 marks emphasis and nav-active states. The positive tracking at small sizes (0.036em at 12px) is anti-convention — it adds air to prevent the dense, gray-on-gray feel that typical SaaS body copy produces.
+### Cal Sans UI Variable Light — Primary body and UI text font. The light weight and tight negative tracking create a clean, modern text block that is readable without being loud. · `--font-cal-sans-ui-variable-light`
+- **Substitute:** Inter Light
+- **Weights:** 300
+- **Sizes:** 14px, 16px, 18px
+- **Line height:** 1.40 - 1.50
+- **Letter spacing:** Tight negative tracking from -0.19px to -0.24px for a compact feel.
+- **Role:** Primary body and UI text font. The light weight and tight negative tracking create a clean, modern text block that is readable without being loud.
+
+### Inter — Secondary UI and body font. Used for smaller text, labels, and inside complex components like the calendar widget where utmost clarity is required. · `--font-inter`
+- **Substitute:** system-ui, -apple-system, sans-serif
+- **Weights:** 400, 500, 600
+- **Sizes:** 10px, 12px, 14px, 16px
+- **Line height:** 1.14 - 1.43
+- **Role:** Secondary UI and body font. Used for smaller text, labels, and inside complex components like the calendar widget where utmost clarity is required.
+
+### Matter — Tertiary UI text for captions and metadata where a highly legible, neutral choice is needed. · `--font-matter`
+- **Substitute:** Inter
+- **Weights:** 400
+- **Sizes:** 10px, 12px, 14px
+- **Line height:** 1.14 - 1.50
+- **Role:** Tertiary UI text for captions and metadata where a highly legible, neutral choice is needed.
 
 ### Type Scale
 
 | Role | Family | Weight | Size | Line Height | Letter Spacing | Token |
 |------|--------|--------|------|-------------|----------------|-------|
-| caption | — | — | 12px | 1.5 | 0.432px | `--text-caption` |
-| body-sm | — | — | 14px | 1.5 | 0.238px | `--text-body-sm` |
-| body | — | — | 16px | 1.56 | 0.272px | `--text-body` |
-| subheading | — | — | 18px | 1.67 | 0.108px | `--text-subheading` |
-| heading-sm | — | — | 22px | 1.29 | -0.132px | `--text-heading-sm` |
-| heading | — | — | 28px | 1.2 | -0.168px | `--text-heading` |
-| heading-lg | — | — | 48px | 1.15 | -0.288px | `--text-heading-lg` |
-| display | — | — | 80px | 1.09 | -0.8px | `--text-display` |
+| caption | — | — | 12px | 1.4 | -0.24px | `--text-caption` |
+| body-sm | — | — | 14px | 1.5 | -0.2px | `--text-body-sm` |
+| body | — | — | 16px | 1.5 | -0.19px | `--text-body` |
+| subheading | — | — | 18px | 1.4 | -0.2px | `--text-subheading` |
+| heading-sm | — | — | 20px | 1.3 | 0.2px | `--text-heading-sm` |
+| heading | — | — | 24px | 1.3 | 0.24px | `--text-heading` |
+| heading-lg | — | — | 48px | 1.1 | 0.48px | `--text-heading-lg` |
+| display | — | — | 64px | 1.1 | 0.64px | `--text-display` |
 
 ## Tokens — Spacing & Shapes
 
-**Base unit:** 8px
-
-**Density:** comfortable
+**Density:** compact
 
 ### Spacing Scale
 
 | Name | Value | Token |
 |------|-------|-------|
+| 4 | 4px | `--spacing-4` |
+| 5 | 5px | `--spacing-5` |
+| 6 | 6px | `--spacing-6` |
 | 8 | 8px | `--spacing-8` |
+| 10 | 10px | `--spacing-10` |
+| 12 | 12px | `--spacing-12` |
 | 16 | 16px | `--spacing-16` |
+| 20 | 20px | `--spacing-20` |
 | 24 | 24px | `--spacing-24` |
+| 28 | 28px | `--spacing-28` |
 | 32 | 32px | `--spacing-32` |
 | 40 | 40px | `--spacing-40` |
 | 48 | 48px | `--spacing-48` |
 | 80 | 80px | `--spacing-80` |
-| 88 | 88px | `--spacing-88` |
-| 120 | 120px | `--spacing-120` |
-| 216 | 216px | `--spacing-216` |
 
 ### Border Radius
 
 | Element | Value |
 |---------|-------|
-| cards | 24-28px |
-| chips | 9999px |
-| links | 4px |
-| inputs | 4px |
-| buttons | 200px (pill) |
-| navItems | 8px |
+| tags | 9999px |
+| cards | 12px |
+| inputs | 8px |
+| buttons | 9999px (pills), 8px (rectangular) |
+
+### Shadows
+
+| Name | Value | Token |
+|------|-------|-------|
+| sm | `rgba(36, 36, 36, 0.7) 0px 1px 5px -4px, rgba(36, 36, 36, ...` | `--shadow-sm` |
+| subtle | `rgba(255, 255, 255, 0.15) 0px 2px 0px 0px inset` | `--shadow-subtle` |
+| sm-2 | `rgba(19, 19, 22, 0.7) 0px 1px 5px -4px, rgba(34, 42, 53, ...` | `--shadow-sm-2` |
+| sm-3 | `rgba(19, 19, 22, 0.7) 0px 1px 5px -4px, rgba(34, 42, 53, ...` | `--shadow-sm-3` |
+| sm-4 | `rgba(34, 42, 53, 0.05) 0px 4px 8px 0px` | `--shadow-sm-4` |
+| subtle-2 | `rgb(255, 255, 255) 0px 2px 0px 0px inset` | `--shadow-subtle-2` |
+| subtle-3 | `rgba(0, 0, 0, 0.1) 0px 1px 3px 0px, rgba(0, 0, 0, 0.06) 0...` | `--shadow-subtle-3` |
 
 ### Layout
 
 - **Page max-width:** 1200px
-- **Section gap:** 64-80px
-- **Card padding:** 32-40px
-- **Element gap:** 8-16px
+- **Section gap:** 96px
+- **Card padding:** 24px
 
 ## Components
 
-### Top Announcement Bar
-**Role:** Slim sticky banner above nav for product news, promos, and data-protection notices
+### Primary CTA Button
+**Role:** The main call-to-action on the page.
 
-Full-width band at 48px height, #f8f9fa background (same as canvas — no visual weight, just a divider line at the bottom in #dadce0). Body text 14px Google Sans Text weight 400 in #3c4043, centered. Inline link in #1a73e8 underlined. Close icon (X) at far right in #5f6368.
+A pill-shaped button. Background: Ink (#101010). Text: White (#ffffff). Font: Cal Sans UI at 14-16px. Radius: 9999px. Padding: ~12px 24px.
 
-### Primary Navigation Bar
-**Role:** Sticky global header with brand, primary links, search, account, and contact action
+### Secondary Ghost Button
+**Role:** A secondary call-to-action, often next to the primary.
 
-64px height, white background, 1px #dadce0 bottom border. Left: Google for Education wordmark (Google Sans Display, 18px, #202124). Center: nav links (Our values, Products, AI, Resources) at 14px weight 400 in #3c4043, underline indicator at 2px #1a73e8 on active. Right: search icon, account avatar (32px circle, #f8f9fa with #5f6368 glyph), 'Sign in' text link, and the filled pill button. Padding 0 24px.
+A pill-shaped outline button. Background: transparent or Paper (#f4f4f4). Text: Graphite (#242424). Border: 1px solid Silver (#e5e7eb). Radius: 9999px. Padding: ~12px 24px.
 
-### Filled Pill Button
-**Role:** Primary interactive element — used for the highest-priority action per screen
+### Header CTA Button
+**Role:** The main call-to-action in the sticky header.
 
-Height 40px, padding 0 24px, border-radius 200px (fully pill). Background #1a73e8, text white, Google Sans Text 14px weight 500. No border. Hover/pressed: background shifts to #1967d2. One per viewport maximum — pair with a ghost button for secondary actions.
+A rectangular button. Background: Ink (#101010). Text: White (#ffffff). Font: Cal Sans UI at 14px. Radius: 8px. Padding: ~8px 16px.
 
-### Ghost Pill Button
-**Role:** Secondary interactive element — pairs with the filled button to offer an alternative path
+### Tag Button
+**Role:** Small, non-critical buttons for categorizing or filtering content.
 
-Same dimensions as the filled pill (40px height, 200px radius, 0 24px padding) but background is transparent, border 1px solid #dadce0, text #1a73e8. Hover: background #f8f9fa, border #1a73e8.
+A small pill button. Background: Paper (#f4f4f4) or Silver (#e5e7eb). Text: Graphite (#242424). Radius: 9999px. Padding: ~4px 12px.
 
-### Breadcrumb Trail
-**Role:** Path indicator below nav showing page hierarchy
+### Scheduling Widget Card
+**Role:** The hero component showcasing the product's core functionality.
 
-Left-aligned, 12px Google Sans Text weight 400 in #5f6368. Segments separated by '›' glyph in #5f6368. Current page segment in #202124 weight 500. Vertical padding 16px above and below.
+Background: White (#ffffff). Padding: 16px. Radius: 12px. Shadow: `rgba(36, 36, 36, 0.05) 0px 4px 8px 0px`. Contains an interactive calendar UI.
 
-### Hero Section
-**Role:** Page-level introduction with brand mark, headline, description, and action pair
+### Navigation Link
+**Role:** Links in the main site header.
 
-Centered, max-width 800px for the text block. Vertical padding 80px top, 64px bottom. Brand mark (small product icon + name) sits 32px above headline. Display headline: 80px Google Sans Display weight 400, #202124, letter-spacing -0.8px, two lines max. Description: 18px Google Sans Text weight 400, #5f6368, max-width 640px, 24px margin-top. Action pair: filled pill + ghost pill, 16px gap, 32px margin-top from description.
-
-### Feature Showcase Card
-**Role:** Two-column side-by-side panels showing product capabilities with embedded UI screenshots
-
-Equal-width columns, 24px gap. Each card: border-radius 24px, padding 0 (the product screenshot bleeds to the card edge with a 8px inset for the inner caption). Top half: product UI screenshot with a soft blue-to-transparent gradient background (#1a73e8 at 8% opacity fading down). Bottom half: white background with 32px padding, heading 22px weight 500 #202124, body 16px #5f6368, and a text link with arrow at the bottom in #1a73e8.
-
-### Tab Switcher
-**Role:** Horizontal filter control to switch between feature categories
-
-Inline row of three text labels (Personalize learning, Simplify everyday tasks, Gain insights and visibility) in a single pill container. Container: border-radius 9999px, border 1px #dadce0, background white, padding 4px. Active tab: background #f8f9fa, border-radius 9999px inset, text #202124 weight 500. Inactive: #5f6368 weight 400. No background fill on the active state — just a subtle gray pill within a gray pill.
-
-### Inline Text Link
-**Role:** Hyperlink within body copy and as standalone call-to-action labels
-
-Google Sans Text, inherits size from surrounding text. Color #1a73e8. Underline 1px, underline-offset 2px. Hover: color #1967d2. Used for 'Try now', 'Learn more', breadcrumb links, and in-body references.
-
-### Product Brand Mark
-**Role:** Small icon-and-label combination identifying a Google product within the Education ecosystem
-
-32×32px rounded square icon (border-radius 8px) paired with product name in 18px Google Sans Display weight 500 #202124. 12px gap between icon and label. Vertically centered as a group.
-
-### Modal Dialog
-**Role:** Overlay for region selection, confirmations, and focused tasks
-
-Centered on scrim background (rgba(32, 33, 36, 0.5)). Card: 480px max-width, background white, border-radius 8px, no shadow — separation comes from the scrim alone. Header: product name with 32px icon at left, close (X) at right in #5f6368. Body: 16px #3c4043, 24px padding. Footer: right-aligned action pair (text link 'Stay here' + filled pill 'Go'), 16px gap, 24px padding.
-
-### Search Icon Button
-**Role:** Compact utility trigger in the nav for site search
-
-40×40px, border-radius 50%. Transparent background, 24px magnifying-glass glyph in #5f6368. Hover: background #f8f9fa, glyph #202124. No border.
-
-### Section Divider
-**Role:** Visual break between page bands without adding a hard line
-
-Whitespace-only divider. 64–80px vertical gap between content blocks. If a line is needed, use 1px #dadce0 spanning the full container width.
+Text-only link. Color: Graphite (#242424). Font: Cal Sans UI at 14-16px. No underline.
 
 ## Do's and Don'ts
 
 ### Do
-- Use 200px border-radius on all filled and ghost buttons to maintain the pill shape that defines the system
-- Set display headlines at 80px with -0.8px letter-spacing and 1.09 line-height — tight tracking at scale is the signature
-- Apply positive letter-spacing to body text: 0.272px at 16px, 0.432px at 12px — tracking opens as size shrinks
-- Use #1a73e8 for all interactive blue — links, icons, filled buttons, tab indicators, and active nav underlines
-- Separate sections with 64–80px of whitespace, not divider lines — the canvas is uniform, rhythm comes from spacing
-- Set card radii to 24–28px for feature panels and 8px for modals — the gap between these two radii is intentional
-- Default to weight 400 for body and weight 500 for emphasis — never use 700 in body copy
+- Use 'Cal Sans' weight 600 exclusively for headings (size 20px and above).
+- Employ a strict monochrome palette (Ink, Graphite, Slate, Paper, White) for 99% of the UI.
+- Use pill-shaped buttons (9999px radius) for all primary and secondary page CTAs.
+- Apply a 12px border radius to all content cards and large containers.
+- Use subtle, diffuse shadows (`rgba(36, 36, 36, 0.05) 0px 4px 8px 0px`) for elevation.
+- Set body copy in 'Cal Sans UI Variable Light' with tight negative letter-spacing.
+- Reserve the single 'Action Blue' (#0099ff) for secondary links or informational highlights.
 
 ### Don't
-- Do not introduce shadows on cards or panels — elevation comes from surface color shifts, not box-shadow
-- Do not use more than one filled button per viewport — pair with a ghost pill for secondary actions
-- Do not use green (#188038) outside the Classroom brand mark and explicit success states — it is not a generic accent
-- Do not use #1a73e8 for decorative backgrounds or large surface fills — it is an interactive color, reserve it for state
-- Do not set display headlines above 80px or use weight 700 in headlines — the 80px weight-400 display is the ceiling
-- Do not add gradients — the system is flat; the only color variation is the soft #e8f0fe tint behind product screenshots
-- Do not use letter-spacing below 0 on body text — negative tracking is reserved for 22px and above
-
-## Surfaces
-
-| Level | Name | Value | Purpose |
-|-------|------|-------|---------|
-| 0 | Canvas | `#f8f9fa` | Page background — the soft off-white that prevents glare against white product screenshots |
-| 1 | Card Surface | `#ffffff` | Feature cards, modal dialogs, embedded UI containers — true white to lift content off the canvas |
-| 2 | Feature Panel Tint | `#e8f0fe` | Soft blue wash behind product screenshots in feature cards — ties the product UI to the brand accent |
-| 3 | Scrim | `#20212480` | Modal overlay background — dims the page to focus attention |
+- Do not introduce any new colors to the core UI; confine color to logos and the single blue accent.
+- Do not use sharp corners on buttons or cards.
+- Do not use font weights heavier than 600.
+- Do not use traditional outlined buttons; use either solid 'Ink' or 'ghost' pill buttons.
+- Do not use gradients on any buttons or card backgrounds.
+- Do not use borders on cards; use shadows for separation.
+- Do not set body text in 'Cal Sans'; it is for headlines only.
 
 ## Elevation
 
-The system uses almost no shadow. Elevation is communicated through surface color shifts (canvas #f8f9fa → card white) and the scrim layer behind modals. The one shadow value detected (#c4c6c7) appears only on focused input fields, where a soft outer ring communicates active state without adding visual weight to the page.
+- **Feature Card, Scheduling Widget:** `rgba(36, 36, 36, 0.05) 0px 4px 8px 0px`
+- **Hover/Focus Card:** `rgba(36, 36, 36, 0.7) 0px 1px 5px -4px, rgba(36, 36, 36, 0.05) 0px 4px 8px 0px`
 
 ## Imagery
 
-Imagery is product-screenshot-first: full-bleed captures of the actual Classroom interface rendered as the hero of each feature card, with a soft blue tint behind them to integrate with the page. No lifestyle photography, no stock illustrations, no decorative abstract graphics. Icons are flat, monochromatic, and geometric — Google Material outlined style at 1.5px stroke weight. The visual language is 'show the product' rather than 'illustrate the concept': every image is a literal screen of the software doing its job.
+The visual language is entirely product-centric and informational. Imagery consists solely of clean, isolated product UI screenshots and the logos of integration partners. There is no lifestyle photography, illustration, or abstract graphics. This choice reinforces the brand's focus on its functional capabilities, letting the product itself be the hero. All visual elements are presented within contained cards, never full-bleed, maintaining the page's orderly, grid-based structure.
 
 ## Layout
 
-Max-width 1200px centered container with 24px horizontal padding. Hero is a centered single-column stack (brand mark → display headline → description → action pair) with generous vertical breathing room (80px top, 64px bottom). Feature sections use a two-column equal grid with 24px gap, each card stacking a product screenshot over a text block. A horizontal tab switcher separates feature blocks. No sidebar, no asymmetric hero, no full-bleed imagery — everything sits inside the centered container against a uniform canvas. Navigation is a single sticky top bar; no mega-menu, no secondary nav row. The overall rhythm is: hero → feature pair → tab switcher → feature pair → repeating — each band separated by 64–80px of whitespace rather than dividers.
+The site uses a centered layout within a max-width of 1200px, creating generous breathing room on either side. Sections are clearly demarcated by 96px of vertical space, establishing a calm, deliberate rhythm. The hero combines a large headline stack with a prominent product UI visual. Content below follows a predictable pattern of centered headlines followed by 3-column feature card grids or alternating text-and-visual blocks. This simple, highly structured approach emphasizes clarity and ease of navigation.
 
 ## Agent Prompt Guide
 
-Quick Color Reference:
-- text primary: #202124
-- text secondary: #3c4043
-- text muted: #5f6368
-- background: #f8f9fa
-- border: #dadce0
-- accent: #1a73e8
-- primary action: no distinct CTA color
+### Quick Color Reference
+- **Page Background:** `#f4f4f4` (Paper)
+- **Card Background:** `#ffffff` (White)
+- **Headline Text:** `#242424` (Graphite)
+- **Body Text:** `#242424` (Graphite)
+- **Primary CTA:** `#101010` (Ink) background, `#ffffff` (White) text
+- **Borders/Dividers:** `#e5e7eb` (Silver)
 
-Example Component Prompts:
-
-1. Build a hero section. Background #f8f9fa, centered text block max-width 800px, padding 80px top / 64px bottom. Small product brand mark (32px icon + 18px Google Sans Display weight 500 #202124 label) at top. Display headline 80px Google Sans Display weight 400 #202124 letter-spacing -0.8px, two lines. Description 18px Google Sans Text weight 400 #5f6368, max-width 640px, 24px margin-top. Below: a filled pill (height 40px, radius 200px, background #1a73e8, white 14px weight 500 text) paired with a ghost pill (same size, transparent background, 1px #dadce0 border, #1a73e8 text), 16px gap, 32px margin-top from description.
-
-2. Build a feature showcase card. Two equal-width columns side by side, 24px gap. Each card: border-radius 24px, no border, no shadow. Top half: product UI screenshot image, full-bleed to the card edges, set against a #e8f0fe background tint. Bottom half: white background, 32px padding all sides. Heading 22px Google Sans Display weight 500 #202124, 8px margin-bottom. Body 16px Google Sans Text weight 400 #5f6368. Bottom-left: inline text link in #1a73e8 with right-arrow glyph.
-
-3. Build a tab switcher. Inline row inside a pill container (border-radius 9999px, 1px #dadce0 border, white background, 4px padding). Three tab labels in 14px Google Sans Text. Active tab: background #f8f9fa, text #202124 weight 500, border-radius 9999px. Inactive: #5f6368 weight 400, no background. Tabs separated only by the container padding, no internal dividers.
-
-4. Build a breadcrumb trail. 12px Google Sans Text weight 400 #5f6368. Segments separated by '›' glyph in #5f6368 with 8px horizontal margin. Current (last) segment in #202124 weight 500. Clickable segments colored #1a73e8. Container padding 16px vertical.
-
-5. Build a modal dialog. Centered on a scrim (rgba(32, 33, 36, 0.5)). Card: max-width 480px, white background, border-radius 8px, no shadow. Header: 32px product icon left-aligned with 18px product name in Google Sans Display weight 500 #202124, 24px padding, close X icon at right in #5f6368. Body: 16px #3c4043 text, 24px padding. Footer: right-aligned text link 'Stay here' in #1a73e8 paired with filled pill 'Go' (background #1a73e8, white text, 200px radius, 0 24px padding, 40px height), 16px gap, 24px padding.
+### Example Component Prompts
+1.  **Hero Section:** "Create a hero section with a `#f4f4f4` background. On the left, add a headline 'The better way to schedule' using 'Cal Sans' at 64px, weight 600, color `#242424`, and line-height 1.1. Below it, add body text using 'Cal Sans UI' at 18px, color `#6b7280'. On the right, place a large card with a white background, 12px radius, and a subtle shadow `rgba(36, 36, 36, 0.05) 0px 4px 8px 0px` to represent a scheduling widget."
+2.  **Primary CTA Button:** "Create a button with the text 'Get started'. Make it pill-shaped with a `9999px` radius. Use a `#101010` background color and `#ffffff` text color. The font should be 'Cal Sans UI' at 16px. Use padding of 12px top/bottom and 24px left/right."
+3.  **Feature Card:** "Create a feature card with a `#ffffff` background, `24px` padding, a `12px` border radius, and a `rgba(36, 36, 36, 0.05) 0px 4px 8px 0px` box shadow. Inside, add a small numbered tag, a heading 'Connect your calendar' in 'Cal Sans' at 20px, and body text 'We'll handle all the cross-referencing' in 'Cal Sans UI' at 16px."
 
 ## Similar Brands
 
-- **Notion** — Same restrained single-accent approach — near-white canvas, one chromatic voice (blue for Notion, Google blue here), generous whitespace, and pill-shaped controls
-- **Apple Education** — Both center on large tightly-tracked display headlines, use product screenshots as feature heroes, and keep the chrome almost invisible with a single-color nav bar
-- **Figma** — Share the 'product-as-hero' visual logic — no decorative imagery, embedded UI screenshots carry the visual weight, and color is purely functional
-- **Linear** — Both rely on tight typographic hierarchy and a narrow gray scale, with one brand color that appears only on interactive elements and icons
-- **Microsoft Education** — Same light-canvas, large-headline hero pattern and product-screenshot feature cards, though Microsoft uses a broader accent palette
+- **Calendly** — Direct competitor with a similar clean, utility-focused scheduling UI, but uses more color.
+- **Linear** — Shares the disciplined monochrome palette, precision typography, and subtle shadows.
+- **Vercel** — Similar use of a geometric sans-serif for headlines (Geist) against a stark black-and-white UI.
+- **Pitch** — Employs a custom slab-serif for identity and relies on a clean, card-based layout with a primarily B&W palette.
 
 ## Quick Start
 
@@ -237,94 +214,104 @@ Example Component Prompts:
 ```css
 :root {
   /* Colors */
-  --color-canvas-white: #f8f9fa;
-  --color-charcoal-ink: #202124;
-  --color-graphite: #3c4043;
-  --color-slate: #5f6368;
-  --color-mist: #dadce0;
-  --color-cloud-shadow: #c4c6c7;
-  --color-google-blue: #1a73e8;
-  --color-google-blue-deep: #1967d2;
-  --color-classroom-green: #188038;
+  --color-ink: #101010;
+  --color-action-blue: #0099ff;
+  --color-white: #ffffff;
+  --color-paper: #f4f4f4;
+  --color-graphite: #242424;
+  --color-slate: #6b7280;
+  --color-stone: #898989;
+  --color-silver: #e5e7eb;
+  --color-info-banner-bg: #eff6fe;
+  --color-google-blue: #4285f4;
+  --color-google-yellow: #fbbc04;
+  --color-google-green: #34a853;
+  --color-google-red: #ea4335;
 
   /* Typography — Font Families */
-  --font-google-sans-display: 'Google Sans Display', ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-  --font-google-sans-text: 'Google Sans Text', ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  --font-cal-sans: 'Cal Sans', ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  --font-cal-sans-ui-variable-light: 'Cal Sans UI Variable Light', ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  --font-inter: 'Inter', ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  --font-matter: 'Matter', ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
 
   /* Typography — Scale */
   --text-caption: 12px;
-  --leading-caption: 1.5;
-  --tracking-caption: 0.432px;
+  --leading-caption: 1.4;
+  --tracking-caption: -0.24px;
   --text-body-sm: 14px;
   --leading-body-sm: 1.5;
-  --tracking-body-sm: 0.238px;
+  --tracking-body-sm: -0.2px;
   --text-body: 16px;
-  --leading-body: 1.56;
-  --tracking-body: 0.272px;
+  --leading-body: 1.5;
+  --tracking-body: -0.19px;
   --text-subheading: 18px;
-  --leading-subheading: 1.67;
-  --tracking-subheading: 0.108px;
-  --text-heading-sm: 22px;
-  --leading-heading-sm: 1.29;
-  --tracking-heading-sm: -0.132px;
-  --text-heading: 28px;
-  --leading-heading: 1.2;
-  --tracking-heading: -0.168px;
+  --leading-subheading: 1.4;
+  --tracking-subheading: -0.2px;
+  --text-heading-sm: 20px;
+  --leading-heading-sm: 1.3;
+  --tracking-heading-sm: 0.2px;
+  --text-heading: 24px;
+  --leading-heading: 1.3;
+  --tracking-heading: 0.24px;
   --text-heading-lg: 48px;
-  --leading-heading-lg: 1.15;
-  --tracking-heading-lg: -0.288px;
-  --text-display: 80px;
-  --leading-display: 1.09;
-  --tracking-display: -0.8px;
+  --leading-heading-lg: 1.1;
+  --tracking-heading-lg: 0.48px;
+  --text-display: 64px;
+  --leading-display: 1.1;
+  --tracking-display: 0.64px;
 
   /* Typography — Weights */
   --font-weight-light: 300;
   --font-weight-regular: 400;
   --font-weight-medium: 500;
-  --font-weight-bold: 700;
+  --font-weight-semibold: 600;
 
   /* Spacing */
-  --spacing-unit: 8px;
+  --spacing-4: 4px;
+  --spacing-5: 5px;
+  --spacing-6: 6px;
   --spacing-8: 8px;
+  --spacing-10: 10px;
+  --spacing-12: 12px;
   --spacing-16: 16px;
+  --spacing-20: 20px;
   --spacing-24: 24px;
+  --spacing-28: 28px;
   --spacing-32: 32px;
   --spacing-40: 40px;
   --spacing-48: 48px;
   --spacing-80: 80px;
-  --spacing-88: 88px;
-  --spacing-120: 120px;
-  --spacing-216: 216px;
 
   /* Layout */
   --page-max-width: 1200px;
-  --section-gap: 64-80px;
-  --card-padding: 32-40px;
-  --element-gap: 8-16px;
+  --section-gap: 96px;
+  --card-padding: 24px;
 
   /* Border Radius */
   --radius-md: 4px;
   --radius-lg: 8px;
+  --radius-xl: 12px;
   --radius-2xl: 16px;
-  --radius-2xl-2: 20px;
-  --radius-3xl: 24px;
-  --radius-3xl-2: 28px;
-  --radius-full: 200px;
-  --radius-full-2: 300px;
+  --radius-3xl: 29px;
+  --radius-full: 100px;
+  --radius-full-2: 120px;
+  --radius-full-3: 1000px;
+  --radius-full-4: 9999px;
 
   /* Named Radii */
-  --radius-cards: 24-28px;
-  --radius-chips: 9999px;
-  --radius-links: 4px;
-  --radius-inputs: 4px;
-  --radius-buttons: 200px (pill);
-  --radius-navitems: 8px;
+  --radius-tags: 9999px;
+  --radius-cards: 12px;
+  --radius-inputs: 8px;
+  --radius-buttons: 9999px (pills), 8px (rectangular);
 
-  /* Surfaces */
-  --surface-canvas: #f8f9fa;
-  --surface-card-surface: #ffffff;
-  --surface-feature-panel-tint: #e8f0fe;
-  --surface-scrim: #20212480;
+  /* Shadows */
+  --shadow-sm: rgba(36, 36, 36, 0.7) 0px 1px 5px -4px, rgba(36, 36, 36, 0.05) 0px 4px 8px 0px;
+  --shadow-subtle: rgba(255, 255, 255, 0.15) 0px 2px 0px 0px inset;
+  --shadow-sm-2: rgba(19, 19, 22, 0.7) 0px 1px 5px -4px, rgba(34, 42, 53, 0.1) 0px 0px 0px 1px, rgba(34, 42, 53, 0.05) 0px 4px 8px 0px;
+  --shadow-sm-3: rgba(19, 19, 22, 0.7) 0px 1px 5px -4px, rgba(34, 42, 53, 0.08) 0px 0px 0px 1px, rgba(34, 42, 53, 0.05) 0px 4px 8px 0px;
+  --shadow-sm-4: rgba(34, 42, 53, 0.05) 0px 4px 8px 0px;
+  --shadow-subtle-2: rgb(255, 255, 255) 0px 2px 0px 0px inset;
+  --shadow-subtle-3: rgba(0, 0, 0, 0.1) 0px 1px 3px 0px, rgba(0, 0, 0, 0.06) 0px 0px 2px 0px;
 }
 ```
 
@@ -333,66 +320,86 @@ Example Component Prompts:
 ```css
 @theme {
   /* Colors */
-  --color-canvas-white: #f8f9fa;
-  --color-charcoal-ink: #202124;
-  --color-graphite: #3c4043;
-  --color-slate: #5f6368;
-  --color-mist: #dadce0;
-  --color-cloud-shadow: #c4c6c7;
-  --color-google-blue: #1a73e8;
-  --color-google-blue-deep: #1967d2;
-  --color-classroom-green: #188038;
+  --color-ink: #101010;
+  --color-action-blue: #0099ff;
+  --color-white: #ffffff;
+  --color-paper: #f4f4f4;
+  --color-graphite: #242424;
+  --color-slate: #6b7280;
+  --color-stone: #898989;
+  --color-silver: #e5e7eb;
+  --color-info-banner-bg: #eff6fe;
+  --color-google-blue: #4285f4;
+  --color-google-yellow: #fbbc04;
+  --color-google-green: #34a853;
+  --color-google-red: #ea4335;
 
   /* Typography */
-  --font-google-sans-display: 'Google Sans Display', ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-  --font-google-sans-text: 'Google Sans Text', ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  --font-cal-sans: 'Cal Sans', ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  --font-cal-sans-ui-variable-light: 'Cal Sans UI Variable Light', ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  --font-inter: 'Inter', ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  --font-matter: 'Matter', ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
 
   /* Typography — Scale */
   --text-caption: 12px;
-  --leading-caption: 1.5;
-  --tracking-caption: 0.432px;
+  --leading-caption: 1.4;
+  --tracking-caption: -0.24px;
   --text-body-sm: 14px;
   --leading-body-sm: 1.5;
-  --tracking-body-sm: 0.238px;
+  --tracking-body-sm: -0.2px;
   --text-body: 16px;
-  --leading-body: 1.56;
-  --tracking-body: 0.272px;
+  --leading-body: 1.5;
+  --tracking-body: -0.19px;
   --text-subheading: 18px;
-  --leading-subheading: 1.67;
-  --tracking-subheading: 0.108px;
-  --text-heading-sm: 22px;
-  --leading-heading-sm: 1.29;
-  --tracking-heading-sm: -0.132px;
-  --text-heading: 28px;
-  --leading-heading: 1.2;
-  --tracking-heading: -0.168px;
+  --leading-subheading: 1.4;
+  --tracking-subheading: -0.2px;
+  --text-heading-sm: 20px;
+  --leading-heading-sm: 1.3;
+  --tracking-heading-sm: 0.2px;
+  --text-heading: 24px;
+  --leading-heading: 1.3;
+  --tracking-heading: 0.24px;
   --text-heading-lg: 48px;
-  --leading-heading-lg: 1.15;
-  --tracking-heading-lg: -0.288px;
-  --text-display: 80px;
-  --leading-display: 1.09;
-  --tracking-display: -0.8px;
+  --leading-heading-lg: 1.1;
+  --tracking-heading-lg: 0.48px;
+  --text-display: 64px;
+  --leading-display: 1.1;
+  --tracking-display: 0.64px;
 
   /* Spacing */
+  --spacing-4: 4px;
+  --spacing-5: 5px;
+  --spacing-6: 6px;
   --spacing-8: 8px;
+  --spacing-10: 10px;
+  --spacing-12: 12px;
   --spacing-16: 16px;
+  --spacing-20: 20px;
   --spacing-24: 24px;
+  --spacing-28: 28px;
   --spacing-32: 32px;
   --spacing-40: 40px;
   --spacing-48: 48px;
   --spacing-80: 80px;
-  --spacing-88: 88px;
-  --spacing-120: 120px;
-  --spacing-216: 216px;
 
   /* Border Radius */
   --radius-md: 4px;
   --radius-lg: 8px;
+  --radius-xl: 12px;
   --radius-2xl: 16px;
-  --radius-2xl-2: 20px;
-  --radius-3xl: 24px;
-  --radius-3xl-2: 28px;
-  --radius-full: 200px;
-  --radius-full-2: 300px;
+  --radius-3xl: 29px;
+  --radius-full: 100px;
+  --radius-full-2: 120px;
+  --radius-full-3: 1000px;
+  --radius-full-4: 9999px;
+
+  /* Shadows */
+  --shadow-sm: rgba(36, 36, 36, 0.7) 0px 1px 5px -4px, rgba(36, 36, 36, 0.05) 0px 4px 8px 0px;
+  --shadow-subtle: rgba(255, 255, 255, 0.15) 0px 2px 0px 0px inset;
+  --shadow-sm-2: rgba(19, 19, 22, 0.7) 0px 1px 5px -4px, rgba(34, 42, 53, 0.1) 0px 0px 0px 1px, rgba(34, 42, 53, 0.05) 0px 4px 8px 0px;
+  --shadow-sm-3: rgba(19, 19, 22, 0.7) 0px 1px 5px -4px, rgba(34, 42, 53, 0.08) 0px 0px 0px 1px, rgba(34, 42, 53, 0.05) 0px 4px 8px 0px;
+  --shadow-sm-4: rgba(34, 42, 53, 0.05) 0px 4px 8px 0px;
+  --shadow-subtle-2: rgb(255, 255, 255) 0px 2px 0px 0px inset;
+  --shadow-subtle-3: rgba(0, 0, 0, 0.1) 0px 1px 3px 0px, rgba(0, 0, 0, 0.06) 0px 0px 2px 0px;
 }
 ```

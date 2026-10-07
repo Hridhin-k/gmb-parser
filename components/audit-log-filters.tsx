@@ -2,6 +2,11 @@
 
 import { useRouter, usePathname, useSearchParams } from "next/navigation";
 import { useCallback } from "react";
+import { useScopedTransition } from "@/components/transition-scope";
+import { ClearFiltersButton } from "@/components/clear-filters-button";
+import { DateRangeFilter } from "@/components/date-range-filter";
+import { SelectField } from "@/components/ui/select-field";
+import type { DateRangeKey } from "@/lib/date-range";
 
 interface Option {
   value: string;
@@ -12,22 +17,17 @@ interface AuditLogFiltersProps {
   currentAction: string;
   currentUser: string;
   currentEntity: string;
-  currentFrom: string;
-  currentTo: string;
+  currentRange: { key: DateRangeKey; from: string; to: string };
   actionOptions: Option[];
   entityOptions: Option[];
   memberOptions: Option[];
 }
 
-const FIELD =
-  "h-10 w-full rounded-full border border-[#dadce0] bg-white px-4 text-sm text-[#202124] focus:border-[#1a73e8] focus:outline-none focus:ring-2 focus:ring-[#e8f0fe] sm:w-auto";
-
 export function AuditLogFilters({
   currentAction,
   currentUser,
   currentEntity,
-  currentFrom,
-  currentTo,
+  currentRange,
   actionOptions,
   entityOptions,
   memberOptions,
@@ -35,100 +35,58 @@ export function AuditLogFilters({
   const router = useRouter();
   const pathname = usePathname();
   const searchParams = useSearchParams();
+  const { start: startTransition } = useScopedTransition();
 
-  const updateParam = useCallback(
-    (key: string, value: string) => {
+  const updateParams = useCallback(
+    (changes: Record<string, string | null>) => {
       const params = new URLSearchParams(searchParams.toString());
-      if (value) params.set(key, value);
-      else params.delete(key);
-      router.push(`${pathname}?${params.toString()}`);
+      for (const [key, value] of Object.entries(changes)) {
+        if (value) params.set(key, value);
+        else params.delete(key);
+      }
+      startTransition(() => router.push(`${pathname}?${params.toString()}`));
     },
-    [router, pathname, searchParams]
+    [router, pathname, searchParams, startTransition]
   );
+  const updateParam = (key: string, value: string) => updateParams({ [key]: value });
 
   const hasFilters =
-    currentAction || currentUser || currentEntity || currentFrom || currentTo;
+    currentAction || currentUser || currentEntity || currentRange.key !== "all";
 
   return (
     <div className="grid grid-cols-1 gap-2 sm:flex sm:flex-wrap sm:items-center">
-      <select
+      <SelectField
+        label="Filter by action"
         value={currentAction}
-        onChange={(e) => updateParam("action", e.target.value)}
-        className={FIELD}
-        aria-label="Filter by action"
-      >
-        <option value="">All actions</option>
-        {actionOptions.map((o) => (
-          <option key={o.value} value={o.value}>
-            {o.label}
-          </option>
-        ))}
-      </select>
+        placeholder="All actions"
+        className="sm:w-auto"
+        onValueChange={(next) => updateParam("action", next)}
+        options={[{ value: "", label: "All actions" }, ...actionOptions]}
+      />
 
-      <select
+      <SelectField
+        label="Filter by item type"
         value={currentEntity}
-        onChange={(e) => updateParam("entity", e.target.value)}
-        className={FIELD}
-        aria-label="Filter by item type"
-      >
-        <option value="">All items</option>
-        {entityOptions.map((o) => (
-          <option key={o.value} value={o.value}>
-            {o.label}
-          </option>
-        ))}
-      </select>
+        placeholder="All items"
+        className="sm:w-auto"
+        onValueChange={(next) => updateParam("entity", next)}
+        options={[{ value: "", label: "All items" }, ...entityOptions]}
+      />
 
       {memberOptions.length > 1 && (
-        <select
+        <SelectField
+          label="Filter by team member"
           value={currentUser}
-          onChange={(e) => updateParam("user", e.target.value)}
-          className={FIELD}
-          aria-label="Filter by team member"
-        >
-          <option value="">Everyone</option>
-          {memberOptions.map((o) => (
-            <option key={o.value} value={o.value}>
-              {o.label}
-            </option>
-          ))}
-        </select>
+          placeholder="Everyone"
+          className="sm:w-auto"
+          onValueChange={(next) => updateParam("user", next)}
+          options={[{ value: "", label: "Everyone" }, ...memberOptions]}
+        />
       )}
 
-      <div className="flex items-center gap-2">
-        <label className="text-xs font-medium text-[#5f6368]" htmlFor="audit-from">
-          From
-        </label>
-        <input
-          id="audit-from"
-          type="date"
-          value={currentFrom}
-          onChange={(e) => updateParam("from", e.target.value)}
-          className={FIELD}
-        />
-      </div>
-      <div className="flex items-center gap-2">
-        <label className="text-xs font-medium text-[#5f6368]" htmlFor="audit-to">
-          To
-        </label>
-        <input
-          id="audit-to"
-          type="date"
-          value={currentTo}
-          onChange={(e) => updateParam("to", e.target.value)}
-          className={FIELD}
-        />
-      </div>
+      <DateRangeFilter value={currentRange} defaultKey="all" onChange={updateParams} />
 
-      {hasFilters && (
-        <button
-          type="button"
-          onClick={() => router.push(pathname)}
-          className="h-10 rounded-full px-3 text-sm font-medium text-[#1a73e8] hover:text-[#1967d2]"
-        >
-          Clear filters
-        </button>
-      )}
+      {hasFilters && <ClearFiltersButton onClear={() => startTransition(() => router.push(pathname))} />}
     </div>
   );
 }

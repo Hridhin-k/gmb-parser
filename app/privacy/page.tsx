@@ -16,7 +16,7 @@ export default function PrivacyPage() {
       </p>
 
       <section>
-        <h2 style={{ fontFamily: "var(--font-google-sans-display), sans-serif" }}>
+        <h2 style={{ fontFamily: "var(--font-heading), sans-serif" }}>
           Two Google accounts
         </h2>
         <p className="mt-3">
@@ -40,7 +40,7 @@ export default function PrivacyPage() {
       </section>
 
       <section>
-        <h2 style={{ fontFamily: "var(--font-google-sans-display), sans-serif" }}>
+        <h2 style={{ fontFamily: "var(--font-heading), sans-serif" }}>
           What we store
         </h2>
         <ul>
@@ -77,7 +77,7 @@ export default function PrivacyPage() {
       </section>
 
       <section>
-        <h2 style={{ fontFamily: "var(--font-google-sans-display), sans-serif" }}>
+        <h2 style={{ fontFamily: "var(--font-heading), sans-serif" }}>
           AI
         </h2>
         <p className="mt-3">
@@ -117,7 +117,7 @@ export default function PrivacyPage() {
       </section>
 
       <section>
-        <h2 style={{ fontFamily: "var(--font-google-sans-display), sans-serif" }}>
+        <h2 style={{ fontFamily: "var(--font-heading), sans-serif" }}>
           Who can see it
         </h2>
         <ul>
@@ -141,7 +141,7 @@ export default function PrivacyPage() {
       </section>
 
       <section>
-        <h2 style={{ fontFamily: "var(--font-google-sans-display), sans-serif" }}>
+        <h2 style={{ fontFamily: "var(--font-heading), sans-serif" }}>
           How long it stays
         </h2>
         <p className="mt-3">
@@ -155,7 +155,7 @@ export default function PrivacyPage() {
       </section>
 
       <section>
-        <h2 style={{ fontFamily: "var(--font-google-sans-display), sans-serif" }}>
+        <h2 style={{ fontFamily: "var(--font-heading), sans-serif" }}>
           Your choices
         </h2>
         <ul>
@@ -168,7 +168,7 @@ export default function PrivacyPage() {
         <p className="mt-3">
           To ask what a workspace holds, or to ask for it to be removed,
           email{" "}
-          <a className="font-medium text-[#1a73e8]" href="mailto:hridhin@explaineddigital.com">
+          <a className="font-medium text-ink underline decoration-stone/50 underline-offset-4 hover:decoration-ink" href="mailto:hridhin@explaineddigital.com">
             hridhin@explaineddigital.com
           </a>
           . If you were invited, the workspace owner can also see the same

@@ -1,8 +1,7 @@
 import { createAdminClient } from "@/lib/supabase/admin";
 import { UNASSIGNED_CLIENT_MARKER } from "@/lib/services/unassigned-client";
-
-export const TREND_PERIODS = [3, 6, 12] as const;
-export type TrendPeriod = (typeof TREND_PERIODS)[number];
+import { locationDisplayName } from "@/lib/ui/location-place";
+import { previousDateRange, type DateRange } from "@/lib/date-range";
 
 export interface TrendMonth {
   month: string;
@@ -26,8 +25,16 @@ export interface TrendSummary {
 export interface AnalyticsData {
   months: TrendMonth[];
   current: TrendSummary;
-  previous: TrendSummary;
+  /** null for all-time ranges, which have nothing before them to compare. */
+  previous: TrendSummary | null;
   clients: Array<{ id: string; name: string }>;
+  locations: AnalyticsLocation[];
+}
+
+export interface AnalyticsLocation {
+  id: string;
+  clientId: string;
+  name: string;
 }
 
 function summarize(months: TrendMonth[]): TrendSummary {
@@ -58,40 +65,18 @@ function summarize(months: TrendMonth[]): TrendSummary {
   };
 }
 
-/**
- * Monthly review trends for the last `period` months, plus the same-length
- * period before it for comparison. One RPC call covers both windows.
- */
-export async function getAnalyticsData(
-  workspaceId: string,
-  period: TrendPeriod,
-  clientId: string | null
-): Promise<AnalyticsData> {
-  const admin = createAdminClient();
+type TrendRow = {
+  month: string;
+  review_count: number;
+  avg_rating: number | null;
+  negative: number;
+  positive: number;
+  replied: number;
+  avg_response_hours: number | null;
+};
 
-  const [trends, clientsResult] = await Promise.all([
-    admin.rpc("grm_review_trends", {
-      p_workspace_id: workspaceId,
-      p_months: period * 2,
-      p_client_id: clientId,
-    }),
-    admin
-      .from("grm_clients")
-      .select("id, name")
-      .eq("workspace_id", workspaceId)
-      .eq("is_active", true)
-      .or(`notes.is.null,notes.neq.${UNASSIGNED_CLIENT_MARKER}`)
-      .order("name"),
-  ]);
-
-  if (trends.error) {
-    throw new Error(`Failed to load review trends: ${trends.error.message}`);
-  }
-  if (clientsResult.error) {
-    throw new Error(`Failed to load clients: ${clientsResult.error.message}`);
-  }
-
-  const all: TrendMonth[] = (trends.data ?? []).map((row) => ({
+function toMonths(rows: TrendRow[] | null): TrendMonth[] {
+  return (rows ?? []).map((row) => ({
     month: row.month,
     reviewCount: row.review_count,
     avgRating: row.avg_rating === null ? null : Number(row.avg_rating),
@@ -101,14 +86,91 @@ export async function getAnalyticsData(
     replied: row.replied,
     avgResponseHours: row.avg_response_hours === null ? null : Number(row.avg_response_hours),
   }));
+}
 
-  const months = all.slice(-period);
-  const previousMonths = all.slice(0, Math.max(0, all.length - period));
+/**
+ * Monthly review trends for `range`, plus the same-length window just before
+ * it for comparison (none for all time).
+ */
+export async function getAnalyticsData(
+  workspaceId: string,
+  range: DateRange,
+  clientId: string | null,
+  locationId: string | null = null
+): Promise<AnalyticsData> {
+  const admin = createAdminClient();
+  const scope = {
+    p_workspace_id: workspaceId,
+    p_client_id: clientId,
+    p_location_id: locationId,
+  };
+  const previousWindow = previousDateRange(range);
+
+  const [trends, previousTrends, clientsResult, locationsResult] = await Promise.all([
+    admin.rpc("grm_review_trends", {
+      ...scope,
+      p_months: null,
+      p_start: range.start?.toISOString() ?? null,
+      p_end: range.end?.toISOString() ?? null,
+    }),
+    previousWindow
+      ? admin.rpc("grm_review_trends", {
+          ...scope,
+          p_start: previousWindow.start.toISOString(),
+          p_end: previousWindow.end.toISOString(),
+        })
+      : Promise.resolve(null),
+    admin
+      .from("grm_clients")
+      .select("id, name")
+      .eq("workspace_id", workspaceId)
+      .eq("is_active", true)
+      .or(`notes.is.null,notes.neq.${UNASSIGNED_CLIENT_MARKER}`)
+      .order("name"),
+    admin
+      .from("grm_google_locations")
+      .select("id, client_id, location_title, store_code, address_formatted")
+      .eq("workspace_id", workspaceId)
+      .eq("is_active", true)
+      .not("client_id", "is", null),
+  ]);
+
+  if (trends.error) {
+    throw new Error(`Failed to load review trends: ${trends.error.message}`);
+  }
+  if (previousTrends?.error) {
+    throw new Error(`Failed to load earlier review trends: ${previousTrends.error.message}`);
+  }
+  if (clientsResult.error) {
+    throw new Error(`Failed to load clients: ${clientsResult.error.message}`);
+  }
+  if (locationsResult.error) {
+    throw new Error(`Failed to load locations: ${locationsResult.error.message}`);
+  }
+
+  const clients = clientsResult.data ?? [];
+  const clientNames = new Map(clients.map((c) => [c.id, c.name]));
+  const locations: AnalyticsLocation[] = (locationsResult.data ?? [])
+    .filter((l) => l.client_id && clientNames.has(l.client_id))
+    .map((l) => ({
+      id: l.id,
+      clientId: l.client_id!,
+      name: locationDisplayName({
+        title: l.location_title,
+        brand: clientNames.get(l.client_id!),
+        storeCode: l.store_code,
+        address: l.address_formatted,
+      }),
+    }))
+    .sort((a, b) => a.name.localeCompare(b.name));
+
+  const months = toMonths(trends.data);
 
   return {
     months,
     current: summarize(months),
-    previous: summarize(previousMonths),
-    clients: clientsResult.data ?? [],
+    previous: previousTrends ? summarize(toMonths(previousTrends.data)) : null,
+    clients,
+    locations,
   };
 }

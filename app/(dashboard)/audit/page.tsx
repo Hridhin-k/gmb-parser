@@ -4,8 +4,10 @@ import { getWorkspaceRoster } from "@/lib/services/workspace";
 import { PageHeader } from "@/components/page-header";
 import { EmptyState } from "@/components/empty-state";
 import { AuditLogFilters } from "@/components/audit-log-filters";
+import { PendingRegion, TransitionScope } from "@/components/transition-scope";
 import { ClipboardList } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { parseDateRange } from "@/lib/date-range";
 
 const AUDIT_LIMIT = 200;
 
@@ -22,29 +24,56 @@ function formatDate(iso: string): string {
 type Tone = "good" | "bad" | "neutral" | "info";
 
 const ACTION_LABELS: Record<string, { label: string; tone: Tone }> = {
-  "google_connection.created": { label: "Connected a Google account", tone: "good" },
-  "google_connection.failed": { label: "Google connection failed", tone: "bad" },
-  "google_connection.revoked": { label: "Disconnected a Google account", tone: "neutral" },
+  "google_connection.created": {
+    label: "Connected a Google account",
+    tone: "good",
+  },
+  "google_connection.failed": {
+    label: "Google connection failed",
+    tone: "bad",
+  },
+  "google_connection.revoked": {
+    label: "Disconnected a Google account",
+    tone: "neutral",
+  },
   "google_sync.completed": { label: "Imported Google locations", tone: "info" },
   "client.created": { label: "Created a client", tone: "info" },
-  "location.connected": { label: "Assigned a location to a client", tone: "good" },
-  "location.disconnected": { label: "Removed a location from a client", tone: "neutral" },
-  "locations.reset_unassigned": { label: "Reset unassigned locations", tone: "neutral" },
-  "location_insight.generated": { label: "Generated a location insight", tone: "info" },
+  "location.connected": {
+    label: "Assigned a location to a client",
+    tone: "good",
+  },
+  "location.disconnected": {
+    label: "Removed a location from a client",
+    tone: "neutral",
+  },
+  "locations.reset_unassigned": {
+    label: "Reset unassigned locations",
+    tone: "neutral",
+  },
+  "location_insight.generated": {
+    label: "Generated a location insight",
+    tone: "info",
+  },
   "review.sync_started": { label: "Started a review sync", tone: "info" },
   "review.synced": { label: "Synced reviews", tone: "good" },
   "review.sync_failed": { label: "Review sync failed", tone: "bad" },
   "reply.ai_generated": { label: "Generated an AI draft", tone: "info" },
   "reply.edited": { label: "Edited a reply", tone: "info" },
   "reply.approved": { label: "Approved a reply", tone: "good" },
-  "reply.publish_attempted": { label: "Started publishing a reply", tone: "neutral" },
+  "reply.publish_attempted": {
+    label: "Started publishing a reply",
+    tone: "neutral",
+  },
   "reply.published": { label: "Published a reply to Google", tone: "good" },
   "reply.publish_failed": { label: "Reply publish failed", tone: "bad" },
   "reply.deleted": { label: "Deleted a reply", tone: "neutral" },
   "workspace.invite_created": { label: "Invited someone", tone: "info" },
   "workspace.invite_accepted": { label: "Joined from an invite", tone: "good" },
   "workspace.invite_revoked": { label: "Cancelled an invite", tone: "neutral" },
-  "workspace.member_role_changed": { label: "Changed a member's role", tone: "info" },
+  "workspace.member_role_changed": {
+    label: "Changed a member's role",
+    tone: "info",
+  },
   "workspace.member_removed": { label: "Removed a member", tone: "neutral" },
   "workspace.member_left": { label: "Left the workspace", tone: "neutral" },
 };
@@ -64,8 +93,8 @@ const ENTITY_LABELS: Record<string, string> = {
 const TONE_CLASSES: Record<Tone, string> = {
   good: "bg-green-50 text-green-700",
   bad: "bg-red-50 text-red-700",
-  neutral: "bg-[#f8f9fa] text-[#3c4043]",
-  info: "bg-[#e8f0fe] text-[#1a73e8]",
+  neutral: "bg-paper text-graphite",
+  info: "bg-paper text-ink",
 };
 
 const METADATA_LABELS: Record<string, string> = {
@@ -93,14 +122,16 @@ function readableAction(action: string) {
 
 function MetadataLine({ metadata }: { metadata: Record<string, unknown> }) {
   const entries = Object.entries(metadata).filter(
-    ([k, v]) => k in METADATA_LABELS && v !== null && v !== undefined && v !== ""
+    ([k, v]) =>
+      k in METADATA_LABELS && v !== null && v !== undefined && v !== "",
   );
   if (entries.length === 0) return null;
   return (
-    <p className="mt-1 flex flex-wrap gap-x-3 gap-y-0.5 text-xs text-[#5f6368]">
+    <p className="mt-1 flex flex-wrap gap-x-3 gap-y-0.5 text-xs text-slate">
       {entries.map(([k, v]) => (
         <span key={k}>
-          {METADATA_LABELS[k]}: <span className="text-[#202124]">{String(v)}</span>
+          {METADATA_LABELS[k]}:{" "}
+          <span className="text-graphite">{String(v)}</span>
         </span>
       ))}
     </p>
@@ -120,8 +151,7 @@ export default async function AuditPage({ searchParams }: AuditPageProps) {
 
   const actionFilter = typeof params.action === "string" ? params.action : "";
   const userFilter = typeof params.user === "string" ? params.user : "";
-  const fromDate = typeof params.from === "string" ? params.from : "";
-  const toDate = typeof params.to === "string" ? params.to : "";
+  const range = parseDateRange(params, "all");
   const entityFilter = typeof params.entity === "string" ? params.entity : "";
 
   let query = admin
@@ -136,14 +166,8 @@ export default async function AuditPage({ searchParams }: AuditPageProps) {
     query = query.eq("user_id", userFilter);
   }
   if (entityFilter) query = query.eq("entity_type", entityFilter);
-  if (fromDate && !Number.isNaN(Date.parse(fromDate))) {
-    query = query.gte("created_at", new Date(fromDate).toISOString());
-  }
-  if (toDate && !Number.isNaN(Date.parse(toDate))) {
-    const end = new Date(toDate);
-    end.setDate(end.getDate() + 1);
-    query = query.lt("created_at", end.toISOString());
-  }
+  if (range.start) query = query.gte("created_at", range.start.toISOString());
+  if (range.end) query = query.lt("created_at", range.end.toISOString());
 
   const [{ data: logs }, roster] = await Promise.all([
     query,
@@ -152,7 +176,12 @@ export default async function AuditPage({ searchParams }: AuditPageProps) {
 
   const emailById = new Map(roster.members.map((m) => [m.userId, m.email]));
   const rows = logs ?? [];
-  const hasFilters = !!(actionFilter || userFilter || entityFilter || fromDate || toDate);
+  const hasFilters = !!(
+    actionFilter ||
+    userFilter ||
+    entityFilter ||
+    range.key !== "all"
+  );
 
   return (
     <div className="space-y-6">
@@ -161,83 +190,96 @@ export default async function AuditPage({ searchParams }: AuditPageProps) {
         description="Every connection, sync, draft, approval, and publish in this workspace, with who did it."
       />
 
-      <AuditLogFilters
-        currentAction={actionFilter}
-        currentUser={userFilter}
-        currentEntity={entityFilter}
-        currentFrom={fromDate}
-        currentTo={toDate}
-        actionOptions={Object.entries(ACTION_LABELS).map(([value, v]) => ({
-          value,
-          label: v.label,
-        }))}
-        entityOptions={Object.entries(ENTITY_LABELS).map(([value, label]) => ({
-          value,
-          label,
-        }))}
-        memberOptions={roster.members.map((m) => ({ value: m.userId, label: m.email }))}
-      />
-
-      {rows.length === 0 ? (
-        <EmptyState
-          icon={ClipboardList}
-          title={hasFilters ? "No entries match your filters" : "No activity yet"}
-          description={
-            hasFilters
-              ? "Try a wider date range or clear the filters."
-              : "Entries appear here as your team connects accounts, syncs, and replies."
-          }
+      <TransitionScope>
+        <AuditLogFilters
+          currentAction={actionFilter}
+          currentUser={userFilter}
+          currentEntity={entityFilter}
+          currentRange={{ key: range.key, from: range.from, to: range.to }}
+          actionOptions={Object.entries(ACTION_LABELS).map(([value, v]) => ({
+            value,
+            label: v.label,
+          }))}
+          entityOptions={Object.entries(ENTITY_LABELS).map(
+            ([value, label]) => ({
+              value,
+              label,
+            }),
+          )}
+          memberOptions={roster.members.map((m) => ({
+            value: m.userId,
+            label: m.email,
+          }))}
         />
-      ) : (
-        <div className="overflow-hidden rounded-3xl border border-[#dadce0] bg-white">
-          <ul className="divide-y divide-[#f8f9fa]">
-            {rows.map((log) => {
-              const action = readableAction(log.action);
-              const actor = log.user_id
-                ? (emailById.get(log.user_id) ?? "Former member")
-                : "System";
-              return (
-                <li
-                  key={log.id}
-                  className="flex flex-col gap-2 px-4 py-3.5 sm:flex-row sm:items-start sm:gap-4 sm:px-5"
-                >
-                  <time
-                    dateTime={log.created_at}
-                    className="shrink-0 text-xs tabular-nums text-[#5f6368] sm:w-40 sm:pt-0.5"
-                  >
-                    {formatDate(log.created_at)}
-                  </time>
-                  <div className="min-w-0 flex-1">
-                    <div className="flex flex-wrap items-center gap-2">
-                      <span
-                        className={cn(
-                          "rounded-full px-2.5 py-0.5 text-xs font-medium",
-                          TONE_CLASSES[action.tone]
-                        )}
+
+        <PendingRegion label="Filtering activity…">
+          {rows.length === 0 ? (
+            <EmptyState
+              icon={ClipboardList}
+              title={
+                hasFilters ? "No entries match your filters" : "No activity yet"
+              }
+              description={
+                hasFilters
+                  ? "Try a wider date range or clear the filters."
+                  : "Entries appear here as your team connects accounts, syncs, and replies."
+              }
+            />
+          ) : (
+            <div className="overflow-hidden rounded-xl bg-white shadow-card">
+              <ul className="divide-y divide-silver">
+                {rows.map((log) => {
+                  const action = readableAction(log.action);
+                  const actor = log.user_id
+                    ? (emailById.get(log.user_id) ?? "Former member")
+                    : "System";
+                  return (
+                    <li
+                      key={log.id}
+                      className="flex flex-col gap-2 px-4 py-3.5 sm:flex-row sm:items-start sm:gap-4 sm:px-5"
+                    >
+                      <time
+                        dateTime={log.created_at}
+                        className="shrink-0 text-xs tabular-nums text-slate sm:w-40 sm:pt-0.5"
                       >
-                        {action.label}
-                      </span>
-                      <span className="text-xs text-[#5f6368]">
-                        {ENTITY_LABELS[log.entity_type] ?? log.entity_type}
-                      </span>
-                    </div>
-                    <MetadataLine
-                      metadata={(log.metadata ?? {}) as Record<string, unknown>}
-                    />
-                  </div>
-                  <p className="truncate text-sm text-[#202124] sm:max-w-[220px] sm:text-right">
-                    {actor}
-                  </p>
-                </li>
-              );
-            })}
-          </ul>
-          <div className="border-t border-[#f8f9fa] px-5 py-2.5 text-xs text-[#5f6368]">
-            Showing {rows.length} most recent entries
-            {rows.length === AUDIT_LIMIT && ". Use the filters to narrow the list."}
-          </div>
-        </div>
-      )}
+                        {formatDate(log.created_at)}
+                      </time>
+                      <div className="min-w-0 flex-1">
+                        <div className="flex flex-wrap items-center gap-2">
+                          <span
+                            className={cn(
+                              "rounded-full px-2.5 py-0.5 text-xs font-medium",
+                              TONE_CLASSES[action.tone],
+                            )}
+                          >
+                            {action.label}
+                          </span>
+                          <span className="text-xs text-slate">
+                            {ENTITY_LABELS[log.entity_type] ?? log.entity_type}
+                          </span>
+                        </div>
+                        <MetadataLine
+                          metadata={
+                            (log.metadata ?? {}) as Record<string, unknown>
+                          }
+                        />
+                      </div>
+                      <p className="truncate text-sm text-graphite sm:max-w-[220px] sm:text-right">
+                        {actor}
+                      </p>
+                    </li>
+                  );
+                })}
+              </ul>
+              <div className="border-t border-silver px-5 py-2.5 text-xs text-slate">
+                Showing {rows.length} most recent entries
+                {rows.length === AUDIT_LIMIT &&
+                  ". Use the filters to narrow the list."}
+              </div>
+            </div>
+          )}
+        </PendingRegion>
+      </TransitionScope>
     </div>
   );
 }

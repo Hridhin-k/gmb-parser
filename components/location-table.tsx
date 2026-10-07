@@ -7,7 +7,8 @@ import { Badge } from "@/components/ui/badge";
 import { Unlink, MapPin, Sparkles } from "lucide-react";
 import Link from "next/link";
 import { SyncButton } from "@/components/sync-button";
-import { locationPlaceLabel } from "@/lib/ui/location-place";
+import { ActivityStatus } from "@/components/activity-status";
+import { locationDisplayName, readableStoreCode } from "@/lib/ui/location-place";
 
 interface Location {
   id: string;
@@ -71,7 +72,7 @@ export function LocationTable({
   return (
     <div className="space-y-3">
       <div className="flex flex-wrap items-center justify-between gap-2">
-        <p className="text-sm text-[#5f6368]">
+        <p className="text-sm text-slate">
           {locations.length} location{locations.length !== 1 ? "s" : ""}
         </p>
         {connectionId && (
@@ -85,6 +86,12 @@ export function LocationTable({
         )}
       </div>
 
+      {loadingId ? (
+        <ActivityStatus
+          title="Removing this location from the client"
+          detail="The Google profile stays in the workspace. You can assign it to another client afterwards."
+        />
+      ) : null}
       {error && (
         <div className="rounded-md border border-red-200 bg-red-50 p-3 text-sm text-red-700">
           {error}
@@ -92,36 +99,38 @@ export function LocationTable({
       )}
 
       {locations.length === 0 ? (
-        <div className="flex flex-col items-center justify-center rounded-3xl border border-[#dadce0] bg-white py-12 text-center">
+        <div className="flex flex-col items-center justify-center rounded-xl bg-white shadow-card py-12 text-center">
           <MapPin className="h-8 w-8 text-[#c9c7c3]" />
-          <p className="mt-2 text-sm font-medium text-[#202124]">
+          <p className="mt-2 text-sm font-medium text-graphite">
             No locations on this client
           </p>
-          <p className="mt-1 text-xs text-[#5f6368]">
+          <p className="mt-1 text-xs text-slate">
             Assign Google profiles from the Unassigned pool on the Clients page.
           </p>
         </div>
       ) : (
         <ul className="space-y-3">
           {locations.map((loc) => {
-            const place = locationPlaceLabel({
+            const name = locationDisplayName({
+              title: loc.location_title,
               storeCode: loc.store_code,
               address: loc.address_formatted,
             });
+            const storeCode = readableStoreCode(loc.store_code);
             return (
               <li
                 key={loc.id}
-                className="rounded-3xl border border-[#dadce0] bg-white p-4 sm:p-5"
+                className="rounded-xl bg-white shadow-card p-4 sm:p-5"
               >
                 <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
                   <div className="min-w-0 space-y-1">
                     <div className="flex flex-wrap items-center gap-2">
-                      <p className="text-sm font-medium text-[#202124]">
-                        {place ?? loc.location_title}
+                      <p className="text-sm font-medium text-graphite">
+                        {name}
                       </p>
-                      {loc.store_code && place !== loc.store_code ? (
-                        <span className="rounded-full bg-[#e8f0fe] px-2 py-0.5 text-[11px] font-medium text-[#1a73e8]">
-                          {loc.store_code}
+                      {storeCode ? (
+                        <span className="rounded-full bg-paper px-2 py-0.5 text-[11px] font-medium text-ink underline decoration-stone/50 underline-offset-4 hover:decoration-ink">
+                          {storeCode}
                         </span>
                       ) : null}
                       <Badge
@@ -129,23 +138,23 @@ export function LocationTable({
                         className={
                           loc.is_active
                             ? "bg-green-100 text-green-700 hover:bg-green-100"
-                            : "bg-[#f8f9fa] text-[#3c4043]"
+                            : "bg-paper text-graphite"
                         }
                       >
                         {loc.is_active ? "Active" : "Inactive"}
                       </Badge>
                     </div>
                     {loc.address_formatted ? (
-                      <p className="text-sm leading-relaxed text-[#3c4043]">
+                      <p className="text-sm leading-relaxed text-graphite">
                         {loc.address_formatted}
                       </p>
                     ) : (
-                      <p className="text-sm text-[#5f6368]">No address on this Google profile</p>
+                      <p className="text-sm text-slate">No address on this Google profile</p>
                     )}
                     {loc.primary_phone ? (
-                      <p className="text-xs text-[#5f6368]">{loc.primary_phone}</p>
+                      <p className="text-xs text-slate">{loc.primary_phone}</p>
                     ) : null}
-                    <p className="text-xs text-[#5f6368]">
+                    <p className="text-xs text-slate">
                       {formatSyncDate(loc.last_synced_at)}
                     </p>
                   </div>
@@ -159,8 +168,8 @@ export function LocationTable({
                       />
                     ) : null}
                     <Link
-                      href={`/dashboard?location=${loc.id}`}
-                      className="inline-flex h-8 items-center gap-1 rounded-full px-2 text-xs font-medium text-[#1a73e8] hover:bg-[#e8f0fe]"
+                      href={`/clients/${clientId}?location=${loc.id}#insight`}
+                      className="inline-flex h-8 items-center gap-1 rounded-full px-2 text-xs font-medium text-ink hover:bg-paper"
                     >
                       <Sparkles className="h-3.5 w-3.5" aria-hidden />
                       Insights

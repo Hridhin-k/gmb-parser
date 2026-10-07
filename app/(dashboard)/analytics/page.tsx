@@ -2,20 +2,22 @@ import { Download } from "lucide-react";
 import { getActiveWorkspace } from "@/lib/services/session";
 import {
   getAnalyticsData,
-  TREND_PERIODS,
   type TrendMonth,
-  type TrendPeriod,
   type TrendSummary,
 } from "@/lib/services/analytics";
+import { dateRangeParams, parseDateRange } from "@/lib/date-range";
 import { PageHeader } from "@/components/page-header";
 import { AnalyticsFilters } from "@/components/analytics-filters";
+import { PendingRegion, TransitionScope } from "@/components/transition-scope";
 import { cn } from "@/lib/utils";
 
 interface AnalyticsPageProps {
   searchParams: Promise<Record<string, string | string[] | undefined>>;
 }
 
-const JAKARTA = { fontFamily: "var(--font-google-sans-display), sans-serif" };
+const DEFAULT_RANGE = "6m";
+
+const JAKARTA = { fontFamily: "var(--font-heading), sans-serif" };
 
 function monthLabel(iso: string, withYear = false) {
   return new Date(`${iso}T00:00:00Z`).toLocaleDateString("en-US", {
@@ -23,6 +25,29 @@ function monthLabel(iso: string, withYear = false) {
     ...(withYear ? { year: "numeric" } : {}),
     timeZone: "UTC",
   });
+}
+
+function axisLabel(iso: string, dense: boolean) {
+  return new Date(`${iso}T00:00:00Z`).toLocaleDateString("en-US", {
+    month: "short",
+    year: dense ? "2-digit" : "numeric",
+    timeZone: "UTC",
+  });
+}
+
+/** Evenly spaced indexes, always including the first and last month. */
+function tickIndexes(count: number, maxTicks: number) {
+  if (count <= 1) return [0];
+  if (count <= maxTicks) return Array.from({ length: count }, (_, index) => index);
+  const step = Math.ceil((count - 1) / (maxTicks - 1));
+  const ticks: number[] = [];
+  for (let index = 0; index < count; index += step) ticks.push(index);
+  const last = count - 1;
+  if (ticks[ticks.length - 1] !== last) {
+    if (last - ticks[ticks.length - 1] < step / 2) ticks[ticks.length - 1] = last;
+    else ticks.push(last);
+  }
+  return ticks;
 }
 
 function formatHours(hours: number | null) {
@@ -48,21 +73,32 @@ function Delta({
   higherIsBetter?: boolean;
 }) {
   if (current === null || previous === null) {
-    return <span className="text-xs text-[#5f6368]">No earlier data</span>;
+    return <span className="text-xs text-slate">No earlier data</span>;
   }
   const diff = current - previous;
   if (Math.abs(diff) < 1e-9) {
-    return <span className="text-xs text-[#5f6368]">Same as before</span>;
+    return <span className="text-xs text-slate">Same as before</span>;
   }
   const good = higherIsBetter ? diff > 0 : diff < 0;
   return (
-    <span className={cn("text-xs font-medium", good ? "text-green-600" : "text-red-600")}>
+    <span
+      className={cn(
+        "text-xs font-medium",
+        good ? "text-green-600" : "text-red-600",
+      )}
+    >
       {diff > 0 ? "▲" : "▼"} {format(Math.abs(diff))} vs previous
     </span>
   );
 }
 
-function SummaryTiles({ current, previous }: { current: TrendSummary; previous: TrendSummary }) {
+function SummaryTiles({
+  current,
+  previous,
+}: {
+  current: TrendSummary;
+  previous: TrendSummary | null;
+}) {
   const tiles = [
     {
       label: "Reviews",
@@ -70,7 +106,7 @@ function SummaryTiles({ current, previous }: { current: TrendSummary; previous: 
       delta: (
         <Delta
           current={current.reviewCount}
-          previous={previous.reviewCount || null}
+          previous={previous?.reviewCount || null}
           format={(d) => d.toLocaleString()}
         />
       ),
@@ -87,7 +123,11 @@ function SummaryTiles({ current, previous }: { current: TrendSummary; previous: 
               ? "text-yellow-600"
               : "text-red-600",
       delta: (
-        <Delta current={current.avgRating} previous={previous.avgRating} format={(d) => d.toFixed(2)} />
+        <Delta
+          current={current.avgRating}
+          previous={previous?.avgRating ?? null}
+          format={(d) => d.toFixed(2)}
+        />
       ),
     },
     {
@@ -96,7 +136,7 @@ function SummaryTiles({ current, previous }: { current: TrendSummary; previous: 
       delta: (
         <Delta
           current={current.replyRate}
-          previous={previous.replyRate}
+          previous={previous?.replyRate ?? null}
           format={(d) => `${Math.round(d * 100)} pts`}
         />
       ),
@@ -107,7 +147,7 @@ function SummaryTiles({ current, previous }: { current: TrendSummary; previous: 
       delta: (
         <Delta
           current={current.avgResponseHours}
-          previous={previous.avgResponseHours}
+          previous={previous?.avgResponseHours ?? null}
           format={(d) => formatHours(d)}
           higherIsBetter={false}
         />
@@ -116,12 +156,12 @@ function SummaryTiles({ current, previous }: { current: TrendSummary; previous: 
   ];
 
   return (
-    <div className="grid grid-cols-2 divide-x divide-y divide-[#f8f9fa] overflow-hidden rounded-3xl border border-[#dadce0] bg-white lg:grid-cols-4 lg:divide-y-0">
+    <div className="grid grid-cols-2 divide-x divide-y divide-silver overflow-hidden rounded-xl bg-white shadow-card lg:grid-cols-4 lg:divide-y-0">
       {tiles.map((t) => (
         <div key={t.label} className="flex flex-col gap-1 p-4 sm:p-5">
-          <p className="text-xs font-medium text-[#5f6368]">{t.label}</p>
+          <p className="text-xs font-medium text-slate">{t.label}</p>
           <p
-            className={cn("text-[26px] leading-tight tracking-[-0.02em] text-[#202124]", t.tone)}
+            className={cn("text-[26px] leading-tight text-graphite", t.tone)}
             style={JAKARTA}
           >
             {t.value}
@@ -135,13 +175,15 @@ function SummaryTiles({ current, previous }: { current: TrendSummary; previous: 
 
 function VolumeChart({ months }: { months: TrendMonth[] }) {
   const max = Math.max(1, ...months.map((m) => m.reviewCount));
+  const dense = months.length > 18;
+  const ticks = tickIndexes(months.length, dense ? 6 : 8);
   return (
-    <div className="rounded-3xl border border-[#dadce0] bg-white p-5">
+    <div className="min-w-0 overflow-hidden rounded-xl bg-white p-5 shadow-card">
       <div className="flex flex-wrap items-center justify-between gap-2">
-        <h2 className="text-lg text-[#202124]" style={JAKARTA}>
+        <h2 className="text-lg text-graphite" style={JAKARTA}>
           Reviews per month
         </h2>
-        <div className="flex gap-3 text-xs text-[#3c4043]">
+        <div className="flex gap-3 text-xs text-graphite">
           <span className="flex items-center gap-1.5">
             <span className="h-2.5 w-2.5 rounded-full bg-green-500" /> 4–5★
           </span>
@@ -153,31 +195,72 @@ function VolumeChart({ months }: { months: TrendMonth[] }) {
           </span>
         </div>
       </div>
-      <div className="mt-5 flex h-48 items-end gap-1.5 sm:gap-3" role="img" aria-label="Monthly review volume by rating">
+      <div
+        className={cn(
+          "mt-5 flex h-44 items-end",
+          dense ? "gap-px" : "gap-1.5 sm:gap-3",
+        )}
+        role="img"
+        aria-label="Monthly review volume by rating"
+      >
         {months.map((m) => {
           const height = (m.reviewCount / max) * 100;
           return (
-            <div key={m.month} className="flex h-full min-w-0 flex-1 flex-col items-center justify-end gap-1.5">
-              <span className="text-[11px] tabular-nums text-[#5f6368]">
-                {m.reviewCount > 0 ? m.reviewCount : ""}
-              </span>
+            <div
+              key={m.month}
+              className="flex h-full min-w-0 flex-1 flex-col items-center justify-end"
+              title={`${monthLabel(m.month, true)}: ${m.reviewCount.toLocaleString("en-US")} reviews`}
+            >
               <div
-                className="flex w-full max-w-10 flex-col-reverse overflow-hidden rounded-md bg-[#f8f9fa]"
-                style={{ height: `${Math.max(height, 2)}%` }}
-                title={`${monthLabel(m.month, true)}: ${m.positive} positive, ${m.neutral} neutral, ${m.negative} negative`}
+                className="flex w-full max-w-10 flex-col-reverse overflow-hidden rounded-sm bg-paper"
+                style={{ height: `${Math.max(height, m.reviewCount > 0 ? 2 : 0)}%` }}
               >
                 {m.reviewCount > 0 ? (
                   <>
-                    <div className="bg-green-500" style={{ height: `${(m.positive / m.reviewCount) * 100}%` }} />
-                    <div className="bg-yellow-400" style={{ height: `${(m.neutral / m.reviewCount) * 100}%` }} />
-                    <div className="bg-red-500" style={{ height: `${(m.negative / m.reviewCount) * 100}%` }} />
+                    <div
+                      className="bg-green-500"
+                      style={{
+                        height: `${(m.positive / m.reviewCount) * 100}%`,
+                      }}
+                    />
+                    <div
+                      className="bg-yellow-400"
+                      style={{
+                        height: `${(m.neutral / m.reviewCount) * 100}%`,
+                      }}
+                    />
+                    <div
+                      className="bg-red-500"
+                      style={{
+                        height: `${(m.negative / m.reviewCount) * 100}%`,
+                      }}
+                    />
                   </>
                 ) : null}
               </div>
-              <span className="text-[11px] text-[#5f6368]">{monthLabel(m.month)}</span>
             </div>
           );
         })}
+      </div>
+      <div className="relative mt-2 h-4 text-[11px] text-slate">
+        {ticks.map((index, tickIndex) => (
+          <span
+            key={months[index].month}
+            className={cn(
+              "absolute top-0 whitespace-nowrap",
+              tickIndex === 0 && "left-0",
+              tickIndex === ticks.length - 1 && "right-0",
+              tickIndex > 0 && tickIndex < ticks.length - 1 && "-translate-x-1/2",
+            )}
+            style={
+              tickIndex > 0 && tickIndex < ticks.length - 1
+                ? { left: `${(index / Math.max(months.length - 1, 1)) * 100}%` }
+                : undefined
+            }
+          >
+            {axisLabel(months[index].month, dense)}
+          </span>
+        ))}
       </div>
     </div>
   );
@@ -191,27 +274,44 @@ function RatingChart({ months }: { months: TrendMonth[] }) {
   const step = months.length > 1 ? (width - padX * 2) / (months.length - 1) : 0;
   const y = (rating: number) => padY + ((5 - rating) / 4) * (height - padY * 2);
   const points = months
-    .map((m, i) => (m.avgRating === null ? null : { x: padX + i * step, y: y(m.avgRating), m }))
+    .map((m, i) =>
+      m.avgRating === null
+        ? null
+        : { x: padX + i * step, y: y(m.avgRating), m },
+    )
     .filter((p): p is NonNullable<typeof p> => p !== null);
 
+  const dense = months.length > 18;
+  const ticks = new Set(tickIndexes(months.length, dense ? 6 : 8));
+  const dotRadius = step > 0 && step < 14 ? 2 : 4.5;
+
   return (
-    <div className="rounded-3xl border border-[#dadce0] bg-white p-5">
-      <h2 className="text-lg text-[#202124]" style={JAKARTA}>
+    <div className="min-w-0 overflow-hidden rounded-xl bg-white p-5 shadow-card">
+      <h2 className="text-lg text-graphite" style={JAKARTA}>
         Average rating
       </h2>
       {points.length === 0 ? (
-        <p className="mt-6 text-sm text-[#5f6368]">No reviews in this period yet.</p>
+        <p className="mt-6 text-sm text-slate">
+          No reviews in this period yet.
+        </p>
       ) : (
         <svg
-          viewBox={`0 0 ${width} ${height + 20}`}
+          viewBox={`0 0 ${width} ${height + 28}`}
           className="mt-4 h-auto w-full"
           role="img"
           aria-label="Average rating per month"
         >
           {[1, 2, 3, 4, 5].map((r) => (
             <g key={r}>
-              <line x1={padX} x2={width - padX} y1={y(r)} y2={y(r)} stroke="#f8f9fa" strokeWidth={1} />
-              <text x={4} y={y(r) + 4} fontSize={11} fill="#5f6368">
+              <line
+                x1={padX}
+                x2={width - padX}
+                y1={y(r)}
+                y2={y(r)}
+                stroke="#e5e7eb"
+                strokeWidth={1}
+              />
+              <text x={4} y={y(r) + 4} fontSize={11} fill="#6b7280">
                 {r}★
               </text>
             </g>
@@ -219,37 +319,44 @@ function RatingChart({ months }: { months: TrendMonth[] }) {
           <polyline
             points={points.map((p) => `${p.x},${p.y}`).join(" ")}
             fill="none"
-            stroke="#1a73e8"
-            strokeWidth={2.5}
+            stroke="#101010"
+            strokeWidth={2}
             strokeLinejoin="round"
             strokeLinecap="round"
           />
           {points.map((p) => (
-            <g key={p.m.month}>
-              <circle
-                cx={p.x}
-                cy={p.y}
-                r={4.5}
-                fill="#fff"
-                stroke={p.m.avgRating! >= 4 ? "#22c55e" : p.m.avgRating! >= 3 ? "#eab308" : "#ef4444"}
-                strokeWidth={2.5}
-              >
-                <title>{`${monthLabel(p.m.month, true)}: ${p.m.avgRating!.toFixed(2)}★`}</title>
-              </circle>
-            </g>
-          ))}
-          {months.map((m, i) => (
-            <text
-              key={m.month}
-              x={padX + i * step}
-              y={height + 14}
-              fontSize={11}
-              fill="#5f6368"
-              textAnchor="middle"
+            <circle
+              key={p.m.month}
+              cx={p.x}
+              cy={p.y}
+              r={dotRadius}
+              fill="#fff"
+              stroke={
+                p.m.avgRating! >= 4
+                  ? "#22c55e"
+                  : p.m.avgRating! >= 3
+                    ? "#eab308"
+                    : "#ef4444"
+              }
+              strokeWidth={dotRadius < 3 ? 1.5 : 2.5}
             >
-              {monthLabel(m.month)}
-            </text>
+              <title>{`${monthLabel(p.m.month, true)}: ${p.m.avgRating!.toFixed(2)}★`}</title>
+            </circle>
           ))}
+          {months.map((m, i) =>
+            ticks.has(i) ? (
+              <text
+                key={m.month}
+                x={padX + i * step}
+                y={height + 18}
+                fontSize={11}
+                fill="#6b7280"
+                textAnchor={i === 0 ? "start" : i === months.length - 1 ? "end" : "middle"}
+              >
+                {axisLabel(m.month, dense)}
+              </text>
+            ) : null,
+          )}
         </svg>
       )}
     </div>
@@ -258,11 +365,11 @@ function RatingChart({ months }: { months: TrendMonth[] }) {
 
 function MonthTable({ months }: { months: TrendMonth[] }) {
   return (
-    <div className="overflow-hidden rounded-3xl border border-[#dadce0] bg-white">
+    <div className="overflow-hidden rounded-xl bg-white shadow-card">
       <div className="overflow-x-auto">
         <table className="w-full text-sm">
           <thead>
-            <tr className="border-b border-[#f8f9fa] bg-[#f8f9fa] text-left text-xs font-medium text-[#5f6368]">
+            <tr className="border-b border-silver bg-paper text-left text-xs font-medium text-slate">
               <th className="px-4 py-3 sm:px-5">Month</th>
               <th className="px-4 py-3 text-right">Reviews</th>
               <th className="px-4 py-3 text-right">Avg</th>
@@ -271,21 +378,32 @@ function MonthTable({ months }: { months: TrendMonth[] }) {
               <th className="px-4 py-3 text-right sm:pr-5">Reply time</th>
             </tr>
           </thead>
-          <tbody className="divide-y divide-[#f8f9fa]">
+          <tbody className="divide-y divide-silver">
             {[...months].reverse().map((m) => (
               <tr key={m.month} className="tabular-nums">
-                <td className="px-4 py-3 text-[#202124] sm:px-5">{monthLabel(m.month, true)}</td>
-                <td className="px-4 py-3 text-right text-[#202124]">{m.reviewCount}</td>
-                <td className="px-4 py-3 text-right text-[#202124]">
+                <td className="px-4 py-3 text-graphite sm:px-5">
+                  {monthLabel(m.month, true)}
+                </td>
+                <td className="px-4 py-3 text-right text-graphite">
+                  {m.reviewCount}
+                </td>
+                <td className="px-4 py-3 text-right text-graphite">
                   {m.avgRating === null ? "—" : m.avgRating.toFixed(2)}
                 </td>
-                <td className={cn("px-4 py-3 text-right", m.negative > 0 ? "text-red-600" : "text-[#5f6368]")}>
+                <td
+                  className={cn(
+                    "px-4 py-3 text-right",
+                    m.negative > 0 ? "text-red-600" : "text-slate",
+                  )}
+                >
                   {m.negative}
                 </td>
-                <td className="px-4 py-3 text-right text-[#202124]">
-                  {m.reviewCount > 0 ? formatPercent(m.replied / m.reviewCount) : "—"}
+                <td className="px-4 py-3 text-right text-graphite">
+                  {m.reviewCount > 0
+                    ? formatPercent(m.replied / m.reviewCount)
+                    : "—"}
                 </td>
-                <td className="px-4 py-3 text-right text-[#202124] sm:pr-5">
+                <td className="px-4 py-3 text-right text-graphite sm:pr-5">
                   {formatHours(m.avgResponseHours)}
                 </td>
               </tr>
@@ -297,58 +415,86 @@ function MonthTable({ months }: { months: TrendMonth[] }) {
   );
 }
 
-export default async function AnalyticsPage({ searchParams }: AnalyticsPageProps) {
-  const [params, { workspaceId }] = await Promise.all([searchParams, getActiveWorkspace()]);
+export default async function AnalyticsPage({
+  searchParams,
+}: AnalyticsPageProps) {
+  const [params, { workspaceId }] = await Promise.all([
+    searchParams,
+    getActiveWorkspace(),
+  ]);
 
-  const monthsParam = Number(params.months);
-  const period: TrendPeriod = (TREND_PERIODS as readonly number[]).includes(monthsParam)
-    ? (monthsParam as TrendPeriod)
-    : 6;
+  const range = parseDateRange(params, DEFAULT_RANGE);
   const clientParam =
     typeof params.client === "string" && /^[0-9a-f-]{36}$/i.test(params.client)
       ? params.client
       : "";
 
-  const data = await getAnalyticsData(workspaceId, period, clientParam || null);
+  const locationParam =
+    typeof params.location === "string" &&
+    /^[0-9a-f-]{36}$/i.test(params.location)
+      ? params.location
+      : "";
 
-  const exportParams = new URLSearchParams({ months: String(period) });
+  const data = await getAnalyticsData(
+    workspaceId,
+    range,
+    clientParam || null,
+    locationParam || null,
+  );
+
+  const exportParams = new URLSearchParams(dateRangeParams(range, "all"));
   if (clientParam) exportParams.set("client", clientParam);
+  if (locationParam) exportParams.set("location", locationParam);
 
   return (
-    <div className="space-y-6">
+    <div className="flex flex-col gap-8">
       <PageHeader
         title="Analytics"
         description="How ratings, volume, and response times are moving across your clients."
       >
         <a
           href={`/api/reviews/export?${exportParams.toString()}`}
-          className="inline-flex h-9 items-center gap-1.5 rounded-full border border-[#dadce0] bg-white px-4 text-sm font-medium text-[#202124] hover:border-[#1a73e8]"
+          className="inline-flex h-9 items-center gap-1.5 rounded-full border border-silver bg-white px-4 text-sm font-medium text-graphite hover:border-ink"
         >
           <Download className="h-3.5 w-3.5" aria-hidden />
           Export CSV
         </a>
       </PageHeader>
 
-      <AnalyticsFilters
-        period={period}
-        periods={TREND_PERIODS}
-        clientId={clientParam}
-        clients={data.clients}
-      />
+      <TransitionScope>
+        <AnalyticsFilters
+          range={{ key: range.key, from: range.from, to: range.to }}
+          defaultRange={DEFAULT_RANGE}
+          clientId={clientParam}
+          clients={data.clients}
+          locationId={locationParam}
+          locations={data.locations}
+        />
 
-      <SummaryTiles current={data.current} previous={data.previous} />
+        <PendingRegion label="Recalculating analytics…" className="flex flex-col gap-10">
+          <SummaryTiles current={data.current} previous={data.previous} />
 
-      <div className="grid gap-5 lg:grid-cols-2">
-        <VolumeChart months={data.months} />
-        <RatingChart months={data.months} />
-      </div>
+          <div
+            className={cn(
+              "grid gap-5",
+              data.months.length > 18 ? "grid-cols-1" : "lg:grid-cols-2",
+            )}
+          >
+            <VolumeChart months={data.months} />
+            <RatingChart months={data.months} />
+          </div>
 
-      <MonthTable months={data.months} />
+          <MonthTable months={data.months} />
 
-      <p className="text-xs leading-relaxed text-[#5f6368]">
-        Compared with the {period} months before. Reply time is measured from the review to the
-        latest reply on Google.
-      </p>
+          <p className="text-xs leading-relaxed text-slate">
+            {data.previous
+              ? `${range.label}, compared with the same length of time just before it.`
+              : `${range.label}.`}{" "}
+            Reply time is measured from the review to the latest reply on
+            Google.
+          </p>
+        </PendingRegion>
+      </TransitionScope>
     </div>
   );
 }

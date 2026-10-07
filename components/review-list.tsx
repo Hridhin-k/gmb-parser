@@ -12,10 +12,12 @@ import {
   Clock,
   MessageSquare,
   Sparkles,
-  Loader2,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { Checkbox } from "@/components/ui/checkbox";
+import { ActivityStatus } from "@/components/activity-status";
 import { ReviewDetailPanel } from "@/components/review-detail-panel";
+import { Spinner } from "@/components/ui/spinner";
 
 interface ReviewItem {
   id: string;
@@ -78,7 +80,7 @@ function StarRating({ rating }: { rating: number }) {
                 : rating === 3
                   ? "fill-yellow-400 text-yellow-500"
                   : "fill-red-500 text-red-500"
-              : "fill-mist text-mist"
+              : "fill-silver text-silver"
           )}
           aria-hidden
         />
@@ -88,11 +90,11 @@ function StarRating({ rating }: { rating: number }) {
 }
 
 const STATUS_CONFIG: Record<string, { label: string; className: string; Icon: typeof CheckCircle2 }> = {
-  published:       { label: "Published", className: "bg-[#e8f0fe] text-[#1a73e8]",  Icon: CheckCircle2 },
-  approved:        { label: "Ready",  className: "bg-[#1a73e8] text-white",   Icon: CheckCircle2 },
-  draft:           { label: "Draft",     className: "bg-[#f8f9fa] text-[#5f6368] border border-[#dadce0]",   Icon: Pencil },
+  published:       { label: "Published", className: "bg-paper text-ink",  Icon: CheckCircle2 },
+  approved:        { label: "Ready",  className: "bg-ink text-white",   Icon: CheckCircle2 },
+  draft:           { label: "Draft",     className: "bg-paper text-slate border border-silver",   Icon: Pencil },
   failed:          { label: "Failed",    className: "bg-[#fce8e6] text-destructive",    Icon: AlertCircle },
-  pending_publish: { label: "Publishing", className: "bg-[#e8f0fe] text-[#1a73e8]", Icon: Clock },
+  pending_publish: { label: "Publishing", className: "bg-paper text-ink", Icon: Clock },
 };
 
 function ReplyStatusPill({ status, source }: { status: string; source?: string }) {
@@ -188,17 +190,16 @@ export function ReviewList({ reviews, replies, canApprove }: ReviewListProps) {
 
   return (
     <div className="space-y-3">
-      <div className="flex flex-col gap-3 rounded-3xl border border-[#dadce0] bg-white px-3 py-3 sm:flex-row sm:flex-wrap sm:items-center sm:px-4">
-        <label className="flex items-center gap-2 text-sm text-[#202124]">
-          <input
-            type="checkbox"
+      <div className="flex flex-col gap-3 rounded-xl bg-white shadow-card px-3 py-3 sm:flex-row sm:flex-wrap sm:items-center sm:px-4">
+        <label className="flex items-center gap-2 text-sm text-graphite">
+          <Checkbox
             checked={allChecked}
-            onChange={(e) => toggleAll(e.target.checked)}
-            className="rounded border-[#d9d7d3]"
+            onCheckedChange={(checked) => toggleAll(checked)}
+            aria-label="Select all on page"
           />
           Select all on page
         </label>
-        <span className="text-sm text-[#5f6368]">
+        <span className="text-sm text-slate">
           {selectedIds.length} selected
         </span>
         <div className="flex flex-wrap gap-1.5 sm:ml-auto">
@@ -210,11 +211,11 @@ export function ReviewList({ reviews, replies, canApprove }: ReviewListProps) {
             className="gap-1"
           >
             {bulkLoading === "generate" ? (
-              <Loader2 className="h-3 w-3 animate-spin" />
+              <Spinner size="xs" />
             ) : (
               <Sparkles className="h-3 w-3" />
             )}
-            AI draft
+            {bulkLoading === "generate" ? "Gemini is writing…" : "AI draft"}
           </Button>
           {canApprove ? (
             <Button
@@ -230,12 +231,9 @@ export function ReviewList({ reviews, replies, canApprove }: ReviewListProps) {
             size="xs"
             disabled={selectedIds.length === 0 || bulkLoading !== null}
             onClick={() => runBulk("publish")}
+            loading={bulkLoading === "publish"}
           >
-            {bulkLoading === "publish"
-              ? "Publishing…"
-              : canApprove
-                ? "Approve & publish"
-                : "Publish"}
+            {bulkLoading === "publish" ? "Posting to Google…" : canApprove ? "Approve & publish" : "Publish"}
           </Button>
           <Button
             size="xs"
@@ -248,6 +246,33 @@ export function ReviewList({ reviews, replies, canApprove }: ReviewListProps) {
           </Button>
         </div>
       </div>
+
+      {bulkLoading === "generate" ? (
+        <ActivityStatus
+          tone="gemini"
+          title="Gemini is drafting the selected replies"
+          detail="Each draft stays in GRM. Nothing is posted to Google until a person approves it."
+        />
+      ) : null}
+      {bulkLoading === "approve" ? (
+        <ActivityStatus
+          title="Approving the selected drafts"
+          detail="Approved replies are ready to publish. They are not on Google yet."
+        />
+      ) : null}
+      {bulkLoading === "publish" ? (
+        <ActivityStatus
+          tone="google"
+          title="Posting the selected replies on Google"
+          detail="Google is publishing each approved reply on its Business Profile."
+        />
+      ) : null}
+      {bulkLoading === "discard" ? (
+        <ActivityStatus
+          title="Removing the selected drafts"
+          detail="These drafts leave GRM. Replies already on Google stay there."
+        />
+      ) : null}
 
       {bulkError && (
         <p className="text-xs text-red-600" role="alert">
@@ -279,24 +304,22 @@ export function ReviewList({ reviews, replies, canApprove }: ReviewListProps) {
               key={review.id}
               role="listitem"
               className={cn(
-                "flex flex-col rounded-3xl border bg-white p-5 text-left transition-colors",
+                "flex flex-col rounded-xl border bg-white p-5 text-left transition-colors",
                 isActive
-                  ? "border-[#1a73e8] bg-[#e8f0fe]/40"
-                  : "border-[#dadce0] hover:border-[#1a73e8]"
+                  ? "border-ink bg-paper/40"
+                  : "border-silver hover:border-ink"
               )}
             >
               <div className="flex items-start gap-3">
-                <input
-                  type="checkbox"
+                <Checkbox
                   checked={!!checked[review.id]}
-                  onChange={(e) =>
+                  onCheckedChange={(checked) =>
                     setChecked((prev) => ({
                       ...prev,
-                      [review.id]: e.target.checked,
+                      [review.id]: checked,
                     }))
                   }
                   onClick={(e) => e.stopPropagation()}
-                  className="mt-1 rounded border-[#dadce0]"
                   aria-label={`Select review by ${name}`}
                 />
                 <span
@@ -313,7 +336,7 @@ export function ReviewList({ reviews, replies, canApprove }: ReviewListProps) {
                 </span>
                 <div className="min-w-0 flex-1">
                   <div className="flex items-start justify-between gap-2">
-                    <p className="truncate text-sm font-medium text-[#202124]">
+                    <p className="truncate text-sm font-medium text-graphite">
                       {name}
                     </p>
                     <span
@@ -329,7 +352,7 @@ export function ReviewList({ reviews, replies, canApprove }: ReviewListProps) {
                       {review.star_rating}/5
                     </span>
                   </div>
-                  <p className="mt-0.5 truncate text-xs font-light text-[#5f6368]">
+                  <p className="mt-0.5 truncate text-xs font-light text-slate">
                     {formatRelativeDate(review.review_create_time)}
                     {" · "}
                     {review.location_title}
@@ -340,18 +363,18 @@ export function ReviewList({ reviews, replies, canApprove }: ReviewListProps) {
               <button
                 type="button"
                 onClick={() => setSelectedId(review.id)}
-                className="mt-4 flex flex-1 flex-col text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#1a73e8]"
+                className="mt-4 flex flex-1 flex-col text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ink/10"
                 aria-label={`Open review by ${name}`}
               >
                 <StarRating rating={review.star_rating} />
-                <p className="mt-3 line-clamp-4 text-sm font-light leading-relaxed text-[#202124] sm:line-clamp-5 sm:min-h-[7.5rem]">
+                <p className="mt-3 line-clamp-4 text-sm font-light leading-relaxed text-graphite sm:line-clamp-5 sm:min-h-[7.5rem]">
                   {review.comment || "Rating only — no written comment."}
                 </p>
               </button>
 
               <div className="mt-4 flex flex-wrap items-center gap-2">
                 {hasGoogleReply && (
-                  <span className="inline-flex items-center gap-1 rounded-full bg-[#e6f4ea] px-2.5 py-1 text-[11px] font-medium text-classroom-green">
+                  <span className="inline-flex items-center gap-1 rounded-full bg-[#e6f4ea] px-2.5 py-1 text-[11px] font-medium text-success">
                     <MessageSquare className="h-3 w-3" aria-hidden />
                     On Google
                   </span>
@@ -363,7 +386,7 @@ export function ReviewList({ reviews, replies, canApprove }: ReviewListProps) {
                   />
                 )}
                 {review.reply_status === "none" && !hasGoogleReply && (
-                  <span className="text-xs font-light text-[#5f6368]">
+                  <span className="text-xs font-light text-slate">
                     Needs a reply
                   </span>
                 )}
@@ -375,7 +398,7 @@ export function ReviewList({ reviews, replies, canApprove }: ReviewListProps) {
 
       {selectedReview && (
         <div
-          className="fixed inset-0 z-50 flex items-stretch justify-center bg-[#202124]/45 sm:items-center sm:p-6"
+          className="fixed inset-0 z-50 flex items-stretch justify-center bg-graphite/45 sm:items-center sm:p-6"
           role="presentation"
           onClick={() => setSelectedId(null)}
         >
@@ -383,7 +406,7 @@ export function ReviewList({ reviews, replies, canApprove }: ReviewListProps) {
             role="dialog"
             aria-modal="true"
             aria-label={`Review by ${selectedReview.reviewer_display_name || "reviewer"}`}
-            className="flex h-dvh w-full max-w-2xl flex-col overflow-hidden bg-white sm:h-[min(92dvh,860px)] sm:rounded-3xl sm:border sm:border-[#dadce0]"
+            className="flex h-dvh w-full max-w-2xl flex-col overflow-hidden bg-white sm:h-[min(92dvh,860px)] sm:rounded-xl sm:border sm:border-silver"
             onClick={(event) => event.stopPropagation()}
           >
             <ReviewDetailPanel

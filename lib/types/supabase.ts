@@ -749,6 +749,10 @@ export type Database = {
     }
     Functions: {
       grm_my_workspace_ids: { Args: Record<PropertyKey, never>; Returns: string[] }
+      grm_location_review_counts: {
+        Args: { p_workspace_id: string; p_start?: string | null; p_end?: string | null }
+        Returns: { location_id: string; review_count: number }[]
+      }
       grm_location_review_stats: {
         Args: { p_workspace_id: string }
         Returns: {
@@ -772,7 +776,14 @@ export type Database = {
         }[]
       }
       grm_review_trends: {
-        Args: { p_workspace_id: string; p_months?: number; p_client_id?: string | null }
+        Args: {
+          p_workspace_id: string
+          p_months?: number | null
+          p_client_id?: string | null
+          p_location_id?: string | null
+          p_start?: string | null
+          p_end?: string | null
+        }
         Returns: {
           month: string
           review_count: number

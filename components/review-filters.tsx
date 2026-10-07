@@ -1,9 +1,16 @@
 "use client";
 
 import { useRouter, usePathname, useSearchParams } from "next/navigation";
-import { useCallback, useEffect, useState, useTransition } from "react";
+import { useCallback, useEffect, useState } from "react";
+import { useScopedTransition } from "@/components/transition-scope";
 import { cn } from "@/lib/utils";
-import { Star, Search, X } from "lucide-react";
+import { Star, Search } from "lucide-react";
+import { ClearFiltersButton } from "@/components/clear-filters-button";
+import { DateRangeFilter, type DateRangeChange } from "@/components/date-range-filter";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { SelectField } from "@/components/ui/select-field";
+import type { DateRangeKey } from "@/lib/date-range";
 
 const STATUS_FILTERS = [
   { key: "all", label: "All" },
@@ -17,19 +24,12 @@ const STATUS_FILTERS = [
 
 const RATING_FILTERS = [5, 4, 3, 2, 1] as const;
 
-const PERIOD_FILTERS = [
-  { key: "all", label: "All time" },
-  { key: "7d", label: "7 days" },
-  { key: "30d", label: "30 days" },
-  { key: "90d", label: "90 days" },
-] as const;
-
 interface ReviewFiltersProps {
   currentFilter: string;
   currentRating: string;
   currentRatingBucket: string;
   currentSearch: string;
-  currentPeriod: string;
+  currentRange: { key: DateRangeKey; from: string; to: string };
   currentHasComment: boolean;
   clients: Array<{ id: string; name: string }>;
   locations: Array<{ id: string; location_title: string; clientId: string | null }>;
@@ -43,7 +43,7 @@ export function ReviewFilters({
   currentRating,
   currentRatingBucket,
   currentSearch,
-  currentPeriod,
+  currentRange,
   currentHasComment,
   clients,
   locations,
@@ -56,7 +56,7 @@ export function ReviewFilters({
   const searchParams = useSearchParams();
   const [searchValue, setSearchValue] = useState(currentSearch);
   const [syncedSearch, setSyncedSearch] = useState(currentSearch);
-  const [, startTransition] = useTransition();
+  const { start: startTransition } = useScopedTransition();
 
   if (syncedSearch !== currentSearch) {
     setSyncedSearch(currentSearch);
@@ -75,7 +75,7 @@ export function ReviewFilters({
       });
     }, 320);
     return () => window.clearTimeout(handle);
-  }, [searchValue, currentSearch, pathname, router, searchParams]);
+  }, [searchValue, currentSearch, pathname, router, searchParams, startTransition]);
 
   const pushParams = useCallback(
     (mutate: (params: URLSearchParams) => void) => {
@@ -86,7 +86,7 @@ export function ReviewFilters({
         router.push(`${pathname}?${params.toString()}`);
       });
     },
-    [router, pathname, searchParams]
+    [router, pathname, searchParams, startTransition]
   );
 
   const updateParam = useCallback(
@@ -113,7 +113,7 @@ export function ReviewFilters({
     !!currentRating ||
     !!currentRatingBucket ||
     !!currentSearch ||
-    currentPeriod !== "all" ||
+    currentRange.key !== "all" ||
     currentHasComment ||
     !!currentClientId ||
     !!currentLocationId;
@@ -146,8 +146,8 @@ export function ReviewFilters({
     <div className={cn("space-y-2.5", compact && "space-y-2")}>
       <div className="grid grid-cols-1 gap-2 sm:flex sm:flex-wrap sm:items-center">
         {useClientSearch ? (
-          <div className="relative">
-            <input
+          <div className="relative sm:w-56">
+            <Input
               type="search"
               list="dashboard-client-options"
               value={clientQuery}
@@ -170,7 +170,6 @@ export function ReviewFilters({
                   });
                 }
               }}
-              className="h-10 w-full rounded-full border border-[#dadce0] bg-white px-4 text-sm text-[#202124] focus:border-[#1a73e8] focus:outline-none focus:ring-2 focus:ring-[#e8f0fe] sm:w-56"
               aria-label="Search and filter by profile"
             />
             <datalist id="dashboard-client-options">
@@ -180,89 +179,78 @@ export function ReviewFilters({
             </datalist>
           </div>
         ) : (
-          <select
+          <SelectField
+            label="Filter by client"
             value={currentClientId}
-            onChange={(e) => {
+            placeholder="All profiles"
+            className="sm:w-auto"
+            onValueChange={(next) => {
               pushParams((params) => {
                 params.delete("location");
-                if (e.target.value) params.set("client", e.target.value);
+                if (next) params.set("client", next);
                 else params.delete("client");
               });
             }}
-            className="h-10 w-full rounded-full border border-[#dadce0] bg-white px-4 text-sm text-[#202124] focus:border-[#1a73e8] focus:outline-none focus:ring-2 focus:ring-[#e8f0fe] sm:w-auto"
-            aria-label="Filter by client"
-          >
-            <option value="">All profiles</option>
-            {clients.map((c) => (
-              <option key={c.id} value={c.id}>
-                {c.name}
-              </option>
-            ))}
-          </select>
+            options={[
+              { value: "", label: "All profiles" },
+              ...clients.map((client) => ({ value: client.id, label: client.name })),
+            ]}
+          />
         )}
 
         {filteredLocations.length > 0 && (
-          <select
+          <SelectField
+            label="Filter by location"
             value={currentLocationId}
-            onChange={(e) => updateParam("location", e.target.value)}
-            className="h-10 w-full rounded-full border border-[#dadce0] bg-white px-4 text-sm text-[#202124] focus:border-[#1a73e8] focus:outline-none focus:ring-2 focus:ring-[#e8f0fe] sm:w-auto"
-            aria-label="Filter by location"
-          >
-            <option value="">All locations</option>
-            {filteredLocations.map((l) => (
-              <option key={l.id} value={l.id}>
-                {l.location_title}
-              </option>
-            ))}
-          </select>
+            placeholder="All locations"
+            className="sm:w-auto"
+            onValueChange={(next) => updateParam("location", next)}
+            options={[
+              { value: "", label: "All locations" },
+              ...filteredLocations.map((location) => ({
+                value: location.id,
+                label: location.location_title,
+              })),
+            ]}
+          />
         )}
 
-        <select
-          value={currentPeriod}
-          onChange={(e) => updateParam("period", e.target.value)}
-          className="h-10 w-full rounded-full border border-[#dadce0] bg-white px-4 text-sm text-[#202124] focus:border-[#1a73e8] focus:outline-none focus:ring-2 focus:ring-[#e8f0fe] sm:w-auto"
-          aria-label="Filter by time period"
-        >
-          {PERIOD_FILTERS.map((p) => (
-            <option key={p.key} value={p.key}>
-              {p.label}
-            </option>
-          ))}
-        </select>
+        <DateRangeFilter
+          value={currentRange}
+          defaultKey="all"
+          onChange={(change: DateRangeChange) =>
+            pushParams((params) => {
+              params.delete("period");
+              for (const [key, value] of Object.entries(change)) {
+                if (value) params.set(key, value);
+                else params.delete(key);
+              }
+            })
+          }
+        />
 
-        {hasActive && (
-          <button
-            type="button"
-            onClick={clearAll}
-            className="inline-flex h-10 items-center gap-1 rounded-full px-3 text-sm text-[#5f6368] hover:bg-[#e8f0fe] hover:text-[#1a73e8]"
-          >
-            <X className="h-3.5 w-3.5" aria-hidden />
-            Clear
-          </button>
-        )}
+        {hasActive && <ClearFiltersButton onClear={clearAll} />}
       </div>
 
       <div className="flex flex-wrap items-center gap-1">
         {STATUS_FILTERS.map((f) => (
-          <button
+          <Button
             key={f.key}
             type="button"
+            size="sm"
+            variant={currentFilter === f.key ? "default" : "outline"}
             onClick={() => updateParam("filter", f.key)}
-            className={cn(
-              "rounded-full px-3 py-1.5 text-[13px] font-medium transition-colors",
-              currentFilter === f.key
-                ? "bg-[#1a73e8] text-white"
-                : "bg-[#e8f0fe] text-[#202124] hover:bg-[#dadce0]"
-            )}
           >
             {f.label}
-          </button>
+          </Button>
         ))}
       </div>
 
       <div className="flex flex-wrap items-center gap-1">
-        <button
+        <Button
           type="button"
+          size="sm"
+          variant={currentRatingBucket === "negative" ? "default" : "outline"}
           onClick={() =>
             pushParams((params) => {
               params.delete("rating");
@@ -270,17 +258,13 @@ export function ReviewFilters({
               else params.set("stars", "negative");
             })
           }
-          className={cn(
-            "rounded-full px-3 py-1.5 text-[13px] font-medium transition-colors",
-            currentRatingBucket === "negative"
-              ? "bg-google-blue text-white"
-              : "bg-[#e8f0fe] text-[#202124] hover:bg-[#dadce0]"
-          )}
         >
           1–2★ Critical
-        </button>
-        <button
+        </Button>
+        <Button
           type="button"
+          size="sm"
+          variant={currentRatingBucket === "positive" ? "default" : "outline"}
           onClick={() =>
             pushParams((params) => {
               params.delete("rating");
@@ -288,22 +272,18 @@ export function ReviewFilters({
               else params.set("stars", "positive");
             })
           }
-          className={cn(
-            "rounded-full px-3 py-1.5 text-[13px] font-medium transition-colors",
-            currentRatingBucket === "positive"
-              ? "bg-[#1a73e8] text-white"
-              : "bg-[#e8f0fe] text-[#202124] hover:bg-[#dadce0]"
-          )}
         >
           4–5★ Positive
-        </button>
+        </Button>
 
-        <div className="mx-1 h-4 w-px bg-[#dadce0]" aria-hidden />
+        <div className="mx-1 h-4 w-px bg-silver" aria-hidden />
 
         {RATING_FILTERS.map((r) => (
-          <button
+          <Button
             key={r}
             type="button"
+            size="sm"
+            variant={currentRating === String(r) ? "default" : "outline"}
             onClick={() =>
               pushParams((params) => {
                 params.delete("stars");
@@ -311,50 +291,40 @@ export function ReviewFilters({
                 else params.set("rating", String(r));
               })
             }
-            className={cn(
-              "flex items-center gap-0.5 rounded-full px-3 py-1.5 text-[13px] font-medium transition-colors",
-              currentRating === String(r)
-                ? "bg-[#1a73e8] text-white"
-                : "bg-[#e8f0fe] text-[#202124] hover:bg-[#dadce0]"
-            )}
           >
             {r}
             <Star className="h-3 w-3 fill-current" aria-hidden />
-          </button>
+          </Button>
         ))}
 
-        <div className="mx-1 h-4 w-px bg-[#dadce0]" aria-hidden />
+        <div className="mx-1 h-4 w-px bg-silver" aria-hidden />
 
-        <button
+        <Button
           type="button"
+          size="sm"
+          variant={currentHasComment ? "default" : "outline"}
           onClick={() =>
             pushParams((params) => {
               if (currentHasComment) params.delete("comment");
               else params.set("comment", "1");
             })
           }
-          className={cn(
-            "rounded-full px-3 py-1.5 text-[13px] font-medium transition-colors",
-            currentHasComment
-              ? "bg-[#1a73e8] text-white"
-              : "bg-[#e8f0fe] text-[#202124] hover:bg-[#dadce0]"
-          )}
         >
           Has comment
-        </button>
+        </Button>
       </div>
 
-      <div className="relative">
+      <div className="relative sm:max-w-sm">
         <Search
-          className="absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-[#5f6368]"
+          className="pointer-events-none absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-slate"
           aria-hidden
         />
-        <input
+        <Input
           type="search"
           placeholder="Search reviewer or review text…"
           value={searchValue}
           onChange={(e) => setSearchValue(e.target.value)}
-          className="h-10 w-full rounded-full border border-[#dadce0] bg-white pl-9 pr-4 text-sm text-[#202124] placeholder:text-[#5f6368] focus:border-[#1a73e8] focus:outline-none focus:ring-2 focus:ring-[#e8f0fe] sm:max-w-sm"
+          className="pl-9"
           aria-label="Search reviews"
         />
       </div>

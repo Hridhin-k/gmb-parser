@@ -53,7 +53,7 @@ export function UnlinkedLocationsPanel({
   if (locations.length === 0) return null;
 
   return (
-    <div className="rounded-3xl border border-[#dadce0] bg-[#e8f0fe]">
+    <div className="rounded-xl border border-silver bg-paper">
       <button
         type="button"
         className="flex w-full items-center justify-between px-4 py-3 text-left"
@@ -88,10 +88,10 @@ export function UnlinkedLocationsPanel({
               className="flex items-center justify-between rounded-md bg-white px-3 py-2.5 shadow-sm"
             >
               <div className="min-w-0">
-                <p className="truncate text-sm font-medium text-[#202124]">
+                <p className="truncate text-sm font-medium text-graphite">
                   {loc.location_title}
                 </p>
-                <p className="truncate text-xs text-[#5f6368]">
+                <p className="truncate text-xs text-slate">
                   {loc.address_formatted ??
                     loc.grm_google_accounts?.account_display_name ??
                     loc.google_location_name}
@@ -102,9 +102,10 @@ export function UnlinkedLocationsPanel({
                 variant="outline"
                 className="ml-3 shrink-0"
                 onClick={() => handleConnect(loc.id)}
+                loading={loadingId === loc.id}
                 disabled={loadingId === loc.id}
               >
-                <Link2 className="h-3.5 w-3.5" />
+                <Link2 className="h-3.5 w-3.5" aria-hidden />
                 {loadingId === loc.id ? "Assigning…" : "Assign"}
               </Button>
             </div>

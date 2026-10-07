@@ -1,81 +1,210 @@
 {
   "color": {
-    "canvas-white": {
-      "$value": "#f8f9fa",
+    "ink": {
+      "$value": "#101010",
       "$type": "color",
-      "$description": "Canvas White — Page background, card surfaces, section bands — the off-white ground that prevents harshness against pure white product screenshots"
+      "$description": "Ink — Primary CTAs, primary text, active states. Used as the strongest dark tone, providing maximum contrast and visual weight for key actions."
     },
-    "charcoal-ink": {
-      "$value": "#202124",
+    "action-blue": {
+      "$value": "#0099ff",
       "$type": "color",
-      "$description": "Charcoal Ink — Primary text, display headlines, active icon strokes — the deepest readable black-blue for maximum hierarchy"
+      "$description": "Action Blue — Tertiary links, informational banner text. A rare, functional splash of color reserved for secondary calls to action and informational highlights."
+    },
+    "white": {
+      "$value": "#ffffff",
+      "$type": "color",
+      "$description": "White — Card backgrounds, text on dark buttons."
+    },
+    "paper": {
+      "$value": "#f4f4f4",
+      "$type": "color",
+      "$description": "Paper — Main page background."
     },
     "graphite": {
-      "$value": "#3c4043",
+      "$value": "#242424",
       "$type": "color",
-      "$description": "Graphite — Secondary headings, nav text, strong body — one step lighter than charcoal for sub-headings and navigation labels"
+      "$description": "Graphite — Headlines, primary body text."
     },
     "slate": {
-      "$value": "#5f6368",
+      "$value": "#6b7280",
       "$type": "color",
-      "$description": "Slate — Muted body text, helper copy, icon glyphs, breadcrumb separators, footer micro-copy"
+      "$description": "Slate — Secondary text, descriptive copy, disabled states."
     },
-    "mist": {
-      "$value": "#dadce0",
+    "stone": {
+      "$value": "#898989",
       "$type": "color",
-      "$description": "Mist — Hairline borders, card outlines, input strokes, dividers between sections — the only structural separator in the system"
+      "$description": "Stone — Placeholder text, decorative UI elements."
     },
-    "cloud-shadow": {
-      "$value": "#c4c6c7",
+    "silver": {
+      "$value": "#e5e7eb",
       "$type": "color",
-      "$description": "Cloud Shadow — Soft elevation on focused inputs and floating chips"
+      "$description": "Silver — Borders, dividers, subtle backgrounds."
+    },
+    "info-banner-bg": {
+      "$value": "#eff6fe",
+      "$type": "color",
+      "$description": "Info Banner BG — Background for the top-of-page informational banner."
     },
     "google-blue": {
-      "$value": "#1a73e8",
+      "$value": "#4285f4",
       "$type": "color",
-      "$description": "Google Blue — Blue supporting accent for decorative details and low-frequency emphasis. Do not promote it to the primary CTA color"
+      "$description": "Google Blue — Integration logos only."
     },
-    "google-blue-deep": {
-      "$value": "#1967d2",
+    "google-yellow": {
+      "$value": "#fbbc04",
       "$type": "color",
-      "$description": "Google Blue Deep — Blue supporting accent for decorative details and low-frequency emphasis. Do not promote it to the primary CTA color"
+      "$description": "Google Yellow — Integration logos only."
     },
-    "classroom-green": {
-      "$value": "#188038",
+    "google-green": {
+      "$value": "#34a853",
       "$type": "color",
-      "$description": "Classroom Green — Green supporting accent for decorative details and low-frequency emphasis"
+      "$description": "Google Green — Integration logos only."
+    },
+    "google-red": {
+      "$value": "#ea4335",
+      "$type": "color",
+      "$description": "Google Red — Integration logos only."
     }
   },
   "font": {
-    "google-sans-display": {
-      "$value": "Google Sans Display",
+    "cal-sans": {
+      "$value": "Cal Sans",
       "$type": "fontFamily",
-      "$description": "Display headlines and section titles. The 80px display weight is the page's signature — tightly tracked and stacked to two lines in the hero. At 48px and below, tracking relaxes toward 0. Substituting with Inter (closest free analog) or Product Sans preserves the geometric warmth; system sans-serif will feel colder."
+      "$description": "Primary headline font. Its geometric forms and slightly wide stance give the brand a unique, technical-yet-friendly voice. Used exclusively for headings to establish hierarchy."
     },
-    "google-sans-text": {
-      "$value": "Google Sans Text",
+    "cal-sans-ui-variable-light": {
+      "$value": "Cal Sans UI Variable Light",
       "$type": "fontFamily",
-      "$description": "Body copy, navigation, buttons, form inputs, helper text, breadcrumbs. Weight 400 is the default; 500 marks emphasis and nav-active states. The positive tracking at small sizes (0.036em at 12px) is anti-convention — it adds air to prevent the dense, gray-on-gray feel that typical SaaS body copy produces."
+      "$description": "Primary body and UI text font. The light weight and tight negative tracking create a clean, modern text block that is readable without being loud."
+    },
+    "inter": {
+      "$value": "Inter",
+      "$type": "fontFamily",
+      "$description": "Secondary UI and body font. Used for smaller text, labels, and inside complex components like the calendar widget where utmost clarity is required."
+    },
+    "matter": {
+      "$value": "Matter",
+      "$type": "fontFamily",
+      "$description": "Tertiary UI text for captions and metadata where a highly legible, neutral choice is needed."
     }
   },
   "typography": {
     "xs": {
       "$value": {
-        "fontFamily": "Google Sans Text",
-        "fontSize": "12px",
+        "fontFamily": "Matter Regular",
+        "fontSize": "8px",
         "fontWeight": 400,
-        "lineHeight": 1.67,
-        "letterSpacing": "0.017em"
+        "lineHeight": 1.4,
+        "letterSpacing": "0em"
       },
       "$type": "typography",
-      "$description": "Typography step xs at 12px"
+      "$description": "Typography step xs at 8px"
+    },
+    "xs-2": {
+      "$value": {
+        "fontFamily": "Inter",
+        "fontSize": "10px",
+        "fontWeight": 500,
+        "lineHeight": 1.14,
+        "letterSpacing": "0em"
+      },
+      "$type": "typography",
+      "$description": "Typography step xs-2 at 10px"
+    },
+    "xs-3": {
+      "$value": {
+        "fontFamily": "Inter",
+        "fontSize": "10px",
+        "fontWeight": 500,
+        "lineHeight": 1.43,
+        "letterSpacing": "0em"
+      },
+      "$type": "typography",
+      "$description": "Typography step xs-3 at 10px"
+    },
+    "xs-4": {
+      "$value": {
+        "fontFamily": "Inter",
+        "fontSize": "10px",
+        "fontWeight": 400,
+        "lineHeight": 1.14,
+        "letterSpacing": "0em"
+      },
+      "$type": "typography",
+      "$description": "Typography step xs-4 at 10px"
+    },
+    "xs-5": {
+      "$value": {
+        "fontFamily": "Matter Regular",
+        "fontSize": "10px",
+        "fontWeight": 400,
+        "lineHeight": 1.4,
+        "letterSpacing": "0em"
+      },
+      "$type": "typography",
+      "$description": "Typography step xs-5 at 10px"
+    },
+    "xs-6": {
+      "$value": {
+        "fontFamily": "sans-serif",
+        "fontSize": "12px",
+        "fontWeight": 400,
+        "lineHeight": 1.2,
+        "letterSpacing": "0em"
+      },
+      "$type": "typography",
+      "$description": "Typography step xs-6 at 12px"
+    },
+    "xs-7": {
+      "$value": {
+        "fontFamily": "Cal Sans UI Variable Light",
+        "fontSize": "12px",
+        "fontWeight": 300,
+        "lineHeight": 1,
+        "letterSpacing": "0em"
+      },
+      "$type": "typography",
+      "$description": "Typography step xs-7 at 12px"
+    },
+    "xs-8": {
+      "$value": {
+        "fontFamily": "Inter",
+        "fontSize": "12px",
+        "fontWeight": 500,
+        "lineHeight": 1,
+        "letterSpacing": "0em"
+      },
+      "$type": "typography",
+      "$description": "Typography step xs-8 at 12px"
+    },
+    "xs-9": {
+      "$value": {
+        "fontFamily": "Matter Regular",
+        "fontSize": "12px",
+        "fontWeight": 400,
+        "lineHeight": 1.5,
+        "letterSpacing": "0em"
+      },
+      "$type": "typography",
+      "$description": "Typography step xs-9 at 12px"
+    },
+    "xs-10": {
+      "$value": {
+        "fontFamily": "Cal Sans",
+        "fontSize": "12px",
+        "fontWeight": 600,
+        "lineHeight": 1.5,
+        "letterSpacing": "0em"
+      },
+      "$type": "typography",
+      "$description": "Typography step xs-10 at 12px"
     },
     "sm": {
       "$value": {
-        "fontFamily": "Google Sans Text",
+        "fontFamily": "Cal Sans UI Variable Light",
         "fontSize": "14px",
-        "fontWeight": 400,
-        "lineHeight": 1.44,
+        "fontWeight": 300,
+        "lineHeight": 1.4,
         "letterSpacing": "0em"
       },
       "$type": "typography",
@@ -83,21 +212,153 @@
     },
     "sm-2": {
       "$value": {
-        "fontFamily": "Google Sans Text",
+        "fontFamily": "Cal Sans UI Variable Light",
         "fontSize": "14px",
-        "fontWeight": 500,
-        "lineHeight": 1.71,
-        "letterSpacing": "0.036em"
+        "fontWeight": 300,
+        "lineHeight": 1.5,
+        "letterSpacing": "-0.014em"
       },
       "$type": "typography",
       "$description": "Typography step sm-2 at 14px"
     },
+    "sm-3": {
+      "$value": {
+        "fontFamily": "Cal Sans UI Variable Light",
+        "fontSize": "14px",
+        "fontWeight": 300,
+        "lineHeight": 1.43,
+        "letterSpacing": "-0.014em"
+      },
+      "$type": "typography",
+      "$description": "Typography step sm-3 at 14px"
+    },
+    "sm-4": {
+      "$value": {
+        "fontFamily": "Cal Sans UI Variable Light",
+        "fontSize": "14px",
+        "fontWeight": 300,
+        "lineHeight": 1.4,
+        "letterSpacing": "-0.02em"
+      },
+      "$type": "typography",
+      "$description": "Typography step sm-4 at 14px"
+    },
+    "sm-5": {
+      "$value": {
+        "fontFamily": "Matter Regular",
+        "fontSize": "14px",
+        "fontWeight": 400,
+        "lineHeight": 1.14,
+        "letterSpacing": "0em"
+      },
+      "$type": "typography",
+      "$description": "Typography step sm-5 at 14px"
+    },
+    "sm-6": {
+      "$value": {
+        "fontFamily": "Cal Sans UI Variable Light",
+        "fontSize": "14px",
+        "fontWeight": 300,
+        "lineHeight": 1.43,
+        "letterSpacing": "0em"
+      },
+      "$type": "typography",
+      "$description": "Typography step sm-6 at 14px"
+    },
+    "sm-7": {
+      "$value": {
+        "fontFamily": "Inter",
+        "fontSize": "14px",
+        "fontWeight": 500,
+        "lineHeight": 1.14,
+        "letterSpacing": "0em"
+      },
+      "$type": "typography",
+      "$description": "Typography step sm-7 at 14px"
+    },
+    "sm-8": {
+      "$value": {
+        "fontFamily": "Cal Sans UI Variable Light",
+        "fontSize": "14px",
+        "fontWeight": 300,
+        "lineHeight": 1.5,
+        "letterSpacing": "0em"
+      },
+      "$type": "typography",
+      "$description": "Typography step sm-8 at 14px"
+    },
+    "sm-9": {
+      "$value": {
+        "fontFamily": "Roboto Mono",
+        "fontSize": "14px",
+        "fontWeight": 600,
+        "lineHeight": 1,
+        "letterSpacing": "0em"
+      },
+      "$type": "typography",
+      "$description": "Typography step sm-9 at 14px"
+    },
+    "sm-10": {
+      "$value": {
+        "fontFamily": "Inter",
+        "fontSize": "14px",
+        "fontWeight": 500,
+        "lineHeight": 1.43,
+        "letterSpacing": "0em"
+      },
+      "$type": "typography",
+      "$description": "Typography step sm-10 at 14px"
+    },
+    "sm-11": {
+      "$value": {
+        "fontFamily": "Matter SemiBold",
+        "fontSize": "14px",
+        "fontWeight": 400,
+        "lineHeight": 1.3,
+        "letterSpacing": "0em"
+      },
+      "$type": "typography",
+      "$description": "Typography step sm-11 at 14px"
+    },
+    "sm-12": {
+      "$value": {
+        "fontFamily": "Matter Medium",
+        "fontSize": "14px",
+        "fontWeight": 400,
+        "lineHeight": 1.5,
+        "letterSpacing": "0em"
+      },
+      "$type": "typography",
+      "$description": "Typography step sm-12 at 14px"
+    },
+    "sm-13": {
+      "$value": {
+        "fontFamily": "Matter Regular",
+        "fontSize": "14px",
+        "fontWeight": 400,
+        "lineHeight": 1.5,
+        "letterSpacing": "0em"
+      },
+      "$type": "typography",
+      "$description": "Typography step sm-13 at 14px"
+    },
+    "sm-14": {
+      "$value": {
+        "fontFamily": "CUSTOMV2;Cal Sans UI Regular",
+        "fontSize": "14px",
+        "fontWeight": 400,
+        "lineHeight": 1.5,
+        "letterSpacing": "0em"
+      },
+      "$type": "typography",
+      "$description": "Typography step sm-14 at 14px"
+    },
     "base": {
       "$value": {
-        "fontFamily": "Google Sans Text",
+        "fontFamily": "Cal Sans UI Variable Light",
         "fontSize": "16px",
-        "fontWeight": 400,
-        "lineHeight": 1.63,
+        "fontWeight": 300,
+        "lineHeight": 1.5,
         "letterSpacing": "0em"
       },
       "$type": "typography",
@@ -105,10 +366,10 @@
     },
     "base-2": {
       "$value": {
-        "fontFamily": "Google Sans Display",
+        "fontFamily": "Inter",
         "fontSize": "16px",
-        "fontWeight": 500,
-        "lineHeight": 1.5,
+        "fontWeight": 600,
+        "lineHeight": 1,
         "letterSpacing": "0em"
       },
       "$type": "typography",
@@ -116,240 +377,143 @@
     },
     "base-3": {
       "$value": {
-        "fontFamily": "Google Sans Display",
+        "fontFamily": "Cal Sans",
         "fontSize": "16px",
-        "fontWeight": 400,
-        "lineHeight": 1.5,
-        "letterSpacing": "0.001em"
+        "fontWeight": 600,
+        "lineHeight": 1.1,
+        "letterSpacing": "0em"
       },
       "$type": "typography",
       "$description": "Typography step base-3 at 16px"
     },
     "base-4": {
       "$value": {
-        "fontFamily": "Google Sans Display",
+        "fontFamily": "Cal Sans UI Variable Light",
         "fontSize": "16px",
-        "fontWeight": 500,
-        "lineHeight": 1.75,
-        "letterSpacing": "0em"
+        "fontWeight": 300,
+        "lineHeight": 1.5,
+        "letterSpacing": "-0.012em"
       },
       "$type": "typography",
       "$description": "Typography step base-4 at 16px"
     },
-    "base-5": {
-      "$value": {
-        "fontFamily": "Google Sans Display",
-        "fontSize": "16px",
-        "fontWeight": 500,
-        "lineHeight": 1.2,
-        "letterSpacing": "0em"
-      },
-      "$type": "typography",
-      "$description": "Typography step base-5 at 16px"
-    },
-    "base-6": {
-      "$value": {
-        "fontFamily": "Google Sans Display",
-        "fontSize": "16px",
-        "fontWeight": 400,
-        "lineHeight": 1.2,
-        "letterSpacing": "0em"
-      },
-      "$type": "typography",
-      "$description": "Typography step base-6 at 16px"
-    },
-    "base-7": {
-      "$value": {
-        "fontFamily": "Google Sans Display",
-        "fontSize": "16px",
-        "fontWeight": 500,
-        "lineHeight": 1.2,
-        "letterSpacing": "0.031em"
-      },
-      "$type": "typography",
-      "$description": "Typography step base-7 at 16px"
-    },
-    "base-8": {
-      "$value": {
-        "fontFamily": "Google Sans Text",
-        "fontSize": "16px",
-        "fontWeight": 500,
-        "lineHeight": 1.5,
-        "letterSpacing": "0em"
-      },
-      "$type": "typography",
-      "$description": "Typography step base-8 at 16px"
-    },
-    "base-9": {
-      "$value": {
-        "fontFamily": "Google Sans Text",
-        "fontSize": "16px",
-        "fontWeight": 400,
-        "lineHeight": 1.5,
-        "letterSpacing": "0.006em"
-      },
-      "$type": "typography",
-      "$description": "Typography step base-9 at 16px"
-    },
-    "base-10": {
-      "$value": {
-        "fontFamily": "Google Sans Text",
-        "fontSize": "16px",
-        "fontWeight": 500,
-        "lineHeight": 1.44,
-        "letterSpacing": "0em"
-      },
-      "$type": "typography",
-      "$description": "Typography step base-10 at 16px"
-    },
     "lg": {
       "$value": {
-        "fontFamily": "Google Sans Text",
+        "fontFamily": "Cal Sans UI Variable Light",
         "fontSize": "18px",
-        "fontWeight": 400,
-        "lineHeight": 1.44,
-        "letterSpacing": "0em"
+        "fontWeight": 300,
+        "lineHeight": 1.3,
+        "letterSpacing": "-0.011em"
       },
       "$type": "typography",
       "$description": "Typography step lg at 18px"
     },
-    "lg-2": {
-      "$value": {
-        "fontFamily": "Google Sans Display",
-        "fontSize": "18px",
-        "fontWeight": 500,
-        "lineHeight": 1.56,
-        "letterSpacing": "0em"
-      },
-      "$type": "typography",
-      "$description": "Typography step lg-2 at 18px"
-    },
-    "lg-3": {
-      "$value": {
-        "fontFamily": "Google Sans Text",
-        "fontSize": "18px",
-        "fontWeight": 400,
-        "lineHeight": 1,
-        "letterSpacing": "0em"
-      },
-      "$type": "typography",
-      "$description": "Typography step lg-3 at 18px"
-    },
-    "lg-4": {
-      "$value": {
-        "fontFamily": "Google Sans Text",
-        "fontSize": "18px",
-        "fontWeight": 400,
-        "lineHeight": 1.56,
-        "letterSpacing": "0em"
-      },
-      "$type": "typography",
-      "$description": "Typography step lg-4 at 18px"
-    },
-    "lg-5": {
-      "$value": {
-        "fontFamily": "Google Sans Text",
-        "fontSize": "18px",
-        "fontWeight": 300,
-        "lineHeight": 1.44,
-        "letterSpacing": "0em"
-      },
-      "$type": "typography",
-      "$description": "Typography step lg-5 at 18px"
-    },
     "xl": {
       "$value": {
-        "fontFamily": "Google Sans Display",
+        "fontFamily": "Cal Sans",
         "fontSize": "20px",
-        "fontWeight": 400,
-        "lineHeight": 1.4,
-        "letterSpacing": "0em"
+        "fontWeight": 600,
+        "lineHeight": 1,
+        "letterSpacing": "0.01em"
       },
       "$type": "typography",
       "$description": "Typography step xl at 20px"
     },
     "xl-2": {
       "$value": {
-        "fontFamily": "Google Sans Display",
+        "fontFamily": "Cal Sans",
         "fontSize": "20px",
-        "fontWeight": 500,
-        "lineHeight": 1.4,
+        "fontWeight": 600,
+        "lineHeight": 1.5,
         "letterSpacing": "0em"
       },
       "$type": "typography",
       "$description": "Typography step xl-2 at 20px"
     },
-    "xl-3": {
-      "$value": {
-        "fontFamily": "Google Sans Display",
-        "fontSize": "20px",
-        "fontWeight": 500,
-        "lineHeight": 1.2,
-        "letterSpacing": "0em"
-      },
-      "$type": "typography",
-      "$description": "Typography step xl-3 at 20px"
-    },
-    "xl-4": {
-      "$value": {
-        "fontFamily": "Google Sans Display",
-        "fontSize": "22px",
-        "fontWeight": 400,
-        "lineHeight": 1.09,
-        "letterSpacing": "0em"
-      },
-      "$type": "typography",
-      "$description": "Typography step xl-4 at 22px"
-    },
     "2xl": {
       "$value": {
-        "fontFamily": "Google Sans Display",
-        "fontSize": "28px",
-        "fontWeight": 400,
-        "lineHeight": 1.29,
+        "fontFamily": "Cal Sans",
+        "fontSize": "24px",
+        "fontWeight": 600,
+        "lineHeight": 1.3,
         "letterSpacing": "0em"
       },
       "$type": "typography",
-      "$description": "Typography step 2xl at 28px"
+      "$description": "Typography step 2xl at 24px"
     },
     "5xl": {
       "$value": {
-        "fontFamily": "Google Sans Display",
+        "fontFamily": "Cal Sans",
         "fontSize": "48px",
-        "fontWeight": 700,
-        "lineHeight": 1.17,
-        "letterSpacing": "-0.01em"
+        "fontWeight": 600,
+        "lineHeight": 1.1,
+        "letterSpacing": "0em"
       },
       "$type": "typography",
       "$description": "Typography step 5xl at 48px"
     },
     "5xl-2": {
       "$value": {
-        "fontFamily": "Google Sans Display",
-        "fontSize": "80px",
-        "fontWeight": 700,
-        "lineHeight": 1.15,
-        "letterSpacing": "-0.006em"
+        "fontFamily": "Cal Sans",
+        "fontSize": "64px",
+        "fontWeight": 600,
+        "lineHeight": 1.1,
+        "letterSpacing": "0em"
       },
       "$type": "typography",
-      "$description": "Typography step 5xl-2 at 80px"
+      "$description": "Typography step 5xl-2 at 64px"
     }
   },
   "spacing": {
+    "4": {
+      "$value": "4px",
+      "$type": "dimension",
+      "$description": "Spacing 4px"
+    },
+    "5": {
+      "$value": "5px",
+      "$type": "dimension",
+      "$description": "Spacing 5px"
+    },
+    "6": {
+      "$value": "6px",
+      "$type": "dimension",
+      "$description": "Spacing 6px"
+    },
     "8": {
       "$value": "8px",
       "$type": "dimension",
       "$description": "Spacing 8px"
+    },
+    "10": {
+      "$value": "10px",
+      "$type": "dimension",
+      "$description": "Spacing 10px"
+    },
+    "12": {
+      "$value": "12px",
+      "$type": "dimension",
+      "$description": "Spacing 12px"
     },
     "16": {
       "$value": "16px",
       "$type": "dimension",
       "$description": "Spacing 16px"
     },
+    "20": {
+      "$value": "20px",
+      "$type": "dimension",
+      "$description": "Spacing 20px"
+    },
     "24": {
       "$value": "24px",
       "$type": "dimension",
       "$description": "Spacing 24px"
+    },
+    "28": {
+      "$value": "28px",
+      "$type": "dimension",
+      "$description": "Spacing 28px"
     },
     "32": {
       "$value": "32px",
@@ -370,26 +534,6 @@
       "$value": "80px",
       "$type": "dimension",
       "$description": "Spacing 80px"
-    },
-    "88": {
-      "$value": "88px",
-      "$type": "dimension",
-      "$description": "Spacing 88px"
-    },
-    "120": {
-      "$value": "120px",
-      "$type": "dimension",
-      "$description": "Spacing 120px"
-    },
-    "216": {
-      "$value": "216px",
-      "$type": "dimension",
-      "$description": "Spacing 216px"
-    },
-    "unit": {
-      "$value": "8px",
-      "$type": "dimension",
-      "$description": "Base spacing unit"
     }
   },
   "radius": {
@@ -403,64 +547,84 @@
       "$type": "dimension",
       "$description": "Border radius lg"
     },
+    "xl": {
+      "$value": "12px",
+      "$type": "dimension",
+      "$description": "Border radius xl"
+    },
     "2xl": {
       "$value": "16px",
       "$type": "dimension",
       "$description": "Border radius 2xl"
     },
-    "2xl-2": {
-      "$value": "20px",
-      "$type": "dimension",
-      "$description": "Border radius 2xl-2"
-    },
     "3xl": {
-      "$value": "24px",
+      "$value": "29px",
       "$type": "dimension",
       "$description": "Border radius 3xl"
     },
-    "3xl-2": {
-      "$value": "28px",
-      "$type": "dimension",
-      "$description": "Border radius 3xl-2"
-    },
     "full": {
-      "$value": "200px",
+      "$value": "100px",
       "$type": "dimension",
       "$description": "Border radius full"
     },
     "full-2": {
-      "$value": "300px",
+      "$value": "120px",
       "$type": "dimension",
       "$description": "Border radius full-2"
+    },
+    "full-3": {
+      "$value": "1000px",
+      "$type": "dimension",
+      "$description": "Border radius full-3"
+    },
+    "full-4": {
+      "$value": "9999px",
+      "$type": "dimension",
+      "$description": "Border radius full-4"
     }
   },
-  "surface": {
-    "canvas": {
-      "$value": "#f8f9fa",
-      "$type": "color",
-      "$description": "Surface level 0: Page background — the soft off-white that prevents glare against white product screenshots"
+  "shadow": {
+    "sm": {
+      "$value": "rgba(36, 36, 36, 0.7) 0px 1px 5px -4px, rgba(36, 36, 36, 0.05) 0px 4px 8px 0px",
+      "$type": "shadow",
+      "$description": "Shadow elevation sm"
     },
-    "card-surface": {
-      "$value": "#ffffff",
-      "$type": "color",
-      "$description": "Surface level 1: Feature cards, modal dialogs, embedded UI containers — true white to lift content off the canvas"
+    "subtle": {
+      "$value": "rgba(255, 255, 255, 0.15) 0px 2px 0px 0px inset",
+      "$type": "shadow",
+      "$description": "Shadow elevation subtle"
     },
-    "feature-panel-tint": {
-      "$value": "#e8f0fe",
-      "$type": "color",
-      "$description": "Surface level 2: Soft blue wash behind product screenshots in feature cards — ties the product UI to the brand accent"
+    "sm-2": {
+      "$value": "rgba(19, 19, 22, 0.7) 0px 1px 5px -4px, rgba(34, 42, 53, 0.1) 0px 0px 0px 1px, rgba(34, 42, 53, 0.05) 0px 4px 8px 0px",
+      "$type": "shadow",
+      "$description": "Shadow elevation sm-2"
     },
-    "scrim": {
-      "$value": "#20212480",
-      "$type": "color",
-      "$description": "Surface level 3: Modal overlay background — dims the page to focus attention"
+    "sm-3": {
+      "$value": "rgba(19, 19, 22, 0.7) 0px 1px 5px -4px, rgba(34, 42, 53, 0.08) 0px 0px 0px 1px, rgba(34, 42, 53, 0.05) 0px 4px 8px 0px",
+      "$type": "shadow",
+      "$description": "Shadow elevation sm-3"
+    },
+    "sm-4": {
+      "$value": "rgba(34, 42, 53, 0.05) 0px 4px 8px 0px",
+      "$type": "shadow",
+      "$description": "Shadow elevation sm-4"
+    },
+    "subtle-2": {
+      "$value": "rgb(255, 255, 255) 0px 2px 0px 0px inset",
+      "$type": "shadow",
+      "$description": "Shadow elevation subtle-2"
+    },
+    "subtle-3": {
+      "$value": "rgba(0, 0, 0, 0.1) 0px 1px 3px 0px, rgba(0, 0, 0, 0.06) 0px 0px 2px 0px",
+      "$type": "shadow",
+      "$description": "Shadow elevation subtle-3"
     }
   },
   "$extensions": {
     "com.refero.extraction": {
-      "url": "https://classroom.google.com",
-      "siteName": "Google for Education",
-      "extractedAt": "2026-06-03T17:37:16.469Z",
+      "url": "https://cal.com",
+      "siteName": "Cal.com",
+      "extractedAt": "2026-04-11T17:33:49.454Z",
       "variant": "extended"
     }
   }

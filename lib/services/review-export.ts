@@ -1,4 +1,5 @@
 import { createAdminClient } from "@/lib/supabase/admin";
+import { locationDisplayName } from "@/lib/ui/location-place";
 
 const PAGE_SIZE = 1000;
 export const EXPORT_MAX_ROWS = 50_000;
@@ -7,6 +8,7 @@ export interface ReviewExportFilters {
   clientId: string | null;
   locationId: string | null;
   since: string | null;
+  until: string | null;
   replyFilter: string;
   ratingBucket: "negative" | "positive" | null;
   rating: number | null;
@@ -44,10 +46,13 @@ type ExportRow = {
   reply_status: string;
   google_reply_comment: string | null;
   google_reply_update_time: string | null;
-  grm_google_locations:
-    | { location_title: string; grm_clients: { name: string } | { name: string }[] | null }
-    | { location_title: string; grm_clients: { name: string } | { name: string }[] | null }[]
-    | null;
+  grm_google_locations: ExportLocation | ExportLocation[] | null;
+};
+
+type ExportLocation = {
+  location_title: string;
+  address_formatted: string | null;
+  grm_clients: { name: string } | { name: string }[] | null;
 };
 
 function one<T>(value: T | T[] | null | undefined): T | null {
@@ -83,7 +88,7 @@ export async function* reviewCsvLines(
       .select(
         `review_create_time, reviewer_display_name, reviewer_is_anonymous, star_rating,
          comment, reply_status, google_reply_comment, google_reply_update_time,
-         grm_google_locations!inner(location_title, grm_clients(name))`
+         grm_google_locations!inner(location_title, address_formatted, grm_clients(name))`
       )
       .eq("workspace_id", workspaceId)
       .order("review_create_time", { ascending: false })
@@ -92,6 +97,7 @@ export async function* reviewCsvLines(
 
     if (locationIds) query = query.in("location_id", locationIds);
     if (filters.since) query = query.gte("review_create_time", filters.since);
+    if (filters.until) query = query.lt("review_create_time", filters.until);
     if (filters.rating !== null) query = query.eq("star_rating", filters.rating);
     else if (filters.ratingBucket === "negative") query = query.lte("star_rating", 2);
     else if (filters.ratingBucket === "positive") query = query.gte("star_rating", 4);
@@ -123,7 +129,13 @@ export async function* reviewCsvLines(
       yield csvRow([
         r.review_create_time,
         client?.name ?? "",
-        location?.location_title ?? "",
+        location
+          ? locationDisplayName({
+              title: location.location_title,
+              brand: client?.name,
+              address: location.address_formatted,
+            })
+          : "",
         r.reviewer_is_anonymous ? "Anonymous" : r.reviewer_display_name,
         r.star_rating,
         r.comment ?? "",

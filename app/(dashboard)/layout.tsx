@@ -1,4 +1,5 @@
 import { AppShell } from "@/components/app-shell";
+import { listAgencyClients } from "@/lib/services/agency-home";
 import { listAccessibleWorkspaces } from "@/lib/services/workspace";
 import { getActiveWorkspace } from "@/lib/services/session";
 
@@ -8,7 +9,10 @@ export default async function DashboardLayout({
   children: React.ReactNode;
 }) {
   const { user, workspaceId } = await getActiveWorkspace();
-  const workspaces = await listAccessibleWorkspaces(user.id);
+  const [workspaces, clients] = await Promise.all([
+    listAccessibleWorkspaces(user.id),
+    listAgencyClients(workspaceId),
+  ]);
   const workspaceName =
     workspaces.find((workspace) => workspace.id === workspaceId)?.name ??
     "Workspace";
@@ -19,6 +23,7 @@ export default async function DashboardLayout({
       workspaceName={workspaceName}
       workspaces={workspaces}
       activeWorkspaceId={workspaceId}
+      clients={clients}
     >
       {children}
     </AppShell>

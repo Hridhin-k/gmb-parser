@@ -30,12 +30,12 @@ export function AttentionQueue({
   }
 
   return (
-    <section className="rounded-3xl border border-mist bg-white p-8 text-charcoal-ink" aria-labelledby="attention-heading">
+    <section className="rounded-xl bg-white shadow-card p-8 text-graphite" aria-labelledby="attention-heading">
       <div className="flex flex-wrap items-center justify-between gap-2">
-        <h2 id="attention-heading" className="text-heading-sm font-medium text-charcoal-ink">
+        <h2 id="attention-heading" className="text-heading-sm font-medium text-graphite">
           Needs attention
         </h2>
-        <span className="rounded-full bg-feature-tint px-3 py-1 text-caption font-medium text-google-blue">
+        <span className="rounded-full bg-paper px-3 py-1 text-caption font-medium text-ink">
           {totalNeedingReply} open
         </span>
       </div>
@@ -45,13 +45,13 @@ export function AttentionQueue({
             <button
               type="button"
               onClick={() => open(p.id)}
-              className="flex w-full items-center gap-3 rounded-lg px-2 py-2.5 text-left transition-colors hover:bg-canvas-white"
+              className="flex w-full items-center gap-3 rounded-lg px-2 py-2.5 text-left transition-colors hover:bg-paper"
             >
-              <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-feature-tint text-[11px] font-medium text-google-blue">
+              <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-paper text-[11px] font-medium text-ink">
                 {p.title.slice(0, 2).toUpperCase()}
               </span>
               <div className="min-w-0 flex-1">
-                <p className="truncate text-sm font-medium text-charcoal-ink">
+                <p className="truncate text-sm font-medium text-graphite">
                   {p.clientName ?? p.title}
                 </p>
                 <p className="truncate text-caption text-slate">
@@ -67,7 +67,7 @@ export function AttentionQueue({
                   p.avgRating == null
                     ? "text-slate"
                     : p.avgRating >= 4
-                      ? "text-classroom-green"
+                      ? "text-success"
                       : p.avgRating >= 3
                         ? "text-[#e37400]"
                         : "text-destructive"
@@ -78,9 +78,9 @@ export function AttentionQueue({
                   className={cn(
                     "h-3 w-3",
                     p.avgRating == null
-                      ? "fill-mist text-mist"
+                      ? "fill-silver text-silver"
                       : p.avgRating >= 4
-                        ? "fill-classroom-green text-classroom-green"
+                        ? "fill-success text-success"
                         : p.avgRating >= 3
                           ? "fill-[#e37400] text-[#e37400]"
                           : "fill-destructive text-destructive"
@@ -88,7 +88,7 @@ export function AttentionQueue({
                   aria-hidden
                 />
               </span>
-              <span className="inline-flex shrink-0 items-center gap-1 text-caption font-medium tabular-nums text-charcoal-ink">
+              <span className="inline-flex shrink-0 items-center gap-1 text-caption font-medium tabular-nums text-graphite">
                 <AlertCircle className="h-3.5 w-3.5" aria-hidden />
                 {p.unanswered}
               </span>

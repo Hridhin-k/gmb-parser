@@ -7,7 +7,6 @@ import { cn } from "@/lib/utils";
 import {
   Star,
   Sparkles,
-  Loader2,
   AlertCircle,
   RefreshCw,
   X,
@@ -18,6 +17,7 @@ import {
   Lightbulb,
   PenLine,
 } from "lucide-react";
+import { ActivityStatus } from "@/components/activity-status";
 import { Button } from "@/components/ui/button";
 import type { ProfileRow } from "@/lib/services/dashboard";
 import { locationPlaceLabel } from "@/lib/ui/location-place";
@@ -26,21 +26,22 @@ import type {
   ProfileAnalysis,
   SuggestedFeature,
 } from "@/lib/services/location-insights";
+import { Spinner } from "@/components/ui/spinner";
 
 const SENTIMENT_STYLES: Record<string, string> = {
   positive: "bg-emerald-50 text-emerald-700 border-emerald-100",
   mixed: "bg-amber-50 text-amber-800 border-amber-100",
   negative: "bg-red-50 text-red-700 border-red-100",
-  neutral: "bg-[#e8f0fe] text-[#1a73e8] border-[#dadce0]",
+  neutral: "bg-paper text-ink border-silver",
 };
 
 const EFFORT: Record<SuggestedFeature["effort"], string> = {
   quick: "bg-green-50 text-green-700",
   medium: "bg-yellow-50 text-yellow-800",
-  project: "bg-[#e8f0fe] text-[#1a73e8]",
+  project: "bg-paper text-ink",
 };
 
-const JAKARTA = { fontFamily: "var(--font-google-sans-display), sans-serif" };
+const JAKARTA = { fontFamily: "var(--font-heading), sans-serif" };
 
 interface ProfileInsightPanelProps {
   profile: ProfileRow;
@@ -51,11 +52,11 @@ interface ProfileInsightPanelProps {
 function BulletList({ items, tone = "default" }: { items: string[]; tone?: "default" | "good" | "bad" }) {
   if (items.length === 0) return null;
   const dot =
-    tone === "good" ? "bg-green-500" : tone === "bad" ? "bg-red-400" : "bg-[#dadce0]";
+    tone === "good" ? "bg-green-500" : tone === "bad" ? "bg-red-400" : "bg-silver";
   return (
     <ul className="mt-2 space-y-1.5">
       {items.map((item) => (
-        <li key={item} className="flex gap-2 text-[13px] leading-snug text-[#202124]">
+        <li key={item} className="flex gap-2 text-[13px] leading-snug text-graphite">
           <span className={cn("mt-1.5 h-1.5 w-1.5 shrink-0 rounded-full", dot)} />
           {item}
         </li>
@@ -74,10 +75,10 @@ function InsightCard({
   children: React.ReactNode;
 }) {
   return (
-    <div className="rounded-2xl border border-[#dadce0] bg-[#f8f9fa] p-4">
+    <div className="rounded-xl border border-silver bg-paper p-4">
       <div className="flex items-center gap-2">
-        <Icon className="h-4 w-4 text-[#1a73e8]" aria-hidden />
-        <h3 className="text-sm font-semibold text-[#202124]">{title}</h3>
+        <Icon className="h-4 w-4 text-ink" aria-hidden />
+        <h3 className="text-sm font-semibold text-graphite">{title}</h3>
       </div>
       <div className="mt-2">{children}</div>
     </div>
@@ -93,11 +94,11 @@ function AnalysisGrid({ analysis }: { analysis: ProfileAnalysis }) {
       <div className="grid gap-3 sm:grid-cols-2">
         <InsightCard icon={Palette} title="Branding">
           {branding.voice ? (
-            <p className="text-[13px] font-light leading-relaxed text-[#3c4043]">{branding.voice}</p>
+            <p className="text-[13px] font-light leading-relaxed text-graphite">{branding.voice}</p>
           ) : null}
           {branding.strengths.length > 0 ? (
             <>
-              <p className="mt-2 text-[11px] font-semibold uppercase tracking-[0.08em] text-[#5f6368]">
+              <p className="mt-2 text-[11px] font-semibold uppercase tracking-[0.08em] text-slate">
                 Strengths
               </p>
               <BulletList items={branding.strengths} tone="good" />
@@ -105,7 +106,7 @@ function AnalysisGrid({ analysis }: { analysis: ProfileAnalysis }) {
           ) : null}
           {branding.gaps.length > 0 ? (
             <>
-              <p className="mt-2 text-[11px] font-semibold uppercase tracking-[0.08em] text-[#5f6368]">
+              <p className="mt-2 text-[11px] font-semibold uppercase tracking-[0.08em] text-slate">
                 Gaps
               </p>
               <BulletList items={branding.gaps} tone="bad" />
@@ -115,9 +116,9 @@ function AnalysisGrid({ analysis }: { analysis: ProfileAnalysis }) {
 
         <InsightCard icon={Users} title="Staff">
           {staff.summary ? (
-            <p className="text-[13px] font-light leading-relaxed text-[#3c4043]">{staff.summary}</p>
+            <p className="text-[13px] font-light leading-relaxed text-graphite">{staff.summary}</p>
           ) : (
-            <p className="text-[13px] text-[#5f6368]">Reviews don’t mention staff in enough detail yet.</p>
+            <p className="text-[13px] text-slate">Reviews don’t mention staff in enough detail yet.</p>
           )}
           <BulletList items={staff.praise} tone="good" />
           <BulletList items={staff.issues} tone="bad" />
@@ -126,7 +127,7 @@ function AnalysisGrid({ analysis }: { analysis: ProfileAnalysis }) {
         <InsightCard icon={MessageCircleHeart} title="Customer feedback">
           {customerFeedback.loves.length > 0 ? (
             <>
-              <p className="text-[11px] font-semibold uppercase tracking-[0.08em] text-[#5f6368]">
+              <p className="text-[11px] font-semibold uppercase tracking-[0.08em] text-slate">
                 Customers love
               </p>
               <BulletList items={customerFeedback.loves} tone="good" />
@@ -134,7 +135,7 @@ function AnalysisGrid({ analysis }: { analysis: ProfileAnalysis }) {
           ) : null}
           {customerFeedback.friction.length > 0 ? (
             <>
-              <p className="mt-2 text-[11px] font-semibold uppercase tracking-[0.08em] text-[#5f6368]">
+              <p className="mt-2 text-[11px] font-semibold uppercase tracking-[0.08em] text-slate">
                 Friction
               </p>
               <BulletList items={customerFeedback.friction} tone="bad" />
@@ -142,7 +143,7 @@ function AnalysisGrid({ analysis }: { analysis: ProfileAnalysis }) {
           ) : null}
           {customerFeedback.requests.length > 0 ? (
             <>
-              <p className="mt-2 text-[11px] font-semibold uppercase tracking-[0.08em] text-[#5f6368]">
+              <p className="mt-2 text-[11px] font-semibold uppercase tracking-[0.08em] text-slate">
                 Asked for
               </p>
               <BulletList items={customerFeedback.requests} />
@@ -152,7 +153,7 @@ function AnalysisGrid({ analysis }: { analysis: ProfileAnalysis }) {
 
         <InsightCard icon={Wrench} title="Operations">
           {operations.summary ? (
-            <p className="text-[13px] font-light leading-relaxed text-[#3c4043]">{operations.summary}</p>
+            <p className="text-[13px] font-light leading-relaxed text-graphite">{operations.summary}</p>
           ) : null}
           <BulletList items={operations.notes} />
         </InsightCard>
@@ -161,8 +162,8 @@ function AnalysisGrid({ analysis }: { analysis: ProfileAnalysis }) {
       {suggestedFeatures.length > 0 ? (
         <div>
           <div className="mb-3 flex items-center gap-2">
-            <Lightbulb className="h-4 w-4 text-[#1a73e8]" aria-hidden />
-            <h3 className="text-sm font-semibold text-[#202124]" style={JAKARTA}>
+            <Lightbulb className="h-4 w-4 text-ink" aria-hidden />
+            <h3 className="text-sm font-semibold text-graphite" style={JAKARTA}>
               Features to add for this profile
             </h3>
           </div>
@@ -170,10 +171,10 @@ function AnalysisGrid({ analysis }: { analysis: ProfileAnalysis }) {
             {suggestedFeatures.map((feature) => (
               <li
                 key={feature.title}
-                className="rounded-2xl border border-[#dadce0] bg-white p-4"
+                className="rounded-xl bg-white shadow-card p-4"
               >
                 <div className="flex items-start justify-between gap-2">
-                  <p className="text-sm font-semibold text-[#202124]">{feature.title}</p>
+                  <p className="text-sm font-semibold text-graphite">{feature.title}</p>
                   <span
                     className={cn(
                       "shrink-0 rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide",
@@ -183,9 +184,9 @@ function AnalysisGrid({ analysis }: { analysis: ProfileAnalysis }) {
                     {feature.effort}
                   </span>
                 </div>
-                <p className="mt-1.5 text-[13px] leading-relaxed text-[#3c4043]">{feature.why}</p>
+                <p className="mt-1.5 text-[13px] leading-relaxed text-graphite">{feature.why}</p>
                 {feature.basedOn ? (
-                  <p className="mt-2 text-[12px] text-[#5f6368]">From reviews: {feature.basedOn}</p>
+                  <p className="mt-2 text-[12px] text-slate">From reviews: {feature.basedOn}</p>
                 ) : null}
               </li>
             ))}
@@ -196,11 +197,11 @@ function AnalysisGrid({ analysis }: { analysis: ProfileAnalysis }) {
       {replyPlaybook.tone || replyPlaybook.do.length > 0 ? (
         <InsightCard icon={PenLine} title="How to reply here">
           {replyPlaybook.tone ? (
-            <p className="text-[13px] font-light leading-relaxed text-[#3c4043]">{replyPlaybook.tone}</p>
+            <p className="text-[13px] font-light leading-relaxed text-graphite">{replyPlaybook.tone}</p>
           ) : null}
           {replyPlaybook.do.length > 0 ? (
             <>
-              <p className="mt-2 text-[11px] font-semibold uppercase tracking-[0.08em] text-[#5f6368]">
+              <p className="mt-2 text-[11px] font-semibold uppercase tracking-[0.08em] text-slate">
                 Do
               </p>
               <BulletList items={replyPlaybook.do} tone="good" />
@@ -208,7 +209,7 @@ function AnalysisGrid({ analysis }: { analysis: ProfileAnalysis }) {
           ) : null}
           {replyPlaybook.avoid.length > 0 ? (
             <>
-              <p className="mt-2 text-[11px] font-semibold uppercase tracking-[0.08em] text-[#5f6368]">
+              <p className="mt-2 text-[11px] font-semibold uppercase tracking-[0.08em] text-slate">
                 Avoid
               </p>
               <BulletList items={replyPlaybook.avoid} tone="bad" />
@@ -250,11 +251,7 @@ export function ProfileInsightPanel({
   }
 
   function showUnanswered() {
-    const params = new URLSearchParams(searchParams.toString());
-    params.set("location", profile.id);
-    params.set("filter", "unanswered");
-    params.delete("page");
-    router.push(`${pathname}?${params.toString()}#inbox`);
+    router.push(`/reviews?location=${profile.id}&filter=unanswered`);
   }
 
   async function generate(force = false) {
@@ -283,17 +280,17 @@ export function ProfileInsightPanel({
 
   return (
     <section
-      className="rounded-3xl border border-[#dadce0] bg-white p-5 sm:p-6"
+      className="rounded-xl bg-white shadow-card p-5 sm:p-6"
       aria-labelledby="selected-profile-heading"
     >
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0">
-          <p className="truncate text-[12px] font-bold uppercase tracking-[0.08em] text-[#1a73e8]">
+          <p className="truncate text-[12px] font-semibold uppercase tracking-[0.08em] text-ink">
             {profile.clientName ?? "Profile"}
           </p>
           <h2
             id="selected-profile-heading"
-            className="mt-1 text-[22px] leading-[1.3] tracking-[-0.02em] text-[#202124] sm:text-[26px]"
+            className="mt-1 text-[22px] leading-[1.3] text-graphite sm:text-[26px]"
             style={JAKARTA}
           >
             {locationPlaceLabel({
@@ -302,7 +299,7 @@ export function ProfileInsightPanel({
             }) ?? profile.title}
           </h2>
           {profile.address ? (
-            <p className="mt-1 text-sm leading-relaxed text-[#5f6368]">
+            <p className="mt-1 text-sm leading-relaxed text-slate">
               {profile.address}
             </p>
           ) : null}
@@ -316,24 +313,26 @@ export function ProfileInsightPanel({
           >
             {sentiment}
           </span>
-          <button
+          <Button
             type="button"
+            variant="ghost"
+            size="icon"
             onClick={clearSelection}
-            className="rounded p-1 text-[#5f6368] hover:bg-[#f8f9fa] hover:text-[#202124]"
+            className="text-slate"
             aria-label="Clear profile selection"
           >
             <X className="h-4 w-4" />
-          </button>
+          </Button>
         </div>
       </div>
 
-      <div className="mt-2 flex flex-wrap items-center gap-3 text-[12px] text-[#3c4043]">
+      <div className="mt-2 flex flex-wrap items-center gap-3 text-[12px] text-graphite">
         <span className="inline-flex items-center gap-1">
           <Star
             className={cn(
               "h-3.5 w-3.5",
               profile.avgRating == null
-                ? "fill-mist text-mist"
+                ? "fill-silver text-silver"
                 : profile.avgRating >= 4
                   ? "fill-green-500 text-green-500"
                   : profile.avgRating >= 3
@@ -360,14 +359,31 @@ export function ProfileInsightPanel({
         )}
       </div>
 
-      <p className="mt-4 text-[15px] font-light leading-relaxed text-[#202124]">{summary}</p>
+      <p
+        className={cn(
+          "mt-4 text-[15px] font-light leading-relaxed text-graphite",
+          loading && "opacity-40"
+        )}
+      >
+        {summary}
+      </p>
+
+      {loading ? (
+        <div className="mt-3">
+          <ActivityStatus
+            tone="gemini"
+            title={`Gemini is reading ${profile.title}`}
+            detail="It uses only this location’s reviews to summarise branding, staff, and what customers mention. The summary above stays until the new one is ready."
+          />
+        </div>
+      ) : null}
 
       {(active?.themes?.length ?? 0) > 0 && (
         <div className="mt-3 flex flex-wrap gap-1.5">
           {active!.themes.map((t) => (
             <span
               key={t}
-              className="rounded-full bg-[#e8f0fe] px-2.5 py-0.5 text-[11px] font-medium text-[#1a73e8]"
+              className="rounded-full bg-paper px-2.5 py-0.5 text-[11px] font-medium text-ink underline decoration-stone/50 underline-offset-4 hover:decoration-ink"
             >
               {t}
             </span>
@@ -392,25 +408,21 @@ export function ProfileInsightPanel({
           onClick={() => generate(Boolean(active))}
         >
           {loading ? (
-            <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden />
+            <Spinner size="sm" />
           ) : stale || !rich ? (
             <Sparkles className="h-3.5 w-3.5" aria-hidden />
           ) : (
             <RefreshCw className="h-3.5 w-3.5" aria-hidden />
           )}
-          {loading
-            ? "Reading reviews…"
-            : !rich
-              ? "Generate profile insights"
-              : stale
-                ? "Update insights"
-                : "Refresh insights"}
+          {loading ? "Gemini is reading reviews…" : !rich ? "Generate profile insights" : stale ? "Update insights" : "Refresh insights"}
         </Button>
         {stale && rich && (
           <span className="text-[11px] text-amber-600">Reviews changed — regenerate</span>
         )}
-        <span className="text-[11px] text-[#5f6368]">
-          Gemini reads this profile’s reviews only: branding, staff, feedback, and feature ideas.
+        <span className="text-[11px] text-slate">
+          {loading
+            ? "This usually takes a few seconds. You can leave the rest of the page as it is."
+            : "Gemini reads this profile’s reviews only: branding, staff, feedback, and feature ideas."}
         </span>
       </div>
     </section>

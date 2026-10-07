@@ -5,18 +5,37 @@ import { logger } from "@/lib/logger";
 import { createHash } from "crypto";
 import {
   GEMINI_MODEL_ID,
+  GEMINI_THINKING_LOW,
   classifyGeminiError,
+  extractGeminiText,
   geminiGenerateUrl,
   logGeminiFailure,
 } from "@/lib/gemini";
+import { splitGoogleTranslation } from "@/lib/review-text";
 
 // ---------------------------------------------------------------------------
 // Config
 // ---------------------------------------------------------------------------
 
 const MODEL_ID = GEMINI_MODEL_ID;
-const PROMPT_VERSION = "v2.0";
+const PROMPT_VERSION = "v3.0";
 const REQUEST_TIMEOUT_MS = 30_000;
+const MAX_COMMENT_CHARS = 4000;
+
+const GENERATION_CONFIG = {
+  temperature: 0.6,
+  maxOutputTokens: 1024,
+  topP: 0.9,
+  thinkingConfig: GEMINI_THINKING_LOW,
+};
+
+const BLOCKED_FINISH_REASONS = new Set([
+  "SAFETY",
+  "PROHIBITED_CONTENT",
+  "BLOCKLIST",
+  "SPII",
+  "RECITATION",
+]);
 
 // ---------------------------------------------------------------------------
 // Types
@@ -28,12 +47,22 @@ export interface GenerateDraftParams {
   userId: string;
 }
 
-interface ReviewContext {
-  reviewerName: string;
+export interface ReplyPlaybook {
+  tone: string;
+  do: string[];
+  avoid: string[];
+}
+
+export interface ReviewContext {
+  /** null when the reviewer is anonymous or has no usable name. */
+  reviewerName: string | null;
   starRating: number;
   comment: string | null;
   businessName: string;
   locationName: string;
+  playbook?: ReplyPlaybook | null;
+  /** The unpublished draft being replaced when the user clicks Regenerate. */
+  previousDraft?: string | null;
 }
 
 export interface GenerateDraftResult {
@@ -46,50 +75,97 @@ export interface GenerateDraftResult {
 // Prompt construction
 // ---------------------------------------------------------------------------
 
-function buildSystemPrompt(ctx: ReviewContext): string {
-  const ratingLabel =
-    ctx.starRating <= 2 ? "negative" : ctx.starRating === 3 ? "mixed" : "positive";
+function lengthRule(comment: string | null): string {
+  if (!comment) return "1–2 short sentences.";
+  if (comment.length < 200) return "2–3 sentences.";
+  return "3–5 sentences — enough to respond to every point they raised, and no more.";
+}
 
-  return `You are a reputation management professional writing a reply to a Google Business Profile review on behalf of "${ctx.businessName}" (location: "${ctx.locationName}").
+function commentBlock(comment: string | null): string {
+  if (!comment) return "Written comment: none (rating only)";
+  const { original, translation } = splitGoogleTranslation(
+    comment.slice(0, MAX_COMMENT_CHARS)
+  );
+  return translation
+    ? `Written comment (original, as the reviewer wrote it):\n${original}\n\nGoogle's English translation (may be inaccurate):\n${translation}`
+    : `Written comment:\n${original}`;
+}
 
-The review is ${ratingLabel} (${ctx.starRating}/5 stars).
+function playbookBlock(playbook: ReplyPlaybook | null | undefined): string {
+  if (!playbook) return "";
+  const lines: string[] = [];
+  if (playbook.tone) lines.push(`Tone: ${playbook.tone}`);
+  if (playbook.do.length) lines.push(`Do:\n${playbook.do.map((d) => `- ${d}`).join("\n")}`);
+  if (playbook.avoid.length) {
+    lines.push(`Avoid:\n${playbook.avoid.map((a) => `- ${a}`).join("\n")}`);
+  }
+  if (!lines.length) return "";
+  return `\nTHIS LOCATION'S REPLY STYLE (from analysis of its past reviews — follow it unless it conflicts with the rules above)\n${lines.join("\n")}\n`;
+}
 
-REVIEW:
-Reviewer: ${ctx.reviewerName}
-Rating: ${ctx.starRating}/5
-${ctx.comment ? `Comment: ${ctx.comment}` : "Comment: (No written comment — rating only)"}
+function previousDraftBlock(previous: string | null | undefined): string {
+  const text = previous?.trim();
+  if (!text) return "";
+  return `\nPREVIOUS DRAFT (the user rejected it and asked for a new version)\n${text.slice(0, 1500)}\n- Write a noticeably different reply: a different opening line and different wording. Keep the same facts and follow every rule above.\n- If the previous draft was cut off or missed a point from the review, make sure the new one is complete and covers it.\n`;
+}
 
-INSTRUCTIONS:
-- Write a single, ready-to-publish reply. Output ONLY the reply text.
-- Be professional, natural, and concise (2–4 sentences).
-- Acknowledge the reviewer's specific experience when they left a comment.
-- Reflect the tone appropriate for a ${ctx.starRating}-star review.
+export function buildReplyPrompt(ctx: ReviewContext): string {
+  const comment = ctx.comment?.trim() || null;
 
-${ratingLabel === "negative" ? `NEGATIVE REVIEW GUIDELINES:
-- Acknowledge the concern sincerely.
-- Apologize where appropriate without admitting legal liability.
-- Avoid defensiveness or arguing with the reviewer.
-- Suggest resolving the matter privately when appropriate (e.g. "please reach out to us directly").
-- Do not invent compensation, discounts, or specific remedies.
-- Do not make promises the business has not authorized.` : ""}
+  return `You write replies to Google reviews on behalf of "${ctx.businessName}" (location: "${ctx.locationName}"). The reply is published publicly under the business's name.
 
-${ratingLabel === "positive" ? `POSITIVE REVIEW GUIDELINES:
-- Thank the reviewer genuinely.
-- Reference specific positive points they mentioned when possible.
-- Avoid repetitive template phrases like "We appreciate your kind words".` : ""}
+REVIEW
+Reviewer name: ${ctx.reviewerName ?? "(anonymous — do not use a name)"}
+Star rating: ${ctx.starRating}/5
+${commentBlock(comment)}
 
-${ratingLabel === "mixed" ? `MIXED REVIEW GUIDELINES:
-- Thank the reviewer for their feedback.
-- Acknowledge both positive aspects and concerns they raised.
-- Offer to address concerns privately if appropriate.` : ""}
+READ THE REVIEW FIRST
+- Base the tone on what the reviewer actually wrote. The star rating is only a hint: a 5-star review can contain a complaint and a 1-star review can contain praise. Respond to both sides.
+- Identify every distinct point (praise, complaint, request, question). The reply must address each one — never answer only part of the review.
+- If the comment is unclear, very short, or only emojis, keep the reply short and general instead of guessing what they meant.
+- With no written comment: thank them for the rating. For 1–3 stars, also invite them to tell the business directly what went wrong.
 
-ABSOLUTE RULES:
-- Write in the first person plural as the business ("we", "our team"). Do not add meta commentary about how the reply was drafted.
-- Never invent facts, staff names, policies, phone numbers, email addresses, or URLs.
-- Never include placeholder brackets like [Name] or [Phone].
-- Never argue with or contradict the reviewer.
-- Never make unsupported claims about the business.
-- Never expose internal business information.`;
+LANGUAGE
+- Reply in English when the reviewer wrote in English, or in another language typed in English letters (for example Malayalam or Hindi written in the Latin alphabet).
+- If the reviewer wrote in another script (for example Malayalam or Hindi script), reply in that same language and script.
+
+LENGTH
+- ${lengthRule(comment)}
+- Every sentence must be complete. No signature, sign-off name, or hashtags. Use an emoji only if the reviewer did.
+
+RULES
+- Write as the business in first person plural ("we", "our team").
+- Use the reviewer's first name at most once; skip it if it looks like a username.
+- Refer to the specifics they mentioned (products, sections, staff, waiting, prices) in your own words. Do not copy their sentences back.
+- For complaints: apologise sincerely without admitting legal liability, do not argue or make excuses, and invite them to contact the business directly so it can be put right.
+- Never claim an action the business has not confirmed (for example "we have retrained our staff", "we are adding more counters", "it is back in stock"). Say the feedback will be shared with the team instead.
+- Never offer refunds, discounts, gifts, or compensation.
+- Never invent facts, staff names, policies, opening hours, phone numbers, email addresses, or URLs. Never use placeholders like [Name].
+- Avoid stock phrases such as "We appreciate your kind words" or "Your feedback is valuable to us".
+${playbookBlock(ctx.playbook)}${previousDraftBlock(ctx.previousDraft)}
+OUTPUT
+Return only the reply text — no quotes, labels, or notes.`;
+}
+
+function cleanReply(text: string): string {
+  return text
+    .trim()
+    .replace(/^(reply|response)\s*:\s*/i, "")
+    .replace(/^["“]([\s\S]*)["”]$/, "$1")
+    .trim();
+}
+
+function playbookFromAnalysis(analysis: unknown): ReplyPlaybook | null {
+  const pb = (analysis as { replyPlaybook?: Partial<ReplyPlaybook> } | null)?.replyPlaybook;
+  if (!pb || typeof pb !== "object") return null;
+  const list = (v: unknown) =>
+    Array.isArray(v) ? v.filter((x): x is string => typeof x === "string" && !!x.trim()) : [];
+  const playbook = {
+    tone: typeof pb.tone === "string" ? pb.tone.trim() : "",
+    do: list(pb.do).slice(0, 4),
+    avoid: list(pb.avoid).slice(0, 4),
+  };
+  return playbook.tone || playbook.do.length || playbook.avoid.length ? playbook : null;
 }
 
 function hashPrompt(prompt: string): string {
@@ -124,8 +200,10 @@ export class AIReviewService {
         `id, star_rating, comment, reviewer_display_name, reviewer_is_anonymous,
          grm_google_locations!inner(
            location_title,
-           grm_clients(name)
-         )`
+           grm_clients(name),
+           grm_location_insights(workspace_id, analysis)
+         ),
+         grm_review_replies(content, status, workspace_id)`
       )
       .eq("id", params.reviewId)
       .eq("workspace_id", params.workspaceId)
@@ -141,23 +219,38 @@ export class AIReviewService {
     const locTyped = loc as {
       location_title: string;
       grm_clients?: { name: string } | Array<{ name: string }> | null;
+      grm_location_insights?: Array<{ workspace_id: string; analysis: unknown }> | null;
     };
     const clientData = locTyped.grm_clients;
     const businessName = Array.isArray(clientData)
       ? (clientData[0]?.name ?? locTyped.location_title)
       : (clientData?.name ?? locTyped.location_title);
 
+    const insightRow = (locTyped.grm_location_insights ?? []).find(
+      (row) => row.workspace_id === params.workspaceId
+    );
+    const replies = (review as {
+      grm_review_replies?: Array<{ content: string; status: string; workspace_id: string }> | null;
+    }).grm_review_replies;
+    const previousDraft = (replies ?? []).find(
+      (r) =>
+        r.workspace_id === params.workspaceId &&
+        (r.status === "draft" || r.status === "failed")
+    )?.content;
+
     const ctx: ReviewContext = {
       reviewerName: review.reviewer_is_anonymous
-        ? "a valued customer"
-        : (review.reviewer_display_name || "a customer"),
+        ? null
+        : review.reviewer_display_name?.trim() || null,
       starRating: review.star_rating,
       comment: review.comment,
       businessName,
       locationName: locTyped.location_title,
+      playbook: playbookFromAnalysis(insightRow?.analysis),
+      previousDraft,
     };
 
-    const systemPrompt = buildSystemPrompt(ctx);
+    const systemPrompt = buildReplyPrompt(ctx);
     const promptHash = hashPrompt(systemPrompt);
 
     // Call Gemini
@@ -171,11 +264,7 @@ export class AIReviewService {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           contents: [{ parts: [{ text: systemPrompt }] }],
-          generationConfig: {
-            temperature: 0.7,
-            maxOutputTokens: 400,
-            topP: 0.9,
-          },
+          generationConfig: GENERATION_CONFIG,
         }),
         signal: controller.signal,
         cache: "no-store",
@@ -191,9 +280,29 @@ export class AIReviewService {
       }
 
       const data = await response.json();
-      const text = data.candidates?.[0]?.content?.parts?.[0]?.text;
+      const { text, finishReason } = extractGeminiText(data);
+      const blockReason = (data as { promptFeedback?: { blockReason?: string } })
+        .promptFeedback?.blockReason;
 
-      if (!text || typeof text !== "string" || text.trim().length < 5) {
+      if (blockReason || (finishReason && BLOCKED_FINISH_REASONS.has(finishReason))) {
+        const classified = classifyGeminiError(null, "SAFETY");
+        throw new AppError(classified.message, "AI_SAFETY_BLOCKED", 502);
+      }
+
+      if (finishReason === "MAX_TOKENS") {
+        logger.warn("ai_review.truncated", {
+          reviewId: params.reviewId,
+          usage: (data as { usageMetadata?: unknown }).usageMetadata,
+        });
+        throw new AppError(
+          "The AI reply was cut off before it finished. Please try again.",
+          "AI_INVALID_RESPONSE",
+          502
+        );
+      }
+
+      const cleaned = cleanReply(text);
+      if (cleaned.length < 5) {
         throw new AppError(
           "AI returned an empty or unusable response. Please try again.",
           "AI_INVALID_RESPONSE",
@@ -201,7 +310,7 @@ export class AIReviewService {
         );
       }
 
-      responseText = text.trim();
+      responseText = cleaned;
     } catch (error) {
       if (error instanceof AppError) throw error;
       if ((error as Error).name === "AbortError") {
@@ -231,11 +340,7 @@ export class AIReviewService {
         prompt_version: PROMPT_VERSION,
         ai_prompt_hash: promptHash,
         generated_by: params.userId,
-        generation_params: {
-          temperature: 0.7,
-          maxOutputTokens: 400,
-          topP: 0.9,
-        },
+        generation_params: GENERATION_CONFIG,
       })
       .select("id")
       .single();

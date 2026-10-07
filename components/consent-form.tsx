@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
+import { Checkbox } from "@/components/ui/checkbox";
 
 export function ConsentForm() {
   const router = useRouter();
@@ -38,18 +39,18 @@ export function ConsentForm() {
 
   return (
     <div className="w-full max-w-lg">
-      <div className="rounded-3xl border border-[#dadce0] bg-white px-5 py-8 sm:px-8 sm:py-10">
+      <div className="rounded-xl bg-white shadow-card px-5 py-8 sm:px-8 sm:py-10">
         <div className="mb-6">
-          <div className="flex h-9 w-9 items-center justify-center rounded-full bg-[#1a73e8] text-sm font-bold text-white">
+          <div className="flex h-9 w-9 items-center justify-center rounded-full bg-ink text-sm font-semibold text-white">
             G
           </div>
           <h1
-            className="mt-5 text-[28px] leading-[1.2] tracking-[-0.032em] text-[#202124] sm:text-[31px]"
-            style={{ fontFamily: "var(--font-google-sans-display), sans-serif" }}
+            className="mt-5 text-[28px] leading-[1.2] text-graphite sm:text-[31px]"
+            style={{ fontFamily: "var(--font-heading), sans-serif" }}
           >
             Before you open GRM
           </h1>
-          <p className="mt-2 text-sm font-light leading-relaxed text-[#5f6368] sm:text-base">
+          <p className="mt-2 text-sm font-light leading-relaxed text-slate sm:text-base">
             This is asked once for this Google account. Later sign-ins go
             straight to your workspace.
           </p>
@@ -65,31 +66,29 @@ export function ConsentForm() {
         )}
 
         <div className="mb-5 space-y-3">
-          <label className="flex items-start gap-3 text-sm leading-snug text-[#202124]">
-            <input
-              type="checkbox"
+          <label className="flex items-start gap-3 text-sm leading-snug text-graphite">
+            <Checkbox
               checked={acceptedTerms}
-              onChange={(event) => setAcceptedTerms(event.target.checked)}
-              className="mt-1 size-4 shrink-0 rounded border-[#dadce0]"
+              onCheckedChange={(checked) => setAcceptedTerms(checked)}
+              aria-label="Agree to the Terms of Service and Privacy Policy"
             />
             <span>
               I agree to the{" "}
-              <a href="/terms" className="font-medium text-[#1a73e8]">
+              <a href="/terms" className="font-medium text-ink underline decoration-stone/50 underline-offset-4 hover:decoration-ink">
                 Terms of Service
               </a>{" "}
               and{" "}
-              <a href="/privacy" className="font-medium text-[#1a73e8]">
+              <a href="/privacy" className="font-medium text-ink underline decoration-stone/50 underline-offset-4 hover:decoration-ink">
                 Privacy Policy
               </a>
               .
             </span>
           </label>
-          <label className="flex items-start gap-3 text-sm leading-snug text-[#202124]">
-            <input
-              type="checkbox"
+          <label className="flex items-start gap-3 text-sm leading-snug text-graphite">
+            <Checkbox
               checked={acceptedAi}
-              onChange={(event) => setAcceptedAi(event.target.checked)}
-              className="mt-1 size-4 shrink-0 rounded border-[#dadce0]"
+              onCheckedChange={(checked) => setAcceptedAi(checked)}
+              aria-label="Agree to AI draft processing"
             />
             <span>
               I understand GRM can send review text to Google Gemini to draft
@@ -105,6 +104,7 @@ export function ConsentForm() {
             void handleAccept();
           }}
           disabled={!canContinue}
+          loading={loading}
           className="w-full"
           size="lg"
         >

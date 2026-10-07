@@ -296,6 +296,187 @@ describe("AIReviewService.generateDraft", () => {
   });
 });
 
+describe("AIReviewService.generateDraft Gemini output handling", () => {
+  const originalEnv = process.env;
+  const reviewData = {
+    id: "rev-1",
+    star_rating: 2,
+    comment: "Waited 40 minutes at billing.",
+    reviewer_display_name: "Asha",
+    reviewer_is_anonymous: false,
+    grm_google_locations: { location_title: "Store", grm_clients: { name: "Biz" } },
+  };
+
+  beforeEach(() => {
+    vi.resetModules();
+    process.env = { ...originalEnv, GEMINI_API_KEY: "test-key" };
+    vi.clearAllMocks();
+  });
+
+  afterEach(() => {
+    process.env = originalEnv;
+    vi.restoreAllMocks();
+  });
+
+  async function run(geminiBody: unknown) {
+    mockSingle.mockReturnValueOnce({ data: reviewData, error: null });
+    const mockFetch = vi
+      .spyOn(globalThis, "fetch")
+      .mockResolvedValueOnce(new Response(JSON.stringify(geminiBody), { status: 200 }));
+    const { AIReviewService } = await import("@/lib/services/ai-review");
+    const promise = AIReviewService.generateDraft({
+      reviewId: "rev-1",
+      workspaceId: "ws-1",
+      userId: "user-1",
+    });
+    return { promise, mockFetch };
+  }
+
+  it("rejects a reply that hit the token limit instead of saving it", async () => {
+    const { promise, mockFetch } = await run({
+      candidates: [
+        {
+          finishReason: "MAX_TOKENS",
+          content: { parts: [{ text: "Thank you for your feedback, and we are glad you enjoyed" }] },
+        },
+      ],
+    });
+    await expect(promise).rejects.toThrow("cut off");
+    const body = JSON.parse(mockFetch.mock.calls[0][1]!.body as string);
+    expect(body.generationConfig.thinkingConfig).toEqual({ thinkingLevel: "low" });
+    expect(body.generationConfig.maxOutputTokens).toBeGreaterThanOrEqual(1024);
+  });
+
+  it("reports safety blocks", async () => {
+    const { promise } = await run({ candidates: [{ finishReason: "SAFETY" }] });
+    await expect(promise).rejects.toThrow("content restrictions");
+  });
+});
+
+describe("extractGeminiText", () => {
+  it("joins answer parts and skips thought parts", async () => {
+    const { extractGeminiText } = await import("@/lib/gemini");
+    const result = extractGeminiText({
+      candidates: [
+        {
+          finishReason: "STOP",
+          content: {
+            parts: [
+              { text: "thinking...", thought: true },
+              { text: "Thank you, " },
+              { text: "Asha." },
+            ],
+          },
+        },
+      ],
+    });
+    expect(result).toEqual({ text: "Thank you, Asha.", finishReason: "STOP" });
+  });
+});
+
+describe("splitGoogleTranslation", () => {
+  it("handles translation-first format", async () => {
+    const { splitGoogleTranslation } = await import("@/lib/review-text");
+    expect(
+      splitGoogleTranslation("(Translated by Google) Great shop\n\n(Original)\nനല്ല കട")
+    ).toEqual({ original: "നല്ല കട", translation: "Great shop" });
+  });
+
+  it("handles original-first format", async () => {
+    const { splitGoogleTranslation } = await import("@/lib/review-text");
+    expect(
+      splitGoogleTranslation(
+        "32 ഇഞ്ച് പാന്റ്സ് കിട്ടാനില്ല\n\n(Translated by Google)\nEven 32-inch pants are unavailable."
+      )
+    ).toEqual({
+      original: "32 ഇഞ്ച് പാന്റ്സ് കിട്ടാനില്ല",
+      translation: "Even 32-inch pants are unavailable.",
+    });
+  });
+
+  it("drops a translation identical to the original", async () => {
+    const { splitGoogleTranslation } = await import("@/lib/review-text");
+    expect(
+      splitGoogleTranslation("Cheap behaviour, saree section\n\n(Translated by Google)\nCheap behavior saree section")
+    ).toEqual({ original: "Cheap behaviour, saree section", translation: null });
+  });
+
+  it("leaves plain comments alone", async () => {
+    const { splitGoogleTranslation } = await import("@/lib/review-text");
+    expect(splitGoogleTranslation("  Nice staff ")).toEqual({
+      original: "Nice staff",
+      translation: null,
+    });
+  });
+});
+
+describe("buildReplyPrompt", () => {
+  const base = {
+    reviewerName: "Asha",
+    starRating: 5,
+    businessName: "Fazyo",
+    locationName: "Fazyo Kochi",
+  };
+
+  it("tells the model to read content over stars and cover every point", async () => {
+    const { buildReplyPrompt } = await import("@/lib/services/ai-review");
+    const prompt = buildReplyPrompt({ ...base, comment: "Good collection but no 32-inch pants." });
+    expect(prompt).toContain("The star rating is only a hint");
+    expect(prompt).toContain("address each one");
+    expect(prompt).toContain("Good collection but no 32-inch pants.");
+  });
+
+  it("includes both original and Google translation", async () => {
+    const { buildReplyPrompt } = await import("@/lib/services/ai-review");
+    const prompt = buildReplyPrompt({
+      ...base,
+      comment: "നല്ല കട\n\n(Translated by Google)\nGood shop",
+    });
+    expect(prompt).toContain("original, as the reviewer wrote it):\nനല്ല കട");
+    expect(prompt).toContain("Google's English translation (may be inaccurate):\nGood shop");
+  });
+
+  it("handles anonymous rating-only reviews", async () => {
+    const { buildReplyPrompt } = await import("@/lib/services/ai-review");
+    const prompt = buildReplyPrompt({ ...base, reviewerName: null, comment: null });
+    expect(prompt).toContain("(anonymous — do not use a name)");
+    expect(prompt).toContain("Written comment: none (rating only)");
+    expect(prompt).toContain("1–2 short sentences.");
+  });
+
+  it("allows longer replies for long reviews", async () => {
+    const { buildReplyPrompt } = await import("@/lib/services/ai-review");
+    const prompt = buildReplyPrompt({ ...base, comment: "x".repeat(400) });
+    expect(prompt).toContain("3–5 sentences");
+  });
+
+  it("asks for a different version when regenerating", async () => {
+    const { buildReplyPrompt } = await import("@/lib/services/ai-review");
+    const first = buildReplyPrompt({ ...base, comment: null });
+    expect(first).not.toContain("PREVIOUS DRAFT");
+    const regen = buildReplyPrompt({
+      ...base,
+      comment: null,
+      previousDraft: "Thank you for the five-star rating, Anjali! Our team is",
+    });
+    expect(regen).toContain("PREVIOUS DRAFT");
+    expect(regen).toContain("Our team is");
+    expect(regen).toContain("noticeably different");
+  });
+
+  it("adds the location reply playbook when present", async () => {
+    const { buildReplyPrompt } = await import("@/lib/services/ai-review");
+    const prompt = buildReplyPrompt({
+      ...base,
+      comment: "Nice",
+      playbook: { tone: "Warm and local", do: ["Mention the saree section"], avoid: ["Promising discounts"] },
+    });
+    expect(prompt).toContain("THIS LOCATION'S REPLY STYLE");
+    expect(prompt).toContain("Tone: Warm and local");
+    expect(prompt).toContain("- Promising discounts");
+  });
+});
+
 describe("Server-only verification", () => {
   it("AIReviewService relies on server-only APIs (process.env, crypto)", async () => {
     const crypto = await import("crypto");

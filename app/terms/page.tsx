@@ -15,7 +15,7 @@ export default function TermsPage() {
       </p>
 
       <section>
-        <h2 style={{ fontFamily: "var(--font-google-sans-display), sans-serif" }}>
+        <h2 style={{ fontFamily: "var(--font-heading), sans-serif" }}>
           What GRM is
         </h2>
         <p className="mt-3">
@@ -27,7 +27,7 @@ export default function TermsPage() {
       </section>
 
       <section>
-        <h2 style={{ fontFamily: "var(--font-google-sans-display), sans-serif" }}>
+        <h2 style={{ fontFamily: "var(--font-heading), sans-serif" }}>
           Who may connect Google
         </h2>
         <ul>
@@ -51,7 +51,7 @@ export default function TermsPage() {
       </section>
 
       <section>
-        <h2 style={{ fontFamily: "var(--font-google-sans-display), sans-serif" }}>
+        <h2 style={{ fontFamily: "var(--font-heading), sans-serif" }}>
           Workspaces and roles
         </h2>
         <ul>
@@ -76,7 +76,7 @@ export default function TermsPage() {
       </section>
 
       <section>
-        <h2 style={{ fontFamily: "var(--font-google-sans-display), sans-serif" }}>
+        <h2 style={{ fontFamily: "var(--font-heading), sans-serif" }}>
           AI drafts are not the published reply
         </h2>
         <p className="mt-3">
@@ -111,7 +111,7 @@ export default function TermsPage() {
       </section>
 
       <section>
-        <h2 style={{ fontFamily: "var(--font-google-sans-display), sans-serif" }}>
+        <h2 style={{ fontFamily: "var(--font-heading), sans-serif" }}>
           Acceptable use
         </h2>
         <ul>
@@ -128,7 +128,7 @@ export default function TermsPage() {
       </section>
 
       <section>
-        <h2 style={{ fontFamily: "var(--font-google-sans-display), sans-serif" }}>
+        <h2 style={{ fontFamily: "var(--font-heading), sans-serif" }}>
           The service itself
         </h2>
         <p className="mt-3">
@@ -146,12 +146,12 @@ export default function TermsPage() {
       </section>
 
       <section>
-        <h2 style={{ fontFamily: "var(--font-google-sans-display), sans-serif" }}>
+        <h2 style={{ fontFamily: "var(--font-heading), sans-serif" }}>
           Contact
         </h2>
         <p className="mt-3">
           Questions about these terms:{" "}
-          <a className="font-medium text-[#1a73e8]" href="mailto:hridhin@explaineddigital.com">
+          <a className="font-medium text-ink underline decoration-stone/50 underline-offset-4 hover:decoration-ink" href="mailto:hridhin@explaineddigital.com">
             hridhin@explaineddigital.com
           </a>
           .

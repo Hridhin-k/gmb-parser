@@ -79,12 +79,12 @@ export function GoogleConnectionCard({
       <CardHeader className="flex flex-col gap-3 space-y-0 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <CardTitle
-            className="text-[22px] leading-[1.3] tracking-[-0.02em] text-[#202124]"
-            style={{ fontFamily: "var(--font-google-sans-display), sans-serif" }}
+            className="text-[22px] leading-[1.3] text-graphite"
+            style={{ fontFamily: "var(--font-heading), sans-serif" }}
           >
             Google Business Profile
           </CardTitle>
-          <p className="mt-1 text-sm font-light text-[#5f6368]">
+          <p className="mt-1 text-sm font-light text-slate">
             Connect your Google account to manage reviews. Sync pulls the newest pages only unless you rebuild.
           </p>
         </div>
@@ -94,7 +94,7 @@ export function GoogleConnectionCard({
             setError(null);
             setSuccess(false);
           }}
-          className="inline-flex shrink-0 items-center justify-center rounded-full bg-[#1a73e8] px-4 py-2 text-sm font-semibold text-white hover:bg-[#1967d2]"
+          className="inline-flex shrink-0 items-center justify-center rounded-full bg-ink px-4 py-2 text-sm font-semibold text-white hover:bg-graphite"
         >
           <ExternalLink className="mr-1.5 h-3.5 w-3.5" />
           Connect Google
@@ -115,7 +115,7 @@ export function GoogleConnectionCard({
         )}
 
         {activeConnections.length === 0 && !error && !success && (
-          <p className="py-2 text-sm font-light text-[#5f6368]">
+          <p className="py-2 text-sm font-light text-slate">
             No Google accounts connected. Click &ldquo;Connect Google&rdquo; to
             get started.
           </p>
@@ -124,7 +124,7 @@ export function GoogleConnectionCard({
         {activeConnections.map((conn) => (
           <div
             key={conn.id}
-            className="flex flex-col gap-3 rounded-[12px] border border-[#dadce0] px-4 py-3 sm:flex-row sm:items-center sm:justify-between"
+            className="flex flex-col gap-3 rounded-[12px] border border-silver px-4 py-3 sm:flex-row sm:items-center sm:justify-between"
           >
             <div className="flex min-w-0 items-center gap-3">
               <svg viewBox="0 0 24 24" className="h-5 w-5 shrink-0" aria-hidden="true">
@@ -146,10 +146,10 @@ export function GoogleConnectionCard({
                 />
               </svg>
               <div className="min-w-0">
-                <p className="truncate text-sm font-medium text-[#202124]">
+                <p className="truncate text-sm font-medium text-graphite">
                   {conn.google_email}
                 </p>
-                <p className="text-xs font-light text-[#5f6368]">
+                <p className="text-xs font-light text-slate">
                   Connected{" "}
                   {new Date(conn.created_at).toLocaleDateString("en-US", {
                     month: "short",
@@ -163,11 +163,11 @@ export function GoogleConnectionCard({
             <Button
               variant="outline"
               size="sm"
-              disabled={disconnecting === conn.id}
+              loading={disconnecting === conn.id}
               onClick={() => setConfirmTarget({ id: conn.id, email: conn.google_email })}
-              className="text-[#3c4043]"
+              className="text-graphite"
             >
-              <Unplug className="mr-1.5 h-3.5 w-3.5" />
+              <Unplug className="h-3.5 w-3.5" aria-hidden />
               {disconnecting === conn.id ? "Disconnecting…" : "Disconnect"}
             </Button>
           </div>
@@ -182,7 +182,7 @@ export function GoogleConnectionCard({
         description={
           <>
             GRM stops syncing reviews and publishing replies for{" "}
-            <span className="font-medium text-[#202124]">{confirmTarget?.email}</span>. Reviews
+            <span className="font-medium text-graphite">{confirmTarget?.email}</span>. Reviews
             already synced stay in GRM. You can reconnect at any time.
           </>
         }

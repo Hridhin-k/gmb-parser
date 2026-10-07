@@ -3,7 +3,13 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { AppError } from "@/lib/errors";
 import { logger } from "@/lib/logger";
 import { AuditService } from "./audit";
-import { GEMINI_MODEL_ID, geminiGenerateUrl } from "@/lib/gemini";
+import {
+  GEMINI_MODEL_ID,
+  GEMINI_THINKING_LOW,
+  extractGeminiText,
+  geminiGenerateUrl,
+} from "@/lib/gemini";
+import { readableReviewText } from "@/lib/review-text";
 import type { Json } from "@/lib/types/supabase";
 
 const MODEL_ID = GEMINI_MODEL_ID;
@@ -460,7 +466,7 @@ export class LocationInsightService {
     const reviewBlock = stats.reviews
       .map(
         (r, i) =>
-          `${i + 1}. ${r.star_rating}/5 — ${(r.comment ?? "(rating only)").slice(0, 280)}`
+          `${i + 1}. ${r.star_rating}/5 — ${(readableReviewText(r.comment) ?? "(rating only)").slice(0, 400)}`
       )
       .join("\n");
 
@@ -533,9 +539,10 @@ Rules:
           contents: [{ parts: [{ text: prompt }] }],
           generationConfig: {
             temperature: 0.4,
-            maxOutputTokens: 2500,
+            maxOutputTokens: 8192,
             topP: 0.9,
             responseMimeType: "application/json",
+            thinkingConfig: GEMINI_THINKING_LOW,
           },
         }),
         signal: controller.signal,
@@ -563,8 +570,15 @@ Rules:
       }
 
       const data = await response.json();
-      const rawText = data.candidates?.[0]?.content?.parts?.[0]?.text;
-      if (!rawText || typeof rawText !== "string") {
+      const { text: rawText, finishReason } = extractGeminiText(data);
+      if (finishReason === "MAX_TOKENS") {
+        logger.warn("location_insight.truncated", {
+          locationId,
+          usage: (data as { usageMetadata?: unknown }).usageMetadata,
+        });
+        throw new AppError("AI insight was cut off. Please try again.", "AI_INVALID_RESPONSE", 502);
+      }
+      if (!rawText) {
         throw new AppError("Empty AI insight response", "AI_INVALID_RESPONSE", 502);
       }
       parsed = parseLocationInsightPayload(rawText);

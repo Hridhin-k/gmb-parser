@@ -10,6 +10,34 @@ export function geminiGenerateUrl(apiKey: string): string {
   return `${GENERATE_CONTENT_URL}?key=${apiKey}`;
 }
 
+/**
+ * Hidden thinking tokens count against maxOutputTokens; at the default level
+ * they can consume most of a small budget and truncate the visible answer.
+ * This model rejects "minimal".
+ */
+export const GEMINI_THINKING_LOW = { thinkingLevel: "low" } as const;
+
+export interface GeminiCandidateText {
+  text: string;
+  finishReason: string | null;
+}
+
+/** Joins every non-thought text part; reading only parts[0] can drop the answer. */
+export function extractGeminiText(data: unknown): GeminiCandidateText {
+  const candidate = (data as {
+    candidates?: Array<{
+      finishReason?: string;
+      content?: { parts?: Array<{ text?: unknown; thought?: boolean }> };
+    }>;
+  })?.candidates?.[0];
+  const text = (candidate?.content?.parts ?? [])
+    .filter((p) => !p.thought && typeof p.text === "string")
+    .map((p) => p.text as string)
+    .join("")
+    .trim();
+  return { text, finishReason: candidate?.finishReason ?? null };
+}
+
 export type GeminiErrorType =
   | "config"
   | "quota"

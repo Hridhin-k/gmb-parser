@@ -11,12 +11,13 @@ import {
   Send,
   CheckCircle2,
   Pencil,
-  Loader2,
   Sparkles,
   Trash2,
   RotateCw,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { ActivityStatus } from "@/components/activity-status";
+import { Spinner } from "@/components/ui/spinner";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -73,7 +74,7 @@ function StarDisplay({ rating }: { rating: number }) {
                 : rating === 3
                   ? "fill-yellow-400 text-yellow-500"
                   : "fill-red-500 text-red-500"
-              : "fill-mist text-mist"
+              : "fill-silver text-silver"
           )}
           aria-hidden
         />
@@ -97,9 +98,9 @@ const REPLY_STATUS_MAP: Record<
   string,
   { label: string; className: string; dotColor: string }
 > = {
-  none:            { label: "No reply",       className: "text-[#5f6368]",  dotColor: "bg-[#dadce0]" },
-  draft:           { label: "Draft",          className: "text-[#3c4043]",  dotColor: "bg-[#5f6368]" },
-  approved:        { label: "Approved",       className: "text-[#1a73e8]",  dotColor: "bg-[#1a73e8]" },
+  none:            { label: "No reply",       className: "text-slate",  dotColor: "bg-silver" },
+  draft:           { label: "Draft",          className: "text-graphite",  dotColor: "bg-slate" },
+  approved:        { label: "Approved",       className: "text-ink",  dotColor: "bg-ink" },
   pending_publish: { label: "Publishing...",  className: "text-amber-700",  dotColor: "bg-amber-500" },
   published:       { label: "Published",      className: "text-green-700",  dotColor: "bg-green-500" },
   failed:          { label: "Publish failed", className: "text-red-700",    dotColor: "bg-red-500" },
@@ -276,12 +277,12 @@ export function ReviewDetailPanel({
   return (
     <div className="flex h-full flex-col overflow-hidden bg-white">
       {/* Header */}
-      <div className="flex shrink-0 items-center justify-between border-b border-mist px-5 py-4">
+      <div className="flex shrink-0 items-center justify-between border-b border-silver px-5 py-4">
         <div className="min-w-0">
-          <p className="truncate text-sm font-medium text-[#202124]">
+          <p className="truncate text-sm font-medium text-graphite">
             {reviewerName}
           </p>
-          <p className="text-xs text-[#5f6368]">
+          <p className="text-xs text-slate">
             {review.location_title}
             {review.client_name && (
               <span className="text-[#c9c7c3]"> · </span>
@@ -289,13 +290,16 @@ export function ReviewDetailPanel({
             {review.client_name}
           </p>
         </div>
-        <button
+        <Button
+          type="button"
+          variant="ghost"
+          size="icon"
           onClick={onClose}
-          className="ml-2 shrink-0 rounded p-1 text-[#5f6368] hover:bg-[#f8f9fa] hover:text-[#3c4043] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+          className="ml-2 shrink-0 text-slate"
           aria-label="Close review detail"
         >
           <X className="h-4 w-4" />
-        </button>
+        </Button>
       </div>
 
       {/* Scrollable body */}
@@ -303,18 +307,18 @@ export function ReviewDetailPanel({
         {/* Rating + date row */}
         <div className="flex items-center justify-between">
           <StarDisplay rating={review.star_rating} />
-          <span className="text-[11px] text-[#5f6368]">
+          <span className="text-[11px] text-slate">
             {formatDate(review.review_create_time)}
           </span>
         </div>
 
         {/* Review text */}
         {review.comment ? (
-          <p className="text-base font-light leading-relaxed text-[#202124]">
+          <p className="text-base font-light leading-relaxed text-graphite">
             {review.comment}
           </p>
         ) : (
-          <p className="text-sm italic text-[#5f6368]">
+          <p className="text-sm italic text-slate">
             Rating only — no written comment.
           </p>
         )}
@@ -350,6 +354,39 @@ export function ReviewDetailPanel({
           )}
         </div>
 
+        {loading === "generate" ? (
+          <ActivityStatus
+            tone="gemini"
+            title="Gemini is writing a reply"
+            detail="It reads this review and drafts a response inside GRM. Nothing is posted to Google until you approve it."
+          />
+        ) : null}
+        {loading === "publish" ? (
+          <ActivityStatus
+            tone="google"
+            title="Posting this reply on Google"
+            detail="Google is publishing it on the Business Profile. Keep this open until it finishes."
+          />
+        ) : null}
+        {loading === "approve" ? (
+          <ActivityStatus
+            title="Approving this reply"
+            detail="It stays in GRM as ready to publish. It is not on Google yet."
+          />
+        ) : null}
+        {loading === "create" || loading === "edit" ? (
+          <ActivityStatus
+            title="Saving the draft"
+            detail="The reply stays in GRM. Publishing to Google is a separate step."
+          />
+        ) : null}
+        {loading === "delete" ? (
+          <ActivityStatus
+            title="Removing this draft"
+            detail="The reply leaves GRM. A reply already on Google is not deleted from there."
+          />
+        ) : null}
+
         {/* Error display */}
         {error && (
           <div className="rounded-md border border-red-200 bg-red-50 px-3 py-2.5 text-sm text-red-700" role="alert">
@@ -380,11 +417,11 @@ export function ReviewDetailPanel({
                 className="gap-1.5"
               >
                 {loading === "generate" ? (
-                  <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden />
+                  <Spinner size="sm" />
                 ) : (
                   <Sparkles className="h-3.5 w-3.5" aria-hidden />
                 )}
-                {loading === "generate" ? "Generating..." : "Generate AI Response"}
+                {loading === "generate" ? "Gemini is writing…" : "Generate AI Response"}
               </Button>
               <Button
                 variant="outline"
@@ -397,18 +434,13 @@ export function ReviewDetailPanel({
                 Write manually
               </Button>
             </div>
-            {loading === "generate" && (
-              <p className="text-xs text-[#5f6368]">
-                AI is drafting a response. This usually takes a few seconds.
-              </p>
-            )}
-          </div>
+            </div>
         )}
 
         {/* Create form */}
         {isCreating && !reply && (
           <div className="space-y-3">
-            <label htmlFor="draft-reply" className="block text-xs font-medium text-[#5f6368]">
+            <label htmlFor="draft-reply" className="block text-xs font-medium text-slate">
               Draft reply
             </label>
             <Textarea
@@ -427,7 +459,7 @@ export function ReviewDetailPanel({
                 className="gap-1.5"
               >
                 {loading === "create" ? (
-                  <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden />
+                  <Spinner size="sm" />
                 ) : (
                   <Send className="h-3.5 w-3.5" aria-hidden />
                 )}
@@ -452,7 +484,7 @@ export function ReviewDetailPanel({
           <div className="space-y-3">
             {isEditing ? (
               <>
-                <label htmlFor="edit-reply" className="block text-xs font-medium text-[#5f6368]">
+                <label htmlFor="edit-reply" className="block text-xs font-medium text-slate">
                   Edit reply
                 </label>
                 <Textarea
@@ -470,7 +502,7 @@ export function ReviewDetailPanel({
                     className="gap-1.5"
                   >
                     {loading === "edit" ? (
-                      <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden />
+                      <Spinner size="sm" />
                     ) : (
                       <CheckCircle2 className="h-3.5 w-3.5" aria-hidden />
                     )}
@@ -495,7 +527,7 @@ export function ReviewDetailPanel({
                   ? "border-green-200 bg-green-50/40"
                   : reply.source === "ai"
                   ? "border-purple-100 bg-purple-50/30"
-                  : "border-[#dadce0] bg-[#f8f9fa]/50"
+                  : "border-silver bg-paper/50"
               )}>
                 {reply.source === "ai" && reply.status !== "published" && (
                   <p className="mb-1.5 flex items-center gap-1 text-[10px] font-medium text-purple-600">
@@ -512,7 +544,12 @@ export function ReviewDetailPanel({
                     )}
                   </p>
                 )}
-                <p className="whitespace-pre-wrap text-sm leading-relaxed text-[#202124]">
+                <p
+                  className={cn(
+                    "whitespace-pre-wrap text-sm leading-relaxed text-graphite transition-opacity",
+                    loading === "generate" && "opacity-40"
+                  )}
+                >
                   {reply.content}
                 </p>
                 {/* Keep primary actions next to the draft so they are not clipped */}
@@ -527,12 +564,12 @@ export function ReviewDetailPanel({
                           className="gap-1.5"
                         >
                           {loading === "publish" ? (
-                            <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden />
+                            <Spinner size="sm" />
                           ) : (
                             <Send className="h-3.5 w-3.5" aria-hidden />
                           )}
                           {loading === "publish"
-                            ? "Publishing..."
+                            ? "Posting to Google…"
                             : "Approve & publish"}
                         </Button>
                         <Button
@@ -543,7 +580,7 @@ export function ReviewDetailPanel({
                           className="gap-1.5"
                         >
                           {loading === "approve" ? (
-                            <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden />
+                            <Spinner size="sm" />
                           ) : (
                             <CheckCircle2 className="h-3.5 w-3.5" aria-hidden />
                           )}
@@ -551,7 +588,7 @@ export function ReviewDetailPanel({
                         </Button>
                       </>
                     ) : (
-                      <p className="w-full text-xs text-[#5f6368]">
+                      <p className="w-full text-xs text-slate">
                         An owner or admin needs to approve this draft before it can be published.
                       </p>
                     )}
@@ -575,13 +612,17 @@ export function ReviewDetailPanel({
                       disabled={loading !== null}
                       className="gap-1.5"
                     >
-                      <RotateCw className="h-3.5 w-3.5" aria-hidden />
-                      Regenerate
+                      {loading === "generate" ? (
+                        <Spinner size="sm" />
+                      ) : (
+                        <RotateCw className="h-3.5 w-3.5" aria-hidden />
+                      )}
+                      {loading === "generate" ? "Gemini is writing…" : "Regenerate"}
                     </Button>
                     <Button
                       size="sm"
                       variant="ghost"
-                      className="text-[#5f6368] hover:text-red-600"
+                      className="text-slate hover:text-red-600"
                       onClick={handleDelete}
                       disabled={loading !== null}
                       aria-label="Reject draft"
@@ -599,11 +640,11 @@ export function ReviewDetailPanel({
                       className="gap-1.5"
                     >
                       {loading === "publish" ? (
-                        <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden />
+                        <Spinner size="sm" />
                       ) : (
                         <Send className="h-3.5 w-3.5" aria-hidden />
                       )}
-                      {loading === "publish" ? "Publishing..." : "Publish to Google"}
+                      {loading === "publish" ? "Posting to Google…" : "Publish to Google"}
                     </Button>
                     <Button
                       size="sm"
@@ -621,7 +662,7 @@ export function ReviewDetailPanel({
                     <Button
                       size="sm"
                       variant="ghost"
-                      className="text-[#5f6368] hover:text-red-600"
+                      className="text-slate hover:text-red-600"
                       onClick={handleDelete}
                       disabled={loading !== null}
                       aria-label="Reject draft"
@@ -639,11 +680,11 @@ export function ReviewDetailPanel({
                       className="gap-1.5"
                     >
                       {loading === "publish" ? (
-                        <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden />
+                        <Spinner size="sm" />
                       ) : (
                         <Send className="h-3.5 w-3.5" aria-hidden />
                       )}
-                      {loading === "publish" ? "Publishing..." : "Retry publish"}
+                      {loading === "publish" ? "Posting to Google…" : "Retry publish"}
                     </Button>
                     <Button
                       size="sm"

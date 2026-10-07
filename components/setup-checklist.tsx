@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useSyncExternalStore } from "react";
 import { Check, X } from "lucide-react";
+import { Button } from "@/components/ui/button";
 import { SyncButton } from "@/components/sync-button";
 import { cn } from "@/lib/utils";
 
@@ -48,20 +49,16 @@ export function SetupChecklist({
       title: "Connect Google",
       body: "Sign in with the Google account that manages your Business Profiles.",
       action: (
-        <Link href="/settings" className="font-medium text-[#1a73e8] hover:text-[#1967d2]">
+        <Link href="/settings" className="font-medium text-ink underline decoration-stone/50 underline-offset-4 hover:decoration-ink">
           Open settings
         </Link>
       ),
     },
     {
       done: hasLocations,
-      title: "Assign locations to clients",
-      body: "Import your profiles, then put each location under the business it belongs to.",
-      action: (
-        <Link href="/clients" className="font-medium text-[#1a73e8] hover:text-[#1967d2]">
-          Go to clients
-        </Link>
-      ),
+      title: "Sync profiles",
+      body: "Click Sync profiles at the top of this page. Every brand on your Google account becomes a client, with its shops as locations.",
+      action: null,
     },
     {
       done: hasReviews,
@@ -75,8 +72,8 @@ export function SetupChecklist({
       body: "Open a review, generate a draft, edit it, approve, and publish to Google.",
       action: hasReviews ? (
         <Link
-          href="/dashboard?filter=unanswered#inbox"
-          className="font-medium text-[#1a73e8] hover:text-[#1967d2]"
+          href="/reviews?filter=unanswered"
+          className="font-medium text-ink underline decoration-stone/50 underline-offset-4 hover:decoration-ink"
         >
           Show reviews that need a reply
         </Link>
@@ -95,33 +92,35 @@ export function SetupChecklist({
   return (
     <section
       aria-labelledby="setup-heading"
-      className="rounded-3xl border border-[#dadce0] bg-white p-5 sm:p-6"
+      className="rounded-xl bg-white shadow-card p-5 sm:p-6"
     >
       <div className="flex items-start justify-between gap-3">
         <div>
           <h2
             id="setup-heading"
-            className="text-[22px] leading-[1.3] tracking-[-0.02em] text-[#202124]"
-            style={{ fontFamily: "var(--font-google-sans-display), sans-serif" }}
+            className="text-[22px] leading-[1.3] text-graphite"
+            style={{ fontFamily: "var(--font-heading), sans-serif" }}
           >
             Get set up
           </h2>
-          <p className="mt-1 text-sm font-light text-[#5f6368]">
+          <p className="mt-1 text-sm font-light text-slate">
             {completed} of {steps.length} done
           </p>
         </div>
-        <button
+        <Button
           type="button"
+          variant="ghost"
+          size="icon"
           onClick={dismiss}
-          className="rounded-full p-1.5 text-[#5f6368] hover:bg-[#f8f9fa] hover:text-[#202124]"
+          className="text-slate"
           aria-label="Hide setup checklist"
         >
           <X className="h-4 w-4" aria-hidden />
-        </button>
+        </Button>
       </div>
 
       <div
-        className="mt-4 h-1.5 overflow-hidden rounded-full bg-[#e8f0fe]"
+        className="mt-4 h-1.5 overflow-hidden rounded-full bg-paper"
         role="progressbar"
         aria-valuemin={0}
         aria-valuemax={steps.length}
@@ -129,7 +128,7 @@ export function SetupChecklist({
         aria-label="Setup progress"
       >
         <div
-          className="h-full rounded-full bg-[#1a73e8] transition-all"
+          className="h-full rounded-full bg-ink transition-all"
           style={{ width: `${(completed / steps.length) * 100}%` }}
         />
       </div>
@@ -139,15 +138,15 @@ export function SetupChecklist({
           <li
             key={step.title}
             className={cn(
-              "flex flex-col gap-2 rounded-2xl border p-4",
-              step.done ? "border-[#dadce0] bg-[#f8f9fa]" : "border-[#dadce0] bg-white"
+              "flex flex-col gap-2 rounded-xl border p-4",
+              step.done ? "border-silver bg-paper" : "border-silver bg-white"
             )}
           >
             <div className="flex items-center gap-2">
               <span
                 className={cn(
-                  "flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-xs font-bold",
-                  step.done ? "bg-green-500 text-white" : "bg-[#e8f0fe] text-[#1a73e8]"
+                  "flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-xs font-semibold",
+                  step.done ? "bg-green-500 text-white" : "bg-paper text-ink"
                 )}
               >
                 {step.done ? <Check className="h-3.5 w-3.5" aria-hidden /> : i + 1}
@@ -155,13 +154,13 @@ export function SetupChecklist({
               <p
                 className={cn(
                   "text-sm font-semibold",
-                  step.done ? "text-[#5f6368] line-through" : "text-[#202124]"
+                  step.done ? "text-slate line-through" : "text-graphite"
                 )}
               >
                 {step.title}
               </p>
             </div>
-            <p className="text-[13px] font-light leading-relaxed text-[#3c4043]">{step.body}</p>
+            <p className="text-[13px] font-light leading-relaxed text-graphite">{step.body}</p>
             {!step.done && step.action ? <div className="mt-auto text-sm">{step.action}</div> : null}
           </li>
         ))}
