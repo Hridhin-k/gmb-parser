@@ -1002,6 +1002,7 @@ what repeats.
   only the frames, without a verbal walkthrough.
   Needs reply, Critical, and Failed are identifiable within one second on the
   dashboard.
+  
   AI content is always labeled, and publish is a separate deliberate action.
   No raw user ids or database ids in primary UI.
   Focus, hover, disabled, and loading are specified on buttons that trigger
