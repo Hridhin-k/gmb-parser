@@ -95,7 +95,7 @@ export function AppShell({
       {/* Sidebar */}
         <aside
         className={cn(
-          "fixed inset-y-0 left-0 z-50 flex w-[min(100%,18rem)] flex-col border-r border-[#ede9ff] bg-white transition-transform duration-150 ease-out lg:static lg:w-60 lg:translate-x-0",
+          "fixed inset-y-0 left-0 z-50 flex w-[min(100%,18rem)] flex-col border-r border-mist bg-white transition-transform duration-150 ease-out lg:static lg:w-60 lg:translate-x-0",
           sidebarOpen ? "translate-x-0" : "-translate-x-full"
         )}
         aria-label="Main navigation"
@@ -104,16 +104,16 @@ export function AppShell({
         <div className="flex h-12 shrink-0 items-center justify-between border-b border-sidebar-border px-4">
           <Link
             href="/dashboard"
-            className="flex items-center gap-2 text-lg tracking-[-0.03em] text-[#18161a]"
-            style={{ fontFamily: "var(--font-plus-jakarta), sans-serif" }}
+            className="flex items-center gap-2 text-lg tracking-[-0.03em] text-[#202124]"
+            style={{ fontFamily: "var(--font-google-sans-display), sans-serif" }}
           >
-            <span className="flex h-7 w-7 items-center justify-center rounded-full bg-[#4823ff] text-[11px] font-bold text-white">
+            <span className="flex h-7 w-7 items-center justify-center rounded-full bg-[#1a73e8] text-[11px] font-bold text-white">
               G
             </span>
             GRM
           </Link>
           <button
-            className="rounded p-1 text-[#898b91] hover:text-[#5f6168] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring lg:hidden"
+            className="rounded p-1 text-[#5f6368] hover:text-[#3c4043] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring lg:hidden"
             onClick={() => setSidebarOpen(false)}
             aria-label="Close navigation"
           >
@@ -143,7 +143,7 @@ export function AppShell({
                     setSwitching(false);
                   }
                 }}
-                className="w-full truncate rounded-full border border-[#d9d2ff] bg-white px-3 py-2 text-sm text-[#18161a]"
+                className="w-full truncate rounded-full border border-[#dadce0] bg-white px-3 py-2 text-sm text-[#202124]"
               >
                 {workspaces.map((workspace) => (
                   <option key={workspace.id} value={workspace.id}>
@@ -153,7 +153,7 @@ export function AppShell({
               </select>
             </label>
           ) : (
-            <p className="truncate text-sm font-medium text-[#18161a]">{workspaceName}</p>
+            <p className="truncate text-sm font-medium text-[#202124]">{workspaceName}</p>
           )}
         </div>
 
@@ -167,10 +167,10 @@ export function AppShell({
                 href={item.href}
                 onClick={() => setSidebarOpen(false)}
                 className={cn(
-                  "flex items-center gap-2 rounded-full px-3 py-3 text-[15px] font-medium transition-colors lg:py-2 lg:text-[14px]",
+                  "flex items-center gap-2 rounded-lg px-3 py-3 text-body-sm font-medium transition-colors lg:py-2",
                   active
-                    ? "bg-[#ede9ff] text-[#4823ff]"
-                    : "text-[#18161a] hover:bg-[#ede9ff]/60"
+                    ? "bg-[#e8f0fe] text-[#1a73e8]"
+                    : "text-[#202124] hover:bg-[#e8f0fe]/60"
                 )}
                 aria-current={active ? "page" : undefined}
               >
@@ -183,16 +183,16 @@ export function AppShell({
 
         {/* User section */}
         <div className="border-t border-sidebar-border p-2">
-          <div className="mb-1 flex gap-3 px-2.5 text-xs text-[#898b91]">
-            <a href="/privacy" className="hover:text-[#4823ff]">
+          <div className="mb-1 flex gap-3 px-2.5 text-xs text-[#5f6368]">
+            <a href="/privacy" className="hover:text-[#1a73e8]">
               Privacy
             </a>
-            <a href="/terms" className="hover:text-[#4823ff]">
+            <a href="/terms" className="hover:text-[#1a73e8]">
               Terms
             </a>
           </div>
           <DropdownMenu>
-            <DropdownMenuTrigger className="flex w-full items-center gap-2 rounded-full px-2.5 py-2 text-left text-sm text-[#18161a] hover:bg-[#ede9ff] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
+            <DropdownMenuTrigger className="flex w-full items-center gap-2 rounded-full px-2.5 py-2 text-left text-sm text-[#202124] hover:bg-[#e8f0fe] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
               <Avatar className="h-5 w-5">
                 <AvatarFallback className="bg-primary text-[8px] font-medium text-primary-foreground">
                   {initials}
@@ -219,15 +219,15 @@ export function AppShell({
       {/* Main area */}
       <div className="flex min-w-0 flex-1 flex-col overflow-hidden">
         {/* Top header bar */}
-        <header className="flex h-14 shrink-0 items-center border-b border-[#ede9ff] bg-[#fafaf8] px-3 lg:hidden">
+        <header className="flex h-16 shrink-0 items-center border-b border-mist bg-white px-6 lg:hidden">
           <button
-            className="mr-2 rounded-full p-2 text-[#18161a] hover:bg-[#ede9ff] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+            className="mr-2 rounded-full p-2 text-[#202124] hover:bg-[#e8f0fe] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
             onClick={() => setSidebarOpen(true)}
             aria-label="Open navigation"
           >
             <Menu className="h-5 w-5" />
           </button>
-          <p className="truncate text-sm font-medium text-[#18161a]">
+          <p className="truncate text-sm font-medium text-[#202124]">
             {NAV_ITEMS.find(
               (item) => pathname === item.href || pathname.startsWith(item.href + "/")
             )?.label ?? "GRM"}
@@ -235,7 +235,7 @@ export function AppShell({
         </header>
 
         {/* Page content */}
-        <main className="flex-1 overflow-y-auto bg-[#fafaf8]" id="main-content">
+        <main className="flex-1 overflow-y-auto bg-[#f8f9fa]" id="main-content">
           <div className="mx-auto max-w-[1200px] px-4 py-4 sm:px-5 sm:py-5 lg:px-8 lg:py-6">
             {children}
           </div>

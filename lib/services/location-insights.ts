@@ -3,16 +3,32 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { AppError } from "@/lib/errors";
 import { logger } from "@/lib/logger";
 import { AuditService } from "./audit";
+import { GEMINI_MODEL_ID, geminiGenerateUrl } from "@/lib/gemini";
+import type { Json } from "@/lib/types/supabase";
 
-const GEMINI_API_URL =
-  "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent";
-const MODEL_ID = "gemini-2.0-flash";
-const PROMPT_VERSION = "insight-v1.0";
-const REQUEST_TIMEOUT_MS = 35_000;
-/** Cap review snippets sent to the model to control tokens/cost. */
-const MAX_REVIEW_SAMPLES = 40;
+const MODEL_ID = GEMINI_MODEL_ID;
+export const INSIGHT_PROMPT_VERSION = "insight-v2.0";
+const REQUEST_TIMEOUT_MS = 45_000;
+const MAX_REVIEW_SAMPLES = 50;
 
 export type SentimentLabel = "positive" | "mixed" | "negative" | "neutral";
+export type FeatureEffort = "quick" | "medium" | "project";
+
+export interface SuggestedFeature {
+  title: string;
+  why: string;
+  basedOn: string;
+  effort: FeatureEffort;
+}
+
+export interface ProfileAnalysis {
+  branding: { voice: string; strengths: string[]; gaps: string[] };
+  staff: { summary: string; praise: string[]; issues: string[] };
+  customerFeedback: { loves: string[]; friction: string[]; requests: string[] };
+  operations: { summary: string; notes: string[] };
+  suggestedFeatures: SuggestedFeature[];
+  replyPlaybook: { tone: string; do: string[]; avoid: string[] };
+}
 
 export interface LocationInsight {
   locationId: string;
@@ -21,6 +37,7 @@ export interface LocationInsight {
   themes: string[];
   highlights: string[];
   risks: string[];
+  analysis: ProfileAnalysis;
   reviewCount: number;
   avgRating: number | null;
   sourceHash: string;
@@ -53,6 +70,123 @@ function buildSourceFingerprint(
     ),
   ];
   return hashSource(parts.join("\n"));
+}
+
+function strings(value: unknown, max = 6, len = 220): string[] {
+  if (!Array.isArray(value)) return [];
+  return value
+    .filter((x): x is string => typeof x === "string" && x.trim().length > 0)
+    .map((s) => s.trim().slice(0, len))
+    .slice(0, max);
+}
+
+function text(value: unknown, max = 400): string {
+  return typeof value === "string" ? value.trim().slice(0, max) : "";
+}
+
+export function emptyAnalysis(): ProfileAnalysis {
+  return {
+    branding: { voice: "", strengths: [], gaps: [] },
+    staff: { summary: "", praise: [], issues: [] },
+    customerFeedback: { loves: [], friction: [], requests: [] },
+    operations: { summary: "", notes: [] },
+    suggestedFeatures: [],
+    replyPlaybook: { tone: "", do: [], avoid: [] },
+  };
+}
+
+function parseFeatures(value: unknown): SuggestedFeature[] {
+  if (!Array.isArray(value)) return [];
+  const effortOk = (e: string): e is FeatureEffort =>
+    e === "quick" || e === "medium" || e === "project";
+  const out: SuggestedFeature[] = [];
+  for (const item of value) {
+    if (!item || typeof item !== "object") continue;
+    const row = item as Record<string, unknown>;
+    const title = text(row.title, 80);
+    const why = text(row.why, 220);
+    if (!title || !why) continue;
+    const effortRaw = text(row.effort, 16).toLowerCase();
+    out.push({
+      title,
+      why,
+      basedOn: text(row.basedOn ?? row.based_on, 180),
+      effort: effortOk(effortRaw) ? effortRaw : "medium",
+    });
+    if (out.length >= 6) break;
+  }
+  return out;
+}
+
+export function parseLocationInsightPayload(raw: string): {
+  summary: string;
+  sentiment: SentimentLabel;
+  themes: string[];
+  highlights: string[];
+  risks: string[];
+  analysis: ProfileAnalysis;
+} {
+  const cleaned = raw
+    .replace(/^```json\s*/i, "")
+    .replace(/^```\s*/i, "")
+    .replace(/\s*```$/i, "")
+    .trim();
+
+  const parsed = JSON.parse(cleaned) as Record<string, unknown>;
+  const sentimentRaw = String(parsed.sentiment ?? "neutral");
+  const sentiment: SentimentLabel = (
+    ["positive", "mixed", "negative", "neutral"] as const
+  ).includes(sentimentRaw as SentimentLabel)
+    ? (sentimentRaw as SentimentLabel)
+    : "neutral";
+
+  const branding = (parsed.branding ?? {}) as Record<string, unknown>;
+  const staff = (parsed.staff ?? {}) as Record<string, unknown>;
+  const feedback = (parsed.customerFeedback ??
+    parsed.customer_feedback ??
+    {}) as Record<string, unknown>;
+  const operations = (parsed.operations ?? {}) as Record<string, unknown>;
+  const playbook = (parsed.replyPlaybook ?? parsed.reply_playbook ?? {}) as Record<
+    string,
+    unknown
+  >;
+
+  return {
+    summary: text(parsed.summary, 900),
+    sentiment,
+    themes: strings(parsed.themes, 6, 80),
+    highlights: strings(parsed.highlights, 4, 200),
+    risks: strings(parsed.risks, 4, 200),
+    analysis: {
+      branding: {
+        voice: text(branding.voice, 240),
+        strengths: strings(branding.strengths, 4),
+        gaps: strings(branding.gaps, 4),
+      },
+      staff: {
+        summary: text(staff.summary, 320),
+        praise: strings(staff.praise, 4),
+        issues: strings(staff.issues, 4),
+      },
+      customerFeedback: {
+        loves: strings(feedback.loves, 5),
+        friction: strings(feedback.friction, 5),
+        requests: strings(feedback.requests, 5),
+      },
+      operations: {
+        summary: text(operations.summary, 320),
+        notes: strings(operations.notes, 5),
+      },
+      suggestedFeatures: parseFeatures(
+        parsed.suggestedFeatures ?? parsed.suggested_features
+      ),
+      replyPlaybook: {
+        tone: text(playbook.tone, 200),
+        do: strings(playbook.do, 4),
+        avoid: strings(playbook.avoid, 4),
+      },
+    },
+  };
 }
 
 function heuristicInsight(
@@ -96,51 +230,36 @@ function heuristicInsight(
       .filter((r) => r.comment)
       .slice(0, 3)
       .map((r) => r.comment!.trim().slice(0, 140)),
+    analysis: emptyAnalysis(),
     reviewCount: reviews.length,
     avgRating,
   };
 }
 
-function parseInsightJson(raw: string): {
-  summary: string;
-  sentiment: SentimentLabel;
-  themes: string[];
-  highlights: string[];
-  risks: string[];
-} {
-  const cleaned = raw
-    .replace(/^```json\s*/i, "")
-    .replace(/^```\s*/i, "")
-    .replace(/\s*```$/i, "")
-    .trim();
+function asAnalysis(value: unknown): ProfileAnalysis {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    return emptyAnalysis();
+  }
+  try {
+    return parseLocationInsightPayload(
+      JSON.stringify({ summary: "cached", ...(value as object), sentiment: "neutral" })
+    ).analysis;
+  } catch {
+    return emptyAnalysis();
+  }
+}
 
-  const parsed = JSON.parse(cleaned) as Record<string, unknown>;
-  const sentimentRaw = String(parsed.sentiment ?? "neutral");
-  const sentiment: SentimentLabel = (
-    ["positive", "mixed", "negative", "neutral"] as const
-  ).includes(sentimentRaw as SentimentLabel)
-    ? (sentimentRaw as SentimentLabel)
-    : "neutral";
-
-  const asStringArray = (v: unknown): string[] =>
-    Array.isArray(v)
-      ? v.filter((x): x is string => typeof x === "string").map((s) => s.slice(0, 200)).slice(0, 6)
-      : [];
-
-  return {
-    summary: typeof parsed.summary === "string" ? parsed.summary.slice(0, 800) : "",
-    sentiment,
-    themes: asStringArray(parsed.themes),
-    highlights: asStringArray(parsed.highlights),
-    risks: asStringArray(parsed.risks),
-  };
+function hasRichAnalysis(analysis: ProfileAnalysis): boolean {
+  return (
+    analysis.suggestedFeatures.length > 0 ||
+    analysis.branding.strengths.length > 0 ||
+    analysis.customerFeedback.loves.length > 0 ||
+    analysis.staff.praise.length > 0 ||
+    analysis.staff.issues.length > 0
+  );
 }
 
 export class LocationInsightService {
-  /**
-   * Returns cached insights for locations. Does not call Gemini.
-   * Marks entries stale when the underlying review set has changed.
-   */
   static async getCachedInsights(
     workspaceId: string,
     locationIds: string[],
@@ -150,18 +269,37 @@ export class LocationInsightService {
     if (!locationIds.length) return result;
 
     const supabase = createAdminClient();
-    const { data } = await supabase
+    const withAnalysis = await supabase
       .from("grm_location_insights")
       .select(
-        `location_id, summary, sentiment_label, themes, highlights, risks,
-         review_count, avg_rating, source_hash, generated_at`
+        `location_id, summary, sentiment_label, themes, highlights, risks, analysis,
+         review_count, avg_rating, source_hash, generated_at, prompt_version`
       )
       .eq("workspace_id", workspaceId)
       .in("location_id", locationIds);
 
+    const { data } =
+      withAnalysis.error && /analysis/i.test(withAnalysis.error.message)
+        ? await supabase
+            .from("grm_location_insights")
+            .select(
+              `location_id, summary, sentiment_label, themes, highlights, risks,
+               review_count, avg_rating, source_hash, generated_at, prompt_version`
+            )
+            .eq("workspace_id", workspaceId)
+            .in("location_id", locationIds)
+        : withAnalysis;
+
     for (const row of data ?? []) {
       const expected = fingerprints.get(row.location_id);
-      const stale = !expected || expected !== row.source_hash;
+      const analysis = asAnalysis(
+        "analysis" in row ? (row as { analysis?: unknown }).analysis : {}
+      );
+      const stale =
+        !expected ||
+        expected !== row.source_hash ||
+        row.prompt_version !== INSIGHT_PROMPT_VERSION ||
+        !hasRichAnalysis(analysis);
       result.set(row.location_id, {
         locationId: row.location_id,
         summary: row.summary,
@@ -171,6 +309,7 @@ export class LocationInsightService {
           ? (row.highlights as string[])
           : [],
         risks: Array.isArray(row.risks) ? (row.risks as string[]) : [],
+        analysis,
         reviewCount: row.review_count,
         avgRating: row.avg_rating != null ? Number(row.avg_rating) : null,
         sourceHash: row.source_hash,
@@ -182,9 +321,6 @@ export class LocationInsightService {
     return result;
   }
 
-  /**
-   * Builds fingerprints + heuristic fallbacks for locations (no AI quota).
-   */
   static async buildLocationReviewStats(
     workspaceId: string,
     locationIds: string[]
@@ -260,10 +396,6 @@ export class LocationInsightService {
     return map;
   }
 
-  /**
-   * Generates (or returns cached) AI insight for one location.
-   * Skips Gemini when source_hash is unchanged unless force=true.
-   */
   static async generateForLocation(
     workspaceId: string,
     locationId: string,
@@ -332,43 +464,76 @@ export class LocationInsightService {
       )
       .join("\n");
 
-    const prompt = `You are a reputation analyst for Google Business Profile reviews.
+    const prompt = `You are a reputation, branding, and customer-experience analyst for one Google Business Profile.
 
 Business: "${businessName}"
 Location: "${location.location_title}"
-Review count in sample: ${stats.reviews.length}
+Reviews in this sample: ${stats.reviews.length}
 Average rating: ${stats.avgRating?.toFixed(2) ?? "n/a"}
 
 REVIEWS:
 ${reviewBlock}
 
-Return ONLY valid JSON (no markdown) with this shape:
+Return ONLY valid JSON (no markdown) with this exact shape:
 {
-  "summary": "2-4 sentence executive summary of reputation for this location",
+  "summary": "3-5 sentence briefing: reputation, what this location is known for, and the one thing to fix first",
   "sentiment": "positive" | "mixed" | "negative" | "neutral",
-  "themes": ["up to 5 recurring themes"],
-  "highlights": ["up to 3 short positive points customers mention"],
-  "risks": ["up to 3 short issues to address"]
+  "themes": ["up to 6 recurring themes"],
+  "highlights": ["up to 4 praise points with evidence"],
+  "risks": ["up to 4 reputation risks"],
+  "branding": {
+    "voice": "how customers describe the brand personality in one sentence",
+    "strengths": ["up to 4 brand strengths from reviews"],
+    "gaps": ["up to 4 brand or listing gaps, e.g. photos, categories, promises not matching experience"]
+  },
+  "staff": {
+    "summary": "how customers talk about people who work here",
+    "praise": ["staff praise, name a person only if a review does"],
+    "issues": ["staff-related complaints"]
+  },
+  "customerFeedback": {
+    "loves": ["what customers keep coming back for"],
+    "friction": ["pain points: wait, price, cleanliness, parking, etc."],
+    "requests": ["things customers ask for or wish existed"]
+  },
+  "operations": {
+    "summary": "hours, queue, cleanliness, consistency, facilities",
+    "notes": ["specific operational notes"]
+  },
+  "suggestedFeatures": [
+    {
+      "title": "short feature name this profile should add",
+      "why": "what it would improve",
+      "basedOn": "which review pattern justifies it",
+      "effort": "quick" | "medium" | "project"
+    }
+  ],
+  "replyPlaybook": {
+    "tone": "how replies from this location should sound",
+    "do": ["up to 4 reply habits"],
+    "avoid": ["up to 4 things not to say"]
+  }
 }
 
 Rules:
-- Base claims only on the reviews provided. Do not invent facts.
-- Be specific and actionable. Avoid fluff.
-- If few reviews, say so and keep confidence low in the summary.`;
+- Base every claim on the reviews. If evidence is thin, say so. Never invent staff names, services, or policies.
+- suggestedFeatures must be specific to THIS profile. Mix Google listing ideas (photos, Q&A, products, booking, posts, attributes) with on-the-ground ideas (waitlist, staff name badges, kids menu, accessibility, parking signage) when the reviews support them.
+- Prefer 4-6 suggestedFeatures. Use effort "quick" for listing/content changes, "medium" for process changes, "project" for bigger investment.
+- Do not mention that you are an AI.`;
 
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
 
-    let parsed: ReturnType<typeof parseInsightJson>;
+    let parsed: ReturnType<typeof parseLocationInsightPayload>;
     try {
-      const response = await fetch(`${GEMINI_API_URL}?key=${apiKey}`, {
+      const response = await fetch(geminiGenerateUrl(apiKey), {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           contents: [{ parts: [{ text: prompt }] }],
           generationConfig: {
-            temperature: 0.35,
-            maxOutputTokens: 700,
+            temperature: 0.4,
+            maxOutputTokens: 2500,
             topP: 0.9,
             responseMimeType: "application/json",
           },
@@ -383,7 +548,6 @@ Rules:
           status: response.status,
           body: body.slice(0, 200),
         });
-        // Fall back to heuristic so the UI still works under quota pressure
         const fallback = {
           ...stats.heuristic,
           locationId,
@@ -399,11 +563,11 @@ Rules:
       }
 
       const data = await response.json();
-      const text = data.candidates?.[0]?.content?.parts?.[0]?.text;
-      if (!text || typeof text !== "string") {
+      const rawText = data.candidates?.[0]?.content?.parts?.[0]?.text;
+      if (!rawText || typeof rawText !== "string") {
         throw new AppError("Empty AI insight response", "AI_INVALID_RESPONSE", 502);
       }
-      parsed = parseInsightJson(text);
+      parsed = parseLocationInsightPayload(rawText);
       if (!parsed.summary) {
         throw new AppError("Invalid AI insight JSON", "AI_INVALID_RESPONSE", 502);
       }
@@ -435,6 +599,7 @@ Rules:
       themes: parsed.themes,
       highlights: parsed.highlights,
       risks: parsed.risks,
+      analysis: parsed.analysis,
       reviewCount: stats.reviews.length,
       avgRating: stats.avgRating,
       sourceHash: stats.fingerprint,
@@ -452,7 +617,7 @@ Rules:
       entityId: locationId,
       metadata: {
         model: MODEL_ID,
-        promptVersion: PROMPT_VERSION,
+        promptVersion: INSIGHT_PROMPT_VERSION,
         reviewCount: insight.reviewCount,
       },
     });
@@ -467,25 +632,35 @@ Rules:
     insight: Omit<LocationInsight, "stale">
   ): Promise<void> {
     const supabase = createAdminClient();
-    const { error } = await supabase.from("grm_location_insights").upsert(
-      {
-        workspace_id: workspaceId,
-        location_id: locationId,
-        summary: insight.summary,
-        sentiment_label: insight.sentimentLabel,
-        themes: insight.themes,
-        highlights: insight.highlights,
-        risks: insight.risks,
-        review_count: insight.reviewCount,
-        avg_rating: insight.avgRating,
-        source_hash: insight.sourceHash,
-        ai_model: MODEL_ID,
-        prompt_version: PROMPT_VERSION,
-        generated_at: insight.generatedAt,
-        generated_by: userId,
-      },
-      { onConflict: "workspace_id,location_id" }
-    );
+    const row = {
+      workspace_id: workspaceId,
+      location_id: locationId,
+      summary: insight.summary,
+      sentiment_label: insight.sentimentLabel,
+      themes: insight.themes,
+      highlights: insight.highlights,
+      risks: insight.risks,
+      analysis: insight.analysis as unknown as Json,
+      review_count: insight.reviewCount,
+      avg_rating: insight.avgRating,
+      source_hash: insight.sourceHash,
+      ai_model: MODEL_ID,
+      prompt_version: INSIGHT_PROMPT_VERSION,
+      generated_at: insight.generatedAt,
+      generated_by: userId,
+    };
+    let { error } = await supabase
+      .from("grm_location_insights")
+      .upsert(row, { onConflict: "workspace_id,location_id" });
+
+    if (error && /analysis/i.test(error.message)) {
+      const withoutAnalysis = { ...row };
+      delete (withoutAnalysis as { analysis?: Json }).analysis;
+      const retry = await supabase
+        .from("grm_location_insights")
+        .upsert(withoutAnalysis, { onConflict: "workspace_id,location_id" });
+      error = retry.error;
+    }
 
     if (error) {
       logger.error("location_insight.upsert_failed", { dbError: error.message });

@@ -101,7 +101,7 @@ export default async function ReviewsPage({ searchParams }: ReviewsPageProps) {
           {data.totalReviewCount > 0 && (
             <a
               href={`/api/reviews/export?${queryForPagination.toString()}`}
-              className="inline-flex h-9 items-center gap-1.5 rounded-full border border-[#d9d2ff] bg-white px-4 text-sm font-medium text-[#18161a] hover:border-[#4823ff]"
+              className="inline-flex h-9 items-center gap-1.5 rounded-full border border-[#dadce0] bg-white px-4 text-sm font-medium text-[#202124] hover:border-[#1a73e8]"
             >
               <Download className="h-3.5 w-3.5" aria-hidden />
               Export CSV
@@ -156,7 +156,7 @@ export default async function ReviewsPage({ searchParams }: ReviewsPageProps) {
         />
       ) : (
         <>
-          <p className="text-[12px] tabular-nums text-[#898b91]">
+          <p className="text-[12px] tabular-nums text-[#5f6368]">
             {data.totalReviewCount} matching
           </p>
           <ReviewList

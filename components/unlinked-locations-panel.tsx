@@ -53,14 +53,14 @@ export function UnlinkedLocationsPanel({
   if (locations.length === 0) return null;
 
   return (
-    <div className="rounded-[20px] border border-[#d9d2ff] bg-[#ede9ff]">
+    <div className="rounded-3xl border border-[#dadce0] bg-[#e8f0fe]">
       <button
         type="button"
         className="flex w-full items-center justify-between px-4 py-3 text-left"
         onClick={() => setExpanded((v) => !v)}
         aria-expanded={expanded}
       >
-        <div>
+        <div className="min-w-0 pr-3">
           <p className="text-sm font-medium text-blue-900">
             {locations.length} unassigned location
             {locations.length !== 1 ? "s" : ""} you can add here
@@ -88,10 +88,10 @@ export function UnlinkedLocationsPanel({
               className="flex items-center justify-between rounded-md bg-white px-3 py-2.5 shadow-sm"
             >
               <div className="min-w-0">
-                <p className="truncate text-sm font-medium text-[#18161a]">
+                <p className="truncate text-sm font-medium text-[#202124]">
                   {loc.location_title}
                 </p>
-                <p className="truncate text-xs text-[#898b91]">
+                <p className="truncate text-xs text-[#5f6368]">
                   {loc.address_formatted ??
                     loc.grm_google_accounts?.account_display_name ??
                     loc.google_location_name}

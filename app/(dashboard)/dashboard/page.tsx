@@ -124,7 +124,7 @@ export default async function DashboardPage({ searchParams }: DashboardPageProps
     <div className="space-y-6">
       <PageHeader
         title="Dashboard"
-        description="Built for scale — find what needs work across hundreds of profiles, then act in place."
+        description="Open a profile for branding, staff, and feedback insights — then draft, approve, and publish replies."
       >
         {data.hasConnections && (
           <SyncButton syncAll label="Sync reviews" size="sm" />
@@ -204,19 +204,19 @@ export default async function DashboardPage({ searchParams }: DashboardPageProps
                 <div className="flex flex-wrap items-end justify-between gap-2">
                   <div>
                     <h2
-                      className="text-[26px] leading-[1.2] tracking-[-0.032em] text-[#18161a] sm:text-[31px]"
-                      style={{ fontFamily: "var(--font-plus-jakarta), sans-serif" }}
+                      className="text-[26px] leading-[1.2] tracking-[-0.032em] text-[#202124] sm:text-[31px]"
+                      style={{ fontFamily: "var(--font-google-sans-display), sans-serif" }}
                     >
                       Review inbox
                       {data.selectedProfile
                         ? ` · ${data.selectedProfile.title}`
                         : ""}
                     </h2>
-                    <p className="text-sm font-light text-[#898b91]">
+                    <p className="text-sm font-light text-[#5f6368]">
                       Draft, approve, and publish without leaving the dashboard.
                     </p>
                   </div>
-                  <p className="text-sm tabular-nums text-[#898b91]">
+                  <p className="text-sm tabular-nums text-[#5f6368]">
                     {data.totalReviewCount} matching
                   </p>
                 </div>

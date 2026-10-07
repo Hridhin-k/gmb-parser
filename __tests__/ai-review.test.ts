@@ -88,6 +88,15 @@ describe("classifyGeminiError", () => {
     expect(result.type).toBe("invalid_response");
   });
 
+  it("classifies a retired model as config", () => {
+    const result = classifyGeminiError(
+      404,
+      "This model models/gemini-2.0-flash is no longer available."
+    );
+    expect(result.type).toBe("config");
+    expect(result.message).toMatch(/no longer available/i);
+  });
+
   it("classifies unknown errors", () => {
     const result = classifyGeminiError(500, "");
     expect(result.type).toBe("unknown");

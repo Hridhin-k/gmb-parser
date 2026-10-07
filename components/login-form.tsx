@@ -29,18 +29,18 @@ export function LoginForm() {
 
   return (
     <div className="w-full max-w-lg">
-      <div className="rounded-[20px] border border-[#d9d2ff] bg-white px-5 py-8 sm:px-8 sm:py-10">
+      <div className="rounded-3xl border border-[#dadce0] bg-white px-5 py-8 sm:px-8 sm:py-10">
         <div className="mb-8">
-          <div className="flex h-9 w-9 items-center justify-center rounded-full bg-[#4823ff] text-sm font-bold text-white">
+          <div className="flex h-9 w-9 items-center justify-center rounded-full bg-[#1a73e8] text-sm font-bold text-white">
             G
           </div>
           <h1
-            className="mt-5 text-[31px] leading-[1.2] tracking-[-0.032em] text-[#18161a]"
-            style={{ fontFamily: "var(--font-plus-jakarta), sans-serif" }}
+            className="mt-5 text-[31px] leading-[1.2] tracking-[-0.032em] text-[#202124]"
+            style={{ fontFamily: "var(--font-google-sans-display), sans-serif" }}
           >
             Sign in to GRM
           </h1>
-          <p className="mt-2 text-base font-light text-[#898b91]">
+          <p className="mt-2 text-base font-light text-[#5f6368]">
             Then connect the Google account that manages your businesses.
           </p>
         </div>
@@ -66,21 +66,21 @@ export function LoginForm() {
           </svg>
           {loading ? "Redirecting..." : "Continue with Google"}
         </Button>
-        <p className="mt-4 text-sm leading-relaxed text-[#898b91]">
+        <p className="mt-4 text-sm leading-relaxed text-[#5f6368]">
           The first time you sign in, you’ll confirm the{" "}
-          <Link href="/terms" className="font-medium text-[#4823ff]">
+          <Link href="/terms" className="font-medium text-[#1a73e8]">
             Terms
           </Link>{" "}
           and{" "}
-          <Link href="/privacy" className="font-medium text-[#4823ff]">
+          <Link href="/privacy" className="font-medium text-[#1a73e8]">
             Privacy Policy
           </Link>
           , including how AI drafts are used. That step is saved to your account.
         </p>
       </div>
 
-      <p className="mt-5 text-sm text-[#898b91]">
-        <Link href="/" className="font-medium text-[#4823ff]">
+      <p className="mt-5 text-sm text-[#5f6368]">
+        <Link href="/" className="font-medium text-[#1a73e8]">
           Back to GRM
         </Link>
       </p>

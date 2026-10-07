@@ -31,7 +31,7 @@ export default async function ClientsPage() {
     <div className="space-y-10">
       <PageHeader
         title="Clients"
-        description="Click Sync profiles to pull every Google Business Profile you manage and create a client for each one automatically."
+        description="Sync profiles to pull every Google Business Profile you manage. Shops from the same brand (for example every Fazyo location) are grouped under one client."
       >
         <div className="flex flex-wrap items-center gap-2">
           {connectionId && <SyncLocationsButton connectionId={connectionId} />}
@@ -57,7 +57,7 @@ export default async function ClientsPage() {
           title="No clients yet"
           description={
             connectionId
-              ? "Click Sync profiles. We will create one client per Google Business Profile you manage."
+              ? "Click Sync profiles. We will create one client per organisation and put every shop under it."
               : "Connect a Google account in Settings first, then sync profiles."
           }
         />
@@ -70,20 +70,20 @@ export default async function ClientsPage() {
 
             return (
               <Link key={client.id} href={`/clients/${client.id}`}>
-                <Card className="cursor-pointer transition-colors hover:border-[#4823ff]">
+                <Card className="cursor-pointer transition-colors hover:border-[#1a73e8]">
                   <CardContent className="p-5">
                     <div className="flex items-start justify-between gap-2">
                       <div className="min-w-0">
-                        <p className="truncate text-base font-medium text-[#18161a]">
+                        <p className="truncate text-base font-medium text-[#202124]">
                           {client.name}
                         </p>
-                        <p className="mt-1 text-sm font-light text-[#898b91]">
+                        <p className="mt-1 text-sm font-light text-[#5f6368]">
                           {locationCount === 0
                             ? "No locations yet"
                             : `${locationCount} location${locationCount === 1 ? "" : "s"}`}
                         </p>
                       </div>
-                      <div className="flex shrink-0 items-center gap-1 rounded-full bg-[#ede9ff] px-2.5 py-1 text-xs font-semibold text-[#4823ff]">
+                      <div className="flex shrink-0 items-center gap-1 rounded-full bg-[#e8f0fe] px-2.5 py-1 text-xs font-semibold text-[#1a73e8]">
                         <MapPin className="h-3 w-3" />
                         {locationCount}
                       </div>

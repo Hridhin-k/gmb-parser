@@ -9,6 +9,7 @@ const PUBLIC_PATHS = [
   "/auth/callback",
   "/api/auth",
   "/api/google/callback",
+  "/api/cron",
 ];
 
 export async function proxy(request: NextRequest) {

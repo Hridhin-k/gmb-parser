@@ -3,14 +3,14 @@ export function ratingStarClass(rating: number): string {
   if (rating >= 4) return "fill-[#16a34a] text-[#16a34a]";
   if (rating >= 3) return "fill-[#eab308] text-[#eab308]";
   if (rating > 0) return "fill-[#dc2626] text-[#dc2626]";
-  return "fill-[#e4e2de] text-[#e4e2de]";
+  return "fill-mist text-mist";
 }
 
 export function ratingTextClass(rating: number): string {
   if (rating >= 4) return "text-[#16a34a]";
   if (rating >= 3) return "text-[#ca8a04]";
   if (rating > 0) return "text-[#dc2626]";
-  return "text-[#898b91]";
+  return "text-[#5f6368]";
 }
 
 export function ratingBarClass(star: number): string {

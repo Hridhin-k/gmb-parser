@@ -20,7 +20,7 @@ interface AuditLogFiltersProps {
 }
 
 const FIELD =
-  "h-10 w-full rounded-full border border-[#d9d2ff] bg-white px-4 text-sm text-[#18161a] focus:border-[#4823ff] focus:outline-none focus:ring-2 focus:ring-[#ede9ff] sm:w-auto";
+  "h-10 w-full rounded-full border border-[#dadce0] bg-white px-4 text-sm text-[#202124] focus:border-[#1a73e8] focus:outline-none focus:ring-2 focus:ring-[#e8f0fe] sm:w-auto";
 
 export function AuditLogFilters({
   currentAction,
@@ -96,7 +96,7 @@ export function AuditLogFilters({
       )}
 
       <div className="flex items-center gap-2">
-        <label className="text-xs font-medium text-[#898b91]" htmlFor="audit-from">
+        <label className="text-xs font-medium text-[#5f6368]" htmlFor="audit-from">
           From
         </label>
         <input
@@ -108,7 +108,7 @@ export function AuditLogFilters({
         />
       </div>
       <div className="flex items-center gap-2">
-        <label className="text-xs font-medium text-[#898b91]" htmlFor="audit-to">
+        <label className="text-xs font-medium text-[#5f6368]" htmlFor="audit-to">
           To
         </label>
         <input
@@ -124,7 +124,7 @@ export function AuditLogFilters({
         <button
           type="button"
           onClick={() => router.push(pathname)}
-          className="h-10 rounded-full px-3 text-sm font-medium text-[#4823ff] hover:text-[#7e78ff]"
+          className="h-10 rounded-full px-3 text-sm font-medium text-[#1a73e8] hover:text-[#1967d2]"
         >
           Clear filters
         </button>

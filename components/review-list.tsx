@@ -78,7 +78,7 @@ function StarRating({ rating }: { rating: number }) {
                 : rating === 3
                   ? "fill-yellow-400 text-yellow-500"
                   : "fill-red-500 text-red-500"
-              : "fill-[#eceae6] text-[#eceae6]"
+              : "fill-mist text-mist"
           )}
           aria-hidden
         />
@@ -88,11 +88,11 @@ function StarRating({ rating }: { rating: number }) {
 }
 
 const STATUS_CONFIG: Record<string, { label: string; className: string; Icon: typeof CheckCircle2 }> = {
-  published:       { label: "Published", className: "bg-[#ede9ff] text-[#4823ff]",  Icon: CheckCircle2 },
-  approved:        { label: "Ready",  className: "bg-[#4823ff] text-white",   Icon: CheckCircle2 },
-  draft:           { label: "Draft",     className: "bg-[#fafaf8] text-[#898b91] border border-[#d9d2ff]",   Icon: Pencil },
-  failed:          { label: "Failed",    className: "bg-[#1e1b22] text-[#e7ff6e]",    Icon: AlertCircle },
-  pending_publish: { label: "Publishing", className: "bg-[#ede9ff] text-[#4823ff]", Icon: Clock },
+  published:       { label: "Published", className: "bg-[#e8f0fe] text-[#1a73e8]",  Icon: CheckCircle2 },
+  approved:        { label: "Ready",  className: "bg-[#1a73e8] text-white",   Icon: CheckCircle2 },
+  draft:           { label: "Draft",     className: "bg-[#f8f9fa] text-[#5f6368] border border-[#dadce0]",   Icon: Pencil },
+  failed:          { label: "Failed",    className: "bg-[#fce8e6] text-destructive",    Icon: AlertCircle },
+  pending_publish: { label: "Publishing", className: "bg-[#e8f0fe] text-[#1a73e8]", Icon: Clock },
 };
 
 function ReplyStatusPill({ status, source }: { status: string; source?: string }) {
@@ -188,8 +188,8 @@ export function ReviewList({ reviews, replies, canApprove }: ReviewListProps) {
 
   return (
     <div className="space-y-3">
-      <div className="flex flex-col gap-3 rounded-[20px] border border-[#d9d2ff] bg-white px-3 py-3 sm:flex-row sm:flex-wrap sm:items-center sm:px-4">
-        <label className="flex items-center gap-2 text-sm text-[#18161a]">
+      <div className="flex flex-col gap-3 rounded-3xl border border-[#dadce0] bg-white px-3 py-3 sm:flex-row sm:flex-wrap sm:items-center sm:px-4">
+        <label className="flex items-center gap-2 text-sm text-[#202124]">
           <input
             type="checkbox"
             checked={allChecked}
@@ -198,7 +198,7 @@ export function ReviewList({ reviews, replies, canApprove }: ReviewListProps) {
           />
           Select all on page
         </label>
-        <span className="text-sm text-[#898b91]">
+        <span className="text-sm text-[#5f6368]">
           {selectedIds.length} selected
         </span>
         <div className="flex flex-wrap gap-1.5 sm:ml-auto">
@@ -279,10 +279,10 @@ export function ReviewList({ reviews, replies, canApprove }: ReviewListProps) {
               key={review.id}
               role="listitem"
               className={cn(
-                "flex flex-col rounded-[20px] border bg-white p-5 text-left transition-colors",
+                "flex flex-col rounded-3xl border bg-white p-5 text-left transition-colors",
                 isActive
-                  ? "border-[#4823ff] bg-[#ede9ff]/40"
-                  : "border-[#d9d2ff] hover:border-[#4823ff]"
+                  ? "border-[#1a73e8] bg-[#e8f0fe]/40"
+                  : "border-[#dadce0] hover:border-[#1a73e8]"
               )}
             >
               <div className="flex items-start gap-3">
@@ -296,7 +296,7 @@ export function ReviewList({ reviews, replies, canApprove }: ReviewListProps) {
                     }))
                   }
                   onClick={(e) => e.stopPropagation()}
-                  className="mt-1 rounded border-[#d9d2ff]"
+                  className="mt-1 rounded border-[#dadce0]"
                   aria-label={`Select review by ${name}`}
                 />
                 <span
@@ -313,7 +313,7 @@ export function ReviewList({ reviews, replies, canApprove }: ReviewListProps) {
                 </span>
                 <div className="min-w-0 flex-1">
                   <div className="flex items-start justify-between gap-2">
-                    <p className="truncate text-sm font-medium text-[#18161a]">
+                    <p className="truncate text-sm font-medium text-[#202124]">
                       {name}
                     </p>
                     <span
@@ -329,7 +329,7 @@ export function ReviewList({ reviews, replies, canApprove }: ReviewListProps) {
                       {review.star_rating}/5
                     </span>
                   </div>
-                  <p className="mt-0.5 truncate text-xs font-light text-[#898b91]">
+                  <p className="mt-0.5 truncate text-xs font-light text-[#5f6368]">
                     {formatRelativeDate(review.review_create_time)}
                     {" · "}
                     {review.location_title}
@@ -340,18 +340,18 @@ export function ReviewList({ reviews, replies, canApprove }: ReviewListProps) {
               <button
                 type="button"
                 onClick={() => setSelectedId(review.id)}
-                className="mt-4 flex flex-1 flex-col text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#4823ff]"
+                className="mt-4 flex flex-1 flex-col text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#1a73e8]"
                 aria-label={`Open review by ${name}`}
               >
                 <StarRating rating={review.star_rating} />
-                <p className="mt-3 line-clamp-4 text-sm font-light leading-relaxed text-[#18161a] sm:line-clamp-5 sm:min-h-[7.5rem]">
+                <p className="mt-3 line-clamp-4 text-sm font-light leading-relaxed text-[#202124] sm:line-clamp-5 sm:min-h-[7.5rem]">
                   {review.comment || "Rating only — no written comment."}
                 </p>
               </button>
 
               <div className="mt-4 flex flex-wrap items-center gap-2">
                 {hasGoogleReply && (
-                  <span className="inline-flex items-center gap-1 rounded-full bg-[#e7ff6e] px-2.5 py-1 text-[11px] font-semibold text-[#18161a]">
+                  <span className="inline-flex items-center gap-1 rounded-full bg-[#e6f4ea] px-2.5 py-1 text-[11px] font-medium text-classroom-green">
                     <MessageSquare className="h-3 w-3" aria-hidden />
                     On Google
                   </span>
@@ -363,7 +363,7 @@ export function ReviewList({ reviews, replies, canApprove }: ReviewListProps) {
                   />
                 )}
                 {review.reply_status === "none" && !hasGoogleReply && (
-                  <span className="text-xs font-light text-[#898b91]">
+                  <span className="text-xs font-light text-[#5f6368]">
                     Needs a reply
                   </span>
                 )}
@@ -375,7 +375,7 @@ export function ReviewList({ reviews, replies, canApprove }: ReviewListProps) {
 
       {selectedReview && (
         <div
-          className="fixed inset-0 z-50 flex items-stretch justify-center bg-[#18161a]/45 sm:items-center sm:p-6"
+          className="fixed inset-0 z-50 flex items-stretch justify-center bg-[#202124]/45 sm:items-center sm:p-6"
           role="presentation"
           onClick={() => setSelectedId(null)}
         >
@@ -383,7 +383,7 @@ export function ReviewList({ reviews, replies, canApprove }: ReviewListProps) {
             role="dialog"
             aria-modal="true"
             aria-label={`Review by ${selectedReview.reviewer_display_name || "reviewer"}`}
-            className="flex h-dvh w-full max-w-2xl flex-col overflow-hidden bg-white sm:h-[min(92dvh,860px)] sm:rounded-[20px] sm:border sm:border-[#d9d2ff]"
+            className="flex h-dvh w-full max-w-2xl flex-col overflow-hidden bg-white sm:h-[min(92dvh,860px)] sm:rounded-3xl sm:border sm:border-[#dadce0]"
             onClick={(event) => event.stopPropagation()}
           >
             <ReviewDetailPanel

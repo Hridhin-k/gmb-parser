@@ -8,8 +8,8 @@ interface PaginationBarProps {
 }
 
 const LINK =
-  "rounded-full border border-[#d9d2ff] bg-white px-4 py-2 font-medium text-[#18161a] hover:border-[#4823ff]";
-const DISABLED = "rounded-full border border-[#ede9ff] px-4 py-2 text-[#d9d2ff]";
+  "rounded-full border border-[#dadce0] bg-white px-4 py-2 font-medium text-[#202124] hover:border-[#1a73e8]";
+const DISABLED = "rounded-full border border-mist px-4 py-2 text-[#dadce0]";
 
 export function PaginationBar({
   basePath,
@@ -31,7 +31,7 @@ export function PaginationBar({
   return (
     <nav
       aria-label="Pagination"
-      className="flex items-center justify-center gap-3 py-2 text-sm text-[#898b91]"
+      className="flex items-center justify-center gap-3 py-2 text-sm text-[#5f6368]"
     >
       {prev ? (
         <Link href={hrefFor(prev)} className={LINK}>

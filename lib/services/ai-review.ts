@@ -3,14 +3,18 @@ import { AuditService } from "./audit";
 import { AppError } from "@/lib/errors";
 import { logger } from "@/lib/logger";
 import { createHash } from "crypto";
+import {
+  GEMINI_MODEL_ID,
+  classifyGeminiError,
+  geminiGenerateUrl,
+  logGeminiFailure,
+} from "@/lib/gemini";
 
 // ---------------------------------------------------------------------------
 // Config
 // ---------------------------------------------------------------------------
 
-const GEMINI_API_URL =
-  "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent";
-const MODEL_ID = "gemini-2.0-flash";
+const MODEL_ID = GEMINI_MODEL_ID;
 const PROMPT_VERSION = "v2.0";
 const REQUEST_TIMEOUT_MS = 30_000;
 
@@ -92,37 +96,7 @@ function hashPrompt(prompt: string): string {
   return createHash("sha256").update(prompt).digest("hex").slice(0, 16);
 }
 
-// ---------------------------------------------------------------------------
-// Error classification
-// ---------------------------------------------------------------------------
-
-export type GeminiErrorType =
-  | "config"
-  | "quota"
-  | "timeout"
-  | "invalid_response"
-  | "safety_blocked"
-  | "unavailable"
-  | "unknown";
-
-export function classifyGeminiError(
-  status: number | null,
-  body: string
-): { type: GeminiErrorType; message: string } {
-  if (status === 429) {
-    return { type: "quota", message: "AI generation quota exceeded. Please try again later." };
-  }
-  if (status === 503 || status === 502) {
-    return { type: "unavailable", message: "AI service is temporarily unavailable. Please try again shortly." };
-  }
-  if (body.includes("SAFETY")) {
-    return { type: "safety_blocked", message: "The AI could not generate a response for this review due to content restrictions." };
-  }
-  if (status !== null && status >= 400 && status < 500) {
-    return { type: "invalid_response", message: "AI request was invalid. Please try again." };
-  }
-  return { type: "unknown", message: "AI generation failed unexpectedly. Please try again." };
-}
+export { classifyGeminiError } from "@/lib/gemini";
 
 // ---------------------------------------------------------------------------
 // Service
@@ -192,7 +166,7 @@ export class AIReviewService {
 
     let responseText: string;
     try {
-      const response = await fetch(`${GEMINI_API_URL}?key=${apiKey}`, {
+      const response = await fetch(geminiGenerateUrl(apiKey), {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -209,6 +183,9 @@ export class AIReviewService {
 
       if (!response.ok) {
         const body = await response.text();
+        logGeminiFailure("ai_review.gemini_failed", response.status, body, {
+          reviewId: params.reviewId,
+        });
         const classified = classifyGeminiError(response.status, body);
         throw new AppError(classified.message, `AI_${classified.type.toUpperCase()}`, 502);
       }

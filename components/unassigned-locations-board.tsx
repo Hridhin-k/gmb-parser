@@ -87,16 +87,16 @@ export function UnassignedLocationsBoard({
   }
 
   return (
-    <div className="space-y-4 rounded-[20px] border border-[#d9d2ff] bg-white p-5">
+    <div className="space-y-4 rounded-3xl border border-[#dadce0] bg-white p-5">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
           <p
-            className="text-[22px] leading-[1.3] tracking-[-0.02em] text-[#18161a]"
-            style={{ fontFamily: "var(--font-plus-jakarta), sans-serif" }}
+            className="text-[22px] leading-[1.3] tracking-[-0.02em] text-[#202124]"
+            style={{ fontFamily: "var(--font-google-sans-display), sans-serif" }}
           >
             Unassigned Google locations
           </p>
-          <p className="mt-1 text-sm font-light text-[#898b91]">
+          <p className="mt-1 text-sm font-light text-[#5f6368]">
             Sync pulls every profile you manage into this pool. Create a client
             for each business, then assign its location(s) here.
           </p>
@@ -123,30 +123,30 @@ export function UnassignedLocationsBoard({
       )}
 
       {locations.length === 0 ? (
-        <div className="flex flex-col items-center justify-center rounded-[20px] border border-[#d9d2ff] py-10 text-center">
+        <div className="flex flex-col items-center justify-center rounded-3xl border border-[#dadce0] py-10 text-center">
           <MapPin className="h-7 w-7 text-[#c9c7c3]" />
-          <p className="mt-2 text-sm font-medium text-[#18161a]">
+          <p className="mt-2 text-sm font-medium text-[#202124]">
             No unassigned locations
           </p>
-          <p className="mt-1 max-w-sm text-xs text-[#898b91]">
+          <p className="mt-1 max-w-sm text-xs text-[#5f6368]">
             {connectionId
               ? "Open a client and sync locations from Google, or reset assignments if everything was dumped onto one client."
               : "Connect Google in Settings first, then sync locations."}
           </p>
         </div>
       ) : (
-        <ul className="divide-y divide-[#f0eeeb] rounded-md border border-[#f0eeeb]">
+        <ul className="divide-y divide-[#f8f9fa] rounded-md border border-[#f8f9fa]">
           {locations.map((loc) => (
             <li
               key={loc.id}
               className="flex flex-col gap-2 px-3 py-3 sm:flex-row sm:items-center sm:justify-between"
             >
               <div className="min-w-0">
-                <p className="truncate text-sm font-medium text-[#18161a]">
+                <p className="truncate text-sm font-medium text-[#202124]">
                   {loc.location_title}
                 </p>
                 {loc.address_formatted && (
-                  <p className="truncate text-xs text-[#898b91]">
+                  <p className="truncate text-xs text-[#5f6368]">
                     {loc.address_formatted}
                   </p>
                 )}
@@ -160,7 +160,7 @@ export function UnassignedLocationsBoard({
                       [loc.id]: e.target.value,
                     }))
                   }
-                  className="h-10 w-full rounded-full border border-[#d9d2ff] bg-white px-3 text-sm text-[#18161a] sm:w-auto"
+                  className="h-10 w-full rounded-full border border-[#dadce0] bg-white px-3 text-sm text-[#202124] sm:w-auto"
                   aria-label={`Assign ${loc.location_title} to client`}
                   disabled={clients.length === 0}
                 >

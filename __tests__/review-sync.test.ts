@@ -7,6 +7,15 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 const mockFetch = vi.fn();
 vi.stubGlobal("fetch", mockFetch);
 
+const syncState = vi.hoisted(() => ({
+  locationLastSynced: null as string | null,
+  existingReviewRows: [] as Array<{
+    google_review_name: string;
+    sync_hash: string;
+    reply_status: string;
+  }>,
+}));
+
 // Track every DB upsert call for idempotency assertions
 const upsertCalls: unknown[] = [];
 const updateCalls: unknown[] = [];
@@ -24,14 +33,17 @@ vi.mock("@/lib/supabase/admin", () => {
                   id: "loc-1",
                   google_location_name: "accounts/123/locations/456",
                   workspace_id: "ws-1",
+                  last_synced_at: syncState.locationLastSynced,
                 },
                 error: null,
               });
             }
-            // grm_reviews — return no existing record to force upsert
             return Promise.resolve({ data: null, error: null });
           }),
         }),
+        in: vi.fn().mockImplementation(() =>
+          Promise.resolve({ data: syncState.existingReviewRows, error: null })
+        ),
       }),
     }),
     upsert: vi.fn().mockImplementation((data: unknown) => {
@@ -97,8 +109,11 @@ function makeReview(id: string, overrides: Partial<object> = {}) {
 
 beforeEach(() => {
   vi.clearAllMocks();
+  mockFetch.mockReset();
   upsertCalls.length = 0;
   updateCalls.length = 0;
+  syncState.locationLastSynced = null;
+  syncState.existingReviewRows = [];
 });
 
 // ---------------------------------------------------------------------------
@@ -177,6 +192,49 @@ describe("ReviewSyncService.syncLocation", () => {
     expect(result.reviewsSynced).toBe(0);
     expect(result.pagesProcessed).toBe(1);
     expect(result.errorClass).toBeNull();
+  });
+
+  it("incremental sync stops after two unchanged newest-first pages", async () => {
+    syncState.locationLastSynced = "2026-10-01T00:00:00Z";
+    const r1 = makeReview("r1");
+    const r2 = makeReview("r2");
+    const crypto = await import("crypto");
+    const hashOf = (review: ReturnType<typeof makeReview>) =>
+      crypto
+        .createHash("sha256")
+        .update(
+          JSON.stringify({
+            starRating: review.starRating,
+            comment: review.comment ?? null,
+            updateTime: review.updateTime ?? null,
+            replyComment: null,
+            replyUpdateTime: null,
+          })
+        )
+        .digest("hex");
+    syncState.existingReviewRows = [
+      { google_review_name: r1.name, sync_hash: hashOf(r1), reply_status: "none" },
+      { google_review_name: r2.name, sync_hash: hashOf(r2), reply_status: "none" },
+    ];
+
+    mockApiResponse(200, { reviews: [r1], nextPageToken: "p2" });
+    mockApiResponse(200, { reviews: [r2], nextPageToken: "p3" });
+    mockApiResponse(200, { reviews: [makeReview("r3")] });
+
+    const result = await ReviewSyncService.syncLocation(
+      "loc-1",
+      "conn-1",
+      "ws-1",
+      "user-1",
+      { mode: "incremental" }
+    );
+
+    expect(result.mode).toBe("incremental");
+    expect(result.pagesProcessed).toBe(2);
+    expect(result.reviewsUpdated).toBe(0);
+    expect(result.truncated).toBe(true);
+    expect(mockFetch).toHaveBeenCalledTimes(2);
+    expect(String(mockFetch.mock.calls[0]?.[0])).toContain("orderBy=updateTime+desc");
   });
 
   it("handles pagination — fetches all pages", async () => {
@@ -292,9 +350,12 @@ describe("idempotency", () => {
     expect(upsertCalls.length).toBe(firstUpsertCount * 2);
     // But since the conflict key is the same, the DB upsert is safe.
     // Each call will be the same row identifier.
-    const reviewNames = upsertCalls.map(
-      (c) => (c as { google_review_name?: string }).google_review_name
-    );
+    const reviewNames = upsertCalls.flatMap((c) => {
+      if (Array.isArray(c)) {
+        return c.map((row) => (row as { google_review_name?: string }).google_review_name);
+      }
+      return [(c as { google_review_name?: string }).google_review_name];
+    });
     const uniqueNames = new Set(reviewNames);
     // Only r1 and r2 should ever appear
     expect(uniqueNames.size).toBe(2);

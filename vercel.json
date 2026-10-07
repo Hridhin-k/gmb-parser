@@ -1,0 +1,8 @@
+{
+  "crons": [
+    {
+      "path": "/api/cron/reviews-sync",
+      "schedule": "*/20 * * * *"
+    }
+  ]
+}

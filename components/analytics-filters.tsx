@@ -34,7 +34,7 @@ export function AnalyticsFilters({ period, periods, clientId, clients }: Analyti
       )}
     >
       <div
-        className="inline-flex rounded-full border border-[#d9d2ff] bg-white p-1"
+        className="inline-flex rounded-full border border-[#dadce0] bg-white p-1"
         role="group"
         aria-label="Time range"
       >
@@ -45,7 +45,7 @@ export function AnalyticsFilters({ period, periods, clientId, clients }: Analyti
             scroll={false}
             className={cn(
               "rounded-full px-4 py-1.5 text-sm font-medium transition-colors",
-              p === period ? "bg-[#18161a] text-white" : "text-[#5f6168] hover:text-[#18161a]"
+              p === period ? "bg-[#202124] text-white" : "text-[#3c4043] hover:text-[#202124]"
             )}
             aria-current={p === period ? "true" : undefined}
           >
@@ -60,7 +60,7 @@ export function AnalyticsFilters({ period, periods, clientId, clients }: Analyti
         onChange={(e) =>
           startTransition(() => router.push(hrefWith("client", e.target.value || null)))
         }
-        className="h-10 w-full rounded-full border border-[#d9d2ff] bg-white px-4 text-sm text-[#18161a] focus:border-[#4823ff] focus:outline-none focus:ring-2 focus:ring-[#ede9ff] sm:w-64"
+        className="h-10 w-full rounded-full border border-[#dadce0] bg-white px-4 text-sm text-[#202124] focus:border-[#1a73e8] focus:outline-none focus:ring-2 focus:ring-[#e8f0fe] sm:w-64"
       >
         <option value="">All clients</option>
         {clients.map((c) => (

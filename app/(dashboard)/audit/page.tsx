@@ -64,8 +64,8 @@ const ENTITY_LABELS: Record<string, string> = {
 const TONE_CLASSES: Record<Tone, string> = {
   good: "bg-green-50 text-green-700",
   bad: "bg-red-50 text-red-700",
-  neutral: "bg-[#f3f2ef] text-[#5f6168]",
-  info: "bg-[#ede9ff] text-[#4823ff]",
+  neutral: "bg-[#f8f9fa] text-[#3c4043]",
+  info: "bg-[#e8f0fe] text-[#1a73e8]",
 };
 
 const METADATA_LABELS: Record<string, string> = {
@@ -97,10 +97,10 @@ function MetadataLine({ metadata }: { metadata: Record<string, unknown> }) {
   );
   if (entries.length === 0) return null;
   return (
-    <p className="mt-1 flex flex-wrap gap-x-3 gap-y-0.5 text-xs text-[#898b91]">
+    <p className="mt-1 flex flex-wrap gap-x-3 gap-y-0.5 text-xs text-[#5f6368]">
       {entries.map(([k, v]) => (
         <span key={k}>
-          {METADATA_LABELS[k]}: <span className="text-[#18161a]">{String(v)}</span>
+          {METADATA_LABELS[k]}: <span className="text-[#202124]">{String(v)}</span>
         </span>
       ))}
     </p>
@@ -189,8 +189,8 @@ export default async function AuditPage({ searchParams }: AuditPageProps) {
           }
         />
       ) : (
-        <div className="overflow-hidden rounded-[20px] border border-[#e6e4e1] bg-white">
-          <ul className="divide-y divide-[#f0eeeb]">
+        <div className="overflow-hidden rounded-3xl border border-[#dadce0] bg-white">
+          <ul className="divide-y divide-[#f8f9fa]">
             {rows.map((log) => {
               const action = readableAction(log.action);
               const actor = log.user_id
@@ -203,7 +203,7 @@ export default async function AuditPage({ searchParams }: AuditPageProps) {
                 >
                   <time
                     dateTime={log.created_at}
-                    className="shrink-0 text-xs tabular-nums text-[#898b91] sm:w-40 sm:pt-0.5"
+                    className="shrink-0 text-xs tabular-nums text-[#5f6368] sm:w-40 sm:pt-0.5"
                   >
                     {formatDate(log.created_at)}
                   </time>
@@ -217,7 +217,7 @@ export default async function AuditPage({ searchParams }: AuditPageProps) {
                       >
                         {action.label}
                       </span>
-                      <span className="text-xs text-[#898b91]">
+                      <span className="text-xs text-[#5f6368]">
                         {ENTITY_LABELS[log.entity_type] ?? log.entity_type}
                       </span>
                     </div>
@@ -225,14 +225,14 @@ export default async function AuditPage({ searchParams }: AuditPageProps) {
                       metadata={(log.metadata ?? {}) as Record<string, unknown>}
                     />
                   </div>
-                  <p className="truncate text-sm text-[#18161a] sm:max-w-[220px] sm:text-right">
+                  <p className="truncate text-sm text-[#202124] sm:max-w-[220px] sm:text-right">
                     {actor}
                   </p>
                 </li>
               );
             })}
           </ul>
-          <div className="border-t border-[#f0eeeb] px-5 py-2.5 text-xs text-[#898b91]">
+          <div className="border-t border-[#f8f9fa] px-5 py-2.5 text-xs text-[#5f6368]">
             Showing {rows.length} most recent entries
             {rows.length === AUDIT_LIMIT && ". Use the filters to narrow the list."}
           </div>

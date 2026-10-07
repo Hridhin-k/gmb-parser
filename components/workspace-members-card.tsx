@@ -37,7 +37,7 @@ type PendingConfirm =
   | null;
 
 const FIELD =
-  "h-10 rounded-full border border-[#d9d2ff] bg-white px-4 text-sm text-[#18161a] focus:border-[#4823ff] focus:outline-none focus:ring-2 focus:ring-[#ede9ff]";
+  "h-10 rounded-full border border-[#dadce0] bg-white px-4 text-sm text-[#202124] focus:border-[#1a73e8] focus:outline-none focus:ring-2 focus:ring-[#e8f0fe]";
 
 async function send(method: string, url: string, body: object) {
   const response = await fetch(url, {
@@ -168,17 +168,17 @@ export function WorkspaceMembersCard({
     <Card>
       <CardHeader>
         <CardTitle
-          className="text-[22px] leading-[1.3] tracking-[-0.02em] text-[#18161a]"
-          style={{ fontFamily: "var(--font-plus-jakarta), sans-serif" }}
+          className="text-[22px] leading-[1.3] tracking-[-0.02em] text-[#202124]"
+          style={{ fontFamily: "var(--font-google-sans-display), sans-serif" }}
         >
           Team
         </CardTitle>
-        <p className="mt-1 text-sm font-light text-[#898b91]">
+        <p className="mt-1 text-sm font-light text-[#5f6368]">
           {workspaceName} · {members.length} {members.length === 1 ? "person" : "people"}
         </p>
       </CardHeader>
       <CardContent className="space-y-5">
-        <ul className="divide-y divide-[#f0eeeb] overflow-hidden rounded-2xl border border-[#e6e4e1]">
+        <ul className="divide-y divide-[#f8f9fa] overflow-hidden rounded-2xl border border-[#dadce0]">
           {members.map((member) => {
             const isSelf = member.userId === currentUserId;
             const manageable = !isSelf && canManageMember(currentRole, member.role);
@@ -188,14 +188,14 @@ export function WorkspaceMembersCard({
                 className="flex flex-col gap-2 px-4 py-3 sm:flex-row sm:items-center sm:justify-between"
               >
                 <div className="min-w-0">
-                  <p className="truncate text-sm font-medium text-[#18161a]">
+                  <p className="truncate text-sm font-medium text-[#202124]">
                     {member.email}
                     {isSelf ? (
-                      <span className="ml-2 text-xs font-normal text-[#898b91]">You</span>
+                      <span className="ml-2 text-xs font-normal text-[#5f6368]">You</span>
                     ) : null}
                   </p>
                   {joinedLabel(member.joinedAt) ? (
-                    <p className="text-xs text-[#898b91]">{joinedLabel(member.joinedAt)}</p>
+                    <p className="text-xs text-[#5f6368]">{joinedLabel(member.joinedAt)}</p>
                   ) : null}
                 </div>
                 <div className="flex shrink-0 items-center gap-2">
@@ -217,10 +217,10 @@ export function WorkspaceMembersCard({
                       className={cn(
                         "rounded-full px-2.5 py-0.5 text-xs font-medium",
                         member.role === "owner"
-                          ? "bg-[#18161a] text-white"
+                          ? "bg-[#202124] text-white"
                           : member.role === "admin"
-                            ? "bg-[#ede9ff] text-[#4823ff]"
-                            : "bg-[#f3f2ef] text-[#5f6168]"
+                            ? "bg-[#e8f0fe] text-[#1a73e8]"
+                            : "bg-[#f8f9fa] text-[#3c4043]"
                       )}
                     >
                       {roleLabel(member.role)}
@@ -230,7 +230,7 @@ export function WorkspaceMembersCard({
                     <button
                       type="button"
                       onClick={() => setConfirm({ kind: "remove", member })}
-                      className="rounded-full p-2 text-[#898b91] hover:bg-red-50 hover:text-red-600"
+                      className="rounded-full p-2 text-[#5f6368] hover:bg-red-50 hover:text-red-600"
                       aria-label={`Remove ${member.email}`}
                     >
                       <UserMinus className="h-4 w-4" aria-hidden />
@@ -256,18 +256,18 @@ export function WorkspaceMembersCard({
 
         {invites.length > 0 ? (
           <div className="space-y-2">
-            <p className="text-xs font-semibold uppercase tracking-[0.08em] text-[#898b91]">
+            <p className="text-xs font-semibold uppercase tracking-[0.08em] text-[#5f6368]">
               Pending invites
             </p>
-            <ul className="divide-y divide-[#f0eeeb] overflow-hidden rounded-2xl border border-[#e6e4e1]">
+            <ul className="divide-y divide-[#f8f9fa] overflow-hidden rounded-2xl border border-[#dadce0]">
               {invites.map((invite) => (
                 <li
                   key={invite.id}
                   className="flex flex-col gap-2 px-4 py-3 sm:flex-row sm:items-center sm:justify-between"
                 >
-                  <p className="truncate text-sm text-[#18161a]">
+                  <p className="truncate text-sm text-[#202124]">
                     {invite.email}
-                    <span className="ml-2 text-xs text-[#898b91]">{roleLabel(invite.role)}</span>
+                    <span className="ml-2 text-xs text-[#5f6368]">{roleLabel(invite.role)}</span>
                   </p>
                   {canInvite ? (
                     <div className="flex shrink-0 gap-2">
@@ -333,21 +333,21 @@ export function WorkspaceMembersCard({
                 {inviting ? "Inviting…" : "Invite"}
               </Button>
             </div>
-            <p className="text-xs leading-relaxed text-[#898b91]">
+            <p className="text-xs leading-relaxed text-[#5f6368]">
               They join this workspace the next time they sign in with that Google address. GRM
               does not send the email for you, so use Copy invite to share it.
             </p>
           </form>
         ) : (
-          <p className="text-xs text-[#898b91]">
+          <p className="text-xs text-[#5f6368]">
             An owner or admin can invite people and change roles.
           </p>
         )}
 
-        <div className="rounded-2xl bg-[#fafaf8] px-4 py-3 text-xs leading-relaxed text-[#5f6168]">
-          <span className="font-semibold text-[#18161a]">Owner</span> manages everyone.{" "}
-          <span className="font-semibold text-[#18161a]">Admins</span> approve replies and manage
-          members. <span className="font-semibold text-[#18161a]">Members</span> draft replies and
+        <div className="rounded-2xl bg-[#f8f9fa] px-4 py-3 text-xs leading-relaxed text-[#3c4043]">
+          <span className="font-semibold text-[#202124]">Owner</span> manages everyone.{" "}
+          <span className="font-semibold text-[#202124]">Admins</span> approve replies and manage
+          members. <span className="font-semibold text-[#202124]">Members</span> draft replies and
           publish approved ones.
         </div>
 
@@ -367,7 +367,7 @@ export function WorkspaceMembersCard({
         description={
           confirm?.kind === "remove" ? (
             <>
-              <span className="font-medium text-[#18161a]">{confirm.member.email}</span> loses
+              <span className="font-medium text-[#202124]">{confirm.member.email}</span> loses
               access to this workspace&apos;s clients, reviews, and Google accounts right away. You
               can invite them again later.
             </>

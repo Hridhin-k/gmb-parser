@@ -15,7 +15,7 @@ export default function TermsPage() {
       </p>
 
       <section>
-        <h2 style={{ fontFamily: "var(--font-plus-jakarta), sans-serif" }}>
+        <h2 style={{ fontFamily: "var(--font-google-sans-display), sans-serif" }}>
           What GRM is
         </h2>
         <p className="mt-3">
@@ -27,7 +27,7 @@ export default function TermsPage() {
       </section>
 
       <section>
-        <h2 style={{ fontFamily: "var(--font-plus-jakarta), sans-serif" }}>
+        <h2 style={{ fontFamily: "var(--font-google-sans-display), sans-serif" }}>
           Who may connect Google
         </h2>
         <ul>
@@ -51,7 +51,7 @@ export default function TermsPage() {
       </section>
 
       <section>
-        <h2 style={{ fontFamily: "var(--font-plus-jakarta), sans-serif" }}>
+        <h2 style={{ fontFamily: "var(--font-google-sans-display), sans-serif" }}>
           Workspaces and roles
         </h2>
         <ul>
@@ -76,13 +76,15 @@ export default function TermsPage() {
       </section>
 
       <section>
-        <h2 style={{ fontFamily: "var(--font-plus-jakarta), sans-serif" }}>
+        <h2 style={{ fontFamily: "var(--font-google-sans-display), sans-serif" }}>
           AI drafts are not the published reply
         </h2>
         <p className="mt-3">
           When you choose AI draft, or generate a profile insight, GRM sends
           the relevant review text to Google Gemini and stores the result.
-          That result is a suggestion inside GRM.
+          That result is a suggestion inside GRM. Profile insights may include
+          branding notes, staff comments from reviews, and feature ideas.
+          They are not sent to Google until a person acts on them.
         </p>
         <ul>
           <li>
@@ -109,7 +111,7 @@ export default function TermsPage() {
       </section>
 
       <section>
-        <h2 style={{ fontFamily: "var(--font-plus-jakarta), sans-serif" }}>
+        <h2 style={{ fontFamily: "var(--font-google-sans-display), sans-serif" }}>
           Acceptable use
         </h2>
         <ul>
@@ -126,7 +128,7 @@ export default function TermsPage() {
       </section>
 
       <section>
-        <h2 style={{ fontFamily: "var(--font-plus-jakarta), sans-serif" }}>
+        <h2 style={{ fontFamily: "var(--font-google-sans-display), sans-serif" }}>
           The service itself
         </h2>
         <p className="mt-3">
@@ -144,12 +146,12 @@ export default function TermsPage() {
       </section>
 
       <section>
-        <h2 style={{ fontFamily: "var(--font-plus-jakarta), sans-serif" }}>
+        <h2 style={{ fontFamily: "var(--font-google-sans-display), sans-serif" }}>
           Contact
         </h2>
         <p className="mt-3">
           Questions about these terms:{" "}
-          <a className="font-medium text-[#4823ff]" href="mailto:hridhin@explaineddigital.com">
+          <a className="font-medium text-[#1a73e8]" href="mailto:hridhin@explaineddigital.com">
             hridhin@explaineddigital.com
           </a>
           .

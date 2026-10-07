@@ -22,9 +22,10 @@ vi.mock("@/lib/logger", () => ({
 }));
 
 import {
-  autoClientMarker,
+  autoOrgMarker,
   autoProvisionClientsFromLocations,
   isAutoClientMarker,
+  organizationNameFromTitle,
 } from "@/lib/services/auto-provision-clients";
 
 function chain(result: { data: unknown; error: unknown }) {
@@ -44,16 +45,31 @@ function chain(result: { data: unknown; error: unknown }) {
   }
   api.single = vi.fn().mockResolvedValue(result);
   api.maybeSingle = vi.fn().mockResolvedValue(result);
-  // Terminal for list queries (awaited thenables)
   api.then = (resolve: (v: unknown) => unknown) =>
     Promise.resolve(result).then(resolve);
   return api;
 }
 
-describe("autoClientMarker", () => {
-  it("builds a stable marker from the Google location name", () => {
-    const marker = autoClientMarker("accounts/1/locations/2");
-    expect(marker).toBe("grm:auto:loc:accounts/1/locations/2");
+describe("organizationNameFromTitle", () => {
+  it("groups Fazyo shops that only differ by store code or Google id", () => {
+    expect(organizationNameFromTitle("Fazyo")).toBe("Fazyo");
+    expect(organizationNameFromTitle("Fazyo (FAZ-KTYM)")).toBe("Fazyo");
+    expect(organizationNameFromTitle("Fazyo (FAZ-TCR)")).toBe("Fazyo");
+    expect(organizationNameFromTitle("Fazyo (06936392301318726207)")).toBe("Fazyo");
+  });
+
+  it("keeps a legal name and only strips a trailing copy suffix", () => {
+    const legal =
+      "Norms Management (Pvt) Ltd - ESI, PF, Labour Law Consultancy in Kerala";
+    expect(organizationNameFromTitle(legal)).toBe(legal);
+    expect(organizationNameFromTitle(`${legal} (2)`)).toBe(legal);
+  });
+});
+
+describe("autoOrgMarker", () => {
+  it("is stable for an organisation name", () => {
+    const marker = autoOrgMarker("Fazyo");
+    expect(marker).toBe("grm:auto:org:fazyo");
     expect(isAutoClientMarker(marker)).toBe(true);
     expect(isAutoClientMarker("grm:system:unassigned")).toBe(false);
   });
@@ -64,7 +80,7 @@ describe("autoProvisionClientsFromLocations", () => {
     fromMock.mockReset();
   });
 
-  it("creates a client and links each unassigned location once", async () => {
+  it("creates one client and links an unassigned location", async () => {
     const location = {
       id: "loc-1",
       google_location_name: "accounts/1/locations/99",
@@ -74,19 +90,12 @@ describe("autoProvisionClientsFromLocations", () => {
       is_active: true,
     };
 
-    // 1) unassigned locations .in(client_id)
-    // 2) null client_id locations
-    // 3) existing clients
-    // 4) insert client
-    // 5) update location
-    const calls: unknown[] = [];
+    const calls: string[] = [];
     fromMock.mockImplementation((table: string) => {
       if (table === "grm_google_locations") {
         const n = calls.filter((c) => c === "locs").length;
         calls.push("locs");
         if (n === 0) return chain({ data: [location], error: null });
-        if (n === 1) return chain({ data: [], error: null });
-        // link update
         return chain({ data: null, error: null });
       }
       if (table === "grm_clients") {
@@ -104,7 +113,6 @@ describe("autoProvisionClientsFromLocations", () => {
             error: null,
           });
         }
-        // insert
         return chain({ data: { id: "client-new" }, error: null });
       }
       return chain({ data: null, error: null });
@@ -119,8 +127,58 @@ describe("autoProvisionClientsFromLocations", () => {
     });
   });
 
-  it("reuses an existing auto-client for the same Google location", async () => {
-    const marker = autoClientMarker("accounts/1/locations/99");
+  it("puts every Fazyo shop on the same organisation client", async () => {
+    const fazyoA = {
+      id: "loc-a",
+      google_location_name: "accounts/1/locations/a",
+      location_title: "Fazyo",
+      store_code: null,
+      client_id: "unassigned-1",
+      is_active: true,
+    };
+    const fazyoB = {
+      id: "loc-b",
+      google_location_name: "accounts/1/locations/b",
+      location_title: "Fazyo (FAZ-KTYM)",
+      store_code: "FAZ-KTYM",
+      client_id: "unassigned-1",
+      is_active: true,
+    };
+
+    let clientInserts = 0;
+    fromMock.mockImplementation((table: string) => {
+      if (table === "grm_google_locations") {
+        return chain({ data: [fazyoA, fazyoB], error: null });
+      }
+      if (table === "grm_clients") {
+        const isList = clientInserts === 0;
+        if (isList) {
+          clientInserts += 1;
+          return chain({
+            data: [
+              {
+                id: "unassigned-1",
+                name: "Unassigned",
+                notes: "grm:system:unassigned",
+              },
+            ],
+            error: null,
+          });
+        }
+        clientInserts += 1;
+        return chain({ data: { id: "client-fazyo" }, error: null });
+      }
+      return chain({ data: null, error: null });
+    });
+
+    const result = await autoProvisionClientsFromLocations("ws-1", "user-1");
+
+    expect(result.clientsCreated).toBe(1);
+    expect(result.locationsLinked).toBe(2);
+  });
+
+  it("reuses an existing organisation client", async () => {
+    const marker = autoOrgMarker("Acme Bakery");
     const location = {
       id: "loc-1",
       google_location_name: "accounts/1/locations/99",
@@ -130,17 +188,11 @@ describe("autoProvisionClientsFromLocations", () => {
       is_active: true,
     };
 
-    const calls: string[] = [];
     fromMock.mockImplementation((table: string) => {
       if (table === "grm_google_locations") {
-        const n = calls.filter((c) => c === "locs").length;
-        calls.push("locs");
-        if (n === 0) return chain({ data: [location], error: null });
-        if (n === 1) return chain({ data: [], error: null });
-        return chain({ data: null, error: null });
+        return chain({ data: [location], error: null });
       }
       if (table === "grm_clients") {
-        calls.push("clients");
         return chain({
           data: [
             { id: "unassigned-1", name: "Unassigned", notes: "grm:system:unassigned" },

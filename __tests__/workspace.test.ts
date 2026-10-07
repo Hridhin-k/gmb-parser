@@ -26,7 +26,7 @@ const SLUG = /^[a-z0-9][a-z0-9-]{0,61}[a-z0-9]$/;
 function chain(result: { data: unknown; error: unknown }) {
   const api: Record<string, unknown> = {};
   const self = () => api;
-  for (const method of ["select", "eq", "order", "limit", "insert"]) {
+  for (const method of ["select", "eq", "order", "limit", "insert", "update"]) {
     api[method] = vi.fn(self);
   }
   api.single = vi.fn().mockResolvedValue(result);
@@ -138,6 +138,7 @@ describe("ensurePersonalWorkspace", () => {
 
   it("creates a workspace and owner membership when the user has none", async () => {
     let memberReads = 0;
+    let workspaceReads = 0;
     fromMock.mockImplementation((table: string) => {
       if (table === "grm_workspace_invites") {
         return chain({ data: [], error: null });
@@ -146,17 +147,17 @@ describe("ensurePersonalWorkspace", () => {
         memberReads += 1;
         if (memberReads === 1) return chain({ data: [], error: null });
         return chain({
-          data: [
-            {
-              workspace_id: "ws-new",
-              joined_at: "2026-01-01T00:00:00.000Z",
-              active: true,
-            },
-          ],
+          data: {
+            workspace_id: "ws-new",
+            joined_at: "2026-01-01T00:00:00.000Z",
+            active: true,
+          },
           error: null,
         });
       }
       if (table === "grm_workspaces") {
+        workspaceReads += 1;
+        if (workspaceReads === 1) return chain({ data: null, error: null });
         return chain({ data: { id: "ws-new" }, error: null });
       }
       throw new Error(`unexpected table ${table}`);

@@ -21,18 +21,18 @@ function Metric({
   valueClassName?: string;
 }) {
   return (
-    <Link href={href} className="px-4 py-3 hover:bg-[#fafaf8]">
-      <p className="text-xs text-[#898b91]">{label}</p>
+    <Link href={href} className="px-4 py-3 hover:bg-[#f8f9fa]">
+      <p className="text-xs text-[#5f6368]">{label}</p>
       <p
         className={cn(
-          "mt-0.5 text-[26px] leading-none tracking-[-0.03em] text-[#18161a]",
+          "mt-0.5 text-[26px] leading-none tracking-[-0.03em] text-[#202124]",
           valueClassName
         )}
-        style={{ fontFamily: "var(--font-plus-jakarta), sans-serif" }}
+        style={{ fontFamily: "var(--font-google-sans-display), sans-serif" }}
       >
         {value}
       </p>
-      {hint ? <p className="mt-1 text-xs text-[#898b91]">{hint}</p> : null}
+      {hint ? <p className="mt-1 text-xs text-[#5f6368]">{hint}</p> : null}
     </Link>
   );
 }
@@ -62,7 +62,7 @@ export function DashboardStats({
   const positiveStars = kpis.ratingDistribution[4] + kpis.ratingDistribution[5];
 
   return (
-    <section className="overflow-hidden rounded-[20px] border border-[#e6e4e1] bg-white">
+    <section className="overflow-hidden rounded-3xl border border-[#dadce0] bg-white">
       <div className="grid grid-cols-2 divide-x divide-y divide-[#eee] sm:grid-cols-4 sm:divide-y-0">
         <Metric
           href={`${basePath}?filter=unanswered`}
@@ -123,7 +123,7 @@ export function DashboardStats({
 
       <div className="grid border-t border-[#eee] lg:grid-cols-[1.35fr_1fr]">
         <div className="px-4 py-3">
-          <p className="text-xs text-[#898b91]">Rating distribution</p>
+          <p className="text-xs text-[#5f6368]">Rating distribution</p>
           <div className="mt-2 space-y-1">
             {([5, 4, 3, 2, 1] as const).map((star) => {
               const count = kpis.ratingDistribution[star];
@@ -133,7 +133,7 @@ export function DashboardStats({
                 <Link
                   key={star}
                   href={`${basePath}?rating=${star}`}
-                  className="flex items-center gap-2 rounded-md px-1 py-0.5 hover:bg-[#fafaf8]"
+                  className="flex items-center gap-2 rounded-md px-1 py-0.5 hover:bg-[#f8f9fa]"
                 >
                   <span
                     className={cn(
@@ -158,7 +158,7 @@ export function DashboardStats({
                       style={{ width: `${pct}%` }}
                     />
                   </div>
-                  <span className="w-8 text-right text-xs tabular-nums text-[#18161a]">
+                  <span className="w-8 text-right text-xs tabular-nums text-[#202124]">
                     {count}
                   </span>
                 </Link>

@@ -1,5 +1,6 @@
 import { createAdminClient } from "@/lib/supabase/admin";
 import { UNASSIGNED_CLIENT_MARKER } from "@/lib/services/unassigned-client";
+import { formatLocationOption } from "@/lib/ui/location-place";
 import {
   LocationInsightService,
   type LocationInsight,
@@ -45,6 +46,8 @@ export interface ProfileRow {
   title: string;
   clientId: string | null;
   clientName: string | null;
+  storeCode: string | null;
+  address: string | null;
   reviewCount: number;
   unanswered: number;
   critical: number;
@@ -119,7 +122,7 @@ export async function getDashboardData(
     admin
       .from("grm_google_locations")
       .select(
-        `id, location_title, client_id, last_synced_at,
+        `id, location_title, store_code, address_formatted, client_id, last_synced_at,
          grm_clients(name, notes)`
       )
       .eq("workspace_id", workspaceId)
@@ -203,6 +206,8 @@ export async function getDashboardData(
       title: l.location_title,
       clientId: l.client_id,
       clientName,
+      storeCode: l.store_code,
+      address: l.address_formatted,
       reviewCount: count,
       unanswered: s?.unanswered ?? 0,
       critical: s?.critical ?? 0,
@@ -246,7 +251,9 @@ export async function getDashboardData(
     if (!pq) return true;
     return (
       p.title.toLowerCase().includes(pq) ||
-      (p.clientName?.toLowerCase().includes(pq) ?? false)
+      (p.clientName?.toLowerCase().includes(pq) ?? false) ||
+      (p.storeCode?.toLowerCase().includes(pq) ?? false) ||
+      (p.address?.toLowerCase().includes(pq) ?? false)
     );
   });
 
@@ -315,16 +322,32 @@ export async function getDashboardData(
   const locationsForFilters = filters.clientId
     ? locations
         .filter((l) => l.client_id === filters.clientId)
-        .map((l) => ({
-          id: l.id,
-          location_title: l.location_title,
-          clientId: l.client_id,
-        }))
+        .map((l) => {
+          const client = Array.isArray(l.grm_clients)
+            ? l.grm_clients[0]
+            : l.grm_clients;
+          const brand = (client as { name?: string } | null)?.name ?? null;
+          return {
+            id: l.id,
+            location_title: formatLocationOption({
+              brand,
+              title: l.location_title,
+              storeCode: l.store_code,
+              address: l.address_formatted,
+            }),
+            clientId: l.client_id,
+          };
+        })
     : selectedProfile
       ? [
           {
             id: selectedProfile.id,
-            location_title: selectedProfile.title,
+            location_title: formatLocationOption({
+              brand: selectedProfile.clientName,
+              title: selectedProfile.title,
+              storeCode: selectedProfile.storeCode,
+              address: selectedProfile.address,
+            }),
             clientId: selectedProfile.clientId,
           },
         ]

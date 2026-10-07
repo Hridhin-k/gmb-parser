@@ -573,7 +573,8 @@ export class GoogleBusinessProfileService {
     const trimmedNotes = notes?.trim() ?? null;
     if (
       trimmedNotes === UNASSIGNED_CLIENT_MARKER ||
-      (trimmedNotes?.startsWith("grm:auto:loc:") ?? false)
+      (trimmedNotes?.startsWith("grm:auto:loc:") ?? false) ||
+      (trimmedNotes?.startsWith("grm:auto:org:") ?? false)
     ) {
       throw new AppError("Invalid client notes", "VALIDATION_ERROR", 400);
     }

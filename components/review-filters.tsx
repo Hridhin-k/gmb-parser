@@ -170,7 +170,7 @@ export function ReviewFilters({
                   });
                 }
               }}
-              className="h-10 w-full rounded-full border border-[#d9d2ff] bg-white px-4 text-sm text-[#18161a] focus:border-[#4823ff] focus:outline-none focus:ring-2 focus:ring-[#ede9ff] sm:w-56"
+              className="h-10 w-full rounded-full border border-[#dadce0] bg-white px-4 text-sm text-[#202124] focus:border-[#1a73e8] focus:outline-none focus:ring-2 focus:ring-[#e8f0fe] sm:w-56"
               aria-label="Search and filter by profile"
             />
             <datalist id="dashboard-client-options">
@@ -189,7 +189,7 @@ export function ReviewFilters({
                 else params.delete("client");
               });
             }}
-            className="h-10 w-full rounded-full border border-[#d9d2ff] bg-white px-4 text-sm text-[#18161a] focus:border-[#4823ff] focus:outline-none focus:ring-2 focus:ring-[#ede9ff] sm:w-auto"
+            className="h-10 w-full rounded-full border border-[#dadce0] bg-white px-4 text-sm text-[#202124] focus:border-[#1a73e8] focus:outline-none focus:ring-2 focus:ring-[#e8f0fe] sm:w-auto"
             aria-label="Filter by client"
           >
             <option value="">All profiles</option>
@@ -205,7 +205,7 @@ export function ReviewFilters({
           <select
             value={currentLocationId}
             onChange={(e) => updateParam("location", e.target.value)}
-            className="h-10 w-full rounded-full border border-[#d9d2ff] bg-white px-4 text-sm text-[#18161a] focus:border-[#4823ff] focus:outline-none focus:ring-2 focus:ring-[#ede9ff] sm:w-auto"
+            className="h-10 w-full rounded-full border border-[#dadce0] bg-white px-4 text-sm text-[#202124] focus:border-[#1a73e8] focus:outline-none focus:ring-2 focus:ring-[#e8f0fe] sm:w-auto"
             aria-label="Filter by location"
           >
             <option value="">All locations</option>
@@ -220,7 +220,7 @@ export function ReviewFilters({
         <select
           value={currentPeriod}
           onChange={(e) => updateParam("period", e.target.value)}
-          className="h-10 w-full rounded-full border border-[#d9d2ff] bg-white px-4 text-sm text-[#18161a] focus:border-[#4823ff] focus:outline-none focus:ring-2 focus:ring-[#ede9ff] sm:w-auto"
+          className="h-10 w-full rounded-full border border-[#dadce0] bg-white px-4 text-sm text-[#202124] focus:border-[#1a73e8] focus:outline-none focus:ring-2 focus:ring-[#e8f0fe] sm:w-auto"
           aria-label="Filter by time period"
         >
           {PERIOD_FILTERS.map((p) => (
@@ -234,7 +234,7 @@ export function ReviewFilters({
           <button
             type="button"
             onClick={clearAll}
-            className="inline-flex h-10 items-center gap-1 rounded-full px-3 text-sm text-[#898b91] hover:bg-[#ede9ff] hover:text-[#4823ff]"
+            className="inline-flex h-10 items-center gap-1 rounded-full px-3 text-sm text-[#5f6368] hover:bg-[#e8f0fe] hover:text-[#1a73e8]"
           >
             <X className="h-3.5 w-3.5" aria-hidden />
             Clear
@@ -251,8 +251,8 @@ export function ReviewFilters({
             className={cn(
               "rounded-full px-3 py-1.5 text-[13px] font-medium transition-colors",
               currentFilter === f.key
-                ? "bg-[#4823ff] text-white"
-                : "bg-[#ede9ff] text-[#18161a] hover:bg-[#d9d2ff]"
+                ? "bg-[#1a73e8] text-white"
+                : "bg-[#e8f0fe] text-[#202124] hover:bg-[#dadce0]"
             )}
           >
             {f.label}
@@ -273,8 +273,8 @@ export function ReviewFilters({
           className={cn(
             "rounded-full px-3 py-1.5 text-[13px] font-medium transition-colors",
             currentRatingBucket === "negative"
-              ? "bg-[#1e1b22] text-white"
-              : "bg-[#ede9ff] text-[#18161a] hover:bg-[#d9d2ff]"
+              ? "bg-google-blue text-white"
+              : "bg-[#e8f0fe] text-[#202124] hover:bg-[#dadce0]"
           )}
         >
           1–2★ Critical
@@ -291,14 +291,14 @@ export function ReviewFilters({
           className={cn(
             "rounded-full px-3 py-1.5 text-[13px] font-medium transition-colors",
             currentRatingBucket === "positive"
-              ? "bg-[#4823ff] text-white"
-              : "bg-[#ede9ff] text-[#18161a] hover:bg-[#d9d2ff]"
+              ? "bg-[#1a73e8] text-white"
+              : "bg-[#e8f0fe] text-[#202124] hover:bg-[#dadce0]"
           )}
         >
           4–5★ Positive
         </button>
 
-        <div className="mx-1 h-4 w-px bg-[#d9d2ff]" aria-hidden />
+        <div className="mx-1 h-4 w-px bg-[#dadce0]" aria-hidden />
 
         {RATING_FILTERS.map((r) => (
           <button
@@ -314,8 +314,8 @@ export function ReviewFilters({
             className={cn(
               "flex items-center gap-0.5 rounded-full px-3 py-1.5 text-[13px] font-medium transition-colors",
               currentRating === String(r)
-                ? "bg-[#4823ff] text-white"
-                : "bg-[#ede9ff] text-[#18161a] hover:bg-[#d9d2ff]"
+                ? "bg-[#1a73e8] text-white"
+                : "bg-[#e8f0fe] text-[#202124] hover:bg-[#dadce0]"
             )}
           >
             {r}
@@ -323,7 +323,7 @@ export function ReviewFilters({
           </button>
         ))}
 
-        <div className="mx-1 h-4 w-px bg-[#d9d2ff]" aria-hidden />
+        <div className="mx-1 h-4 w-px bg-[#dadce0]" aria-hidden />
 
         <button
           type="button"
@@ -336,8 +336,8 @@ export function ReviewFilters({
           className={cn(
             "rounded-full px-3 py-1.5 text-[13px] font-medium transition-colors",
             currentHasComment
-              ? "bg-[#4823ff] text-white"
-              : "bg-[#ede9ff] text-[#18161a] hover:bg-[#d9d2ff]"
+              ? "bg-[#1a73e8] text-white"
+              : "bg-[#e8f0fe] text-[#202124] hover:bg-[#dadce0]"
           )}
         >
           Has comment
@@ -346,7 +346,7 @@ export function ReviewFilters({
 
       <div className="relative">
         <Search
-          className="absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-[#898b91]"
+          className="absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-[#5f6368]"
           aria-hidden
         />
         <input
@@ -354,7 +354,7 @@ export function ReviewFilters({
           placeholder="Search reviewer or review text…"
           value={searchValue}
           onChange={(e) => setSearchValue(e.target.value)}
-          className="h-10 w-full rounded-full border border-[#d9d2ff] bg-white pl-9 pr-4 text-sm text-[#18161a] placeholder:text-[#898b91] focus:border-[#4823ff] focus:outline-none focus:ring-2 focus:ring-[#ede9ff] sm:max-w-sm"
+          className="h-10 w-full rounded-full border border-[#dadce0] bg-white pl-9 pr-4 text-sm text-[#202124] placeholder:text-[#5f6368] focus:border-[#1a73e8] focus:outline-none focus:ring-2 focus:ring-[#e8f0fe] sm:max-w-sm"
           aria-label="Search reviews"
         />
       </div>

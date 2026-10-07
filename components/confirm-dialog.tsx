@@ -46,15 +46,15 @@ export function ConfirmDialog({
       }}
     >
       <DialogPrimitive.Portal>
-        <DialogPrimitive.Backdrop className="fixed inset-0 z-50 bg-[#18161a]/30 backdrop-blur-[2px] data-open:animate-in data-open:fade-in-0" />
-        <DialogPrimitive.Popup className="fixed left-1/2 top-1/2 z-50 w-[calc(100%-2rem)] max-w-md -translate-x-1/2 -translate-y-1/2 rounded-[20px] border border-[#e6e4e1] bg-white p-6 shadow-xl outline-none data-open:animate-in data-open:fade-in-0 data-open:zoom-in-95">
+        <DialogPrimitive.Backdrop className="fixed inset-0 z-50 bg-[#202124]/30 backdrop-blur-[2px] data-open:animate-in data-open:fade-in-0" />
+        <DialogPrimitive.Popup className="fixed left-1/2 top-1/2 z-50 w-[calc(100%-2rem)] max-w-md -translate-x-1/2 -translate-y-1/2 rounded-3xl border border-[#dadce0] bg-white p-6 shadow-xl outline-none data-open:animate-in data-open:fade-in-0 data-open:zoom-in-95">
           <DialogPrimitive.Title
-            className="text-[22px] leading-[1.3] tracking-[-0.02em] text-[#18161a]"
-            style={{ fontFamily: "var(--font-plus-jakarta), sans-serif" }}
+            className="text-[22px] leading-[1.3] tracking-[-0.02em] text-[#202124]"
+            style={{ fontFamily: "var(--font-google-sans-display), sans-serif" }}
           >
             {title}
           </DialogPrimitive.Title>
-          <DialogPrimitive.Description className="mt-2 text-sm font-light leading-relaxed text-[#5f6168]">
+          <DialogPrimitive.Description className="mt-2 text-sm font-light leading-relaxed text-[#3c4043]">
             {description}
           </DialogPrimitive.Description>
           <div className="mt-6 flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">

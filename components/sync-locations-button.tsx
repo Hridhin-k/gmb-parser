@@ -97,13 +97,13 @@ export function SyncLocationsButton({
           size="sm"
           onClick={() => handleSync(true)}
           disabled={syncing}
-          className="text-xs text-[#898b91]"
+          className="text-xs text-[#5f6368]"
         >
           Force refresh
         </Button>
       </div>
       {summary && (
-        <p className="text-xs text-[#5f6168]" role="status">
+        <p className="text-xs text-[#3c4043]" role="status">
           {summary}
         </p>
       )}

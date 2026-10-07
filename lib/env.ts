@@ -13,6 +13,7 @@ const serverEnvSchema = z.object({
   TOKEN_ENCRYPTION_KEY: z
     .string()
     .regex(/^[0-9a-f]{64}$/i, "TOKEN_ENCRYPTION_KEY must be exactly 64 hex characters (run: openssl rand -hex 32)"),
+  CRON_SECRET: z.string().optional(),
 });
 
 const clientEnvSchema = z.object({

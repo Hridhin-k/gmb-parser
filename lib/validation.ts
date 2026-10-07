@@ -157,11 +157,12 @@ export const bulkReviewsBodySchema = z.object({
 
 /** POST /api/reviews/sync */
 export const syncBodySchema = z.discriminatedUnion("all", [
-  z.object({ all: z.literal(true) }),
+  z.object({ all: z.literal(true), full: z.boolean().optional() }),
   z.object({
     all: z.literal(false).optional(),
     locationId: uuidSchema,
     connectionId: uuidSchema,
+    full: z.boolean().optional(),
   }),
 ]);
 

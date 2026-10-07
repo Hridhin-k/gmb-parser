@@ -86,7 +86,10 @@ export class GoogleReviewService {
     locationName: string,
     pageToken?: string
   ): Promise<GoogleReviewsResponse> {
-    const params = new URLSearchParams({ pageSize: String(PAGE_SIZE) });
+    const params = new URLSearchParams({
+      pageSize: String(PAGE_SIZE),
+      orderBy: "updateTime desc",
+    });
     if (pageToken) params.set("pageToken", pageToken);
 
     return reviewApiFetch<GoogleReviewsResponse>(

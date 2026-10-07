@@ -38,18 +38,18 @@ export function ConsentForm() {
 
   return (
     <div className="w-full max-w-lg">
-      <div className="rounded-[20px] border border-[#d9d2ff] bg-white px-5 py-8 sm:px-8 sm:py-10">
+      <div className="rounded-3xl border border-[#dadce0] bg-white px-5 py-8 sm:px-8 sm:py-10">
         <div className="mb-6">
-          <div className="flex h-9 w-9 items-center justify-center rounded-full bg-[#4823ff] text-sm font-bold text-white">
+          <div className="flex h-9 w-9 items-center justify-center rounded-full bg-[#1a73e8] text-sm font-bold text-white">
             G
           </div>
           <h1
-            className="mt-5 text-[28px] leading-[1.2] tracking-[-0.032em] text-[#18161a] sm:text-[31px]"
-            style={{ fontFamily: "var(--font-plus-jakarta), sans-serif" }}
+            className="mt-5 text-[28px] leading-[1.2] tracking-[-0.032em] text-[#202124] sm:text-[31px]"
+            style={{ fontFamily: "var(--font-google-sans-display), sans-serif" }}
           >
             Before you open GRM
           </h1>
-          <p className="mt-2 text-sm font-light leading-relaxed text-[#898b91] sm:text-base">
+          <p className="mt-2 text-sm font-light leading-relaxed text-[#5f6368] sm:text-base">
             This is asked once for this Google account. Later sign-ins go
             straight to your workspace.
           </p>
@@ -65,31 +65,31 @@ export function ConsentForm() {
         )}
 
         <div className="mb-5 space-y-3">
-          <label className="flex items-start gap-3 text-sm leading-snug text-[#18161a]">
+          <label className="flex items-start gap-3 text-sm leading-snug text-[#202124]">
             <input
               type="checkbox"
               checked={acceptedTerms}
               onChange={(event) => setAcceptedTerms(event.target.checked)}
-              className="mt-1 size-4 shrink-0 rounded border-[#d9d2ff]"
+              className="mt-1 size-4 shrink-0 rounded border-[#dadce0]"
             />
             <span>
               I agree to the{" "}
-              <a href="/terms" className="font-medium text-[#4823ff]">
+              <a href="/terms" className="font-medium text-[#1a73e8]">
                 Terms of Service
               </a>{" "}
               and{" "}
-              <a href="/privacy" className="font-medium text-[#4823ff]">
+              <a href="/privacy" className="font-medium text-[#1a73e8]">
                 Privacy Policy
               </a>
               .
             </span>
           </label>
-          <label className="flex items-start gap-3 text-sm leading-snug text-[#18161a]">
+          <label className="flex items-start gap-3 text-sm leading-snug text-[#202124]">
             <input
               type="checkbox"
               checked={acceptedAi}
               onChange={(event) => setAcceptedAi(event.target.checked)}
-              className="mt-1 size-4 shrink-0 rounded border-[#d9d2ff]"
+              className="mt-1 size-4 shrink-0 rounded border-[#dadce0]"
             />
             <span>
               I understand GRM can send review text to Google Gemini to draft

@@ -306,6 +306,7 @@ export type Database = {
       grm_location_insights: {
         Row: {
           ai_model: string
+          analysis: Json
           avg_rating: number | null
           created_at: string
           generated_at: string
@@ -325,6 +326,7 @@ export type Database = {
         }
         Insert: {
           ai_model: string
+          analysis?: Json
           avg_rating?: number | null
           created_at?: string
           generated_at?: string
@@ -344,6 +346,7 @@ export type Database = {
         }
         Update: {
           ai_model?: string
+          analysis?: Json
           avg_rating?: number | null
           created_at?: string
           generated_at?: string

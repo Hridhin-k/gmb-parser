@@ -15,7 +15,7 @@ interface AnalyticsPageProps {
   searchParams: Promise<Record<string, string | string[] | undefined>>;
 }
 
-const JAKARTA = { fontFamily: "var(--font-plus-jakarta), sans-serif" };
+const JAKARTA = { fontFamily: "var(--font-google-sans-display), sans-serif" };
 
 function monthLabel(iso: string, withYear = false) {
   return new Date(`${iso}T00:00:00Z`).toLocaleDateString("en-US", {
@@ -48,11 +48,11 @@ function Delta({
   higherIsBetter?: boolean;
 }) {
   if (current === null || previous === null) {
-    return <span className="text-xs text-[#898b91]">No earlier data</span>;
+    return <span className="text-xs text-[#5f6368]">No earlier data</span>;
   }
   const diff = current - previous;
   if (Math.abs(diff) < 1e-9) {
-    return <span className="text-xs text-[#898b91]">Same as before</span>;
+    return <span className="text-xs text-[#5f6368]">Same as before</span>;
   }
   const good = higherIsBetter ? diff > 0 : diff < 0;
   return (
@@ -116,12 +116,12 @@ function SummaryTiles({ current, previous }: { current: TrendSummary; previous: 
   ];
 
   return (
-    <div className="grid grid-cols-2 divide-x divide-y divide-[#f0eeeb] overflow-hidden rounded-[20px] border border-[#e6e4e1] bg-white lg:grid-cols-4 lg:divide-y-0">
+    <div className="grid grid-cols-2 divide-x divide-y divide-[#f8f9fa] overflow-hidden rounded-3xl border border-[#dadce0] bg-white lg:grid-cols-4 lg:divide-y-0">
       {tiles.map((t) => (
         <div key={t.label} className="flex flex-col gap-1 p-4 sm:p-5">
-          <p className="text-xs font-medium text-[#898b91]">{t.label}</p>
+          <p className="text-xs font-medium text-[#5f6368]">{t.label}</p>
           <p
-            className={cn("text-[26px] leading-tight tracking-[-0.02em] text-[#18161a]", t.tone)}
+            className={cn("text-[26px] leading-tight tracking-[-0.02em] text-[#202124]", t.tone)}
             style={JAKARTA}
           >
             {t.value}
@@ -136,12 +136,12 @@ function SummaryTiles({ current, previous }: { current: TrendSummary; previous: 
 function VolumeChart({ months }: { months: TrendMonth[] }) {
   const max = Math.max(1, ...months.map((m) => m.reviewCount));
   return (
-    <div className="rounded-[20px] border border-[#e6e4e1] bg-white p-5">
+    <div className="rounded-3xl border border-[#dadce0] bg-white p-5">
       <div className="flex flex-wrap items-center justify-between gap-2">
-        <h2 className="text-lg text-[#18161a]" style={JAKARTA}>
+        <h2 className="text-lg text-[#202124]" style={JAKARTA}>
           Reviews per month
         </h2>
-        <div className="flex gap-3 text-xs text-[#5f6168]">
+        <div className="flex gap-3 text-xs text-[#3c4043]">
           <span className="flex items-center gap-1.5">
             <span className="h-2.5 w-2.5 rounded-full bg-green-500" /> 4–5★
           </span>
@@ -158,11 +158,11 @@ function VolumeChart({ months }: { months: TrendMonth[] }) {
           const height = (m.reviewCount / max) * 100;
           return (
             <div key={m.month} className="flex h-full min-w-0 flex-1 flex-col items-center justify-end gap-1.5">
-              <span className="text-[11px] tabular-nums text-[#898b91]">
+              <span className="text-[11px] tabular-nums text-[#5f6368]">
                 {m.reviewCount > 0 ? m.reviewCount : ""}
               </span>
               <div
-                className="flex w-full max-w-10 flex-col-reverse overflow-hidden rounded-md bg-[#f3f2ef]"
+                className="flex w-full max-w-10 flex-col-reverse overflow-hidden rounded-md bg-[#f8f9fa]"
                 style={{ height: `${Math.max(height, 2)}%` }}
                 title={`${monthLabel(m.month, true)}: ${m.positive} positive, ${m.neutral} neutral, ${m.negative} negative`}
               >
@@ -174,7 +174,7 @@ function VolumeChart({ months }: { months: TrendMonth[] }) {
                   </>
                 ) : null}
               </div>
-              <span className="text-[11px] text-[#898b91]">{monthLabel(m.month)}</span>
+              <span className="text-[11px] text-[#5f6368]">{monthLabel(m.month)}</span>
             </div>
           );
         })}
@@ -195,12 +195,12 @@ function RatingChart({ months }: { months: TrendMonth[] }) {
     .filter((p): p is NonNullable<typeof p> => p !== null);
 
   return (
-    <div className="rounded-[20px] border border-[#e6e4e1] bg-white p-5">
-      <h2 className="text-lg text-[#18161a]" style={JAKARTA}>
+    <div className="rounded-3xl border border-[#dadce0] bg-white p-5">
+      <h2 className="text-lg text-[#202124]" style={JAKARTA}>
         Average rating
       </h2>
       {points.length === 0 ? (
-        <p className="mt-6 text-sm text-[#898b91]">No reviews in this period yet.</p>
+        <p className="mt-6 text-sm text-[#5f6368]">No reviews in this period yet.</p>
       ) : (
         <svg
           viewBox={`0 0 ${width} ${height + 20}`}
@@ -210,8 +210,8 @@ function RatingChart({ months }: { months: TrendMonth[] }) {
         >
           {[1, 2, 3, 4, 5].map((r) => (
             <g key={r}>
-              <line x1={padX} x2={width - padX} y1={y(r)} y2={y(r)} stroke="#f0eeeb" strokeWidth={1} />
-              <text x={4} y={y(r) + 4} fontSize={11} fill="#898b91">
+              <line x1={padX} x2={width - padX} y1={y(r)} y2={y(r)} stroke="#f8f9fa" strokeWidth={1} />
+              <text x={4} y={y(r) + 4} fontSize={11} fill="#5f6368">
                 {r}★
               </text>
             </g>
@@ -219,7 +219,7 @@ function RatingChart({ months }: { months: TrendMonth[] }) {
           <polyline
             points={points.map((p) => `${p.x},${p.y}`).join(" ")}
             fill="none"
-            stroke="#4823ff"
+            stroke="#1a73e8"
             strokeWidth={2.5}
             strokeLinejoin="round"
             strokeLinecap="round"
@@ -244,7 +244,7 @@ function RatingChart({ months }: { months: TrendMonth[] }) {
               x={padX + i * step}
               y={height + 14}
               fontSize={11}
-              fill="#898b91"
+              fill="#5f6368"
               textAnchor="middle"
             >
               {monthLabel(m.month)}
@@ -258,11 +258,11 @@ function RatingChart({ months }: { months: TrendMonth[] }) {
 
 function MonthTable({ months }: { months: TrendMonth[] }) {
   return (
-    <div className="overflow-hidden rounded-[20px] border border-[#e6e4e1] bg-white">
+    <div className="overflow-hidden rounded-3xl border border-[#dadce0] bg-white">
       <div className="overflow-x-auto">
         <table className="w-full text-sm">
           <thead>
-            <tr className="border-b border-[#f0eeeb] bg-[#fafaf8] text-left text-xs font-medium text-[#898b91]">
+            <tr className="border-b border-[#f8f9fa] bg-[#f8f9fa] text-left text-xs font-medium text-[#5f6368]">
               <th className="px-4 py-3 sm:px-5">Month</th>
               <th className="px-4 py-3 text-right">Reviews</th>
               <th className="px-4 py-3 text-right">Avg</th>
@@ -271,21 +271,21 @@ function MonthTable({ months }: { months: TrendMonth[] }) {
               <th className="px-4 py-3 text-right sm:pr-5">Reply time</th>
             </tr>
           </thead>
-          <tbody className="divide-y divide-[#f0eeeb]">
+          <tbody className="divide-y divide-[#f8f9fa]">
             {[...months].reverse().map((m) => (
               <tr key={m.month} className="tabular-nums">
-                <td className="px-4 py-3 text-[#18161a] sm:px-5">{monthLabel(m.month, true)}</td>
-                <td className="px-4 py-3 text-right text-[#18161a]">{m.reviewCount}</td>
-                <td className="px-4 py-3 text-right text-[#18161a]">
+                <td className="px-4 py-3 text-[#202124] sm:px-5">{monthLabel(m.month, true)}</td>
+                <td className="px-4 py-3 text-right text-[#202124]">{m.reviewCount}</td>
+                <td className="px-4 py-3 text-right text-[#202124]">
                   {m.avgRating === null ? "—" : m.avgRating.toFixed(2)}
                 </td>
-                <td className={cn("px-4 py-3 text-right", m.negative > 0 ? "text-red-600" : "text-[#898b91]")}>
+                <td className={cn("px-4 py-3 text-right", m.negative > 0 ? "text-red-600" : "text-[#5f6368]")}>
                   {m.negative}
                 </td>
-                <td className="px-4 py-3 text-right text-[#18161a]">
+                <td className="px-4 py-3 text-right text-[#202124]">
                   {m.reviewCount > 0 ? formatPercent(m.replied / m.reviewCount) : "—"}
                 </td>
-                <td className="px-4 py-3 text-right text-[#18161a] sm:pr-5">
+                <td className="px-4 py-3 text-right text-[#202124] sm:pr-5">
                   {formatHours(m.avgResponseHours)}
                 </td>
               </tr>
@@ -322,7 +322,7 @@ export default async function AnalyticsPage({ searchParams }: AnalyticsPageProps
       >
         <a
           href={`/api/reviews/export?${exportParams.toString()}`}
-          className="inline-flex h-9 items-center gap-1.5 rounded-full border border-[#d9d2ff] bg-white px-4 text-sm font-medium text-[#18161a] hover:border-[#4823ff]"
+          className="inline-flex h-9 items-center gap-1.5 rounded-full border border-[#dadce0] bg-white px-4 text-sm font-medium text-[#202124] hover:border-[#1a73e8]"
         >
           <Download className="h-3.5 w-3.5" aria-hidden />
           Export CSV
@@ -345,7 +345,7 @@ export default async function AnalyticsPage({ searchParams }: AnalyticsPageProps
 
       <MonthTable months={data.months} />
 
-      <p className="text-xs leading-relaxed text-[#898b91]">
+      <p className="text-xs leading-relaxed text-[#5f6368]">
         Compared with the {period} months before. Reply time is measured from the review to the
         latest reply on Google.
       </p>

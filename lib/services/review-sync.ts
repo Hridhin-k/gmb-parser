@@ -6,6 +6,9 @@ import { AuditService } from "./audit";
 import { AppError } from "@/lib/errors";
 import { logger } from "@/lib/logger";
 import type { GoogleReview } from "@/lib/types/google";
+import type { Database } from "@/lib/types/supabase";
+
+type ReviewInsert = Database["public"]["Tables"]["grm_reviews"]["Insert"];
 
 const STAR_RATING_MAP: Record<string, number> = {
   ONE: 1, TWO: 2, THREE: 3, FOUR: 4, FIVE: 5,
@@ -18,6 +21,17 @@ const STAR_RATING_MAP: Record<string, number> = {
 // ---------------------------------------------------------------------------
 const MAX_TRANSIENT_RETRIES = 2;
 const RETRY_DELAY_MS = 1500;
+/** Stop incremental sync after this many newest-first pages with no changes. */
+const UNCHANGED_PAGES_TO_STOP = 2;
+/** Safety cap if incremental never hits two unchanged pages (e.g. hash mismatch). */
+const MAX_INCREMENTAL_PAGES = 40;
+const LOCATION_CONCURRENCY = 3;
+
+export type ReviewSyncMode = "incremental" | "full";
+
+export interface SyncLocationOptions {
+  mode?: ReviewSyncMode;
+}
 
 // Errors that should never be retried (permanent failures)
 const NON_RETRYABLE_CLASSES = new Set([
@@ -31,6 +45,23 @@ async function sleep(ms: number) {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
+async function mapPool<T>(
+  items: T[],
+  limit: number,
+  fn: (item: T) => Promise<void>
+): Promise<void> {
+  let index = 0;
+  async function worker() {
+    while (index < items.length) {
+      const current = items[index];
+      index += 1;
+      await fn(current);
+    }
+  }
+  const n = Math.min(Math.max(1, limit), Math.max(items.length, 1));
+  await Promise.all(Array.from({ length: Math.min(n, items.length) }, () => worker()));
+}
+
 // ---------------------------------------------------------------------------
 // Result types
 // ---------------------------------------------------------------------------
@@ -39,6 +70,8 @@ export interface LocationSyncResult {
   reviewsSynced: number;
   reviewsUpdated: number;
   pagesProcessed: number;
+  truncated: boolean;
+  mode: ReviewSyncMode;
   errorClass: string | null;
   errorMessage: string | null;
 }
@@ -78,7 +111,7 @@ export class ReviewSyncService {
    * Flow:
    *   1. Mark location as `syncing`
    *   2. Get a valid access token for the connection
-   *   3. Paginate through ALL reviews from the API
+   *   3. Paginate newest-first (full crawl, or stop after two unchanged pages)
    *   4. Upsert each review; skip if hash unchanged (no actual update)
    *   5. Mark location as `success` | `partial` | `failed`
    *   6. Write a single audit record (not one per page)
@@ -90,7 +123,8 @@ export class ReviewSyncService {
     locationId: string,
     connectionId: string,
     workspaceId: string,
-    userId: string
+    userId: string,
+    options: SyncLocationOptions = {}
   ): Promise<LocationSyncResult> {
     const supabase = createAdminClient();
     const syncStarted = new Date().toISOString();
@@ -98,7 +132,7 @@ export class ReviewSyncService {
     // --- 1. Fetch location record ---
     const { data: location, error: locError } = await supabase
       .from("grm_google_locations")
-      .select("id, google_location_name, workspace_id")
+      .select("id, google_location_name, workspace_id, last_synced_at")
       .eq("id", locationId)
       .eq("workspace_id", workspaceId)
       .single();
@@ -136,10 +170,15 @@ export class ReviewSyncService {
       throw error;
     }
 
-    // --- 4. Paginate through all reviews ---
+    const mode: ReviewSyncMode =
+      options.mode === "full" || !location.last_synced_at ? "full" : "incremental";
+
+    // --- 4. Paginate newest-first. Incremental stops once we hit known pages. ---
     let reviewsSynced = 0;
     let reviewsUpdated = 0;
     let pagesProcessed = 0;
+    let unchangedPages = 0;
+    let truncated = false;
     let errorClass: string | null = null;
     let errorMessage: string | null = null;
     let pageToken: string | undefined;
@@ -149,7 +188,6 @@ export class ReviewSyncService {
       let retries = 0;
       let pageResult: Awaited<ReturnType<typeof GoogleReviewService.listReviews>> | null = null;
 
-      // Retry loop for transient failures on a single page
       while (retries <= MAX_TRANSIENT_RETRIES) {
         try {
           pageResult = await GoogleReviewService.listReviews(
@@ -157,12 +195,11 @@ export class ReviewSyncService {
             location.google_location_name,
             pageToken
           );
-          break; // Success — exit retry loop
+          break;
         } catch (err) {
           const cls = classifyReviewError(err);
 
           if (NON_RETRYABLE_CLASSES.has(cls)) {
-            // Permanent error — abort the whole sync
             errorClass = cls;
             errorMessage = err instanceof Error ? err.message : String(err);
             abortSync = true;
@@ -171,7 +208,6 @@ export class ReviewSyncService {
 
           retries++;
           if (retries > MAX_TRANSIENT_RETRIES) {
-            // Exhausted retries — record partial failure but don't abort
             errorClass = cls;
             errorMessage = err instanceof Error ? err.message : String(err);
             abortSync = true;
@@ -185,28 +221,29 @@ export class ReviewSyncService {
       if (abortSync || !pageResult) break;
 
       pagesProcessed++;
+      const pageReviews = pageResult.reviews ?? [];
+      const pageUpdated = await this.upsertReviewPage(
+        supabase,
+        pageReviews,
+        locationId,
+        workspaceId
+      );
+      reviewsSynced += pageReviews.length;
+      reviewsUpdated += pageUpdated;
 
-      // Upsert each review on this page
-      for (const review of pageResult.reviews ?? []) {
-        try {
-          const wasUpdated = await this.upsertReview(
-            supabase,
-            review,
-            locationId,
-            workspaceId
-          );
-          reviewsSynced++;
-          if (wasUpdated) reviewsUpdated++;
-        } catch (err) {
-          // Log per-review failures but don't abort the page
-          logger.error("review_sync.upsert_failed", {
-            reviewId: review.reviewId,
-            message: err instanceof Error ? err.message : "Unknown",
-          });
-        }
-      }
+      if (pageUpdated === 0 && pageReviews.length > 0) unchangedPages += 1;
+      else unchangedPages = 0;
 
       pageToken = pageResult.nextPageToken;
+
+      if (mode === "incremental" && unchangedPages >= UNCHANGED_PAGES_TO_STOP) {
+        truncated = Boolean(pageToken);
+        break;
+      }
+      if (mode === "incremental" && pagesProcessed >= MAX_INCREMENTAL_PAGES) {
+        truncated = Boolean(pageToken);
+        break;
+      }
     } while (pageToken);
 
     // --- 5. Mark location sync complete ---
@@ -239,6 +276,8 @@ export class ReviewSyncService {
         reviewsSynced,
         reviewsUpdated,
         pagesProcessed,
+        truncated,
+        mode,
         status: finalStatus,
         errorClass,
         errorMessage,
@@ -250,6 +289,8 @@ export class ReviewSyncService {
       reviewsSynced,
       reviewsUpdated,
       pagesProcessed,
+      truncated,
+      mode,
       errorClass,
       errorMessage,
     };
@@ -262,7 +303,8 @@ export class ReviewSyncService {
    */
   static async syncAllWorkspaceLocations(
     workspaceId: string,
-    userId: string
+    userId: string,
+    options: SyncLocationOptions = {}
   ): Promise<BulkSyncResult> {
     const supabase = createAdminClient();
 
@@ -309,31 +351,31 @@ export class ReviewSyncService {
     let locationsFailed = 0;
     let totalReviewsSynced = 0;
 
-    for (const loc of eligible) {
+    const jobs = eligible.map((loc) => {
       const accountData = Array.isArray(loc.grm_google_accounts)
         ? loc.grm_google_accounts[0]
         : loc.grm_google_accounts;
-
       const connectionId = (accountData as { connection_id: string } | null)
         ?.connection_id;
+      return { loc, connectionId };
+    }).filter((j): j is typeof j & { connectionId: string } => Boolean(j.connectionId));
 
-      if (!connectionId) continue;
-
+    await mapPool(jobs, LOCATION_CONCURRENCY, async ({ loc, connectionId }) => {
       try {
         const result = await this.syncLocation(
           loc.id,
           connectionId,
           workspaceId,
-          userId
+          userId,
+          options
         );
         results.push(result);
-
         if (result.errorClass === null || result.reviewsSynced > 0) {
           locationsSucceeded++;
         } else {
           locationsFailed++;
         }
-        totalReviewsSynced += result.reviewsSynced;
+        totalReviewsSynced += result.reviewsUpdated;
       } catch {
         locationsFailed++;
         results.push({
@@ -341,11 +383,13 @@ export class ReviewSyncService {
           reviewsSynced: 0,
           reviewsUpdated: 0,
           pagesProcessed: 0,
+          truncated: false,
+          mode: options.mode ?? "incremental",
           errorClass: "unknown",
           errorMessage: "Unexpected error during sync",
         });
       }
-    }
+    });
 
     return {
       locationsAttempted: eligible.length,
@@ -357,71 +401,86 @@ export class ReviewSyncService {
   }
 
   /**
-   * Upserts a single review into the database.
-   * Uses sync_hash to avoid writing unchanged rows.
-   * Returns true if the row was changed (created or updated), false if unchanged.
+   * One DB read per page, writes only for new/changed reviews.
+   * Unchanged hashes are skipped entirely (no last_synced_at stampede).
    */
-  private static async upsertReview(
+  private static async upsertReviewPage(
     supabase: ReturnType<typeof createAdminClient>,
-    review: GoogleReview,
+    reviews: GoogleReview[],
     locationId: string,
     workspaceId: string
-  ): Promise<boolean> {
-    const hash = reviewHash(review);
-    const starRating = STAR_RATING_MAP[review.starRating] ?? 0;
+  ): Promise<number> {
+    if (reviews.length === 0) return 0;
 
-    // Check if we already have this review with the same hash
-    const { data: existing } = await supabase
+    const { data: existingRows } = await supabase
       .from("grm_reviews")
-      .select("id, sync_hash")
+      .select("google_review_name, sync_hash, reply_status")
       .eq("workspace_id", workspaceId)
-      .eq("google_review_name", review.name)
-      .single();
+      .in(
+        "google_review_name",
+        reviews.map((r) => r.name)
+      );
 
-    if (existing?.sync_hash === hash) {
-      // Content unchanged — update last_synced_at timestamp only
-      await supabase
-        .from("grm_reviews")
-        .update({ last_synced_at: new Date().toISOString() })
-        .eq("id", existing.id);
-      return false;
-    }
+    const existing = new Map(
+      (existingRows ?? []).map((row) => [
+        row.google_review_name,
+        { hash: row.sync_hash, replyStatus: row.reply_status },
+      ])
+    );
 
     const now = new Date().toISOString();
-    const { error } = await supabase.from("grm_reviews").upsert(
-      {
+    const payloads: ReviewInsert[] = [];
+
+    for (const review of reviews) {
+      const hash = reviewHash(review);
+      const prior = existing.get(review.name);
+      if (prior?.hash === hash) continue;
+
+      const googleReply = review.reviewReply?.comment ?? null;
+      const payload: ReviewInsert = {
         workspace_id: workspaceId,
         location_id: locationId,
         google_review_name: review.name,
         google_review_id: review.reviewId,
         reviewer_display_name: review.reviewer?.displayName ?? "",
         reviewer_profile_url: review.reviewer?.profilePhotoUrl ?? null,
-        reviewer_is_anonymous: review.reviewer?.isAnonymous ?? !review.reviewer?.displayName,
-        star_rating: starRating,
+        reviewer_is_anonymous:
+          review.reviewer?.isAnonymous ?? !review.reviewer?.displayName,
+        star_rating: STAR_RATING_MAP[review.starRating] ?? 0,
         comment: review.comment ?? null,
         review_create_time: review.createTime,
         review_update_time: review.updateTime ?? null,
-        google_reply_comment: review.reviewReply?.comment ?? null,
+        google_reply_comment: googleReply,
         google_reply_update_time: review.reviewReply?.updateTime ?? null,
         sync_hash: hash,
         last_synced_at: now,
-      },
-      {
-        onConflict: "workspace_id,google_review_name",
-        // Don't overwrite reply_status — that's managed by our publishing flow
-        ignoreDuplicates: false,
-      }
-    );
+      };
 
-    if (error) {
-      throw new AppError(
-        `Failed to upsert review ${review.reviewId}: ${error.message}`,
-        "DB_ERROR",
-        500
-      );
+      // A reply that already exists on Google should not sit in "Needs reply".
+      // Never overwrite GRM drafts / in-flight publishes.
+      if (googleReply && (!prior || prior.replyStatus === "none")) {
+        payload.reply_status = "published";
+      }
+
+      payloads.push(payload);
     }
 
-    return true;
+    if (payloads.length === 0) return 0;
+
+    const { error } = await supabase.from("grm_reviews").upsert(payloads, {
+      onConflict: "workspace_id,google_review_name",
+      ignoreDuplicates: false,
+    });
+
+    if (error) {
+      logger.error("review_sync.upsert_failed", {
+        count: payloads.length,
+        message: error.message,
+      });
+      return 0;
+    }
+
+    return payloads.length;
   }
 
   // ---------------------------------------------------------------------------

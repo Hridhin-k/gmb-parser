@@ -73,7 +73,7 @@ function StarDisplay({ rating }: { rating: number }) {
                 : rating === 3
                   ? "fill-yellow-400 text-yellow-500"
                   : "fill-red-500 text-red-500"
-              : "fill-[#eceae6] text-[#eceae6]"
+              : "fill-mist text-mist"
           )}
           aria-hidden
         />
@@ -97,9 +97,9 @@ const REPLY_STATUS_MAP: Record<
   string,
   { label: string; className: string; dotColor: string }
 > = {
-  none:            { label: "No reply",       className: "text-[#898b91]",  dotColor: "bg-[#d9d2ff]" },
-  draft:           { label: "Draft",          className: "text-[#5f6168]",  dotColor: "bg-[#898b91]" },
-  approved:        { label: "Approved",       className: "text-[#4823ff]",  dotColor: "bg-[#4823ff]" },
+  none:            { label: "No reply",       className: "text-[#5f6368]",  dotColor: "bg-[#dadce0]" },
+  draft:           { label: "Draft",          className: "text-[#3c4043]",  dotColor: "bg-[#5f6368]" },
+  approved:        { label: "Approved",       className: "text-[#1a73e8]",  dotColor: "bg-[#1a73e8]" },
   pending_publish: { label: "Publishing...",  className: "text-amber-700",  dotColor: "bg-amber-500" },
   published:       { label: "Published",      className: "text-green-700",  dotColor: "bg-green-500" },
   failed:          { label: "Publish failed", className: "text-red-700",    dotColor: "bg-red-500" },
@@ -276,12 +276,12 @@ export function ReviewDetailPanel({
   return (
     <div className="flex h-full flex-col overflow-hidden bg-white">
       {/* Header */}
-      <div className="flex shrink-0 items-center justify-between border-b border-[#ede9ff] px-5 py-4">
+      <div className="flex shrink-0 items-center justify-between border-b border-mist px-5 py-4">
         <div className="min-w-0">
-          <p className="truncate text-sm font-medium text-[#18161a]">
+          <p className="truncate text-sm font-medium text-[#202124]">
             {reviewerName}
           </p>
-          <p className="text-xs text-[#898b91]">
+          <p className="text-xs text-[#5f6368]">
             {review.location_title}
             {review.client_name && (
               <span className="text-[#c9c7c3]"> · </span>
@@ -291,7 +291,7 @@ export function ReviewDetailPanel({
         </div>
         <button
           onClick={onClose}
-          className="ml-2 shrink-0 rounded p-1 text-[#898b91] hover:bg-[#f3f2ef] hover:text-[#5f6168] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+          className="ml-2 shrink-0 rounded p-1 text-[#5f6368] hover:bg-[#f8f9fa] hover:text-[#3c4043] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
           aria-label="Close review detail"
         >
           <X className="h-4 w-4" />
@@ -303,18 +303,18 @@ export function ReviewDetailPanel({
         {/* Rating + date row */}
         <div className="flex items-center justify-between">
           <StarDisplay rating={review.star_rating} />
-          <span className="text-[11px] text-[#898b91]">
+          <span className="text-[11px] text-[#5f6368]">
             {formatDate(review.review_create_time)}
           </span>
         </div>
 
         {/* Review text */}
         {review.comment ? (
-          <p className="text-base font-light leading-relaxed text-[#18161a]">
+          <p className="text-base font-light leading-relaxed text-[#202124]">
             {review.comment}
           </p>
         ) : (
-          <p className="text-sm italic text-[#898b91]">
+          <p className="text-sm italic text-[#5f6368]">
             Rating only — no written comment.
           </p>
         )}
@@ -398,7 +398,7 @@ export function ReviewDetailPanel({
               </Button>
             </div>
             {loading === "generate" && (
-              <p className="text-xs text-[#898b91]">
+              <p className="text-xs text-[#5f6368]">
                 AI is drafting a response. This usually takes a few seconds.
               </p>
             )}
@@ -408,7 +408,7 @@ export function ReviewDetailPanel({
         {/* Create form */}
         {isCreating && !reply && (
           <div className="space-y-3">
-            <label htmlFor="draft-reply" className="block text-xs font-medium text-[#898b91]">
+            <label htmlFor="draft-reply" className="block text-xs font-medium text-[#5f6368]">
               Draft reply
             </label>
             <Textarea
@@ -452,7 +452,7 @@ export function ReviewDetailPanel({
           <div className="space-y-3">
             {isEditing ? (
               <>
-                <label htmlFor="edit-reply" className="block text-xs font-medium text-[#898b91]">
+                <label htmlFor="edit-reply" className="block text-xs font-medium text-[#5f6368]">
                   Edit reply
                 </label>
                 <Textarea
@@ -495,7 +495,7 @@ export function ReviewDetailPanel({
                   ? "border-green-200 bg-green-50/40"
                   : reply.source === "ai"
                   ? "border-purple-100 bg-purple-50/30"
-                  : "border-[#e6e4e1] bg-[#fafaf8]/50"
+                  : "border-[#dadce0] bg-[#f8f9fa]/50"
               )}>
                 {reply.source === "ai" && reply.status !== "published" && (
                   <p className="mb-1.5 flex items-center gap-1 text-[10px] font-medium text-purple-600">
@@ -512,7 +512,7 @@ export function ReviewDetailPanel({
                     )}
                   </p>
                 )}
-                <p className="whitespace-pre-wrap text-sm leading-relaxed text-[#18161a]">
+                <p className="whitespace-pre-wrap text-sm leading-relaxed text-[#202124]">
                   {reply.content}
                 </p>
                 {/* Keep primary actions next to the draft so they are not clipped */}
@@ -551,7 +551,7 @@ export function ReviewDetailPanel({
                         </Button>
                       </>
                     ) : (
-                      <p className="w-full text-xs text-[#898b91]">
+                      <p className="w-full text-xs text-[#5f6368]">
                         An owner or admin needs to approve this draft before it can be published.
                       </p>
                     )}
@@ -581,7 +581,7 @@ export function ReviewDetailPanel({
                     <Button
                       size="sm"
                       variant="ghost"
-                      className="text-[#898b91] hover:text-red-600"
+                      className="text-[#5f6368] hover:text-red-600"
                       onClick={handleDelete}
                       disabled={loading !== null}
                       aria-label="Reject draft"
@@ -621,7 +621,7 @@ export function ReviewDetailPanel({
                     <Button
                       size="sm"
                       variant="ghost"
-                      className="text-[#898b91] hover:text-red-600"
+                      className="text-[#5f6368] hover:text-red-600"
                       onClick={handleDelete}
                       disabled={loading !== null}
                       aria-label="Reject draft"

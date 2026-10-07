@@ -24,7 +24,7 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Not authenticated" }, { status: 401 });
   }
 
-  let body: { all?: boolean; locationId?: string; connectionId?: string };
+  let body: { all?: boolean; locationId?: string; connectionId?: string; full?: boolean };
   try {
     body = await parseBody(request, syncBodySchema);
   } catch (e) {
@@ -47,7 +47,9 @@ export async function POST(request: Request) {
     }
 
     try {
-      const result = await ReviewSyncService.syncAllWorkspaceLocations(workspaceId, user.id);
+      const result = await ReviewSyncService.syncAllWorkspaceLocations(workspaceId, user.id, {
+        mode: body.full ? "full" : "incremental",
+      });
       return NextResponse.json({ success: true, ...result });
     } catch {
       logger.error("sync.all.failed", { userId: user.id, workspaceId });
@@ -95,7 +97,8 @@ export async function POST(request: Request) {
       locationId,
       connectionId,
       workspaceId,
-      user.id
+      user.id,
+      { mode: body.full ? "full" : "incremental" }
     );
 
     return NextResponse.json({ success: true, ...result });

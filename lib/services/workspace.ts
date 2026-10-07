@@ -202,52 +202,44 @@ async function acceptPendingInvites(user: {
   return accepted;
 }
 
-async function createPersonalWorkspace(user: {
-  id: string;
-  email?: string | null;
-}): Promise<void> {
+async function findWorkspaceIdBySlug(slug: string): Promise<string | null> {
   const admin = createAdminClient();
-  const name = personalWorkspaceName(user.email);
-  const slug = personalWorkspaceSlug(user.email, user.id);
-
-  const inserted = await admin
+  const { data, error } = await admin
     .from("grm_workspaces")
-    .insert({ name, slug })
     .select("id")
-    .single();
-
-  let workspaceId = inserted.data?.id ?? null;
-
-  if (inserted.error?.code === "23505") {
-    const { data: raced } = await admin
-      .from("grm_workspaces")
-      .select("id")
-      .eq("slug", slug)
-      .maybeSingle();
-    workspaceId = raced?.id ?? null;
-  } else if (inserted.error || !workspaceId) {
+    .eq("slug", slug)
+    .maybeSingle();
+  if (error && !isSchemaNotReady(error)) {
     throw new AppError("Could not create your workspace.", "DB_ERROR", 500, {
-      dbError: inserted.error?.message,
+      dbError: error.message,
     });
   }
+  return data?.id ?? null;
+}
 
-  if (!workspaceId) {
-    throw new AppError("Could not create your workspace.", "DB_ERROR", 500);
-  }
+function nextWorkspaceSlug(base: string, attempt: number): string {
+  const extra = `-${attempt}`;
+  const slug = `${base.slice(0, Math.max(1, 63 - extra.length))}${extra}`
+    .replace(/-+$/g, "")
+    .slice(0, 63);
+  return WORKSPACE_SLUG.test(slug) ? slug : `workspace-${attempt}`.slice(0, 63);
+}
 
-  const memberInsert = await admin.from("grm_workspace_members").insert({
+async function addOwnerMembership(workspaceId: string, userId: string): Promise<void> {
+  const admin = createAdminClient();
+  const payload = {
     workspace_id: workspaceId,
-    user_id: user.id,
-    role: "owner",
-    active: true,
+    user_id: userId,
+    role: "owner" as const,
+  };
+
+  const inserted = await admin.from("grm_workspace_members").insert({
+    ...payload,
+    active: false,
   });
 
-  if (memberInsert.error && isSchemaNotReady(memberInsert.error)) {
-    const retry = await admin.from("grm_workspace_members").insert({
-      workspace_id: workspaceId,
-      user_id: user.id,
-      role: "owner",
-    });
+  if (inserted.error && isSchemaNotReady(inserted.error)) {
+    const retry = await admin.from("grm_workspace_members").insert(payload);
     if (retry.error && retry.error.code !== "23505") {
       throw new AppError("Could not create your workspace.", "DB_ERROR", 500, {
         dbError: retry.error.message,
@@ -256,9 +248,74 @@ async function createPersonalWorkspace(user: {
     return;
   }
 
-  if (memberInsert.error && memberInsert.error.code !== "23505") {
+  if (inserted.error && inserted.error.code !== "23505") {
     throw new AppError("Could not create your workspace.", "DB_ERROR", 500, {
-      dbError: memberInsert.error.message,
+      dbError: inserted.error.message,
+    });
+  }
+}
+
+async function createPersonalWorkspace(user: {
+  id: string;
+  email?: string | null;
+}): Promise<string> {
+  const admin = createAdminClient();
+  const name = personalWorkspaceName(user.email);
+  const preferredSlug = personalWorkspaceSlug(user.email, user.id);
+
+  let workspaceId: string | null = null;
+  let slug = preferredSlug;
+
+  for (let attempt = 1; attempt <= 8; attempt += 1) {
+    if (attempt > 1) slug = nextWorkspaceSlug(preferredSlug, attempt);
+
+    const existingId = await findWorkspaceIdBySlug(slug);
+    if (existingId) {
+      const { data: alreadyMember } = await admin
+        .from("grm_workspace_members")
+        .select("workspace_id")
+        .eq("workspace_id", existingId)
+        .eq("user_id", user.id)
+        .maybeSingle();
+      if (alreadyMember?.workspace_id) {
+        workspaceId = existingId;
+        break;
+      }
+      continue;
+    }
+
+    const inserted = await admin
+      .from("grm_workspaces")
+      .insert({ name, slug })
+      .select("id")
+      .single();
+
+    if (inserted.error?.code === "23505") {
+      continue;
+    }
+    if (inserted.error || !inserted.data?.id) {
+      throw new AppError("Could not create your workspace.", "DB_ERROR", 500, {
+        dbError: inserted.error?.message,
+      });
+    }
+    workspaceId = inserted.data.id;
+    break;
+  }
+
+  if (!workspaceId) {
+    throw new AppError("Could not create your workspace.", "DB_ERROR", 500, {
+      dbError: "Could not allocate a unique workspace slug",
+    });
+  }
+
+  await addOwnerMembership(workspaceId, user.id);
+  try {
+    await setActiveWorkspace(user.id, workspaceId);
+  } catch (error) {
+    if (!(error instanceof AuthorizationError)) throw error;
+    logger.warn("workspace.active_mark_skipped", {
+      userId: user.id,
+      workspaceId,
     });
   }
 
@@ -266,6 +323,7 @@ async function createPersonalWorkspace(user: {
     userId: user.id,
     workspaceId,
   });
+  return workspaceId;
 }
 
 /**
@@ -282,7 +340,8 @@ export async function ensurePersonalWorkspace(user: {
   if (accepted.length === 0) {
     const existing = await listMemberships(user.id);
     if (existing.length === 0) {
-      await createPersonalWorkspace(user);
+      const workspaceId = await createPersonalWorkspace(user);
+      return { workspace_id: workspaceId };
     }
   }
 
@@ -295,7 +354,8 @@ export async function ensurePersonalWorkspace(user: {
   const memberships = await listMemberships(user.id);
   const chosen = pickActiveWorkspace(memberships);
   if (!chosen) {
-    throw new AppError("Could not create your workspace.", "DB_ERROR", 500);
+    const workspaceId = await createPersonalWorkspace(user);
+    return { workspace_id: workspaceId };
   }
   return { workspace_id: chosen.workspace_id };
 }
@@ -315,7 +375,7 @@ export async function setActiveWorkspace(userId: string, workspaceId: string): P
       dbError: lookupError.message,
     });
   }
-  if (!member) {
+  if (!member?.workspace_id) {
     throw new AuthorizationError("You are not a member of that workspace.");
   }
 
