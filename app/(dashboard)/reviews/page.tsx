@@ -1,5 +1,5 @@
 import { getDashboardData } from "@/lib/services/dashboard";
-import { canApproveReplies } from "@/lib/services/workspace";
+import { canApproveReplies, canSyncWorkspace } from "@/lib/services/workspace";
 import { getActiveRole, getActiveWorkspace } from "@/lib/services/session";
 import { PageHeader } from "@/components/page-header";
 import { EmptyState } from "@/components/empty-state";
@@ -106,9 +106,9 @@ export default async function ReviewsPage({ searchParams }: ReviewsPageProps) {
               Export CSV
             </a>
           )}
-          {data.hasConnections && (
+          {data.hasConnections && canSyncWorkspace(role) ? (
             <SyncButton syncAll label="Sync all" size="sm" />
-          )}
+          ) : null}
         </div>
       </PageHeader>
 

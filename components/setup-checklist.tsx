@@ -9,6 +9,7 @@ import { cn } from "@/lib/utils";
 
 interface SetupChecklistProps {
   workspaceId: string;
+  canSync: boolean;
   hasConnection: boolean;
   hasLocations: boolean;
   hasReviews: boolean;
@@ -32,6 +33,7 @@ function subscribe(callback: () => void) {
 
 export function SetupChecklist({
   workspaceId,
+  canSync,
   hasConnection,
   hasLocations,
   hasReviews,
@@ -57,14 +59,21 @@ export function SetupChecklist({
     {
       done: hasLocations,
       title: "Sync profiles",
-      body: "Click Sync profiles at the top of this page. Every brand on your Google account becomes a client, with its shops as locations.",
+      body: canSync
+        ? "Click Sync profiles at the top of this page. Every brand on your Google account becomes a client, with its shops as locations."
+        : "The workspace owner syncs profiles. Each brand becomes a client, with its shops as locations.",
       action: null,
     },
     {
       done: hasReviews,
       title: "Sync reviews",
-      body: "Pull every review for your assigned locations into one inbox.",
-      action: hasConnection && hasLocations ? <SyncButton syncAll size="xs" label="Sync now" /> : null,
+      body: canSync
+        ? "Pull every review for your assigned locations into one inbox."
+        : "The workspace owner pulls reviews into the inbox.",
+      action:
+        canSync && hasConnection && hasLocations ? (
+          <SyncButton syncAll size="xs" label="Sync now" />
+        ) : null,
     },
     {
       done: hasPublished,

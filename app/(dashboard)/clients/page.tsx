@@ -1,6 +1,7 @@
 import { createAdminClient } from "@/lib/supabase/admin";
 import { GoogleBusinessProfileService } from "@/lib/services/google-business-profile";
-import { getActiveWorkspace } from "@/lib/services/session";
+import { getActiveRole, getActiveWorkspace } from "@/lib/services/session";
+import { canSyncWorkspace } from "@/lib/services/workspace";
 import { PageHeader } from "@/components/page-header";
 import { EmptyState } from "@/components/empty-state";
 import { UnassignedLocationsBoard } from "@/components/unassigned-locations-board";
@@ -11,7 +12,11 @@ import { locationDisplayName } from "@/lib/ui/location-place";
 import Link from "next/link";
 
 export default async function ClientsPage() {
-  const { workspaceId } = await getActiveWorkspace();
+  const [{ workspaceId }, role] = await Promise.all([
+    getActiveWorkspace(),
+    getActiveRole(),
+  ]);
+  const canSync = canSyncWorkspace(role);
   const admin = createAdminClient();
 
   const [{ data: connections }, clients, unassignedLocations] = await Promise.all([
@@ -33,9 +38,9 @@ export default async function ClientsPage() {
         title="Clients"
         description="Clients come from Google. Sync profiles pulls every Business Profile you manage and groups shops from the same brand (for example every Fazyo location) under one client."
       >
-        {connectionId ? (
+        {connectionId && canSync ? (
           <SyncLocationsButton connectionId={connectionId} />
-        ) : (
+        ) : connectionId ? null : (
           <Link
             href="/settings"
             className="inline-flex h-10 items-center rounded-full bg-ink px-4 text-sm font-semibold text-white hover:bg-graphite"

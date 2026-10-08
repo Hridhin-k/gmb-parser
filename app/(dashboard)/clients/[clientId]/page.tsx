@@ -4,7 +4,8 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { GoogleBusinessProfileService } from "@/lib/services/google-business-profile";
 import { isUnassignedClient } from "@/lib/services/unassigned-client";
 import { getLocationInsightView } from "@/lib/services/dashboard";
-import { getActiveWorkspace } from "@/lib/services/session";
+import { getActiveRole, getActiveWorkspace } from "@/lib/services/session";
+import { canSyncWorkspace } from "@/lib/services/workspace";
 import { PageHeader } from "@/components/page-header";
 import { LocationTable } from "@/components/location-table";
 import { ProfileInsightPanel } from "@/components/profile-insight-panel";
@@ -23,10 +24,11 @@ export default async function ClientDetailPage({
   params,
   searchParams,
 }: ClientDetailPageProps) {
-  const [{ clientId }, { workspaceId }, query] = await Promise.all([
+  const [{ clientId }, { workspaceId }, query, role] = await Promise.all([
     params,
     getActiveWorkspace(),
     searchParams,
+    getActiveRole(),
   ]);
   const admin = createAdminClient();
 
@@ -138,6 +140,7 @@ export default async function ClientDetailPage({
       <LocationTable
         clientId={clientId}
         connectionId={connectionId ?? ""}
+        canSync={canSyncWorkspace(role)}
         locations={connectedLocations.map((l) => ({
           id: l.id,
           google_location_name: l.google_location_name,

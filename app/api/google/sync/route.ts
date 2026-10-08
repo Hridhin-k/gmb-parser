@@ -5,6 +5,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { GoogleBusinessProfileService } from "@/lib/services/google-business-profile";
 import { AuditService } from "@/lib/services/audit";
 import { AppError, GoogleApiError } from "@/lib/errors";
+import { assertCanSyncWorkspace } from "@/lib/services/workspace";
 import { logger } from "@/lib/logger";
 import { parseBody } from "@/lib/validation";
 import { checkRateLimit, SYNC_ALL_LIMIT } from "@/lib/rate-limit";
@@ -74,6 +75,15 @@ export async function POST(request: Request) {
 
   if (!membership) {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+  }
+
+  try {
+    await assertCanSyncWorkspace(user.id, connection.workspace_id);
+  } catch (error) {
+    if (error instanceof AppError) {
+      return NextResponse.json({ error: error.message }, { status: error.statusCode });
+    }
+    throw error;
   }
 
   try {

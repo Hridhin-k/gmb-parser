@@ -1,7 +1,8 @@
 import { AgencyHomeView } from "@/components/agency-home";
 import { getAgencyHome } from "@/lib/services/agency-home";
 import { AGENCY_DEFAULT_RANGE, dateRangeParams, parseDateRange } from "@/lib/date-range";
-import { getActiveWorkspace } from "@/lib/services/session";
+import { getActiveRole, getActiveWorkspace } from "@/lib/services/session";
+import { canSyncWorkspace } from "@/lib/services/workspace";
 import { validateFilterString, validatePage } from "@/lib/validation";
 
 interface DashboardPageProps {
@@ -12,9 +13,10 @@ const UUID =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 export default async function DashboardPage({ searchParams }: DashboardPageProps) {
-  const [params, { workspaceId }] = await Promise.all([
+  const [params, { workspaceId }, role] = await Promise.all([
     searchParams,
     getActiveWorkspace(),
+    getActiveRole(),
   ]);
 
   const clientParam = validateFilterString(params.client);
@@ -33,6 +35,7 @@ export default async function DashboardPage({ searchParams }: DashboardPageProps
   return (
     <AgencyHomeView
       workspaceId={workspaceId}
+      canSync={canSyncWorkspace(role)}
       data={data}
       clientId={clientId}
       rangeParams={dateRangeParams(range, AGENCY_DEFAULT_RANGE)}

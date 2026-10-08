@@ -7,7 +7,7 @@ import { logger } from "@/lib/logger";
 import { parseBody, syncBodySchema } from "@/lib/validation";
 import { toUserMessage, toStatusCode } from "@/lib/errors";
 import { checkRateLimit, SYNC_LOCATION_LIMIT, SYNC_ALL_LIMIT } from "@/lib/rate-limit";
-import { ensurePersonalWorkspace } from "@/lib/services/workspace";
+import { assertCanSyncWorkspace, ensurePersonalWorkspace } from "@/lib/services/workspace";
 
 /**
  * POST /api/reviews/sync
@@ -35,6 +35,15 @@ export async function POST(request: Request) {
   const membership = await ensurePersonalWorkspace(user);
 
   const { workspace_id: workspaceId } = membership;
+
+  try {
+    await assertCanSyncWorkspace(user.id, workspaceId);
+  } catch (error) {
+    if (error instanceof AppError) {
+      return NextResponse.json({ error: error.message }, { status: error.statusCode });
+    }
+    throw error;
+  }
 
   // ── Sync all locations ────────────────────────────────────────────────────
   if (body.all) {

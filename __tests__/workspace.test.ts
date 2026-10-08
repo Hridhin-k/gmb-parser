@@ -15,6 +15,7 @@ vi.mock("@/lib/logger", () => ({
 
 import {
   canApproveReplies,
+  canSyncWorkspace,
   ensurePersonalWorkspace,
   personalWorkspaceName,
   personalWorkspaceSlug,
@@ -82,6 +83,15 @@ describe("canApproveReplies", () => {
   it("blocks members", () => {
     expect(canApproveReplies("member")).toBe(false);
     expect(canApproveReplies(null)).toBe(false);
+  });
+});
+
+describe("canSyncWorkspace", () => {
+  it("allows only the owner", () => {
+    expect(canSyncWorkspace("owner")).toBe(true);
+    expect(canSyncWorkspace("admin")).toBe(false);
+    expect(canSyncWorkspace("member")).toBe(false);
+    expect(canSyncWorkspace(null)).toBe(false);
   });
 });
 

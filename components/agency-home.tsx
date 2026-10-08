@@ -16,6 +16,7 @@ import type { AgencyClientRow, AgencyHome } from "@/lib/services/agency-home";
 
 interface AgencyHomeViewProps {
   workspaceId: string;
+  canSync: boolean;
   data: AgencyHome;
   clientId: string;
   /** range/from/to search params for the selected time range (empty for the default). */
@@ -63,6 +64,7 @@ function pageHref(
 
 export function AgencyHomeView({
   workspaceId,
+  canSync,
   data,
   clientId,
   rangeParams,
@@ -85,9 +87,9 @@ export function AgencyHomeView({
     <div className="space-y-4">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <h1 className="font-heading text-heading text-ink">All clients</h1>
-        {data.connectionId ? (
+        {data.connectionId && canSync ? (
           <SyncLocationsButton connectionId={data.connectionId} />
-        ) : (
+        ) : data.connectionId ? null : (
           <Button
             size="sm"
             className="rounded-md px-3"
@@ -101,6 +103,7 @@ export function AgencyHomeView({
 
       <SetupChecklist
         workspaceId={workspaceId}
+        canSync={canSync}
         hasConnection={data.hasConnection}
         hasLocations={kpis.locations > 0}
         hasReviews={data.hasReviews}

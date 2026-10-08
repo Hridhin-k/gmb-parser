@@ -26,6 +26,7 @@ interface Location {
 interface LocationTableProps {
   clientId: string;
   connectionId: string;
+  canSync: boolean;
   locations: Location[];
 }
 
@@ -42,6 +43,7 @@ function formatSyncDate(iso: string | null): string {
 export function LocationTable({
   clientId,
   connectionId,
+  canSync,
   locations,
 }: LocationTableProps) {
   const router = useRouter();
@@ -75,7 +77,7 @@ export function LocationTable({
         <p className="text-sm text-slate">
           {locations.length} location{locations.length !== 1 ? "s" : ""}
         </p>
-        {connectionId && (
+        {canSync && connectionId ? (
           <SyncButton
             locationId={undefined}
             connectionId={undefined}
@@ -83,7 +85,7 @@ export function LocationTable({
             label="Sync all reviews"
             size="sm"
           />
-        )}
+        ) : null}
       </div>
 
       {loadingId ? (
@@ -159,7 +161,7 @@ export function LocationTable({
                     </p>
                   </div>
                   <div className="flex flex-wrap items-center gap-2 lg:shrink-0">
-                    {connectionId ? (
+                    {canSync && connectionId ? (
                       <SyncButton
                         locationId={loc.id}
                         connectionId={connectionId}

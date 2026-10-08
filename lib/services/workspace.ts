@@ -784,6 +784,21 @@ export function canApproveReplies(role: string | null | undefined): boolean {
   return role === "owner" || role === "admin";
 }
 
+/** Profile and review sync use the workspace Google connection. Only the owner may start them. */
+export function canSyncWorkspace(role: string | null | undefined): boolean {
+  return role === "owner";
+}
+
+export async function assertCanSyncWorkspace(
+  userId: string,
+  workspaceId: string
+): Promise<void> {
+  const role = await getMemberRole(userId, workspaceId);
+  if (!canSyncWorkspace(role)) {
+    throw new AuthorizationError("Only the workspace owner can sync Google profiles and reviews.");
+  }
+}
+
 export async function assertCanApproveReplies(
   userId: string,
   workspaceId: string
