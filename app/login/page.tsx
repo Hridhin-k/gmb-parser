@@ -30,10 +30,14 @@ export default async function LoginPage({ searchParams }: LoginPageProps) {
   }
 
   const errorCode = typeof params.error === "string" ? params.error : null;
+  const errorReason = typeof params.reason === "string" ? params.reason : null;
 
   return (
     <div className="flex min-h-dvh items-center justify-center bg-paper px-4 py-10">
-      <LoginForm methods={authMethodsFromEnv()} initialError={loginErrorMessage(errorCode)} />
+      <LoginForm
+        methods={authMethodsFromEnv()}
+        initialError={loginErrorMessage(errorCode, errorReason)}
+      />
     </div>
   );
 }

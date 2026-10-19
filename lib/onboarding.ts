@@ -82,10 +82,25 @@ export function authMethods(flags: AuthMethodFlags = {}): AuthMethod[] {
   return methods;
 }
 
-export function loginErrorMessage(code: string | null | undefined): string | null {
+export function loginErrorMessage(
+  code: string | null | undefined,
+  reason?: string | null
+): string | null {
   if (!code) return null;
   if (code === "auth_failed") {
-    return "Sign-in did not finish. Try Google again. If this keeps happening, the provider returned an error.";
+    if (reason === "pkce") {
+      return "Sign-in could not finish because the browser lost the login cookie. Try again in the same browser tab, with cookies allowed for this site.";
+    }
+    if (reason === "missing_code") {
+      return "Google did not return a sign-in code. Confirm the Supabase redirect URL includes https://your-app/auth/callback.";
+    }
+    if (reason === "access_denied") {
+      return "Google sign-in was cancelled or denied. Try again and allow access.";
+    }
+    if (reason === "exchange") {
+      return "Sign-in code could not be exchanged for a session. Try Google again. If it keeps failing, check Supabase Auth redirect URLs for this site.";
+    }
+    return "Sign-in did not finish. Try Google again. If this keeps happening, check that this site’s URL is allowed in Supabase Auth.";
   }
   return "Sign-in did not finish. Try again.";
 }
