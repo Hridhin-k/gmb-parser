@@ -6,7 +6,7 @@
     },
     {
       "path": "/api/cron/escalations",
-      "schedule": "0 * * * *"
+      "schedule": "30 4 * * *"
     },
     {
       "path": "/api/cron/reports",
