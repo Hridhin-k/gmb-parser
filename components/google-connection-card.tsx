@@ -21,6 +21,7 @@ interface GoogleConnectionCardProps {
   connections: ConnectionInfo[];
   initialMessage?: string | null;
   initialSuccess?: boolean;
+  connectHref?: string;
 }
 
 function getStatusBadge(status: string) {
@@ -38,6 +39,7 @@ function getStatusBadge(status: string) {
 
 export function GoogleConnectionCard({
   connections,
+  connectHref = "/api/google/connect",
   initialMessage,
   initialSuccess,
 }: GoogleConnectionCardProps) {
@@ -89,7 +91,7 @@ export function GoogleConnectionCard({
           </p>
         </div>
         <a
-          href="/api/google/connect"
+          href={connectHref}
           onClick={() => {
             setError(null);
             setSuccess(false);

@@ -48,6 +48,10 @@ export interface GoogleBusinessLocation {
     hasPendingEdits?: boolean;
     hasGoogleUpdated?: boolean;
     canHaveFoodMenus?: boolean;
+    /** True when Google has granted the location a verified voice of merchant. */
+    hasVoiceOfMerchant?: boolean;
+    /** Resource name of the location Google considers the original. */
+    duplicateLocation?: string;
   };
 }
 
@@ -104,6 +108,8 @@ export interface NormalizedGoogleLocation {
   primaryPhone: string | null;
   websiteUri: string | null;
   placeId: string | null;
+  voiceOfMerchant: boolean | null;
+  googleDuplicateOf: string | null;
 }
 
 // Error shape from Google APIs

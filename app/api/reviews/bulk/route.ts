@@ -8,9 +8,11 @@ import { AppError, toUserMessage } from "@/lib/errors";
 import { logger } from "@/lib/logger";
 import { parseBody, bulkReviewsBodySchema } from "@/lib/validation";
 import { checkRateLimit, AI_GENERATE_LIMIT, PUBLISH_LIMIT } from "@/lib/rate-limit";
-import { assertCanApproveReplies, ensurePersonalWorkspace } from "@/lib/services/workspace";
+import { ensurePersonalWorkspace } from "@/lib/services/workspace";
+import { assertReviewAction } from "@/lib/services/access";
+import { assertSafePublicReply } from "@/lib/services/reply-checks";
 
-type BulkAction = "generate" | "approve" | "publish" | "discard";
+type BulkAction = "generate" | "approve" | "publish" | "discard" | "assign";
 
 /**
  * POST /api/reviews/bulk
@@ -25,7 +27,7 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Not authenticated" }, { status: 401 });
   }
 
-  let body: { action: BulkAction; reviewIds: string[] };
+  let body: { action: BulkAction; reviewIds: string[]; assigneeId?: string | null };
   try {
     body = await parseBody(request, bulkReviewsBodySchema);
   } catch (e) {
@@ -56,35 +58,77 @@ export async function POST(request: Request) {
   const membership = await ensurePersonalWorkspace(user);
   const workspaceId = membership.workspace_id;
   const userId = user.id;
-  let canApprove: boolean | null = null;
 
-  async function userCanApprove(): Promise<boolean> {
-    if (canApprove !== null) return canApprove;
+  async function reviewAllowed(reviewId: string, action: "draft" | "approve" | "publish"): Promise<string | null> {
     try {
-      await assertCanApproveReplies(userId, workspaceId);
-      canApprove = true;
+      await assertReviewAction({ userId, workspaceId, reviewId, action });
+      return null;
     } catch (error) {
-      if (error instanceof AppError && error.statusCode === 403) {
-        canApprove = false;
-      } else {
-        throw error;
-      }
+      if (error instanceof AppError) return error.message;
+      throw error;
     }
-    return canApprove;
-  }
-
-  if (body.action === "approve" && !(await userCanApprove())) {
-    return NextResponse.json(
-      { error: "Only an owner or admin can approve replies." },
-      { status: 403 }
-    );
   }
 
   const results: Array<{ reviewId: string; ok: boolean; error?: string }> = [];
 
+  if (body.action === "assign") {
+    const assigneeId = body.assigneeId ?? null;
+    if (assigneeId) {
+      const member = await admin
+        .from("grm_workspace_members")
+        .select("user_id")
+        .eq("workspace_id", workspaceId)
+        .eq("user_id", assigneeId)
+        .maybeSingle();
+      if (member.error || !member.data) {
+        return NextResponse.json(
+          { error: "That person is not in this workspace." },
+          { status: 400 }
+        );
+      }
+    }
+    for (const reviewId of body.reviewIds) {
+      const denied = await reviewAllowed(reviewId, "draft");
+      if (denied) {
+        results.push({ reviewId, ok: false, error: denied });
+        continue;
+      }
+      const { data, error } = await admin
+        .from("grm_reviews")
+        .update({ assigned_to: assigneeId })
+        .eq("id", reviewId)
+        .eq("workspace_id", workspaceId)
+        .select("id")
+        .maybeSingle();
+      if (error || !data) {
+        results.push({ reviewId, ok: false, error: "That review is not in this workspace." });
+      } else {
+        results.push({ reviewId, ok: true });
+      }
+    }
+    const succeeded = results.filter((item) => item.ok).length;
+    await AuditService.log({
+      workspaceId,
+      userId,
+      action: "review.assigned",
+      entityType: "grm_reviews",
+      metadata: { succeeded, failed: results.length - succeeded, assigneeId } as Record<string, unknown>,
+    });
+    return NextResponse.json({
+      succeeded,
+      failed: results.length - succeeded,
+      results,
+    });
+  }
+
   for (const reviewId of body.reviewIds) {
     try {
       if (body.action === "generate") {
+        const denied = await reviewAllowed(reviewId, "draft");
+        if (denied) {
+          results.push({ reviewId, ok: false, error: denied });
+          continue;
+        }
         await AIReviewService.generateDraft({
           reviewId,
           workspaceId,
@@ -96,7 +140,7 @@ export async function POST(request: Request) {
 
       const { data: reply } = await admin
         .from("grm_review_replies")
-        .select("id, status")
+        .select("id, status, content")
         .eq("review_id", reviewId)
         .eq("workspace_id", workspaceId)
         .in("status", ["draft", "approved", "failed"])
@@ -110,6 +154,18 @@ export async function POST(request: Request) {
       }
 
       if (body.action === "approve") {
+        const denied = await reviewAllowed(reviewId, "approve");
+        if (denied) {
+          results.push({ reviewId, ok: false, error: denied });
+          continue;
+        }
+        await assertSafePublicReply({
+          workspaceId,
+          userId: user.id,
+          reviewId,
+          content: reply.content,
+          stage: "approve",
+        });
         if (reply.status !== "draft" && reply.status !== "failed") {
           results.push({ reviewId, ok: false, error: "Reply is not a draft" });
           continue;
@@ -132,13 +188,15 @@ export async function POST(request: Request) {
       }
 
       if (body.action === "publish") {
+        const denied = await reviewAllowed(reviewId, "publish");
+        if (denied) {
+          results.push({ reviewId, ok: false, error: denied });
+          continue;
+        }
         if (reply.status === "draft") {
-          if (!(await userCanApprove())) {
-            results.push({
-              reviewId,
-              ok: false,
-              error: "Only an owner or admin can approve replies.",
-            });
+          const approveDenied = await reviewAllowed(reviewId, "approve");
+          if (approveDenied) {
+            results.push({ reviewId, ok: false, error: approveDenied });
             continue;
           }
           await admin
@@ -155,6 +213,11 @@ export async function POST(request: Request) {
         }
 
         if (reply.status === "failed") {
+          const approveDenied = await reviewAllowed(reviewId, "approve");
+          if (approveDenied) {
+            results.push({ reviewId, ok: false, error: approveDenied });
+            continue;
+          }
           await admin
             .from("grm_review_replies")
             .update({
@@ -177,6 +240,11 @@ export async function POST(request: Request) {
       }
 
       if (body.action === "discard") {
+        const denied = await reviewAllowed(reviewId, "draft");
+        if (denied) {
+          results.push({ reviewId, ok: false, error: denied });
+          continue;
+        }
         if (reply.status === "published" || reply.status === "pending_publish") {
           results.push({ reviewId, ok: false, error: "Cannot discard a published reply" });
           continue;

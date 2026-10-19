@@ -1,15 +1,23 @@
 import { createAdminClient } from "@/lib/supabase/admin";
+import { rpcLocationReviewStats } from "@/lib/supabase/rpc";
 import { UNASSIGNED_CLIENT_MARKER } from "@/lib/services/unassigned-client";
 import { formatLocationOption, locationDisplayName } from "@/lib/ui/location-place";
 import {
   LocationInsightService,
   type LocationInsight,
 } from "@/lib/services/location-insights";
+import {
+  detectComplaintTheme,
+  detectReviewLanguage,
+  type InboxSort,
+} from "@/lib/review-inbox";
+import { replyActivityLabel } from "@/lib/reply-activity";
+import { groupIdsInScope } from "@/lib/hierarchy";
 
 export interface DashboardFilters {
   filter: string;
   rating?: number;
-  ratingBucket?: "negative" | "positive";
+  ratingBucket?: "negative" | "positive" | "escalation";
   q: string;
   clientId: string;
   locationId: string;
@@ -17,6 +25,14 @@ export interface DashboardFilters {
   since: string | null;
   until: string | null;
   hasComment?: boolean;
+  /** has = written text, none = rating only. */
+  text?: "has" | "none";
+  language?: string;
+  theme?: string;
+  /** A member id, or "unassigned". */
+  assignee?: string;
+  groupId?: string;
+  sort?: InboxSort;
   page: number;
   /** Profile directory search (name) */
   profileQ: string;
@@ -71,7 +87,14 @@ export interface DashboardReviewRow {
   reply_status: string;
   location_title: string;
   client_name: string | null;
+  group_name: string | null;
   location_id: string;
+  review_language: string | null;
+  complaint_theme: string | null;
+  assigned_to: string | null;
+  reopened_at: string | null;
+  notes: Array<{ id: string; body: string; createdAt: string; authorId: string }>;
+  activity: Array<{ at: string; label: string }>;
 }
 
 const INBOX_PAGE_SIZE = 30;
@@ -98,6 +121,7 @@ export async function getDashboardData(
   filters: DashboardFilters
 ) {
   const admin = createAdminClient();
+  await backfillReviewSignals(admin, workspaceId);
 
   const [
     { data: allClients },
@@ -105,6 +129,7 @@ export async function getDashboardData(
     { data: connections },
     locationStats,
     { data: unassignedClients },
+    { data: locationGroups },
   ] = await Promise.all([
     admin
       .from("grm_clients")
@@ -116,7 +141,7 @@ export async function getDashboardData(
     admin
       .from("grm_google_locations")
       .select(
-        `id, location_title, store_code, address_formatted, client_id, last_synced_at,
+        `id, location_title, store_code, address_formatted, client_id, group_id, last_synced_at,
          grm_clients(name, notes)`
       )
       .eq("workspace_id", workspaceId)
@@ -128,12 +153,17 @@ export async function getDashboardData(
       .eq("workspace_id", workspaceId)
       .eq("status", "active")
       .limit(1),
-    admin.rpc("grm_location_review_stats", { p_workspace_id: workspaceId }),
+    rpcLocationReviewStats(admin, workspaceId),
     admin
       .from("grm_clients")
       .select("id")
       .eq("workspace_id", workspaceId)
       .eq("notes", UNASSIGNED_CLIENT_MARKER),
+    admin
+      .from("grm_groups")
+      .select("id, name, parent_id")
+      .eq("workspace_id", workspaceId)
+      .order("name"),
   ]);
 
   if (locationStats.error) {
@@ -360,6 +390,20 @@ export async function getDashboardData(
       .filter((l) => l.client_id === filters.clientId)
       .map((l) => l.id);
   }
+  if (filters.groupId && /^[0-9a-f-]{36}$/i.test(filters.groupId)) {
+    const scope = new Set(
+      groupIdsInScope(
+        filters.groupId,
+        (locationGroups ?? []).map((group) => ({ id: group.id, parentId: group.parent_id }))
+      )
+    );
+    const inGroup = locations
+      .filter((location) => location.group_id && scope.has(location.group_id))
+      .map((location) => location.id);
+    locationFilterIds = locationFilterIds
+      ? locationFilterIds.filter((id) => inGroup.includes(id))
+      : inGroup;
+  }
 
   const emptyInbox = {
     kpis,
@@ -376,6 +420,7 @@ export async function getDashboardData(
     pageSize: INBOX_PAGE_SIZE,
     clients,
     locations: locationsForFilters,
+    groups: (locationGroups ?? []).map((group) => ({ id: group.id, name: group.name })),
     hasConnections: (connections?.length ?? 0) > 0,
   };
 
@@ -389,16 +434,15 @@ export async function getDashboardData(
       `id, google_review_id, star_rating, comment, reviewer_display_name,
        reviewer_is_anonymous, review_create_time, review_update_time,
        google_reply_comment, google_reply_update_time, reply_status, last_synced_at,
+       review_language, complaint_theme, assigned_to, reopened_at,
        location_id,
        grm_google_locations!inner(
-         id, location_title, store_code, address_formatted, client_id,
+         id, location_title, store_code, address_formatted, client_id, group_id,
          grm_clients(name)
        )`,
       { count: "exact" }
     )
-    .eq("workspace_id", workspaceId)
-    .order("review_create_time", { ascending: false })
-    .range(rangeFrom, rangeTo);
+    .eq("workspace_id", workspaceId);
 
   if (locationFilterIds) {
     reviewQuery = reviewQuery.in("location_id", locationFilterIds);
@@ -409,6 +453,9 @@ export async function getDashboardData(
   switch (filters.filter) {
     case "unanswered":
       reviewQuery = reviewQuery.eq("reply_status", "none");
+      break;
+    case "attention":
+      reviewQuery = reviewQuery.in("reply_status", ["none", "draft", "failed"]);
       break;
     case "answered":
       reviewQuery = reviewQuery.neq("reply_status", "none");
@@ -428,19 +475,38 @@ export async function getDashboardData(
     case "published":
       reviewQuery = reviewQuery.eq("reply_status", "published");
       break;
+    case "reopened":
+      reviewQuery = reviewQuery.not("reopened_at", "is", null);
+      break;
+    case "escalated":
+      reviewQuery = reviewQuery
+        .lte("star_rating", 3)
+        .in("reply_status", ["none", "draft", "failed"]);
+      break;
     default:
       break;
+  }
+
+  if (filters.language) reviewQuery = reviewQuery.eq("review_language", filters.language);
+  if (filters.theme) reviewQuery = reviewQuery.eq("complaint_theme", filters.theme);
+  if (filters.assignee === "unassigned") reviewQuery = reviewQuery.is("assigned_to", null);
+  else if (filters.assignee && /^[0-9a-f-]{36}$/i.test(filters.assignee)) {
+    reviewQuery = reviewQuery.eq("assigned_to", filters.assignee);
   }
 
   if (filters.rating !== undefined) {
     reviewQuery = reviewQuery.eq("star_rating", filters.rating);
   } else if (filters.ratingBucket === "negative") {
     reviewQuery = reviewQuery.lte("star_rating", 2);
+  } else if (filters.ratingBucket === "escalation") {
+    reviewQuery = reviewQuery.lte("star_rating", 3);
   } else if (filters.ratingBucket === "positive") {
     reviewQuery = reviewQuery.gte("star_rating", 4);
   }
 
-  if (filters.hasComment === true) {
+  if (filters.text === "none") {
+    reviewQuery = reviewQuery.or("comment.is.null,comment.eq.");
+  } else if (filters.text === "has" || filters.hasComment === true) {
     reviewQuery = reviewQuery.not("comment", "is", null).neq("comment", "");
   }
 
@@ -451,7 +517,25 @@ export async function getDashboardData(
     );
   }
 
-  const { data: rawReviews, count: totalReviewCount } = await reviewQuery;
+  if (filters.sort === "oldest") {
+    reviewQuery = reviewQuery.order("review_create_time", { ascending: true });
+  } else if (filters.sort === "highest") {
+    reviewQuery = reviewQuery
+      .order("star_rating", { ascending: false })
+      .order("review_create_time", { ascending: false });
+  } else if (filters.sort === "lowest") {
+    reviewQuery = reviewQuery
+      .order("star_rating", { ascending: true })
+      .order("review_create_time", { ascending: false });
+  } else {
+    reviewQuery = reviewQuery.order("review_create_time", { ascending: false });
+  }
+  reviewQuery = reviewQuery.range(rangeFrom, rangeTo);
+
+  const { data: rawReviews, count: totalReviewCount, error: reviewError } = await reviewQuery;
+  if (reviewError) {
+    throw new Error(`Failed to load reviews: ${reviewError.message}`);
+  }
 
   const reviews: DashboardReviewRow[] = (rawReviews ?? []).map((r) => {
     const loc = Array.isArray(r.grm_google_locations)
@@ -461,6 +545,7 @@ export async function getDashboardData(
       location_title?: string;
       store_code?: string | null;
       address_formatted?: string | null;
+      group_id?: string | null;
       grm_clients?: { name: string } | Array<{ name: string }> | null;
     } | null;
     const clientData = locTyped?.grm_clients;
@@ -488,9 +573,66 @@ export async function getDashboardData(
           })
         : "Unknown",
       client_name: clientName,
+      group_name: null,
       location_id: r.location_id,
+      review_language: r.review_language,
+      complaint_theme: r.complaint_theme,
+      assigned_to: r.assigned_to,
+      reopened_at: r.reopened_at,
+      notes: [],
+      activity: [],
     };
   });
+
+  const reviewIdsForMeta = reviews.map((review) => review.id);
+  const groupIds = [
+    ...new Set(
+      (rawReviews ?? [])
+        .map((review) => {
+          const loc = Array.isArray(review.grm_google_locations)
+            ? review.grm_google_locations[0]
+            : review.grm_google_locations;
+          return (loc as { group_id?: string | null } | null)?.group_id ?? null;
+        })
+        .filter((id): id is string => Boolean(id))
+    ),
+  ];
+  const [groupResult, noteResult] = await Promise.all([
+    groupIds.length
+      ? admin.from("grm_groups").select("id, name").in("id", groupIds)
+      : Promise.resolve({ data: [] as { id: string; name: string }[] }),
+    reviewIdsForMeta.length
+      ? admin
+          .from("grm_review_notes")
+          .select("id, review_id, author_id, body, created_at")
+          .eq("workspace_id", workspaceId)
+          .in("review_id", reviewIdsForMeta)
+          .order("created_at", { ascending: false })
+      : Promise.resolve({ data: [] as Array<{ id: string; review_id: string; author_id: string; body: string; created_at: string }> }),
+  ]);
+  const groupNames = new Map((groupResult.data ?? []).map((group) => [group.id, group.name]));
+  const notesByReview = new Map<string, DashboardReviewRow["notes"]>();
+  for (const note of noteResult.data ?? []) {
+    const list = notesByReview.get(note.review_id) ?? [];
+    list.push({
+      id: note.id,
+      body: note.body,
+      createdAt: note.created_at,
+      authorId: note.author_id,
+    });
+    notesByReview.set(note.review_id, list);
+  }
+  for (const review of reviews) {
+    const raw = (rawReviews ?? []).find((row) => row.id === review.id);
+    const loc = raw
+      ? Array.isArray(raw.grm_google_locations)
+        ? raw.grm_google_locations[0]
+        : raw.grm_google_locations
+      : null;
+    const groupId = (loc as { group_id?: string | null } | null)?.group_id;
+    review.group_name = groupId ? groupNames.get(groupId) ?? null : null;
+    review.notes = notesByReview.get(review.id) ?? [];
+  }
 
   const repliesMap: Record<
     string,
@@ -501,6 +643,7 @@ export async function getDashboardData(
       status: string;
       created_at: string;
       approved_at: string | null;
+      approved_by: string | null;
       published_at: string | null;
       last_error: string | null;
       failure_count: number;
@@ -512,7 +655,7 @@ export async function getDashboardData(
     const { data: repliesData } = await admin
       .from("grm_review_replies")
       .select(
-        "id, review_id, content, source, status, created_at, approved_at, published_at, last_error, failure_count"
+        "id, review_id, content, source, status, created_at, approved_at, approved_by, published_at, last_error, failure_count"
       )
       .eq("workspace_id", workspaceId)
       .in("review_id", reviewIds)
@@ -532,10 +675,31 @@ export async function getDashboardData(
         status: row.status as string,
         created_at: row.created_at,
         approved_at: row.approved_at,
+        approved_by: row.approved_by,
         published_at: row.published_at,
         last_error: row.last_error,
         failure_count: row.failure_count,
       };
+    }
+  }
+
+  const activityIds = [...reviewIds, ...Object.values(repliesMap).map((reply) => reply.id)];
+  if (activityIds.length) {
+    const { data: activityRows } = await admin
+      .from("grm_audit_logs")
+      .select("action, created_at, entity_id, metadata")
+      .eq("workspace_id", workspaceId)
+      .in("entity_id", activityIds)
+      .order("created_at", { ascending: false })
+      .limit(300);
+    const replyToReview = new Map(Object.entries(repliesMap).map(([reviewId, reply]) => [reply.id, reviewId]));
+    for (const row of activityRows ?? []) {
+      const label = replyActivityLabel(row.action);
+      if (!label || !row.entity_id) continue;
+      const reviewId = replyToReview.get(row.entity_id) ?? row.entity_id;
+      const review = reviews.find((item) => item.id === reviewId);
+      if (!review) continue;
+      review.activity.push({ at: row.created_at, label });
     }
   }
 
@@ -554,8 +718,41 @@ export async function getDashboardData(
     pageSize: INBOX_PAGE_SIZE,
     clients,
     locations: locationsForFilters,
+    groups: (locationGroups ?? []).map((group) => ({ id: group.id, name: group.name })),
     hasConnections: (connections?.length ?? 0) > 0,
   };
+}
+
+async function backfillReviewSignals(
+  admin: ReturnType<typeof createAdminClient>,
+  workspaceId: string
+) {
+  const { data, error } = await admin
+    .from("grm_reviews")
+    .select("id, comment, star_rating")
+    .eq("workspace_id", workspaceId)
+    .is("review_language", null)
+    .limit(80);
+  if (error || !data?.length) return;
+
+  // Small batches only. A wide Promise.all of updates can starve the inbox
+  // queries that follow and surface as "TypeError: fetch failed".
+  const batchSize = 8;
+  for (let i = 0; i < data.length; i += batchSize) {
+    const slice = data.slice(i, i + batchSize);
+    await Promise.all(
+      slice.map((row) =>
+        admin
+          .from("grm_reviews")
+          .update({
+            review_language: detectReviewLanguage(row.comment),
+            complaint_theme: detectComplaintTheme(row.comment, row.star_rating),
+          })
+          .eq("id", row.id)
+          .eq("workspace_id", workspaceId)
+      )
+    );
+  }
 }
 
 const LOCATION_ID = /^[0-9a-f-]{36}$/i;
@@ -575,12 +772,12 @@ export async function getLocationInsightView(workspaceId: string, locationId: st
       .eq("workspace_id", workspaceId)
       .eq("id", locationId)
       .maybeSingle(),
-    admin.rpc("grm_location_review_stats", { p_workspace_id: workspaceId }),
+    rpcLocationReviewStats(admin, workspaceId),
   ]);
 
   if (error) throw new Error("Failed to load location");
   if (!location) return null;
-  if (statsResult.error) throw new Error("Failed to load review stats");
+  if (statsResult.error) throw new Error(`Failed to load review stats: ${statsResult.error.message}`);
 
   const client = Array.isArray(location.grm_clients)
     ? location.grm_clients[0]

@@ -1,5 +1,7 @@
+import { redirect } from "next/navigation";
 import { createAdminClient } from "@/lib/supabase/admin";
-import { getActiveWorkspace } from "@/lib/services/session";
+import { getActiveRole, getActiveWorkspace } from "@/lib/services/session";
+import { canOpenPath } from "@/lib/shell";
 import { getWorkspaceRoster } from "@/lib/services/workspace";
 import { PageHeader } from "@/components/page-header";
 import { EmptyState } from "@/components/empty-state";
@@ -54,6 +56,10 @@ const ACTION_LABELS: Record<string, { label: string; tone: Tone }> = {
     label: "Generated a location insight",
     tone: "info",
   },
+  "scope_insight.generated": {
+    label: "Generated an organisation or group insight",
+    tone: "info",
+  },
   "review.sync_started": { label: "Started a review sync", tone: "info" },
   "review.synced": { label: "Synced reviews", tone: "good" },
   "review.sync_failed": { label: "Review sync failed", tone: "bad" },
@@ -83,6 +89,7 @@ const ENTITY_LABELS: Record<string, string> = {
   grm_google_connections: "Google account",
   grm_google_locations: "Location",
   grm_location_insights: "Insight",
+  grm_scope_insights: "Org / group insight",
   grm_review_ai_drafts: "AI draft",
   grm_review_replies: "Reply",
   grm_reviews: "Review",
@@ -143,6 +150,9 @@ interface AuditPageProps {
 }
 
 export default async function AuditPage({ searchParams }: AuditPageProps) {
+  const role = await getActiveRole();
+  if (!canOpenPath("/audit", role)) redirect("/overview");
+
   const [params, { workspaceId }] = await Promise.all([
     searchParams,
     getActiveWorkspace(),

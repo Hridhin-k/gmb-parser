@@ -99,13 +99,22 @@ export class GoogleReviewService {
   }
 
   /**
-   * Publishes a reply to a review.
+   * Reads one review, including any reply Google already stored.
+   * `reviewName` is the full resource name, e.g. "accounts/X/locations/Y/reviews/Z".
+   */
+  static async getReview(accessToken: string, reviewName: string): Promise<GoogleReview> {
+    return reviewApiFetch<GoogleReview>(`${MY_BUSINESS_API}/${reviewName}`, accessToken);
+  }
+
+  /**
+   * Publishes a reply to a review. Returns the reply object Google sent back.
+   * An empty body is not treated as success.
    */
   static async replyToReview(
     accessToken: string,
     reviewName: string,
     comment: string
-  ): Promise<void> {
+  ): Promise<{ comment: string; updateTime: string | null }> {
     let response: Response;
     try {
       response = await fetch(`${MY_BUSINESS_API}/${reviewName}/reply`, {
@@ -125,14 +134,29 @@ export class GoogleReviewService {
       );
     }
 
+    const body = await response.text().catch(() => "");
     if (!response.ok) {
-      const body = await response.text().catch(() => "");
       throw new GoogleApiError(
         `Failed to publish reply: ${response.status}`,
         response.status,
         { reviewName, body }
       );
     }
+
+    let parsed: { comment?: string; updateTime?: string } = {};
+    try {
+      parsed = body ? (JSON.parse(body) as { comment?: string; updateTime?: string }) : {};
+    } catch {
+      parsed = {};
+    }
+    if (!parsed.comment?.trim()) {
+      throw new GoogleApiError(
+        "Google did not return the reply it stored.",
+        undefined,
+        { reviewName, body }
+      );
+    }
+    return { comment: parsed.comment, updateTime: parsed.updateTime ?? null };
   }
 
   /**

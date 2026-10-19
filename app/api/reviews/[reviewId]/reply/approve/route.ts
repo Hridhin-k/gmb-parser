@@ -4,7 +4,10 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { AuditService } from "@/lib/services/audit";
 import { parseBody, validateId, approveReplyBodySchema } from "@/lib/validation";
 import { toUserMessage, toStatusCode, AppError } from "@/lib/errors";
-import { assertCanApproveReplies, ensurePersonalWorkspace } from "@/lib/services/workspace";
+import { ensurePersonalWorkspace } from "@/lib/services/workspace";
+import { assertReviewAction } from "@/lib/services/access";
+import { assertSafePublicReply, replyContentHash } from "@/lib/services/reply-checks";
+import { negativeReviewNeedsApproval } from "@/lib/reply-guardrails";
 
 interface RouteParams {
   params: Promise<{ reviewId: string }>;
@@ -38,7 +41,12 @@ export async function POST(request: Request, { params }: RouteParams) {
   const membership = await ensurePersonalWorkspace(user);
 
   try {
-    await assertCanApproveReplies(user.id, membership.workspace_id);
+    await assertReviewAction({
+      userId: user.id,
+      workspaceId: membership.workspace_id,
+      reviewId,
+      action: "approve",
+    });
   } catch (error) {
     if (error instanceof AppError) {
       return NextResponse.json({ error: error.message }, { status: error.statusCode });
@@ -48,7 +56,7 @@ export async function POST(request: Request, { params }: RouteParams) {
 
   const { data: reply } = await admin
     .from("grm_review_replies")
-    .select("id, status")
+    .select("id, status, content, ai_draft_id, grm_reviews!inner(star_rating)")
     .eq("id", body.replyId)
     .eq("review_id", reviewId)
     .eq("workspace_id", membership.workspace_id)
@@ -56,19 +64,36 @@ export async function POST(request: Request, { params }: RouteParams) {
 
   if (!reply) return NextResponse.json({ error: "Reply not found" }, { status: 404 });
 
-  if (reply.status !== "draft") {
+  if (reply.status !== "draft" && reply.status !== "failed") {
     return NextResponse.json(
-      { error: "Only draft replies can be approved" },
+      { error: "Only a draft can be approved" },
       { status: 400 }
     );
   }
+
+  try {
+    await assertSafePublicReply({
+      workspaceId: membership.workspace_id,
+      userId: user.id,
+      reviewId,
+      content: reply.content,
+      stage: "approve",
+    });
+  } catch (error) {
+    const status = error instanceof AppError ? error.statusCode : 400;
+    return NextResponse.json({ error: toUserMessage(error) }, { status });
+  }
+
+  const approvedAt = new Date().toISOString();
+  const reviewRow = Array.isArray(reply.grm_reviews) ? reply.grm_reviews[0] : reply.grm_reviews;
 
   await admin
     .from("grm_review_replies")
     .update({
       status: "approved",
-      approved_at: new Date().toISOString(),
+      approved_at: approvedAt,
       approved_by: user.id,
+      last_error: null,
     })
     .eq("id", body.replyId);
 
@@ -82,7 +107,16 @@ export async function POST(request: Request, { params }: RouteParams) {
     userId: user.id,
     action: "reply.approved",
     entityType: "grm_review_replies",
-    entityId: body.replyId,
+    entityId: reviewId,
+    metadata: {
+      replyId: body.replyId,
+      decision: "approved",
+      approvedAt,
+      approverId: user.id,
+      contentHash: replyContentHash(reply.content),
+      draftId: reply.ai_draft_id,
+      humanReview: negativeReviewNeedsApproval(reviewRow?.star_rating ?? 5),
+    },
   });
 
   return NextResponse.json({ success: true });

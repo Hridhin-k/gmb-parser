@@ -12,6 +12,7 @@ let mockInsertError: unknown = null;
 let mockDeleteError: unknown = null;
 
 const mockSingle = vi.fn(() => ({ data: mockSelectData, error: mockSelectError }));
+const mockMaybeSingle = vi.fn(() => ({ data: null, error: null }));
 const mockInFn = vi.fn().mockReturnThis();
 const mockSelect = vi.fn().mockReturnThis();
 const mockInsert = vi.fn().mockReturnThis();
@@ -30,8 +31,17 @@ const mockFrom = vi.fn().mockReturnValue({
 });
 
 // Chain returns for fluent API
-mockSelect.mockReturnValue({ eq: mockEq, single: mockSingle });
-mockEq.mockReturnValue({ eq: mockEq, single: mockSingle, in: mockInFn });
+const mockOrder = vi.fn(() => ({ data: [], error: null }));
+mockSelect.mockReturnValue({ eq: mockEq, single: mockSingle, maybeSingle: mockMaybeSingle, order: mockOrder });
+mockEq.mockReturnValue({
+  eq: mockEq,
+  single: mockSingle,
+  maybeSingle: mockMaybeSingle,
+  in: mockInFn,
+  order: mockOrder,
+  data: [{ id: "loc-1", location_title: "Main Street Store", client_id: null, group_id: null }],
+  error: null,
+});
 mockInsert.mockReturnValue({
   select: vi.fn().mockReturnValue({
     single: vi.fn(() => ({ data: mockInsertData, error: mockInsertError })),
@@ -170,7 +180,7 @@ describe("AIReviewService.generateDraft", () => {
   it("calls Gemini with the correct URL and handles success", async () => {
     // Mock review fetch
     const reviewData = {
-      id: "rev-1",
+      id: "rev-1", location_id: "loc-1",
       star_rating: 5,
       comment: "Great service!",
       reviewer_display_name: "John",
@@ -234,7 +244,7 @@ describe("AIReviewService.generateDraft", () => {
 
   it("handles Gemini 429 quota error", async () => {
     const reviewData = {
-      id: "rev-1",
+      id: "rev-1", location_id: "loc-1",
       star_rating: 3,
       comment: "OK service",
       reviewer_display_name: "Jane",
@@ -264,7 +274,7 @@ describe("AIReviewService.generateDraft", () => {
 
   it("handles empty Gemini response", async () => {
     const reviewData = {
-      id: "rev-1",
+      id: "rev-1", location_id: "loc-1",
       star_rating: 4,
       comment: "Nice",
       reviewer_display_name: "Bob",
@@ -299,7 +309,7 @@ describe("AIReviewService.generateDraft", () => {
 describe("AIReviewService.generateDraft Gemini output handling", () => {
   const originalEnv = process.env;
   const reviewData = {
-    id: "rev-1",
+    id: "rev-1", location_id: "loc-1",
     star_rating: 2,
     comment: "Waited 40 minutes at billing.",
     reviewer_display_name: "Asha",
@@ -474,6 +484,18 @@ describe("buildReplyPrompt", () => {
     expect(prompt).toContain("THIS LOCATION'S REPLY STYLE");
     expect(prompt).toContain("Tone: Warm and local");
     expect(prompt).toContain("- Promising discounts");
+  });
+
+  it("includes the workspace reply tone when one is saved", async () => {
+    const { buildReplyPrompt } = await import("@/lib/services/ai-review");
+    const prompt = buildReplyPrompt({
+      ...base,
+      comment: "Nice",
+      tone: { voice: "brief", note: "Never mention prices." },
+    });
+    expect(prompt).toContain("WORKSPACE REPLY TONE");
+    expect(prompt).toContain("as few words");
+    expect(prompt).toContain("Never mention prices.");
   });
 });
 

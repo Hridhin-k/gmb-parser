@@ -3,15 +3,23 @@ import { z } from "zod";
 import { createClient } from "@/lib/supabase/server";
 import { AppError, toStatusCode, toUserMessage } from "@/lib/errors";
 import { parseBody } from "@/lib/validation";
+import { ASSIGNABLE_ROLES } from "@/lib/access";
 import {
   changeMemberRole,
   ensurePersonalWorkspace,
   removeMember,
+  updateMemberAccess,
 } from "@/lib/services/workspace";
 
 const changeRoleSchema = z.object({
   userId: z.string().uuid("That member is invalid."),
-  role: z.enum(["admin", "member"]),
+  role: z.enum(ASSIGNABLE_ROLES).optional(),
+  clientId: z.string().uuid().nullable().optional(),
+  groupId: z.string().uuid().nullable().optional(),
+  locationId: z.string().uuid().nullable().optional(),
+  accessEnabled: z.boolean().optional(),
+  alertEmail: z.boolean().optional(),
+  alertInApp: z.boolean().optional(),
 });
 
 const removeSchema = z.object({
@@ -49,12 +57,33 @@ export async function PATCH(request: Request) {
 
   try {
     const membership = await ensurePersonalWorkspace(user);
-    await changeMemberRole({
-      workspaceId: membership.workspace_id,
-      actorId: user.id,
-      targetUserId: body.userId,
-      role: body.role,
-    });
+    if (body.role) {
+      await changeMemberRole({
+        workspaceId: membership.workspace_id,
+        actorId: user.id,
+        targetUserId: body.userId,
+        role: body.role,
+      });
+    }
+    const scopeFields = ["clientId", "groupId", "locationId"] as const;
+    const hasScope = scopeFields.some((key) => key in body);
+    if (hasScope || body.accessEnabled !== undefined || body.alertEmail !== undefined || body.alertInApp !== undefined) {
+      await updateMemberAccess({
+        workspaceId: membership.workspace_id,
+        actorId: user.id,
+        targetUserId: body.userId,
+        scope: hasScope
+          ? {
+              clientId: body.clientId ?? null,
+              groupId: body.groupId ?? null,
+              locationId: body.locationId ?? null,
+            }
+          : undefined,
+        accessEnabled: body.accessEnabled,
+        alertEmail: body.alertEmail,
+        alertInApp: body.alertInApp,
+      });
+    }
     return NextResponse.json({ success: true });
   } catch (error) {
     return errorResponse(error, "Could not change the role.");

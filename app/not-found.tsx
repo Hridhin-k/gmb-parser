@@ -12,9 +12,9 @@ export default function NotFound() {
         <p className="mt-1 text-[13px] text-slate">
           The page you&apos;re looking for doesn&apos;t exist or has been moved.
         </p>
-        <Link href="/dashboard">
+        <Link href="/overview">
           <Button variant="outline" size="sm" className="mt-5">
-            Back to Dashboard
+            Back to Overview
           </Button>
         </Link>
       </div>

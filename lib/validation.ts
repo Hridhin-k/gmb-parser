@@ -151,8 +151,9 @@ export const publishReplyBodySchema = z.object({
 
 /** POST /api/reviews/bulk */
 export const bulkReviewsBodySchema = z.object({
-  action: z.enum(["generate", "approve", "publish", "discard"]),
+  action: z.enum(["generate", "approve", "publish", "discard", "assign"]),
   reviewIds: z.array(uuidSchema).min(1).max(50),
+  assigneeId: z.string().uuid().nullable().optional(),
 });
 
 /** POST /api/reviews/sync */

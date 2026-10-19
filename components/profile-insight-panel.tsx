@@ -85,7 +85,7 @@ function InsightCard({
   );
 }
 
-function AnalysisGrid({ analysis }: { analysis: ProfileAnalysis }) {
+export function AnalysisGrid({ analysis }: { analysis: ProfileAnalysis }) {
   const { branding, staff, customerFeedback, operations, suggestedFeatures, replyPlaybook } =
     analysis;
 

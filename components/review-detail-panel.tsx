@@ -18,6 +18,11 @@ import {
 import { cn } from "@/lib/utils";
 import { ActivityStatus } from "@/components/activity-status";
 import { Spinner } from "@/components/ui/spinner";
+import { SelectField } from "@/components/ui/select-field";
+import { Input } from "@/components/ui/input";
+import { languageLabel, themeLabel, workflowState } from "@/lib/review-inbox";
+import { splitGoogleTranslation } from "@/lib/review-text";
+import { REPLY_LANGUAGES, REPLY_TEMPLATES } from "@/lib/reply-adjustments";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -35,6 +40,13 @@ interface ReviewForPanel {
   reply_status: string;
   location_title: string;
   client_name: string | null;
+  group_name?: string | null;
+  review_language?: string | null;
+  complaint_theme?: string | null;
+  assigned_to?: string | null;
+  reopened_at?: string | null;
+  notes?: Array<{ id: string; body: string; createdAt: string; authorId: string }>;
+  activity?: Array<{ at: string; label: string }>;
 }
 
 interface ReplyForPanel {
@@ -44,6 +56,7 @@ interface ReplyForPanel {
   status: string;
   created_at: string;
   approved_at: string | null;
+  approved_by?: string | null;
   published_at: string | null;
   last_error: string | null;
   failure_count: number;
@@ -53,6 +66,7 @@ interface ReviewDetailPanelProps {
   review: ReviewForPanel;
   reply: ReplyForPanel | null;
   canApprove: boolean;
+  members?: Array<{ id: string; email: string }>;
   onClose: () => void;
 }
 
@@ -114,6 +128,7 @@ export function ReviewDetailPanel({
   review,
   reply,
   canApprove,
+  members = [],
   onClose,
 }: ReviewDetailPanelProps) {
   const router = useRouter();
@@ -122,6 +137,17 @@ export function ReviewDetailPanel({
   const [isCreating, setIsCreating] = useState(false);
   const [loading, setLoading] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [assignee, setAssignee] = useState(review.assigned_to ?? "");
+  const [note, setNote] = useState("");
+  const [replyLanguage, setReplyLanguage] = useState("");
+  const [templateId, setTemplateId] = useState("");
+  const reviewText = review.comment ? splitGoogleTranslation(review.comment) : null;
+  const workflow = workflowState({
+    replyStatus: review.reply_status,
+    starRating: review.star_rating,
+    reopenedAt: review.reopened_at ?? null,
+    hasGoogleReply: Boolean(review.google_reply_comment),
+  });
 
   const reviewerName = review.reviewer_is_anonymous
     ? "Anonymous"
@@ -240,11 +266,24 @@ export function ReviewDetailPanel({
     }
   }
 
-  async function handleGenerateAI() {
+  function blockRewrite(): boolean {
+    if (isEditing) {
+      setError("Save or cancel your edits before replacing the draft.");
+      return true;
+    }
+    return false;
+  }
+
+  async function handleGenerateAI(body?: object) {
+    if (reply && blockRewrite()) return;
     setError(null);
     setLoading("generate");
     try {
-      await apiCall(`/api/reviews/${review.id}/generate`, "POST");
+      await apiCall(
+        `/api/reviews/${review.id}/generate`,
+        "POST",
+        body ?? (reply ? { adjustment: "regenerate", replaceEdited: true } : undefined)
+      );
       toast.success("AI draft ready", { description: "Read it and edit before approving." });
       router.refresh();
     } catch (e) {
@@ -288,7 +327,9 @@ export function ReviewDetailPanel({
               <span className="text-[#c9c7c3]"> · </span>
             )}
             {review.client_name}
+            {review.group_name ? ` · ${review.group_name}` : ""}
           </p>
+          <p className="text-xs text-slate">{workflow.label}</p>
         </div>
         <Button
           type="button"
@@ -313,15 +354,138 @@ export function ReviewDetailPanel({
         </div>
 
         {/* Review text */}
-        {review.comment ? (
-          <p className="text-base font-light leading-relaxed text-graphite">
-            {review.comment}
-          </p>
+        {reviewText ? (
+          <div className="space-y-2">
+            <p className="text-base font-light leading-relaxed text-graphite">{reviewText.original}</p>
+            {reviewText.translation ? (
+              <p className="text-sm leading-relaxed text-slate">
+                <span className="font-medium text-graphite">Translation. </span>
+                {reviewText.translation}
+              </p>
+            ) : null}
+          </div>
         ) : (
           <p className="text-sm italic text-slate">
             Rating only — no written comment.
           </p>
         )}
+        <p className="text-xs text-slate">
+          {[languageLabel(review.review_language), themeLabel(review.complaint_theme)]
+            .filter(Boolean)
+            .join(" · ") || "No language or complaint theme on this review."}
+        </p>
+        <div className="flex flex-col gap-2 sm:flex-row sm:items-end">
+          <SelectField
+            label="Assigned to"
+            value={assignee}
+            options={[
+              { value: "", label: "Unassigned" },
+              ...members.map((member) => ({ value: member.id, label: member.email })),
+            ]}
+            onValueChange={setAssignee}
+            className="sm:w-64"
+          />
+          <Button
+            type="button"
+            size="sm"
+            variant="outline"
+            disabled={loading !== null || assignee === (review.assigned_to ?? "")}
+            onClick={async () => {
+              setError(null);
+              setLoading("assign");
+              try {
+                await apiCall(`/api/reviews/${review.id}/workflow`, "POST", {
+                  action: "assign",
+                  userId: assignee || null,
+                });
+                toast.success(assignee ? "Review assigned" : "Assignment cleared");
+                router.refresh();
+              } catch (caught) {
+                setError(caught instanceof Error ? caught.message : "Could not assign the review.");
+              } finally {
+                setLoading(null);
+              }
+            }}
+          >
+            {loading === "assign" ? "Saving…" : "Save assignment"}
+          </Button>
+        </div>
+        <div className="space-y-2">
+          <p className="text-xs font-semibold uppercase tracking-[0.08em] text-slate">Internal notes</p>
+          {(review.notes ?? []).length === 0 ? (
+            <p className="text-sm text-slate">No notes yet. Notes stay in GRM and are not posted to Google.</p>
+          ) : (
+            <ul className="space-y-2">
+              {(review.notes ?? []).map((item) => (
+                <li key={item.id} className="rounded-lg border border-silver px-3 py-2">
+                  <p className="text-sm text-graphite">{item.body}</p>
+                  <p className="mt-1 text-xs text-slate">
+                    {members.find((member) => member.id === item.authorId)?.email ?? "Teammate"}
+                    {" · "}
+                    {formatDate(item.createdAt)}
+                  </p>
+                </li>
+              ))}
+            </ul>
+          )}
+          <form
+            className="flex flex-col gap-2 sm:flex-row"
+            onSubmit={async (event) => {
+              event.preventDefault();
+              if (!note.trim()) return;
+              setError(null);
+              setLoading("note");
+              try {
+                await apiCall(`/api/reviews/${review.id}/workflow`, "POST", {
+                  action: "note",
+                  body: note.trim(),
+                });
+                setNote("");
+                toast.success("Note saved");
+                router.refresh();
+              } catch (caught) {
+                setError(caught instanceof Error ? caught.message : "Could not save the note.");
+              } finally {
+                setLoading(null);
+              }
+            }}
+          >
+            <Input
+              value={note}
+              onChange={(event) => setNote(event.target.value)}
+              maxLength={2000}
+              placeholder="Add an internal note"
+              aria-label="Internal note"
+            />
+            <Button type="submit" size="sm" variant="outline" disabled={loading !== null || !note.trim()}>
+              {loading === "note" ? "Saving…" : "Add note"}
+            </Button>
+          </form>
+        </div>
+        <div className="space-y-2">
+          <p className="text-xs font-semibold uppercase tracking-[0.08em] text-slate">Activity</p>
+          <ul className="space-y-1 text-sm text-slate">
+            {[
+              { at: review.review_create_time, label: "Review received" },
+              review.review_update_time && review.review_update_time !== review.review_create_time
+                ? { at: review.review_update_time, label: "Review edited on Google" }
+                : null,
+              review.reopened_at ? { at: review.reopened_at, label: "Reopened after a published reply" } : null,
+              reply ? { at: reply.created_at, label: "Draft saved" } : null,
+              reply?.approved_at ? { at: reply.approved_at, label: "Draft approved" } : null,
+              reply?.published_at ? { at: reply.published_at, label: "Reply published" } : null,
+              ...(review.activity ?? []),
+              ...(review.notes ?? []).map((item) => ({ at: item.createdAt, label: "Internal note added" })),
+            ]
+              .filter((item): item is { at: string; label: string } => Boolean(item))
+              .sort((a, b) => Date.parse(a.at) - Date.parse(b.at))
+              .map((item) => (
+                <li key={`${item.label}-${item.at}`}>
+                  {formatDate(item.at)} · {item.label}
+                </li>
+              ))}
+          </ul>
+        </div>
 
         {/* Existing Google reply */}
         {review.google_reply_comment && (
@@ -532,9 +696,22 @@ export function ReviewDetailPanel({
                 {reply.source === "ai" && reply.status !== "published" && (
                   <p className="mb-1.5 flex items-center gap-1 text-[10px] font-medium text-purple-600">
                     <Sparkles className="h-2.5 w-2.5" aria-hidden />
-                    AI-generated draft — review before publishing
+                    Generated reply. This is not a translation of the review.
                   </p>
                 )}
+                {review.star_rating <= 3 && reply.status !== "published" ? (
+                  <p className="mb-1.5 text-[11px] text-slate">
+                    This 1–3 star review stays unpublished until an owner or admin approves it.
+                  </p>
+                ) : null}
+                {reply.approved_at && reply.status !== "draft" ? (
+                  <p className="mb-1.5 text-[11px] text-slate">
+                    Approved {formatDate(reply.approved_at)}
+                    {reply.approved_by
+                      ? ` by ${members.find((member) => member.id === reply.approved_by)?.email ?? "an owner or admin"}`
+                      : ""}
+                  </p>
+                ) : null}
                 {reply.status === "published" && (
                   <p className="mb-1.5 flex items-center gap-1 text-[10px] font-medium text-green-600">
                     <CheckCircle2 className="h-2.5 w-2.5" aria-hidden />
@@ -588,9 +765,31 @@ export function ReviewDetailPanel({
                         </Button>
                       </>
                     ) : (
-                      <p className="w-full text-xs text-slate">
-                        An owner or admin needs to approve this draft before it can be published.
-                      </p>
+                      <>
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          disabled={loading !== null}
+                          onClick={async () => {
+                            setError(null);
+                            setLoading("submit");
+                            try {
+                              await apiCall(`/api/reviews/${review.id}/reply/submit`, "POST", { replyId: reply.id });
+                              toast.success("Submitted for approval");
+                              router.refresh();
+                            } catch (caught) {
+                              setError(caught instanceof Error ? caught.message : "Could not submit the draft.");
+                            } finally {
+                              setLoading(null);
+                            }
+                          }}
+                        >
+                          {loading === "submit" ? "Submitting…" : "Submit for approval"}
+                        </Button>
+                        <p className="w-full text-xs text-slate">
+                          An owner or admin needs to approve this draft before it can be published.
+                        </p>
+                      </>
                     )}
                     <Button
                       size="sm"
@@ -619,6 +818,68 @@ export function ReviewDetailPanel({
                       )}
                       {loading === "generate" ? "Gemini is writing…" : "Regenerate"}
                     </Button>
+                    {(["shorter", "warmer", "formal"] as const).map((kind) => (
+                      <Button
+                        key={kind}
+                        size="sm"
+                        variant="outline"
+                        disabled={loading !== null || isEditing}
+                        onClick={() => handleGenerateAI({ adjustment: kind, replaceEdited: true })}
+                      >
+                        {kind === "shorter" ? "Shorter" : kind === "warmer" ? "Warmer" : "More formal"}
+                      </Button>
+                    ))}
+                    <SelectField
+                      label="Reply language"
+                      value={replyLanguage}
+                      options={[{ value: "", label: "Change language" }, ...REPLY_LANGUAGES.map((item) => ({ value: item.id, label: item.label }))]}
+                      onValueChange={setReplyLanguage}
+                      disabled={loading !== null || isEditing}
+                      className="w-40"
+                      size="sm"
+                    />
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      disabled={loading !== null || isEditing || !replyLanguage}
+                      onClick={() => handleGenerateAI({ language: replyLanguage, replaceEdited: true })}
+                    >
+                      Rewrite
+                    </Button>
+                    <SelectField
+                      label="Template"
+                      value={templateId}
+                      options={[{ value: "", label: "Apply template" }, ...REPLY_TEMPLATES.map((item) => ({ value: item.id, label: item.label }))]}
+                      onValueChange={setTemplateId}
+                      disabled={loading !== null || isEditing}
+                      className="w-48"
+                      size="sm"
+                    />
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      disabled={loading !== null || isEditing || !templateId}
+                      onClick={async () => {
+                        if (blockRewrite()) return;
+                        setError(null);
+                        setLoading("template");
+                        try {
+                          await apiCall(`/api/reviews/${review.id}/reply/template`, "POST", {
+                            templateId,
+                            replyId: reply.id,
+                            replaceEdited: true,
+                          });
+                          toast.success("Template applied");
+                          router.refresh();
+                        } catch (caught) {
+                          setError(caught instanceof Error ? caught.message : "Could not apply the template.");
+                        } finally {
+                          setLoading(null);
+                        }
+                      }}
+                    >
+                      Apply
+                    </Button>
                     <Button
                       size="sm"
                       variant="ghost"
@@ -633,6 +894,7 @@ export function ReviewDetailPanel({
                 )}
                 {reply.status === "approved" && (
                   <div className="mt-3 flex flex-wrap gap-2">
+                    {canApprove ? (
                     <Button
                       size="sm"
                       onClick={handlePublish}
@@ -646,6 +908,9 @@ export function ReviewDetailPanel({
                       )}
                       {loading === "publish" ? "Posting to Google…" : "Publish to Google"}
                     </Button>
+                    ) : (
+                      <p className="w-full text-xs text-slate">An owner or admin publishes this reply.</p>
+                    )}
                     <Button
                       size="sm"
                       variant="outline"
@@ -671,7 +936,14 @@ export function ReviewDetailPanel({
                     </Button>
                   </div>
                 )}
-                {reply.status === "failed" && (
+                {reply.status === "pending_publish" && canApprove ? (
+                  <div className="mt-3">
+                    <Button size="sm" variant="outline" onClick={handlePublish} disabled={loading !== null}>
+                      {loading === "publish" ? "Checking Google…" : "Check whether Google has this reply"}
+                    </Button>
+                  </div>
+                ) : null}
+                {reply.status === "failed" && canApprove ? (
                   <div className="mt-3 flex flex-wrap gap-2">
                     <Button
                       size="sm"
@@ -700,7 +972,7 @@ export function ReviewDetailPanel({
                       Edit
                     </Button>
                   </div>
-                )}
+                ) : null}
               </div>
             )}
           </div>

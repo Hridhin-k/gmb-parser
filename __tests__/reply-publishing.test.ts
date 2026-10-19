@@ -14,6 +14,7 @@ function makeChain(overrides?: Record<string, unknown>) {
     select: vi.fn().mockReturnThis(),
     update: vi.fn().mockReturnThis(),
     delete: vi.fn().mockReturnThis(),
+    upsert: vi.fn(() => ({ error: null })),
     eq: vi.fn().mockReturnThis(),
     in: vi.fn().mockReturnThis(),
     single: vi.fn(() => ({ data: mockReplyData, error: mockReplyError })),
@@ -108,7 +109,10 @@ function resetMocks() {
   mockReplyData = null;
   mockReplyError = null;
   mockGetValidAccessToken = vi.fn().mockResolvedValue("valid-access-token");
-  mockReplyToReview = vi.fn().mockResolvedValue(undefined);
+  mockReplyToReview = vi.fn().mockResolvedValue({
+    comment: "Thank you for your feedback!",
+    updateTime: "2026-01-01T00:00:00.000Z",
+  });
   mockDeleteReply = vi.fn().mockResolvedValue(undefined);
 }
 
@@ -273,7 +277,7 @@ describe("ReplyPublishingService.publishReply", () => {
     const { ReplyPublishingService } = await import("@/lib/services/reply-publishing");
     await expect(
       ReplyPublishingService.publishReply("reply-1", "review-1", "ws-1", "user-1")
-    ).rejects.toMatchObject({ code: "GOOGLE_UNAVAILABLE" });
+    ).rejects.toMatchObject({ code: "PUBLISH_UNCERTAIN" });
   });
 
   it("maps 403 Google error to GOOGLE_FORBIDDEN with retryable=false", async () => {

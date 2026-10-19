@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { ReviewSyncService } from "@/lib/services/review-sync";
+import { EscalationService } from "@/lib/services/escalations";
 import { logger } from "@/lib/logger";
 
 /**
@@ -51,6 +52,7 @@ export async function GET(request: Request) {
       succeeded += result.locationsSucceeded;
       failed += result.locationsFailed;
       updated += result.totalReviewsSynced;
+      await EscalationService.runScheduled(ws.workspaceId);
     } catch (err) {
       failed += 1;
       logger.error("cron.reviews_sync.workspace_failed", {

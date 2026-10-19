@@ -1,9 +1,12 @@
 import { createAdminClient } from "@/lib/supabase/admin";
+import { inviteExpiresAt, isInviteExpired } from "@/lib/onboarding";
 import { AppError, AuthorizationError, ValidationError } from "@/lib/errors";
 import { AuditService } from "@/lib/services/audit";
 import { logger } from "@/lib/logger";
 import type { GrmMemberRole } from "@/lib/types";
+import { allows, canAssignRole, roleScopeError, type ScopeIds } from "@/lib/access";
 import { canManageMember } from "@/lib/roles";
+import { assertScopeAssignment, getMemberAccess } from "@/lib/services/access";
 
 const WORKSPACE_SLUG = /^[a-z0-9][a-z0-9-]{0,61}[a-z0-9]$/;
 
@@ -22,6 +25,13 @@ export interface WorkspaceRosterMember {
   email: string;
   role: GrmMemberRole;
   joinedAt: string;
+  accessEnabled: boolean;
+  scopeLabel: string;
+  scope: ScopeIds;
+  alertEmail: boolean;
+  alertInApp: boolean;
+  twoStep: "on" | "off" | "unavailable";
+  lastActive: string | null;
 }
 
 export interface WorkspaceRosterInvite {
@@ -29,6 +39,9 @@ export interface WorkspaceRosterInvite {
   email: string;
   role: GrmMemberRole;
   createdAt: string;
+  expiresAt: string | null;
+  scope: ScopeIds;
+  scopeLabel: string;
 }
 
 export interface AccessibleWorkspace {
@@ -131,7 +144,7 @@ async function acceptPendingInvites(user: {
   const admin = createAdminClient();
   const { data: invites, error } = await admin
     .from("grm_workspace_invites")
-    .select("id, workspace_id, role, invited_by")
+    .select("id, workspace_id, role, invited_by, expires_at, scope_client_id, scope_group_id, scope_location_id")
     .eq("email", email)
     .eq("status", "pending")
     .order("created_at", { ascending: true });
@@ -148,12 +161,26 @@ async function acceptPendingInvites(user: {
   const accepted: string[] = [];
 
   for (const invite of invites) {
+    if (isInviteExpired(invite.expires_at)) {
+      await admin
+        .from("grm_workspace_invites")
+        .update({ status: "expired" })
+        .eq("id", invite.id)
+        .eq("status", "pending");
+      continue;
+    }
+
     const { error: memberError } = await admin.from("grm_workspace_members").insert({
       workspace_id: invite.workspace_id,
       user_id: user.id,
       role: invite.role,
       invited_by: invite.invited_by,
       active: false,
+      access_enabled: true,
+      scope_client_id: invite.scope_client_id,
+      scope_group_id: invite.scope_group_id,
+      scope_location_id: invite.scope_location_id,
+      alert_in_app: true,
     });
 
     if (memberError && memberError.code !== "23505" && !isSchemaNotReady(memberError)) {
@@ -458,12 +485,12 @@ async function findUserIdByEmail(email: string): Promise<string | null> {
 async function requireManager(
   userId: string,
   workspaceId: string,
-  deniedMessage = "Only an owner or admin can invite people."
+  deniedMessage = "Only an organization admin can invite people."
 ): Promise<GrmMemberRole> {
   const admin = createAdminClient();
   const { data, error } = await admin
     .from("grm_workspace_members")
-    .select("role")
+    .select("role, access_enabled")
     .eq("user_id", userId)
     .eq("workspace_id", workspaceId)
     .maybeSingle();
@@ -473,7 +500,11 @@ async function requireManager(
       dbError: error.message,
     });
   }
-  if (!data || (data.role !== "owner" && data.role !== "admin")) {
+  if (!data) throw new AuthorizationError(deniedMessage);
+  if (!data.access_enabled) {
+    throw new AuthorizationError("Your access to this organization is turned off.");
+  }
+  if (!allows(data.role, "manage_people") && data.role !== "admin") {
     throw new AuthorizationError(deniedMessage);
   }
   return data.role;
@@ -483,7 +514,7 @@ async function loadTargetMember(workspaceId: string, targetUserId: string) {
   const admin = createAdminClient();
   const { data, error } = await admin
     .from("grm_workspace_members")
-    .select("user_id, role")
+    .select("user_id, role, scope_client_id, scope_group_id, scope_location_id")
     .eq("workspace_id", workspaceId)
     .eq("user_id", targetUserId)
     .maybeSingle();
@@ -502,7 +533,7 @@ export async function changeMemberRole(input: {
   workspaceId: string;
   actorId: string;
   targetUserId: string;
-  role: "admin" | "member";
+  role: GrmMemberRole;
 }): Promise<void> {
   if (input.actorId === input.targetUserId) {
     throw new ValidationError("You cannot change your own role.");
@@ -510,21 +541,25 @@ export async function changeMemberRole(input: {
   const actorRole = await requireManager(
     input.actorId,
     input.workspaceId,
-    "Only an owner or admin can change roles."
+    "Only an organization admin can change roles."
   );
   const target = await loadTargetMember(input.workspaceId, input.targetUserId);
 
-  if (!canManageMember(actorRole, target.role)) {
+  if (!canManageMember(actorRole, target.role) || !canAssignRole(actorRole, input.role)) {
     throw new AuthorizationError(
       target.role === "owner"
-        ? "The workspace owner's role cannot be changed."
-        : "Only the owner can change an admin's role."
+        ? "The organization owner's role cannot be changed."
+        : "You cannot assign that role."
     );
   }
-  if (actorRole === "admin" && input.role === "admin") {
-    throw new AuthorizationError("Only the owner can make someone an admin.");
-  }
   if (target.role === input.role) return;
+  const nextScope = {
+    clientId: target.scope_client_id,
+    groupId: target.scope_group_id,
+    locationId: target.scope_location_id,
+  };
+  const scopeError = roleScopeError(input.role, nextScope);
+  if (scopeError) throw new ValidationError(scopeError);
 
   const admin = createAdminClient();
   const { error } = await admin
@@ -604,17 +639,30 @@ export async function inviteToWorkspace(input: {
   workspaceId: string;
   inviterId: string;
   email: string;
-  role: "admin" | "member";
+  role: GrmMemberRole;
+  scope?: ScopeIds;
 }): Promise<void> {
+  const raw = input.email.trim();
+  if (!raw.includes("@") && /\d/.test(raw)) {
+    throw new ValidationError(
+      "Mobile invites need a messaging provider, which is not configured. Use an email address."
+    );
+  }
   const email = normalizeInviteEmail(input.email);
   if (!email.includes("@")) {
     throw new ValidationError("Enter a valid email address.");
   }
+  const scope = input.scope ?? { clientId: null, groupId: null, locationId: null };
+  const scopeError = roleScopeError(input.role, scope);
+  if (scopeError) throw new ValidationError(scopeError);
 
   const inviterRole = await requireManager(input.inviterId, input.workspaceId);
-  if (input.role === "admin" && inviterRole !== "owner") {
-    throw new AuthorizationError("Only the owner can invite an admin.");
+  if (!canAssignRole(inviterRole, input.role)) {
+    throw new AuthorizationError("You cannot invite someone into that role.");
   }
+  const actor = await getMemberAccess(input.inviterId, input.workspaceId);
+  if (!actor) throw new AuthorizationError("You do not have access to this organization.");
+  await assertScopeAssignment({ actor, scope });
 
   const admin = createAdminClient();
   const { data: inviter } = await admin.auth.admin.getUserById(input.inviterId);
@@ -643,6 +691,10 @@ export async function inviteToWorkspace(input: {
       invited_by: input.inviterId,
       status: "pending",
       accepted_at: null,
+      expires_at: inviteExpiresAt(),
+      scope_client_id: scope.clientId,
+      scope_group_id: scope.groupId,
+      scope_location_id: scope.locationId,
     },
     { onConflict: "workspace_id,email" }
   );
@@ -703,6 +755,119 @@ export async function revokeWorkspaceInvite(input: {
   });
 }
 
+export async function resendWorkspaceInvite(input: {
+  workspaceId: string;
+  actorId: string;
+  inviteId: string;
+}): Promise<{ emailed: false }> {
+  await requireManager(input.actorId, input.workspaceId);
+  const admin = createAdminClient();
+  const { data, error } = await admin
+    .from("grm_workspace_invites")
+    .update({ expires_at: inviteExpiresAt(), status: "pending" })
+    .eq("id", input.inviteId)
+    .eq("workspace_id", input.workspaceId)
+    .eq("status", "pending")
+    .select("id")
+    .maybeSingle();
+  if (error) throw new AppError("Could not resend the invite.", "DB_ERROR", 500, { dbError: error.message });
+  if (!data) throw new ValidationError("That invite is no longer pending.");
+  await AuditService.log({
+    workspaceId: input.workspaceId,
+    userId: input.actorId,
+    action: "workspace.invite_resent",
+    entityType: "grm_workspace_invites",
+    entityId: input.inviteId,
+    metadata: { emailed: false },
+  });
+  return { emailed: false };
+}
+
+export async function updateMemberAccess(input: {
+  workspaceId: string;
+  actorId: string;
+  targetUserId: string;
+  scope?: ScopeIds;
+  accessEnabled?: boolean;
+  alertEmail?: boolean;
+  alertInApp?: boolean;
+}): Promise<void> {
+  const self = input.actorId === input.targetUserId;
+  if (self && (input.accessEnabled !== undefined || input.scope)) {
+    throw new ValidationError("You cannot change your own role or access.");
+  }
+  const target = await loadTargetMember(input.workspaceId, input.targetUserId);
+  const actor = await getMemberAccess(input.actorId, input.workspaceId);
+  if (!actor?.enabled) throw new AuthorizationError("Your access to this organization is turned off.");
+  if (!self) {
+    const actorRole = await requireManager(
+      input.actorId,
+      input.workspaceId,
+      "Only an organization admin can change access."
+    );
+    if (!canManageMember(actorRole, target.role)) {
+      throw new AuthorizationError("The organization owner's access cannot be changed.");
+    }
+  }
+  if (input.scope) {
+    const scopeError = roleScopeError(target.role, input.scope);
+    if (scopeError) throw new ValidationError(scopeError);
+    await assertScopeAssignment({ actor, scope: input.scope });
+  }
+  const patch: {
+    scope_client_id?: string | null;
+    scope_group_id?: string | null;
+    scope_location_id?: string | null;
+    access_enabled?: boolean;
+    alert_email?: boolean;
+    alert_in_app?: boolean;
+  } = {};
+  if (input.scope) {
+    patch.scope_client_id = input.scope.clientId;
+    patch.scope_group_id = input.scope.groupId;
+    patch.scope_location_id = input.scope.locationId;
+  }
+  if (input.accessEnabled !== undefined) patch.access_enabled = input.accessEnabled;
+  if (input.alertEmail !== undefined) patch.alert_email = input.alertEmail;
+  if (input.alertInApp !== undefined) patch.alert_in_app = input.alertInApp;
+  const admin = createAdminClient();
+  const { error } = await admin
+    .from("grm_workspace_members")
+    .update(patch)
+    .eq("workspace_id", input.workspaceId)
+    .eq("user_id", input.targetUserId);
+  if (error) throw new AppError("Could not update that person.", "DB_ERROR", 500, { dbError: error.message });
+  if (input.scope) {
+    await AuditService.log({
+      workspaceId: input.workspaceId,
+      userId: input.actorId,
+      action: "workspace.member_scope_changed",
+      entityType: "grm_workspace_members",
+      entityId: input.targetUserId,
+      metadata: { ...input.scope },
+    });
+  }
+  if (input.accessEnabled !== undefined) {
+    await AuditService.log({
+      workspaceId: input.workspaceId,
+      userId: input.actorId,
+      action: input.accessEnabled ? "workspace.member_activated" : "workspace.member_deactivated",
+      entityType: "grm_workspace_members",
+      entityId: input.targetUserId,
+    });
+  }
+  if (input.alertEmail !== undefined || input.alertInApp !== undefined) {
+    await AuditService.log({
+      workspaceId: input.workspaceId,
+      userId: input.actorId,
+      action: "workspace.notifications_updated",
+      entityType: "grm_workspace_members",
+      entityId: input.targetUserId,
+      metadata: { alertEmail: input.alertEmail ?? null, alertInApp: input.alertInApp ?? null },
+    });
+  }
+}
+
 export async function getWorkspaceRoster(workspaceId: string): Promise<{
   name: string;
   members: WorkspaceRosterMember[];
@@ -714,12 +879,12 @@ export async function getWorkspaceRoster(workspaceId: string): Promise<{
       admin.from("grm_workspaces").select("name").eq("id", workspaceId).single(),
       admin
         .from("grm_workspace_members")
-        .select("user_id, role, joined_at")
+        .select("user_id, role, joined_at, access_enabled, scope_client_id, scope_group_id, scope_location_id, alert_email, alert_in_app")
         .eq("workspace_id", workspaceId)
         .order("joined_at", { ascending: true }),
       admin
         .from("grm_workspace_invites")
-        .select("id, email, role, created_at")
+        .select("id, email, role, created_at, expires_at, scope_client_id, scope_group_id, scope_location_id")
         .eq("workspace_id", workspaceId)
         .eq("status", "pending")
         .order("created_at", { ascending: true }),
@@ -742,23 +907,87 @@ export async function getWorkspaceRoster(workspaceId: string): Promise<{
     });
   }
 
-  const invites = invitesResult.error
-    ? []
-    : (invitesResult.data ?? []).map((invite) => ({
+  const pendingInvites = invitesResult.error ? [] : (invitesResult.data ?? []);
+  const expiredInvites = pendingInvites.filter((invite) => isInviteExpired(invite.expires_at));
+  if (expiredInvites.length) {
+    await Promise.all(
+      expiredInvites.map((invite) =>
+        admin
+          .from("grm_workspace_invites")
+          .update({ status: "expired" })
+          .eq("id", invite.id)
+          .eq("status", "pending")
+      )
+    );
+  }
+  const memberRows = membersResult.data ?? [];
+  const scopeIds = {
+    clients: [...new Set([...memberRows, ...pendingInvites].map((row) => row.scope_client_id).filter(Boolean))] as string[],
+    groups: [...new Set([...memberRows, ...pendingInvites].map((row) => row.scope_group_id).filter(Boolean))] as string[],
+    locations: [...new Set([...memberRows, ...pendingInvites].map((row) => row.scope_location_id).filter(Boolean))] as string[],
+  };
+  const [clientNames, groupNames, locationNames] = await Promise.all([
+    scopeIds.clients.length
+      ? admin.from("grm_clients").select("id, name").in("id", scopeIds.clients)
+      : Promise.resolve({ data: [] as Array<{ id: string; name: string }> }),
+    scopeIds.groups.length
+      ? admin.from("grm_groups").select("id, name").in("id", scopeIds.groups)
+      : Promise.resolve({ data: [] as Array<{ id: string; name: string }> }),
+    scopeIds.locations.length
+      ? admin.from("grm_google_locations").select("id, location_title").in("id", scopeIds.locations)
+      : Promise.resolve({ data: [] as Array<{ id: string; location_title: string | null }> }),
+  ]);
+  const names = new Map<string, string>();
+  for (const row of clientNames.data ?? []) names.set(row.id, row.name);
+  for (const row of groupNames.data ?? []) names.set(row.id, row.name);
+  for (const row of locationNames.data ?? []) names.set(row.id, row.location_title ?? "Location");
+  const scopeOf = (row: { scope_client_id: string | null; scope_group_id: string | null; scope_location_id: string | null }) => ({
+    clientId: row.scope_client_id,
+    groupId: row.scope_group_id,
+    locationId: row.scope_location_id,
+  });
+  const scopeLabel = (scope: ScopeIds) => {
+    if (scope.locationId) return names.get(scope.locationId) ?? "Location";
+    if (scope.groupId) return names.get(scope.groupId) ?? "Group";
+    if (scope.clientId) return names.get(scope.clientId) ?? "Brand";
+    return "Whole organization";
+  };
+
+  const invites = pendingInvites
+    .filter((invite) => !isInviteExpired(invite.expires_at))
+    .map((invite) => {
+      const scope = scopeOf(invite);
+      return {
         id: invite.id,
         email: invite.email,
         role: invite.role,
         createdAt: invite.created_at,
-      }));
+        expiresAt: invite.expires_at,
+        scope,
+        scopeLabel: scopeLabel(scope),
+      };
+    });
 
   const members = await Promise.all(
-    (membersResult.data ?? []).map(async (member) => {
+    memberRows.map(async (member) => {
       const { data } = await admin.auth.admin.getUserById(member.user_id);
+      const authUser = data.user as { email?: string | null; last_sign_in_at?: string | null; factors?: Array<{ status?: string }> } | undefined;
+      const factors = authUser?.factors;
+      const twoStep =
+        factors === undefined ? "unavailable" : factors.some((factor) => factor.status === "verified") ? "on" : "off";
+      const scope = scopeOf(member);
       return {
         userId: member.user_id,
-        email: data.user?.email ?? "Unknown email",
+        email: authUser?.email ?? "Unknown email",
         role: member.role,
         joinedAt: member.joined_at,
+        accessEnabled: member.access_enabled,
+        scope,
+        scopeLabel: scopeLabel(scope),
+        alertEmail: member.alert_email,
+        alertInApp: member.alert_in_app,
+        twoStep: twoStep as "on" | "off" | "unavailable",
+        lastActive: authUser?.last_sign_in_at ?? null,
       };
     })
   );
@@ -781,7 +1010,7 @@ export async function getMemberRole(
 }
 
 export function canApproveReplies(role: string | null | undefined): boolean {
-  return role === "owner" || role === "admin";
+  return allows(role, "approve_negative");
 }
 
 /** Profile and review sync use the workspace Google connection. Only the owner may start them. */

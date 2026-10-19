@@ -4,8 +4,8 @@ export default function ClientsLoading() {
   return (
     <PageLoading
       variant="clients"
-      title="Loading businesses"
-      detail="Fetching each client and the Google locations assigned to it."
+      title="Loading locations"
+      detail="Fetching brands, groups, and the locations inside them."
     />
   );
 }

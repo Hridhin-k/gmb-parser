@@ -10,7 +10,7 @@ export default async function ConsentPage() {
   }
 
   if (await getUserConsent(user.id)) {
-    redirect("/dashboard");
+    redirect("/overview");
   }
 
   return (

@@ -14,7 +14,14 @@ interface AnalyticsFiltersProps {
   clientId: string;
   clients: Array<{ id: string; name: string }>;
   locationId: string;
-  locations: Array<{ id: string; clientId: string; name: string }>;
+  locations: Array<{ id: string; clientId: string; groupId?: string | null; parentGroupId?: string | null; name: string }>;
+  groupId?: string;
+  groups?: Array<{ id: string; name: string }>;
+  hideLocation?: boolean;
+  /** Header already owns the client selector. */
+  hideClient?: boolean;
+  /** Header already owns the date range. */
+  hideRange?: boolean;
 }
 
 export function AnalyticsFilters({
@@ -24,18 +31,28 @@ export function AnalyticsFilters({
   clients,
   locationId,
   locations,
+  groupId = "",
+  groups = [],
+  hideLocation = false,
+  hideClient = false,
+  hideRange = false,
 }: AnalyticsFiltersProps) {
   const router = useRouter();
   const pathname = usePathname();
   const searchParams = useSearchParams();
   const { pending, start: startTransition } = useScopedTransition();
 
-  const visibleLocations = clientId
-    ? locations.filter((l) => l.clientId === clientId)
-    : locations;
+  const visibleLocations = locations.filter(
+    (location) =>
+      (!clientId || location.clientId === clientId) &&
+      (!groupId || location.groupId === groupId || location.parentGroupId === groupId)
+  );
 
   const hasActive =
-    !!clientId || !!locationId || range.key !== defaultRange || searchParams.has("months");
+    (!hideClient && !!clientId) ||
+    !!locationId ||
+    !!groupId ||
+    (!hideRange && (range.key !== defaultRange || searchParams.has("months")));
 
   function navigate(changes: Record<string, string | null>) {
     const params = new URLSearchParams(searchParams.toString());
@@ -55,39 +72,73 @@ export function AnalyticsFilters({
         pending && "opacity-70"
       )}
     >
-      <DateRangeFilter value={range} defaultKey={defaultRange} onChange={navigate} />
+      {hideRange ? null : (
+        <DateRangeFilter value={range} defaultKey={defaultRange} onChange={navigate} />
+      )}
 
-      <SelectField
-        label="Filter by client"
-        value={clientId}
-        placeholder="All clients"
-        className="sm:w-64"
-        onValueChange={(next) => navigate({ client: next || null, location: null })}
-        options={[
-          { value: "", label: "All clients" },
-          ...clients.map((client) => ({ value: client.id, label: client.name })),
-        ]}
-      />
+      {hideClient ? null : (
+        <SelectField
+          label="Filter by client"
+          value={clientId}
+          placeholder="All clients"
+          className="sm:w-64"
+          onValueChange={(next) => navigate({ client: next || null, location: null })}
+          options={[
+            { value: "", label: "All clients" },
+            ...clients.map((client) => ({ value: client.id, label: client.name })),
+          ]}
+        />
+      )}
 
-      <SelectField
-        label="Filter by location"
-        value={visibleLocations.some((location) => location.id === locationId) ? locationId : ""}
-        placeholder="All locations"
-        disabled={visibleLocations.length === 0}
-        className="sm:w-72"
-        onValueChange={(next) => {
-          const owner = locations.find((location) => location.id === next)?.clientId ?? null;
-          navigate(next && !clientId && owner ? { location: next, client: owner } : { location: next || null });
-        }}
-        options={[
-          { value: "", label: "All locations" },
-          ...visibleLocations.map((location) => ({ value: location.id, label: location.name })),
-        ]}
-      />
+      {groups.length > 0 ? (
+        <SelectField
+          label="Filter by group"
+          value={groups.some((group) => group.id === groupId) ? groupId : ""}
+          placeholder="All groups"
+          className="sm:w-56"
+          onValueChange={(next) => navigate({ group: next || null, location: null })}
+          options={[
+            { value: "", label: "All groups" },
+            ...groups.map((group) => ({ value: group.id, label: group.name })),
+          ]}
+        />
+      ) : null}
+
+      {hideLocation ? null : (
+        <SelectField
+          label="Filter by location"
+          value={visibleLocations.some((location) => location.id === locationId) ? locationId : ""}
+          placeholder="All locations"
+          disabled={visibleLocations.length === 0}
+          className="sm:w-72"
+          onValueChange={(next) => {
+            const owner = locations.find((location) => location.id === next)?.clientId ?? null;
+            navigate(next && !clientId && owner ? { location: next, client: owner } : { location: next || null });
+          }}
+          options={[
+            { value: "", label: "All locations" },
+            ...visibleLocations.map((location) => ({ value: location.id, label: location.name })),
+          ]}
+        />
+      )}
 
       {hasActive ? (
         <ClearFiltersButton
-          onClear={() => startTransition(() => router.push(pathname))}
+          onClear={() => {
+            const params = new URLSearchParams();
+            if (hideClient) {
+              const client = searchParams.get("client");
+              if (client) params.set("client", client);
+            }
+            if (hideRange) {
+              for (const key of ["range", "from", "to"]) {
+                const value = searchParams.get(key);
+                if (value) params.set(key, value);
+              }
+            }
+            const qs = params.toString();
+            startTransition(() => router.push(qs ? `${pathname}?${qs}` : pathname));
+          }}
           disabled={pending}
         />
       ) : null}

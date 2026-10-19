@@ -12,5 +12,7 @@ export {
   UNASSIGNED_CLIENT_MARKER,
 } from "./unassigned-client";
 export { LocationInsightService } from "./location-insights";
+export { ScopeInsightService } from "./scope-insights";
 export { getDashboardData } from "./dashboard";
+export { getClientOverview } from "./overview";
 export { ensurePersonalWorkspace } from "./workspace";

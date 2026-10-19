@@ -8,6 +8,7 @@ import {
   UNASSIGNED_CLIENT_MARKER,
 } from "./unassigned-client";
 import { autoProvisionClientsFromLocations } from "./auto-provision-clients";
+import { refreshLocationHolds } from "./onboarding";
 import type {
   GoogleBusinessAccount,
   GoogleBusinessLocation,
@@ -110,6 +111,11 @@ function normalizeLocation(
     primaryPhone: location.phoneNumbers?.primaryPhone ?? null,
     websiteUri: location.websiteUri ?? null,
     placeId: location.metadata?.placeId ?? null,
+    voiceOfMerchant:
+      typeof location.metadata?.hasVoiceOfMerchant === "boolean"
+        ? location.metadata.hasVoiceOfMerchant
+        : null,
+    googleDuplicateOf: location.metadata?.duplicateLocation?.trim() || null,
   };
 }
 
@@ -235,6 +241,7 @@ export class GoogleBusinessProfileService {
       if (recent?.last_synced_at) {
         const age = Date.now() - new Date(recent.last_synced_at).getTime();
         if (age < COOLDOWN_MS) {
+          await refreshLocationHolds(workspaceId);
           const provision = options.userId
             ? await autoProvisionClientsFromLocations(workspaceId, options.userId)
             : { clientsCreated: 0, clientsReused: 0, locationsLinked: 0 };
@@ -398,6 +405,8 @@ export class GoogleBusinessProfileService {
         primary_phone: loc.primaryPhone,
         website_uri: loc.websiteUri,
         place_id: loc.placeId,
+        voice_of_merchant: loc.voiceOfMerchant,
+        google_duplicate_of: loc.googleDuplicateOf,
         is_active: true,
         last_synced_at: new Date().toISOString(),
         // Keep existing client mapping. New rows start unassigned, then
@@ -422,6 +431,7 @@ export class GoogleBusinessProfileService {
       }
     }
 
+    await refreshLocationHolds(workspaceId);
     const provision = options.userId
       ? await autoProvisionClientsFromLocations(workspaceId, options.userId)
       : { clientsCreated: 0, clientsReused: 0, locationsLinked: 0 };

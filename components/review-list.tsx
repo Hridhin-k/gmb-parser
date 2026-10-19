@@ -17,7 +17,9 @@ import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { ActivityStatus } from "@/components/activity-status";
 import { ReviewDetailPanel } from "@/components/review-detail-panel";
+import { SelectField } from "@/components/ui/select-field";
 import { Spinner } from "@/components/ui/spinner";
+import { languageLabel, themeLabel, workflowState } from "@/lib/review-inbox";
 
 interface ReviewItem {
   id: string;
@@ -32,6 +34,13 @@ interface ReviewItem {
   reply_status: string;
   location_title: string;
   client_name: string | null;
+  group_name?: string | null;
+  review_language?: string | null;
+  complaint_theme?: string | null;
+  assigned_to?: string | null;
+  reopened_at?: string | null;
+  notes?: Array<{ id: string; body: string; createdAt: string; authorId: string }>;
+  activity?: Array<{ at: string; label: string }>;
 }
 
 interface ReplyItem {
@@ -41,6 +50,7 @@ interface ReplyItem {
   status: string;
   created_at: string;
   approved_at: string | null;
+  approved_by?: string | null;
   published_at: string | null;
   last_error: string | null;
   failure_count: number;
@@ -50,20 +60,19 @@ interface ReviewListProps {
   reviews: ReviewItem[];
   replies: Record<string, ReplyItem>;
   canApprove: boolean;
+  members?: Array<{ id: string; email: string }>;
 }
 
-type BulkAction = "generate" | "approve" | "publish" | "discard";
+type BulkAction = "generate" | "approve" | "publish" | "discard" | "assign";
 
-function formatRelativeDate(iso: string): string {
-  const d = new Date(iso);
-  const now = new Date();
-  const diff = now.getTime() - d.getTime();
-  const days = Math.floor(diff / (1000 * 60 * 60 * 24));
-  if (days === 0) return "Today";
-  if (days === 1) return "Yesterday";
-  if (days < 7) return `${days}d ago`;
-  if (days < 30) return `${Math.floor(days / 7)}w ago`;
-  return d.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
+function formatWhen(iso: string): string {
+  return new Date(iso).toLocaleString("en-US", {
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+    hour: "numeric",
+    minute: "2-digit",
+  });
 }
 
 function StarRating({ rating }: { rating: number }) {
@@ -112,12 +121,13 @@ function ReplyStatusPill({ status, source }: { status: string; source?: string }
   );
 }
 
-export function ReviewList({ reviews, replies, canApprove }: ReviewListProps) {
+export function ReviewList({ reviews, replies, canApprove, members = [] }: ReviewListProps) {
   const router = useRouter();
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [checked, setChecked] = useState<Record<string, boolean>>({});
   const [bulkLoading, setBulkLoading] = useState<BulkAction | null>(null);
   const [bulkError, setBulkError] = useState<string | null>(null);
+  const [assigneeId, setAssigneeId] = useState("");
 
   const selectedReview = reviews.find((r) => r.id === selectedId) ?? null;
   const selectedReply = selectedId ? (replies[selectedId] ?? null) : null;
@@ -145,7 +155,7 @@ export function ReviewList({ reviews, replies, canApprove }: ReviewListProps) {
     setChecked(nextMap);
   }
 
-  async function runBulk(action: BulkAction) {
+  async function runBulk(action: BulkAction, extra?: { assigneeId: string | null }) {
     if (selectedIds.length === 0) return;
     setBulkError(null);
     setBulkLoading(action);
@@ -153,12 +163,13 @@ export function ReviewList({ reviews, replies, canApprove }: ReviewListProps) {
       const response = await fetch("/api/reviews/bulk", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ action, reviewIds: selectedIds }),
+        body: JSON.stringify({ action, reviewIds: selectedIds, ...extra }),
       });
       const data = (await response.json()) as {
         error?: string;
         succeeded?: number;
         failed?: number;
+        results?: Array<{ ok: boolean; error?: string }>;
       };
       if (!response.ok) {
         setBulkError(data.error ?? "Bulk action failed");
@@ -169,12 +180,14 @@ export function ReviewList({ reviews, replies, canApprove }: ReviewListProps) {
         approve: "approved",
         publish: "published",
         discard: "discarded",
+        assign: "assigned",
       }[action];
       const ok = data.succeeded ?? 0;
       const bad = data.failed ?? 0;
+      const firstError = data.results?.find((item) => !item.ok)?.error;
       if (bad > 0) {
         toast.warning(`${ok} ${verb}, ${bad} failed`, {
-          description: "Open a failed review to see why.",
+          description: firstError ?? "Some selected reviews were not in a state that allows this.",
         });
       } else {
         toast.success(`${ok} review${ok === 1 ? "" : "s"} ${verb}`);
@@ -227,14 +240,45 @@ export function ReviewList({ reviews, replies, canApprove }: ReviewListProps) {
               Approve
             </Button>
           ) : null}
+          {canApprove ? (
           <Button
             size="xs"
             disabled={selectedIds.length === 0 || bulkLoading !== null}
             onClick={() => runBulk("publish")}
             loading={bulkLoading === "publish"}
           >
-            {bulkLoading === "publish" ? "Posting to Google…" : canApprove ? "Approve & publish" : "Publish"}
+            {bulkLoading === "publish" ? "Posting to Google…" : "Approve & publish"}
           </Button>
+          ) : null}
+          {members.length > 0 ? (
+            <>
+              <SelectField
+                label="Assign selected"
+                value={assigneeId}
+                options={[
+                  { value: "", label: "Assign to…" },
+                  { value: "unassigned", label: "Unassigned" },
+                  ...members.map((member) => ({ value: member.id, label: member.email })),
+                ]}
+                onValueChange={setAssigneeId}
+                disabled={selectedIds.length === 0 || bulkLoading !== null}
+                className="w-44"
+                size="sm"
+              />
+              <Button
+                size="xs"
+                variant="outline"
+                disabled={selectedIds.length === 0 || !assigneeId || bulkLoading !== null}
+                onClick={() =>
+                  runBulk("assign", {
+                    assigneeId: assigneeId === "unassigned" ? null : assigneeId,
+                  })
+                }
+              >
+                Assign
+              </Button>
+            </>
+          ) : null}
           <Button
             size="xs"
             variant="ghost"
@@ -352,10 +396,11 @@ export function ReviewList({ reviews, replies, canApprove }: ReviewListProps) {
                       {review.star_rating}/5
                     </span>
                   </div>
-                  <p className="mt-0.5 truncate text-xs font-light text-slate">
-                    {formatRelativeDate(review.review_create_time)}
+                  <p className="mt-0.5 text-xs font-light text-slate">
+                    {formatWhen(review.review_create_time)}
                     {" · "}
                     {review.location_title}
+                    {review.group_name ? ` · ${review.group_name}` : ""}
                   </p>
                 </div>
               </div>
@@ -373,6 +418,25 @@ export function ReviewList({ reviews, replies, canApprove }: ReviewListProps) {
               </button>
 
               <div className="mt-4 flex flex-wrap items-center gap-2">
+                <span className="rounded-full bg-paper px-2.5 py-1 text-[11px] font-medium text-graphite">
+                  {workflowState({
+                    replyStatus: review.reply_status,
+                    starRating: review.star_rating,
+                    reopenedAt: review.reopened_at ?? null,
+                    hasGoogleReply: hasGoogleReply,
+                  }).label}
+                </span>
+                {languageLabel(review.review_language) ? (
+                  <span className="text-[11px] text-slate">{languageLabel(review.review_language)}</span>
+                ) : null}
+                {themeLabel(review.complaint_theme) ? (
+                  <span className="text-[11px] text-slate">{themeLabel(review.complaint_theme)}</span>
+                ) : null}
+                {review.assigned_to ? (
+                  <span className="text-[11px] text-slate">
+                    {members.find((member) => member.id === review.assigned_to)?.email ?? "Assigned"}
+                  </span>
+                ) : null}
                 {hasGoogleReply && (
                   <span className="inline-flex items-center gap-1 rounded-full bg-[#e6f4ea] px-2.5 py-1 text-[11px] font-medium text-success">
                     <MessageSquare className="h-3 w-3" aria-hidden />
@@ -384,11 +448,6 @@ export function ReviewList({ reviews, replies, canApprove }: ReviewListProps) {
                     status={review.reply_status}
                     source={reply?.source}
                   />
-                )}
-                {review.reply_status === "none" && !hasGoogleReply && (
-                  <span className="text-xs font-light text-slate">
-                    Needs a reply
-                  </span>
                 )}
               </div>
             </article>
@@ -413,6 +472,7 @@ export function ReviewList({ reviews, replies, canApprove }: ReviewListProps) {
               review={selectedReview}
               reply={selectedReply}
               canApprove={canApprove}
+              members={members}
               onClose={() => setSelectedId(null)}
             />
           </div>

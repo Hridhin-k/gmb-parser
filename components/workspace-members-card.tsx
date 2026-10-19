@@ -9,7 +9,8 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { SelectField } from "@/components/ui/select-field";
 import { ConfirmDialog } from "@/components/confirm-dialog";
-import { canManageMember, roleLabel } from "@/lib/roles";
+import { ASSIGNABLE_ROLES, allows, roleLabel } from "@/lib/access";
+import { canManageMember } from "@/lib/roles";
 import { cn } from "@/lib/utils";
 
 interface MemberRow {
@@ -17,12 +18,26 @@ interface MemberRow {
   email: string;
   role: string;
   joinedAt?: string;
+  accessEnabled?: boolean;
+  scopeLabel?: string;
+  alertEmail?: boolean;
+  alertInApp?: boolean;
+  twoStep?: "on" | "off" | "unavailable";
+  lastActive?: string | null;
 }
 
 interface InviteRow {
   id: string;
   email: string;
   role: string;
+  expiresAt?: string | null;
+  scopeLabel?: string;
+}
+
+interface ScopeChoice {
+  id: string;
+  label: string;
+  kind: "client" | "group" | "location";
 }
 
 interface WorkspaceMembersCardProps {
@@ -31,6 +46,8 @@ interface WorkspaceMembersCardProps {
   currentRole: string | null;
   members: MemberRow[];
   invites: InviteRow[];
+  scopes?: ScopeChoice[];
+  emailDelivery?: boolean;
 }
 
 type PendingConfirm =
@@ -49,27 +66,21 @@ async function send(method: string, url: string, body: object) {
   return data;
 }
 
-function joinedLabel(iso?: string) {
-  if (!iso) return null;
-  return `Joined ${new Date(iso).toLocaleDateString("en-US", {
-    month: "short",
-    day: "numeric",
-    year: "numeric",
-  })}`;
-}
-
 export function WorkspaceMembersCard({
   workspaceName,
   currentUserId,
   currentRole,
   members,
   invites,
+  scopes = [],
+  emailDelivery = false,
 }: WorkspaceMembersCardProps) {
   const router = useRouter();
-  const canInvite = currentRole === "owner" || currentRole === "admin";
-  const isOwner = currentRole === "owner";
+  const canInvite = allows(currentRole, "manage_people") || currentRole === "admin";
+  const isOwner = allows(currentRole, "manage_people");
   const [email, setEmail] = useState("");
-  const [role, setRole] = useState<"member" | "admin">("member");
+  const [role, setRole] = useState<string>("agent");
+  const [scopeId, setScopeId] = useState("organization");
   const [inviting, setInviting] = useState(false);
   const [busyId, setBusyId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -80,9 +91,18 @@ export function WorkspaceMembersCard({
     setError(null);
     setInviting(true);
     try {
-      await send("POST", "/api/workspace/invites", { email, role });
+      const choice = scopes.find((item) => item.id === scopeId);
+      await send("POST", "/api/workspace/invites", {
+        email,
+        role: isOwner ? role : "member",
+        clientId: choice?.kind === "client" ? choice.id : null,
+        groupId: choice?.kind === "group" ? choice.id : null,
+        locationId: choice?.kind === "location" ? choice.id : null,
+      });
       toast.success(`Invite saved for ${email}`, {
-        description: "Copy the invite message and send it to them.",
+        description: emailDelivery
+          ? "Copy the invite message and send it to them."
+          : "No email is sent until a mail provider is configured. Copy the invite and share it.",
       });
       setEmail("");
       router.refresh();
@@ -107,12 +127,12 @@ export function WorkspaceMembersCard({
     }
   }
 
-  async function handleRoleChange(member: MemberRow, nextRole: "admin" | "member") {
+  async function handleRoleChange(member: MemberRow, nextRole: string) {
     setError(null);
     setBusyId(member.userId);
     try {
       await send("PATCH", "/api/workspace/members", { userId: member.userId, role: nextRole });
-      toast.success(`${member.email} is now ${nextRole === "admin" ? "an admin" : "a member"}`);
+      toast.success(`${member.email} is now ${roleLabel(nextRole)}`);
       router.refresh();
     } catch (e) {
       setError(e instanceof Error ? e.message : "Could not change the role.");
@@ -137,7 +157,7 @@ export function WorkspaceMembersCard({
     try {
       await send("DELETE", "/api/workspace/members", { userId: currentUserId });
       toast.success(`You left ${workspaceName}`);
-      router.replace("/dashboard");
+      router.replace("/overview");
       router.refresh();
     } catch (e) {
       setError(e instanceof Error ? e.message : "Could not leave the workspace.");
@@ -146,12 +166,14 @@ export function WorkspaceMembersCard({
 
   async function copyInvite(invite: InviteRow) {
     const message = [
-      `You're invited to the "${workspaceName}" workspace on GRM as ${
-        invite.role === "admin" ? "an admin" : "a member"
-      }.`,
+      `You're invited to the "${workspaceName}" workspace on GRM as ${roleLabel(invite.role)}.`,
       "",
       `Sign in with Google using ${invite.email}:`,
       `${window.location.origin}/login`,
+      "",
+      invite.expiresAt
+        ? `This invite expires on ${new Date(invite.expiresAt).toLocaleDateString()}. No email is sent automatically.`
+        : "No email is sent automatically.",
     ].join("\n");
     try {
       await navigator.clipboard.writeText(message);
@@ -193,9 +215,22 @@ export function WorkspaceMembersCard({
                       <span className="ml-2 text-xs font-normal text-slate">You</span>
                     ) : null}
                   </p>
-                  {joinedLabel(member.joinedAt) ? (
-                    <p className="text-xs text-slate">{joinedLabel(member.joinedAt)}</p>
-                  ) : null}
+                  <p className="text-xs text-slate">
+                    {member.scopeLabel ?? "Whole organization"}
+                    {member.accessEnabled === false ? " · Access off" : ""}
+                    {" · "}
+                    {member.alertInApp === false && !member.alertEmail
+                      ? "No alerts"
+                      : [member.alertInApp !== false ? "In app" : null, member.alertEmail ? "Email" : null]
+                          .filter(Boolean)
+                          .join(", ")}
+                    {" · Two-step "}
+                    {member.twoStep === "on" ? "On" : member.twoStep === "off" ? "Off" : "Not available"}
+                    {" · "}
+                    {member.lastActive
+                      ? `Last active ${new Date(member.lastActive).toLocaleDateString("en-US", { month: "short", day: "numeric" })}`
+                      : "Last active not available"}
+                  </p>
                 </div>
                 <div className="flex shrink-0 items-center gap-2">
                   {manageable && isOwner ? (
@@ -205,12 +240,12 @@ export function WorkspaceMembersCard({
                       size="sm"
                       disabled={busyId === member.userId}
                       className="w-32"
-                      onValueChange={(next) =>
-                        handleRoleChange(member, next as "admin" | "member")
-                      }
+                      onValueChange={(next) => handleRoleChange(member, next)}
                       options={[
-                        { value: "member", label: "Member" },
-                        { value: "admin", label: "Admin" },
+                        ...(ASSIGNABLE_ROLES as readonly string[]).includes(member.role)
+                          ? []
+                          : [{ value: member.role, label: roleLabel(member.role) }],
+                        ...ASSIGNABLE_ROLES.map((item) => ({ value: item, label: roleLabel(item) })),
                       ]}
                     />
                   ) : (
@@ -227,6 +262,53 @@ export function WorkspaceMembersCard({
                       {roleLabel(member.role)}
                     </span>
                   )}
+                  {isOwner || isSelf ? (
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      disabled={busyId === member.userId}
+                      onClick={() => {
+                        setBusyId(member.userId);
+                        send("PATCH", "/api/workspace/members", {
+                          userId: member.userId,
+                          alertEmail: !member.alertEmail,
+                          alertInApp: member.alertInApp !== false,
+                        })
+                          .then(() => {
+                            toast.success(member.alertEmail ? "Email alerts turned off" : "Email alerts saved", {
+                              description: emailDelivery
+                                ? undefined
+                                : "The preference is saved. Mail is not delivered until a mail provider is configured.",
+                            });
+                            router.refresh();
+                          })
+                          .catch((e: unknown) => setError(e instanceof Error ? e.message : "Could not save alerts."))
+                          .finally(() => setBusyId(null));
+                      }}
+                    >
+                      {member.alertEmail ? "Email on" : "Email off"}
+                    </Button>
+                  ) : null}
+                  {manageable && isOwner ? (
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      disabled={busyId === member.userId}
+                      onClick={() =>
+                        send("PATCH", "/api/workspace/members", {
+                          userId: member.userId,
+                          accessEnabled: member.accessEnabled === false,
+                        }).then(() => {
+                          toast.success(member.accessEnabled === false ? "Access turned on" : "Access turned off");
+                          router.refresh();
+                        })
+                      }
+                    >
+                      {member.accessEnabled === false ? "Turn on" : "Turn off"}
+                    </Button>
+                  ) : null}
                   {manageable ? (
                     <Button
                       type="button"
@@ -270,7 +352,12 @@ export function WorkspaceMembersCard({
                 >
                   <p className="truncate text-sm text-graphite">
                     {invite.email}
-                    <span className="ml-2 text-xs text-slate">{roleLabel(invite.role)}</span>
+                    <span className="ml-2 text-xs text-slate">
+                      {roleLabel(invite.role)}
+                      {invite.expiresAt
+                        ? ` · expires ${new Date(invite.expiresAt).toLocaleDateString()}`
+                        : ""}
+                    </span>
                   </p>
                   {canInvite ? (
                     <div className="flex shrink-0 gap-2">
@@ -283,6 +370,26 @@ export function WorkspaceMembersCard({
                       >
                         <Copy className="h-3.5 w-3.5" aria-hidden />
                         Copy invite
+                      </Button>
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        loading={busyId === `resend-${invite.id}`}
+                        onClick={() => {
+                          setBusyId(`resend-${invite.id}`);
+                          send("PATCH", "/api/workspace/invites", { inviteId: invite.id })
+                            .then(() => {
+                              toast.success("Invite refreshed", {
+                                description: "No email was sent. Copy the invite and share it.",
+                              });
+                              router.refresh();
+                            })
+                            .catch((e: unknown) => setError(e instanceof Error ? e.message : "Could not resend."))
+                            .finally(() => setBusyId(null));
+                        }}
+                      >
+                        Resend
                       </Button>
                       <Button
                         type="button"
@@ -303,32 +410,50 @@ export function WorkspaceMembersCard({
 
         {canInvite ? (
           <form onSubmit={handleInvite} className="space-y-3">
+            <p className="text-sm text-slate">
+              People only see what sits below the place you pick. The invite expires in 14 days and is accepted the next
+              time that email signs in.
+              {emailDelivery
+                ? " Email delivery is configured."
+                : " Email is not sent until a mail provider is configured, so copy the invite and share it."}{" "}
+              WhatsApp alerts are not available.
+            </p>
             <div className="flex flex-col gap-2 sm:flex-row">
               <Input
                 id="invite-email"
-                type="email"
+                type="text"
                 required
                 value={email}
                 onChange={(event) => setEmail(event.target.value)}
                 placeholder="name@company.com"
-                aria-label="Email address"
+                aria-label="Email or mobile number"
               />
               {isOwner ? (
                 <SelectField
                   id="invite-role"
                   label="Role"
                   value={role}
-                  className="sm:w-36"
-                  onValueChange={(next) => setRole(next as "member" | "admin")}
+                  className="sm:w-44"
+                  onValueChange={setRole}
+                  options={ASSIGNABLE_ROLES.map((item) => ({ value: item, label: roleLabel(item) }))}
+                />
+              ) : null}
+              {isOwner ? (
+                <SelectField
+                  id="invite-scope"
+                  label="Can see"
+                  value={scopeId}
+                  className="sm:w-52"
+                  onValueChange={setScopeId}
                   options={[
-                    { value: "member", label: "Member" },
-                    { value: "admin", label: "Admin" },
+                    { value: "organization", label: "Whole organization" },
+                    ...scopes.map((item) => ({ value: item.id, label: item.label })),
                   ]}
                 />
               ) : null}
               <Button type="submit" loading={inviting}>
                 <UserPlus aria-hidden />
-                {inviting ? "Inviting…" : "Invite"}
+                {inviting ? "Inviting…" : "Send invite"}
               </Button>
             </div>
             <p className="text-xs leading-relaxed text-slate">
@@ -338,7 +463,7 @@ export function WorkspaceMembersCard({
           </form>
         ) : (
           <p className="text-xs text-slate">
-            An owner or admin can invite people and change roles.
+            An organization admin can invite people and change roles.
           </p>
         )}
 

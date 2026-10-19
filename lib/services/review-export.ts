@@ -6,6 +6,7 @@ export const EXPORT_MAX_ROWS = 50_000;
 
 export interface ReviewExportFilters {
   clientId: string | null;
+  groupId?: string | null;
   locationId: string | null;
   since: string | null;
   until: string | null;
@@ -60,6 +61,47 @@ function one<T>(value: T | T[] | null | undefined): T | null {
   return value ?? null;
 }
 
+async function exportLocationIds(
+  admin: ReturnType<typeof createAdminClient>,
+  workspaceId: string,
+  filters: { clientId: string | null; groupId?: string | null; locationId?: string | null }
+): Promise<string[] | null> {
+  if (filters.locationId) return [filters.locationId];
+  if (!filters.clientId && !filters.groupId) return null;
+  let query = admin.from("grm_google_locations").select("id").eq("workspace_id", workspaceId);
+  if (filters.clientId) query = query.eq("client_id", filters.clientId);
+  if (filters.groupId) {
+    const { scopedGroupIds } = await import("@/lib/services/hierarchy");
+    const ids = await scopedGroupIds(workspaceId, filters.groupId);
+    query = query.in("group_id", ids);
+  }
+  const { data, error } = await query;
+  if (error) throw new Error(`Failed to load locations: ${error.message}`);
+  return (data ?? []).map((location) => location.id);
+}
+
+/** How many reviews the CSV export would include for this client and period. */
+export async function countExportableReviews(
+  workspaceId: string,
+  filters: Pick<ReviewExportFilters, "clientId" | "groupId" | "locationId" | "since" | "until">
+): Promise<number> {
+  const admin = createAdminClient();
+  const locationIds = await exportLocationIds(admin, workspaceId, filters);
+  if (locationIds && locationIds.length === 0) return 0;
+
+  let query = admin
+    .from("grm_reviews")
+    .select("id", { count: "exact", head: true })
+    .eq("workspace_id", workspaceId);
+  if (locationIds) query = query.in("location_id", locationIds);
+  if (filters.since) query = query.gte("review_create_time", filters.since);
+  if (filters.until) query = query.lt("review_create_time", filters.until);
+
+  const { count, error } = await query;
+  if (error) throw new Error(`Failed to count reviews: ${error.message}`);
+  return count ?? 0;
+}
+
 /** Yields CSV lines (header first) for every review matching the filters. */
 export async function* reviewCsvLines(
   workspaceId: string,
@@ -68,19 +110,8 @@ export async function* reviewCsvLines(
   const admin = createAdminClient();
   yield csvRow(HEADER);
 
-  let locationIds: string[] | null = null;
-  if (filters.locationId) {
-    locationIds = [filters.locationId];
-  } else if (filters.clientId) {
-    const { data, error } = await admin
-      .from("grm_google_locations")
-      .select("id")
-      .eq("workspace_id", workspaceId)
-      .eq("client_id", filters.clientId);
-    if (error) throw new Error(`Failed to load locations: ${error.message}`);
-    locationIds = (data ?? []).map((l) => l.id);
-    if (locationIds.length === 0) return;
-  }
+  const locationIds = await exportLocationIds(admin, workspaceId, filters);
+  if (locationIds && locationIds.length === 0) return;
 
   for (let from = 0; from < EXPORT_MAX_ROWS; from += PAGE_SIZE) {
     let query = admin

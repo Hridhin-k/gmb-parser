@@ -4,6 +4,10 @@ import { ensurePersonalWorkspace } from "@/lib/services/workspace";
 import { getAgencyHome } from "@/lib/services/agency-home";
 import { AGENCY_DEFAULT_RANGE, parseDateRange } from "@/lib/date-range";
 import { csvRow } from "@/lib/services/review-export";
+import { usageExportLines } from "@/lib/agency-portal";
+import { getMemberAccess, visibleClientIds } from "@/lib/services/access";
+import { workspaceGrant } from "@/lib/access";
+import { getMemberRole } from "@/lib/services/workspace";
 import { checkRateLimit, EXPORT_LIMIT } from "@/lib/rate-limit";
 import { logger } from "@/lib/logger";
 
@@ -29,25 +33,31 @@ export async function GET(request: Request) {
   }
 
   const membership = await ensurePersonalWorkspace(user);
+  const role = await getMemberRole(user.id, membership.workspace_id);
+  if (!workspaceGrant(role, "manage_people")) {
+    return NextResponse.json({ error: "You cannot export usage." }, { status: 403 });
+  }
+  const access = await getMemberAccess(user.id, membership.workspace_id);
+  const allowedClientIds = await visibleClientIds(membership.workspace_id, access?.scope);
   const params = new URL(request.url).searchParams;
   const client = params.get("client") ?? "";
   const range = parseDateRange(Object.fromEntries(params), AGENCY_DEFAULT_RANGE);
   const query = (params.get("q") ?? "").slice(0, 200);
 
   try {
+    const requestedClient = UUID.test(client) ? client : "";
+    if (allowedClientIds && requestedClient && !allowedClientIds.includes(requestedClient)) {
+      return NextResponse.json({ error: "That client is not in your scope." }, { status: 403 });
+    }
     const home = await getAgencyHome(membership.workspace_id, {
-      clientId: UUID.test(client) ? client : "",
+      clientId: requestedClient,
       range,
       q: query,
       page: 1,
+      allowedClientIds,
     });
 
-    const lines = [
-      csvRow(["Client", "Locations", "Reviews", "Period"]),
-      ...home.usage.map((row) =>
-        csvRow([row.name, row.locations, row.reviews, home.usageHeading])
-      ),
-    ];
+    const lines = usageExportLines(home.usage, home.usageHeading).map((row) => csvRow(row));
 
     const stamp = new Date().toISOString().slice(0, 10);
     return new Response(`\uFEFF${lines.join("\r\n")}\r\n`, {

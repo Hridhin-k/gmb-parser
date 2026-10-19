@@ -1,6 +1,8 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { ensurePersonalWorkspace } from "@/lib/services/workspace";
+import { getMemberAccess } from "@/lib/services/access";
+import { clampListScope } from "@/lib/access";
 import { reviewCsvLines, type ReviewExportFilters } from "@/lib/services/review-export";
 import { checkRateLimit, EXPORT_LIMIT } from "@/lib/rate-limit";
 import { logger } from "@/lib/logger";
@@ -9,6 +11,7 @@ import { parseDateRange } from "@/lib/date-range";
 const UUID = /^[0-9a-f-]{36}$/i;
 function parseFilters(params: URLSearchParams): ReviewExportFilters {
   const client = params.get("client");
+  const group = params.get("group");
   const location = params.get("location");
   const stars = params.get("stars");
   const rating = Number(params.get("rating"));
@@ -16,6 +19,7 @@ function parseFilters(params: URLSearchParams): ReviewExportFilters {
 
   return {
     clientId: client && UUID.test(client) ? client : null,
+    groupId: group && UUID.test(group) ? group : null,
     locationId: location && UUID.test(location) ? location : null,
     since: range.start?.toISOString() ?? null,
     until: range.end?.toISOString() ?? null,
@@ -44,7 +48,22 @@ export async function GET(request: Request) {
   }
 
   const membership = await ensurePersonalWorkspace(user);
-  const filters = parseFilters(new URL(request.url).searchParams);
+  const requested = parseFilters(new URL(request.url).searchParams);
+  const access = await getMemberAccess(user.id, membership.workspace_id);
+  const bounded = clampListScope(
+    {
+      clientId: requested.clientId ?? "",
+      groupId: requested.groupId ?? "",
+      locationId: requested.locationId ?? "",
+    },
+    access?.scope ?? { clientId: null, groupId: null, locationId: null }
+  );
+  const filters = {
+    ...requested,
+    clientId: bounded.clientId || null,
+    groupId: bounded.groupId || null,
+    locationId: bounded.locationId || null,
+  };
   const lines = reviewCsvLines(membership.workspace_id, filters);
   const encoder = new TextEncoder();
 

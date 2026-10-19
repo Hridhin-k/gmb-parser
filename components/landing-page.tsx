@@ -88,7 +88,7 @@ const pill =
   "inline-flex h-12 items-center justify-center gap-2 rounded-full px-6 text-body font-medium transition-colors";
 
 export function LandingPage({ signedIn }: { signedIn: boolean }) {
-  const primaryHref = signedIn ? "/dashboard" : "/login";
+  const primaryHref = signedIn ? "/overview" : "/login";
   const primaryLabel = signedIn ? "Open workspace" : "Sign in with Google";
 
   return (

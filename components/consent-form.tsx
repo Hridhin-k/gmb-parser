@@ -29,7 +29,7 @@ export function ConsentForm() {
         setLoading(false);
         return;
       }
-      router.replace("/dashboard");
+      router.replace("/overview");
       router.refresh();
     } catch {
       setError("Could not save your agreement.");

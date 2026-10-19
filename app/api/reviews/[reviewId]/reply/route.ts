@@ -12,6 +12,9 @@ import {
 } from "@/lib/validation";
 import { toUserMessage, toStatusCode } from "@/lib/errors";
 import { ensurePersonalWorkspace } from "@/lib/services/workspace";
+import { assertReviewAction } from "@/lib/services/access";
+import { assertSafePublicReply } from "@/lib/services/reply-checks";
+import { AppError } from "@/lib/errors";
 
 interface RouteParams {
   params: Promise<{ reviewId: string }>;
@@ -47,6 +50,19 @@ export async function POST(request: Request, { params }: RouteParams) {
 
   const membership = await getWorkspace(user);
   if (!membership) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+  try {
+    await assertReviewAction({
+      userId: user.id,
+      workspaceId: membership.workspace_id,
+      reviewId,
+      action: "draft",
+    });
+  } catch (error) {
+    if (error instanceof AppError) {
+      return NextResponse.json({ error: error.message }, { status: error.statusCode });
+    }
+    throw error;
+  }
 
   const admin = createAdminClient();
 
@@ -57,6 +73,19 @@ export async function POST(request: Request, { params }: RouteParams) {
     .eq("workspace_id", membership.workspace_id)
     .single();
   if (!review) return NextResponse.json({ error: "Review not found" }, { status: 404 });
+
+  try {
+    await assertSafePublicReply({
+      workspaceId: membership.workspace_id,
+      userId: user.id,
+      reviewId,
+      content: body.content,
+      stage: "save",
+    });
+  } catch (error) {
+    const status = error instanceof AppError ? error.statusCode : 400;
+    return NextResponse.json({ error: toUserMessage(error) }, { status });
+  }
 
   const { data: reply, error } = await admin
     .from("grm_review_replies")
@@ -117,6 +146,19 @@ export async function PUT(request: Request, { params }: RouteParams) {
 
   const membership = await getWorkspace(user);
   if (!membership) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+  try {
+    await assertReviewAction({
+      userId: user.id,
+      workspaceId: membership.workspace_id,
+      reviewId,
+      action: "draft",
+    });
+  } catch (error) {
+    if (error instanceof AppError) {
+      return NextResponse.json({ error: error.message }, { status: error.statusCode });
+    }
+    throw error;
+  }
 
   const admin = createAdminClient();
 
@@ -130,6 +172,19 @@ export async function PUT(request: Request, { params }: RouteParams) {
 
   if (!reply) return NextResponse.json({ error: "Reply not found" }, { status: 404 });
 
+  try {
+    await assertSafePublicReply({
+      workspaceId: membership.workspace_id,
+      userId: user.id,
+      reviewId,
+      content: body.content,
+      stage: "edit",
+    });
+  } catch (error) {
+    const status = error instanceof AppError ? error.statusCode : 400;
+    return NextResponse.json({ error: toUserMessage(error) }, { status });
+  }
+
   if (reply.status !== "draft" && reply.status !== "approved") {
     return NextResponse.json(
       { error: "Only draft or approved replies can be edited" },
@@ -139,7 +194,7 @@ export async function PUT(request: Request, { params }: RouteParams) {
 
   const { error } = await admin
     .from("grm_review_replies")
-    .update({ content: body.content, status: "draft" })
+    .update({ content: body.content, status: "draft", approved_at: null, approved_by: null })
     .eq("id", body.replyId);
 
   if (error) {
@@ -192,6 +247,19 @@ export async function DELETE(request: Request, { params }: RouteParams) {
 
   const membership = await getWorkspace(user);
   if (!membership) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+  try {
+    await assertReviewAction({
+      userId: user.id,
+      workspaceId: membership.workspace_id,
+      reviewId,
+      action: "draft",
+    });
+  } catch (error) {
+    if (error instanceof AppError) {
+      return NextResponse.json({ error: error.message }, { status: error.statusCode });
+    }
+    throw error;
+  }
 
   const admin = createAdminClient();
 

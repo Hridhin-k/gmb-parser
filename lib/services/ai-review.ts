@@ -1,6 +1,6 @@
 import { createAdminClient } from "@/lib/supabase/admin";
 import { AuditService } from "./audit";
-import { AppError } from "@/lib/errors";
+import { AppError, ValidationError } from "@/lib/errors";
 import { logger } from "@/lib/logger";
 import { createHash } from "crypto";
 import {
@@ -12,6 +12,11 @@ import {
   logGeminiFailure,
 } from "@/lib/gemini";
 import { splitGoogleTranslation } from "@/lib/review-text";
+import { toneInstruction, type ToneVoice } from "@/lib/onboarding";
+import { draftsPausedForLocation, resolvedToneForLocation } from "@/lib/services/hierarchy";
+import { adjustmentInstruction, type DraftAdjustment } from "@/lib/reply-adjustments";
+import { checkReplyGuardrails } from "@/lib/reply-guardrails";
+import { EscalationService } from "@/lib/services/escalations";
 
 // ---------------------------------------------------------------------------
 // Config
@@ -45,6 +50,11 @@ export interface GenerateDraftParams {
   reviewId: string;
   workspaceId: string;
   userId: string;
+  adjustment?: DraftAdjustment;
+  /** True only when the user explicitly asked to replace a draft they edited. */
+  replaceEdited?: boolean;
+  /** True only for a background worker. A pause blocks this path. A person drafting is unaffected. */
+  automated?: boolean;
 }
 
 export interface ReplyPlaybook {
@@ -63,6 +73,11 @@ export interface ReviewContext {
   playbook?: ReplyPlaybook | null;
   /** The unpublished draft being replaced when the user clicks Regenerate. */
   previousDraft?: string | null;
+  /** The draft to revise for shorter, warmer, formal, or language changes. */
+  currentDraft?: string | null;
+  adjustment?: DraftAdjustment | null;
+  tone?: { voice: ToneVoice | null; note: string | null } | null;
+  voiceGuide?: string | null;
 }
 
 export interface GenerateDraftResult {
@@ -142,7 +157,7 @@ RULES
 - Never offer refunds, discounts, gifts, or compensation.
 - Never invent facts, staff names, policies, opening hours, phone numbers, email addresses, or URLs. Never use placeholders like [Name].
 - Avoid stock phrases such as "We appreciate your kind words" or "Your feedback is valuable to us".
-${playbookBlock(ctx.playbook)}${previousDraftBlock(ctx.previousDraft)}
+${toneInstruction(ctx.tone?.voice, ctx.tone?.note)}${ctx.voiceGuide ?? ""}${playbookBlock(ctx.playbook)}${previousDraftBlock(ctx.previousDraft)}${adjustmentInstruction(ctx.adjustment, ctx.currentDraft)}
 OUTPUT
 Return only the reply text — no quotes, labels, or notes.`;
 }
@@ -197,13 +212,14 @@ export class AIReviewService {
     const { data: review, error: reviewErr } = await admin
       .from("grm_reviews")
       .select(
-        `id, star_rating, comment, reviewer_display_name, reviewer_is_anonymous,
+        `id, location_id, star_rating, comment, reviewer_display_name, reviewer_is_anonymous,
          grm_google_locations!inner(
            location_title,
+           hold_reason,
            grm_clients(name),
            grm_location_insights(workspace_id, analysis)
          ),
-         grm_review_replies(content, status, workspace_id)`
+         grm_review_replies(content, status, source, workspace_id, grm_review_ai_drafts(content))`
       )
       .eq("id", params.reviewId)
       .eq("workspace_id", params.workspaceId)
@@ -213,14 +229,40 @@ export class AIReviewService {
       throw new AppError("Review not found", "NOT_FOUND", 404);
     }
 
+    if (params.automated) {
+      const pauses = await EscalationService.pausedTargets(params.workspaceId);
+      const place = await admin
+        .from("grm_google_locations")
+        .select("client_id")
+        .eq("id", review.location_id)
+        .maybeSingle();
+      const blocked =
+        pauses.workspace ||
+        pauses.locationIds.includes(review.location_id) ||
+        Boolean(place.data?.client_id && pauses.clientIds.includes(place.data.client_id));
+      if (blocked || (await draftsPausedForLocation(params.workspaceId, review.location_id))) {
+        throw new AppError(
+          "Automatic replies are paused for this location.",
+          "AUTOREPLY_PAUSED",
+          409
+        );
+      }
+    }
+
     const loc = Array.isArray(review.grm_google_locations)
       ? review.grm_google_locations[0]
       : review.grm_google_locations;
     const locTyped = loc as {
       location_title: string;
+      hold_reason?: string | null;
       grm_clients?: { name: string } | Array<{ name: string }> | null;
       grm_location_insights?: Array<{ workspace_id: string; analysis: unknown }> | null;
     };
+    if (locTyped.hold_reason === "duplicate" || locTyped.hold_reason === "unverified") {
+      throw new ValidationError(
+        "This profile is unverified or a suspected duplicate, so automatic drafts stay off. You can still write a reply yourself."
+      );
+    }
     const clientData = locTyped.grm_clients;
     const businessName = Array.isArray(clientData)
       ? (clientData[0]?.name ?? locTyped.location_title)
@@ -230,14 +272,38 @@ export class AIReviewService {
       (row) => row.workspace_id === params.workspaceId
     );
     const replies = (review as {
-      grm_review_replies?: Array<{ content: string; status: string; workspace_id: string }> | null;
+      grm_review_replies?: Array<{
+        content: string;
+        status: string;
+        source?: string;
+        workspace_id: string;
+        grm_review_ai_drafts?: { content: string } | Array<{ content: string }> | null;
+      }> | null;
     }).grm_review_replies;
-    const previousDraft = (replies ?? []).find(
+    const activeReply = (replies ?? []).find(
       (r) =>
         r.workspace_id === params.workspaceId &&
         (r.status === "draft" || r.status === "failed")
-    )?.content;
+    );
+    const linkedDraft = activeReply?.grm_review_ai_drafts;
+    const originalDraft = Array.isArray(linkedDraft) ? linkedDraft[0]?.content : linkedDraft?.content;
+    const manuallyEdited = Boolean(
+      activeReply &&
+        (activeReply.source === "manual" ||
+          (originalDraft && originalDraft.trim() !== activeReply.content.trim()))
+    );
+    if (manuallyEdited && !params.replaceEdited) {
+      throw new ValidationError(
+        "This draft has manual edits. Use Shorter, Warmer, More formal, Regenerate, a language, or a template when you want to replace it."
+      );
+    }
+    const previousDraft = activeReply?.content;
+    const revising = params.adjustment && params.adjustment.kind !== "regenerate";
 
+    const tone = await resolvedToneForLocation(params.workspaceId, review.location_id);
+    const { resolvedForLocation } = await import("@/lib/services/reply-settings");
+    const { voiceGuide } = await import("@/lib/automation");
+    const configured = await resolvedForLocation(params.workspaceId, review.location_id);
     const ctx: ReviewContext = {
       reviewerName: review.reviewer_is_anonymous
         ? null
@@ -247,7 +313,11 @@ export class AIReviewService {
       businessName,
       locationName: locTyped.location_title,
       playbook: playbookFromAnalysis(insightRow?.analysis),
-      previousDraft,
+      previousDraft: revising ? null : previousDraft,
+      currentDraft: revising ? previousDraft : null,
+      adjustment: params.adjustment ?? null,
+      tone,
+      voiceGuide: voiceGuide(configured.tone, configured.automation.varyWording),
     };
 
     const systemPrompt = buildReplyPrompt(ctx);
@@ -308,6 +378,19 @@ export class AIReviewService {
           "AI_INVALID_RESPONSE",
           502
         );
+      }
+
+      const violations = checkReplyGuardrails(cleaned);
+      if (violations.length) {
+        await AuditService.log({
+          workspaceId: params.workspaceId,
+          userId: params.userId,
+          action: "reply.guardrail_blocked",
+          entityType: "grm_reviews",
+          entityId: params.reviewId,
+          metadata: { codes: violations.map((item) => item.code), stage: "generate" },
+        });
+        throw new ValidationError(violations[0].message);
       }
 
       responseText = cleaned;
@@ -393,7 +476,13 @@ export class AIReviewService {
       action: "reply.ai_generated",
       entityType: "grm_review_ai_drafts",
       entityId: draft.id,
-      metadata: { model: MODEL_ID, promptVersion: PROMPT_VERSION, reviewId: params.reviewId },
+      metadata: {
+        model: MODEL_ID,
+        promptVersion: PROMPT_VERSION,
+        reviewId: params.reviewId,
+        adjustment: params.adjustment?.kind ?? "regenerate",
+        language: params.adjustment?.kind === "language" ? params.adjustment.language : null,
+      },
     });
 
     return {

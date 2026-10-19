@@ -9,7 +9,11 @@ const PUBLIC_PATHS = [
   "/auth/callback",
   "/api/auth",
   "/api/google/callback",
+  "/api/google/client-connect",
+  "/c/",
   "/api/cron",
+  "/r",
+  "/api/requests/hooks",
 ];
 
 export async function proxy(request: NextRequest) {
@@ -52,7 +56,7 @@ export async function proxy(request: NextRequest) {
   }
 
   if (user && pathname === "/login") {
-    return NextResponse.redirect(new URL("/dashboard", request.url));
+    return NextResponse.redirect(new URL("/overview", request.url));
   }
 
   return response;

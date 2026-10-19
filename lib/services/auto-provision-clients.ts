@@ -80,6 +80,7 @@ type LocationRow = {
   store_code: string | null;
   client_id: string | null;
   is_active: boolean;
+  hold_reason: string | null;
 };
 
 /**
@@ -98,7 +99,7 @@ export async function autoProvisionClientsFromLocations(
   const { data: locations, error: locError } = await supabase
     .from("grm_google_locations")
     .select(
-      "id, google_location_name, location_title, store_code, client_id, is_active"
+      "id, google_location_name, location_title, store_code, client_id, is_active, hold_reason"
     )
     .eq("workspace_id", workspaceId)
     .eq("is_active", true);
@@ -136,8 +137,8 @@ export async function autoProvisionClientsFromLocations(
     if (isAutoOrgMarker(c.notes)) byOrgMarker.set(c.notes!, c.id);
   }
 
-  const toProvision = ((locations ?? []) as LocationRow[]).filter((loc) =>
-    shouldProvisionLocation(loc, clientById, unassignedIds)
+  const toProvision = ((locations ?? []) as LocationRow[]).filter(
+    (loc) => !loc.hold_reason && shouldProvisionLocation(loc, clientById, unassignedIds)
   );
 
   if (!toProvision.length) {

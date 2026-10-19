@@ -8,6 +8,7 @@ import { parseBody, validateId, publishReplyBodySchema } from "@/lib/validation"
 import { toUserMessage, toStatusCode } from "@/lib/errors";
 import { checkRateLimit, PUBLISH_LIMIT } from "@/lib/rate-limit";
 import { ensurePersonalWorkspace } from "@/lib/services/workspace";
+import { assertReviewAction } from "@/lib/services/access";
 
 interface RouteParams {
   params: Promise<{ reviewId: string }>;
@@ -56,6 +57,20 @@ export async function POST(request: Request, { params }: RouteParams) {
   const admin = createAdminClient();
   const membership = await ensurePersonalWorkspace(user);
 
+  try {
+    await assertReviewAction({
+      userId: user.id,
+      workspaceId: membership.workspace_id,
+      reviewId,
+      action: "publish",
+    });
+  } catch (error) {
+    if (error instanceof AppError) {
+      return NextResponse.json({ error: error.message }, { status: error.statusCode });
+    }
+    throw error;
+  }
+
   const { data: replyCheck } = await admin
     .from("grm_review_replies")
     .select("id, status")
@@ -73,10 +88,31 @@ export async function POST(request: Request, { params }: RouteParams) {
   }
 
   if (replyCheck.status === "pending_publish") {
-    return NextResponse.json(
-      { error: "This reply is already being published. Please wait." },
-      { status: 409 }
-    );
+    try {
+      const result = await ReplyPublishingService.reconcilePendingPublish(
+        body.replyId,
+        reviewId,
+        membership.workspace_id,
+        user.id
+      );
+      return NextResponse.json({
+        success: true,
+        published: true,
+        publishedAt: result.publishedAt,
+        reconciled: true,
+      });
+    } catch (error) {
+      if (error instanceof AppError) {
+        return NextResponse.json(
+          { error: error.message, code: error.code, published: false, retryable: error.statusCode === 409 },
+          { status: error.statusCode }
+        );
+      }
+      return NextResponse.json(
+        { error: "Google could not be checked, so this reply is still not marked as published.", published: false },
+        { status: 409 }
+      );
+    }
   }
 
   if (replyCheck.status === "failed") {

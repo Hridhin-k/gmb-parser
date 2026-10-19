@@ -3,6 +3,22 @@
     {
       "path": "/api/cron/reviews-sync",
       "schedule": "0 4 * * *"
+    },
+    {
+      "path": "/api/cron/escalations",
+      "schedule": "0 * * * *"
+    },
+    {
+      "path": "/api/cron/reports",
+      "schedule": "15 * * * *"
+    },
+    {
+      "path": "/api/cron/requests",
+      "schedule": "45 * * * *"
+    },
+    {
+      "path": "/api/cron/automation",
+      "schedule": "30 * * * *"
     }
   ]
 }

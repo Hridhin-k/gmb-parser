@@ -11,6 +11,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { SelectField } from "@/components/ui/select-field";
 import type { DateRangeKey } from "@/lib/date-range";
+import { COMPLAINT_THEMES, REVIEW_LANGUAGES } from "@/lib/review-inbox";
 
 const STATUS_FILTERS = [
   { key: "all", label: "All" },
@@ -24,6 +25,8 @@ const STATUS_FILTERS = [
 
 const RATING_FILTERS = [5, 4, 3, 2, 1] as const;
 
+type StatusFilter = { key: string; label: string };
+
 interface ReviewFiltersProps {
   currentFilter: string;
   currentRating: string;
@@ -36,6 +39,22 @@ interface ReviewFiltersProps {
   currentClientId: string;
   currentLocationId: string;
   compact?: boolean;
+  /** Header already owns client, date range, and search. */
+  hideScope?: boolean;
+  /** Page already limits the star range, so the 1–2★ and 4–5★ toggles would be ignored. */
+  hideStars?: boolean;
+  /** Status treated as the untouched default, so Clear does not count it. */
+  defaultFilter?: string;
+  statusFilters?: readonly StatusFilter[];
+  showInboxFilters?: boolean;
+  currentLanguage?: string;
+  currentTheme?: string;
+  currentAssignee?: string;
+  currentGroupId?: string;
+  currentSort?: string;
+  currentText?: "" | "has" | "none";
+  groups?: Array<{ id: string; name: string }>;
+  members?: Array<{ id: string; email: string }>;
 }
 
 export function ReviewFilters({
@@ -50,6 +69,19 @@ export function ReviewFilters({
   currentClientId,
   currentLocationId,
   compact = false,
+  hideScope = false,
+  hideStars = false,
+  defaultFilter = "all",
+  statusFilters = STATUS_FILTERS,
+  showInboxFilters = false,
+  currentLanguage = "",
+  currentTheme = "",
+  currentAssignee = "",
+  currentGroupId = "",
+  currentSort = "newest",
+  currentText = "",
+  groups = [],
+  members = [],
 }: ReviewFiltersProps) {
   const router = useRouter();
   const pathname = usePathname();
@@ -64,6 +96,7 @@ export function ReviewFilters({
   }
 
   useEffect(() => {
+    if (hideScope) return;
     if (searchValue === currentSearch) return;
     const handle = window.setTimeout(() => {
       const params = new URLSearchParams(searchParams.toString());
@@ -75,7 +108,7 @@ export function ReviewFilters({
       });
     }, 320);
     return () => window.clearTimeout(handle);
-  }, [searchValue, currentSearch, pathname, router, searchParams, startTransition]);
+  }, [hideScope, searchValue, currentSearch, pathname, router, searchParams, startTransition]);
 
   const pushParams = useCallback(
     (mutate: (params: URLSearchParams) => void) => {
@@ -103,19 +136,32 @@ export function ReviewFilters({
   );
 
   const clearAll = () => {
+    const params = new URLSearchParams();
+    if (hideScope) {
+      for (const key of ["client", "range", "from", "to"]) {
+        const value = searchParams.get(key);
+        if (value) params.set(key, value);
+      }
+    }
+    const qs = params.toString();
     startTransition(() => {
-      router.push(pathname);
+      router.push(qs ? `${pathname}?${qs}` : pathname);
     });
   };
 
   const hasActive =
-    currentFilter !== "all" ||
-    !!currentRating ||
-    !!currentRatingBucket ||
-    !!currentSearch ||
-    currentRange.key !== "all" ||
+    currentFilter !== defaultFilter ||
+    (!hideStars && (!!currentRating || !!currentRatingBucket)) ||
+    (!hideScope && !!currentSearch) ||
+    (!hideScope && currentRange.key !== "all") ||
     currentHasComment ||
-    !!currentClientId ||
+    currentText !== "" ||
+    !!currentLanguage ||
+    !!currentTheme ||
+    !!currentAssignee ||
+    !!currentGroupId ||
+    currentSort !== "newest" ||
+    (!hideScope && !!currentClientId) ||
     !!currentLocationId;
 
   const filteredLocations = currentClientId
@@ -145,7 +191,7 @@ export function ReviewFilters({
   return (
     <div className={cn("space-y-2.5", compact && "space-y-2")}>
       <div className="grid grid-cols-1 gap-2 sm:flex sm:flex-wrap sm:items-center">
-        {useClientSearch ? (
+        {hideScope ? null : useClientSearch ? (
           <div className="relative sm:w-56">
             <Input
               type="search"
@@ -215,25 +261,27 @@ export function ReviewFilters({
           />
         )}
 
-        <DateRangeFilter
-          value={currentRange}
-          defaultKey="all"
-          onChange={(change: DateRangeChange) =>
-            pushParams((params) => {
-              params.delete("period");
-              for (const [key, value] of Object.entries(change)) {
-                if (value) params.set(key, value);
-                else params.delete(key);
-              }
-            })
-          }
-        />
+        {hideScope ? null : (
+          <DateRangeFilter
+            value={currentRange}
+            defaultKey="all"
+            onChange={(change: DateRangeChange) =>
+              pushParams((params) => {
+                params.delete("period");
+                for (const [key, value] of Object.entries(change)) {
+                  if (value) params.set(key, value);
+                  else params.delete(key);
+                }
+              })
+            }
+          />
+        )}
 
         {hasActive && <ClearFiltersButton onClear={clearAll} />}
       </div>
 
       <div className="flex flex-wrap items-center gap-1">
-        {STATUS_FILTERS.map((f) => (
+        {statusFilters.map((f) => (
           <Button
             key={f.key}
             type="button"
@@ -247,6 +295,8 @@ export function ReviewFilters({
       </div>
 
       <div className="flex flex-wrap items-center gap-1">
+        {hideStars ? null : (
+          <>
         <Button
           type="button"
           size="sm"
@@ -298,7 +348,10 @@ export function ReviewFilters({
         ))}
 
         <div className="mx-1 h-4 w-px bg-silver" aria-hidden />
+          </>
+        )}
 
+        {showInboxFilters ? null : (
         <Button
           type="button"
           size="sm"
@@ -312,8 +365,75 @@ export function ReviewFilters({
         >
           Has comment
         </Button>
+        )}
+        {showInboxFilters ? (
+          <>
+            <SelectField
+              label="Text"
+              value={currentText}
+              options={[
+                { value: "", label: "Any text" },
+                { value: "has", label: "Has review text" },
+                { value: "none", label: "Rating only" },
+              ]}
+              onValueChange={(value) =>
+                pushParams((params) => {
+                  if (value) params.set("text", value);
+                  else params.delete("text");
+                  params.delete("comment");
+                })
+              }
+              className="sm:w-40"
+            />
+            <SelectField
+              label="Language"
+              value={currentLanguage}
+              options={[{ value: "", label: "Any language" }, ...REVIEW_LANGUAGES.map((item) => ({ value: item.id, label: item.label }))]}
+              onValueChange={(value) => updateParam("language", value)}
+              className="sm:w-40"
+            />
+            <SelectField
+              label="Complaint theme"
+              value={currentTheme}
+              options={[{ value: "", label: "Any theme" }, ...COMPLAINT_THEMES.map((item) => ({ value: item.id, label: item.label }))]}
+              onValueChange={(value) => updateParam("theme", value)}
+              className="sm:w-48"
+            />
+            <SelectField
+              label="Assignee"
+              value={currentAssignee}
+              options={[
+                { value: "", label: "Anyone" },
+                { value: "unassigned", label: "Unassigned" },
+                ...members.map((member) => ({ value: member.id, label: member.email })),
+              ]}
+              onValueChange={(value) => updateParam("assignee", value)}
+              className="sm:w-52"
+            />
+            <SelectField
+              label="Group"
+              value={currentGroupId}
+              options={[{ value: "", label: "Any group" }, ...groups.map((group) => ({ value: group.id, label: group.name }))]}
+              onValueChange={(value) => updateParam("group", value)}
+              className="sm:w-44"
+            />
+            <SelectField
+              label="Sort"
+              value={currentSort}
+              options={[
+                { value: "newest", label: "Newest" },
+                { value: "oldest", label: "Oldest" },
+                { value: "highest", label: "Highest rating" },
+                { value: "lowest", label: "Lowest rating" },
+              ]}
+              onValueChange={(value) => updateParam("sort", value === "newest" ? "" : value)}
+              className="sm:w-40"
+            />
+          </>
+        ) : null}
       </div>
 
+      {hideScope ? null : (
       <div className="relative sm:max-w-sm">
         <Search
           className="pointer-events-none absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-slate"
@@ -328,6 +448,7 @@ export function ReviewFilters({
           aria-label="Search reviews"
         />
       </div>
+      )}
     </div>
   );
 }

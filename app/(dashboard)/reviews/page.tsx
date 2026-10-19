@@ -1,5 +1,8 @@
 import { getDashboardData } from "@/lib/services/dashboard";
-import { canApproveReplies, canSyncWorkspace } from "@/lib/services/workspace";
+import { COMPLAINT_THEMES, REVIEW_LANGUAGES, type InboxSort } from "@/lib/review-inbox";
+import { clampListScope } from "@/lib/access";
+import { getMemberAccess } from "@/lib/services/access";
+import { canApproveReplies, canSyncWorkspace, getWorkspaceRoster } from "@/lib/services/workspace";
 import { getActiveRole, getActiveWorkspace } from "@/lib/services/session";
 import { PageHeader } from "@/components/page-header";
 import { EmptyState } from "@/components/empty-state";
@@ -21,7 +24,7 @@ interface ReviewsPageProps {
 }
 
 export default async function ReviewsPage({ searchParams }: ReviewsPageProps) {
-  const [params, { workspaceId }] = await Promise.all([
+  const [params, { user, workspaceId }] = await Promise.all([
     searchParams,
     getActiveWorkspace(),
   ]);
@@ -34,13 +37,15 @@ export default async function ReviewsPage({ searchParams }: ReviewsPageProps) {
     "approved",
     "failed",
     "published",
+    "reopened",
+    "escalated",
   ].includes(typeof params.filter === "string" ? params.filter : "")
     ? (params.filter as string)
     : "all";
 
   const ratingParam = validateRatingFilter(params.rating);
   const starsParam =
-    params.stars === "negative" || params.stars === "positive"
+    params.stars === "negative" || params.stars === "positive" || params.stars === "low"
       ? params.stars
       : "";
   const searchParam = validateFilterString(params.q);
@@ -49,25 +54,53 @@ export default async function ReviewsPage({ searchParams }: ReviewsPageProps) {
   const range = parseDateRange(params, "all");
   const hasRange = range.key !== "all";
   const hasComment = params.comment === "1" || params.comment === "true";
+  const textParam = params.text === "0" || params.text === "none" ? "none" : params.text === "1" || params.text === "has" ? "has" : "";
+  const languageParam = REVIEW_LANGUAGES.some((item) => item.id === params.language) ? String(params.language) : "";
+  const themeParam = COMPLAINT_THEMES.some((item) => item.id === params.theme) ? String(params.theme) : "";
+  const assigneeParam =
+    params.assignee === "unassigned" ||
+    (typeof params.assignee === "string" && /^[0-9a-f-]{36}$/i.test(params.assignee))
+      ? params.assignee
+      : "";
+  const groupParam =
+    typeof params.group === "string" && /^[0-9a-f-]{36}$/i.test(params.group) ? params.group : "";
+  const sortParam: InboxSort =
+    params.sort === "oldest" || params.sort === "highest" || params.sort === "lowest" ? params.sort : "newest";
   const currentPage = validatePage(params.page);
 
-  const [role, data] = await Promise.all([
+  const access = await getMemberAccess(user.id, workspaceId);
+  const bounded = clampListScope(
+    {
+      clientId: clientParam,
+      locationId: locationParam,
+      groupId: groupParam,
+    },
+    access?.scope ?? { clientId: null, groupId: null, locationId: null }
+  );
+  const [role, data, roster] = await Promise.all([
     getActiveRole(),
     getDashboardData(workspaceId, {
       filter: filterParam,
       rating: ratingParam,
-      ratingBucket: starsParam || undefined,
+      ratingBucket: starsParam === "low" ? "escalation" : starsParam || undefined,
       q: searchParam,
-      clientId: clientParam,
-      locationId: locationParam,
+      clientId: bounded.clientId,
+      locationId: bounded.locationId,
       since: range.start?.toISOString() ?? null,
       until: range.end?.toISOString() ?? null,
-      hasComment: hasComment || undefined,
+      hasComment: hasComment || textParam === "has" || undefined,
+      text: textParam || undefined,
+      language: languageParam || undefined,
+      theme: themeParam || undefined,
+      assignee: assigneeParam || undefined,
+      groupId: bounded.groupId || undefined,
+      sort: sortParam,
       page: currentPage,
       profileQ: "",
       profileSort: "attention",
       profilePage: 1,
     }),
+    getWorkspaceRoster(workspaceId),
   ]);
   const canApprove = canApproveReplies(role);
 
@@ -85,6 +118,12 @@ export default async function ReviewsPage({ searchParams }: ReviewsPageProps) {
     client: clientParam,
     location: locationParam,
     comment: hasComment ? "1" : "",
+    text: textParam === "has" ? "1" : textParam === "none" ? "0" : "",
+    language: languageParam,
+    theme: themeParam,
+    assignee: assigneeParam,
+    group: groupParam,
+    sort: sortParam !== "newest" ? sortParam : "",
     ...dateRangeParams(range, "all"),
   })) {
     if (v) queryForPagination.set(k, v);
@@ -93,7 +132,7 @@ export default async function ReviewsPage({ searchParams }: ReviewsPageProps) {
   return (
     <div className="space-y-6">
       <PageHeader
-        title="Reviews"
+        title="Inbox"
         description="Every review across your locations. Filter, draft, approve, and publish."
       >
         <div className="flex flex-wrap gap-2">
@@ -124,6 +163,27 @@ export default async function ReviewsPage({ searchParams }: ReviewsPageProps) {
           locations={data.locations}
           currentClientId={clientParam}
           currentLocationId={locationParam}
+          hideScope
+          showInboxFilters
+          currentLanguage={languageParam}
+          currentTheme={themeParam}
+          currentAssignee={assigneeParam}
+          currentGroupId={groupParam}
+          currentSort={sortParam}
+          currentText={textParam}
+          groups={data.groups}
+          members={roster.members.map((member) => ({ id: member.userId, email: member.email }))}
+          statusFilters={[
+            { key: "all", label: "All" },
+            { key: "unanswered", label: "Needs reply" },
+            { key: "escalated", label: "Escalated" },
+            { key: "draft", label: "Draft ready" },
+            { key: "approved", label: "Ready to publish" },
+            { key: "failed", label: "Failed" },
+            { key: "published", label: "Replied" },
+            { key: "reopened", label: "Reopened" },
+            { key: "answered", label: "Any reply" },
+          ]}
         />
 
         <PendingRegion label="Updating reviews…" className="space-y-4">
@@ -138,7 +198,12 @@ export default async function ReviewsPage({ searchParams }: ReviewsPageProps) {
                 clientParam ||
                 locationParam ||
                 hasRange ||
-                hasComment
+                hasComment ||
+                textParam ||
+                languageParam ||
+                themeParam ||
+                assigneeParam ||
+                groupParam
                   ? "No reviews match your filters"
                   : "No reviews synced"
               }
@@ -150,7 +215,12 @@ export default async function ReviewsPage({ searchParams }: ReviewsPageProps) {
                 clientParam ||
                 locationParam ||
                 hasRange ||
-                hasComment
+                hasComment ||
+                textParam ||
+                languageParam ||
+                themeParam ||
+                assigneeParam ||
+                groupParam
                   ? "Try a wider time range, or clear the filters."
                   : data.hasConnections
                     ? "Sync reviews from the dashboard to pull Google reviews here."
@@ -166,6 +236,7 @@ export default async function ReviewsPage({ searchParams }: ReviewsPageProps) {
                 reviews={data.reviews}
                 replies={data.replies}
                 canApprove={canApprove}
+                members={roster.members.map((member) => ({ id: member.userId, email: member.email }))}
               />
               {totalPages > 1 && (
                 <PaginationBar

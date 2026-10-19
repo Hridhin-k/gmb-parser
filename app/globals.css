@@ -2,9 +2,8 @@
 @import "tw-animate-css";
 
 /*
- * Design system: design/design.md ("Monochrome utility, human touch").
- * Ink/Graphite/Slate on Paper and White; color is reserved for logos,
- * status signals, and the single Action Blue accent.
+ * Dashboard palette: navy primary, cool paper, and chart colors for
+ * ratings, sentiment, and reply health. Text stays graphite for reading.
  */
 
 @theme inline {
@@ -15,15 +14,21 @@
   --font-sans: var(--font-inter), ui-sans-serif, system-ui, -apple-system, sans-serif;
   --font-mono: ui-monospace, SFMono-Regular, Menlo, monospace;
 
-  --color-ink: #101010;
-  --color-graphite: #242424;
-  --color-slate: #6b7280;
-  --color-stone: #898989;
-  --color-silver: #e5e7eb;
-  --color-paper: #f4f4f4;
-  --color-action-blue: #0099ff;
-  --color-info-banner-bg: #eff6fe;
-  --color-success: #15803d;
+  --color-ink: #0f274f;
+  --color-graphite: #1e293b;
+  --color-slate: #64748b;
+  --color-stone: #94a3b8;
+  --color-silver: #e2e8f0;
+  --color-paper: #f3f6fb;
+  --color-action-blue: #2563eb;
+  --color-info-banner-bg: #eff6ff;
+  --color-success: #059669;
+  --color-navy: #163a7a;
+  --color-sky: #38bdf8;
+  --color-positive: #10b981;
+  --color-neutral: #f59e0b;
+  --color-negative: #f43f5e;
+  --color-warn: #f97316;
 
   --color-sidebar-ring: var(--sidebar-ring);
   --color-sidebar-border: var(--sidebar-border);
@@ -98,38 +103,38 @@
 
 :root {
   --font-heading: var(--font-cal-sans), "Poppins", ui-sans-serif, system-ui, sans-serif;
-  --background: #f4f4f4;
-  --foreground: #242424;
+  --background: #f3f6fb;
+  --foreground: #1e293b;
   --card: #ffffff;
-  --card-foreground: #242424;
+  --card-foreground: #1e293b;
   --popover: #ffffff;
-  --popover-foreground: #242424;
-  --primary: #101010;
+  --popover-foreground: #1e293b;
+  --primary: #163a7a;
   --primary-foreground: #ffffff;
-  --secondary: #f4f4f4;
-  --secondary-foreground: #242424;
-  --muted: #f4f4f4;
-  --muted-foreground: #6b7280;
-  --accent: #f4f4f4;
-  --accent-foreground: #101010;
-  --destructive: #dc2626;
-  --border: #e5e7eb;
-  --input: #e5e7eb;
-  --ring: #101010;
-  --chart-1: #101010;
-  --chart-2: #6b7280;
-  --chart-3: #898989;
-  --chart-4: #242424;
-  --chart-5: #e5e7eb;
+  --secondary: #e8eef8;
+  --secondary-foreground: #163a7a;
+  --muted: #eef2f7;
+  --muted-foreground: #64748b;
+  --accent: #dbeafe;
+  --accent-foreground: #163a7a;
+  --destructive: #e11d48;
+  --border: #e2e8f0;
+  --input: #e2e8f0;
+  --ring: #2563eb;
+  --chart-1: #2563eb;
+  --chart-2: #10b981;
+  --chart-3: #f59e0b;
+  --chart-4: #f43f5e;
+  --chart-5: #38bdf8;
   --radius: 8px;
-  --sidebar: #ffffff;
-  --sidebar-foreground: #242424;
-  --sidebar-primary: #101010;
-  --sidebar-primary-foreground: #ffffff;
-  --sidebar-accent: #f4f4f4;
-  --sidebar-accent-foreground: #101010;
-  --sidebar-border: #e5e7eb;
-  --sidebar-ring: #101010;
+  --sidebar: #163a7a;
+  --sidebar-foreground: #ffffff;
+  --sidebar-primary: #ffffff;
+  --sidebar-primary-foreground: #163a7a;
+  --sidebar-accent: rgba(255, 255, 255, 0.12);
+  --sidebar-accent-foreground: #ffffff;
+  --sidebar-border: rgba(255, 255, 255, 0.12);
+  --sidebar-ring: #38bdf8;
 }
 
 @layer base {
@@ -159,9 +164,9 @@
     color: var(--color-stone);
   }
   *:focus-visible {
-    @apply outline-2 outline-offset-2 outline-ink;
+    @apply outline-2 outline-offset-2 outline-action-blue;
   }
   ::selection {
-    background-color: var(--color-silver);
+    background-color: #bfdbfe;
   }
 }

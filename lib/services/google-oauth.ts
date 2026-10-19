@@ -97,6 +97,9 @@ interface OAuthStatePayload {
   userId: string;
   nonce: string;
   expiresAt: number;
+  returnTo?: "/onboarding";
+  clientId?: string;
+  onboardingId?: string;
 }
 
 function signState(payload: OAuthStatePayload): string {
@@ -176,17 +179,24 @@ export class GoogleOAuthService {
    * Generates the Google OAuth authorization URL with an HMAC-signed state parameter.
    * The state includes workspace/user context and a random nonce to prevent CSRF.
    */
-  static createAuthorizationUrl(workspaceId: string, userId: string): string {
-    const client = getOAuthClient();
+  static createAuthorizationUrl(
+    workspaceId: string,
+    userId: string,
+    returnTo?: "/onboarding",
+    onboarding?: { clientId: string; onboardingId: string }
+  ): string {
+    const oauth = getOAuthClient();
 
     const statePayload: OAuthStatePayload = {
       workspaceId,
       userId,
       nonce: crypto.randomBytes(16).toString("hex"),
       expiresAt: Date.now() + 10 * 60 * 1000, // 10-minute validity
+      ...(returnTo === "/onboarding" ? { returnTo } : {}),
+      ...(onboarding ? { clientId: onboarding.clientId, onboardingId: onboarding.onboardingId } : {}),
     };
 
-    return client.generateAuthUrl({
+    return oauth.generateAuthUrl({
       access_type: "offline",
       scope: GBP_SCOPES,
       state: signState(statePayload),
@@ -203,6 +213,11 @@ export class GoogleOAuthService {
     return verifyState(state);
   }
 
+  /** Only the setup wizard may override the post-connect page. */
+  static returnPath(payload: OAuthStatePayload): "/onboarding" | "/settings" {
+    return payload.returnTo === "/onboarding" ? "/onboarding" : "/settings";
+  }
+
   /**
    * Handles the full OAuth callback flow:
    * 1. Validate and verify HMAC state
@@ -215,7 +230,7 @@ export class GoogleOAuthService {
     code: string,
     state: string
   ): Promise<{ workspaceId: string; googleEmail: string }> {
-    const { workspaceId, userId } = this.validateState(state);
+    const { workspaceId, userId, clientId } = this.validateState(state);
     const client = getOAuthClient();
 
     let accessToken: string;
@@ -289,6 +304,7 @@ export class GoogleOAuthService {
         {
           workspace_id: workspaceId,
           authorized_by_user_id: userId,
+          ...(clientId ? { client_id: clientId } : {}),
           google_email: googleEmail,
           access_token_enc: accessTokenEnc,
           refresh_token_enc: refreshTokenEnc,

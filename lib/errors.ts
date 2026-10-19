@@ -73,6 +73,14 @@ export class ValidationError extends AppError {
   }
 }
 
+/** 409 — the change replaces or moves something and needs an explicit confirm. */
+export class ConfirmRequiredError extends AppError {
+  constructor(message: string) {
+    super(message, "CONFIRM_REQUIRED", 409);
+    this.name = "ConfirmRequiredError";
+  }
+}
+
 // ---------------------------------------------------------------------------
 // Database
 // ---------------------------------------------------------------------------

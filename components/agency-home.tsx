@@ -13,6 +13,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import type { AgencyClientRow, AgencyHome } from "@/lib/services/agency-home";
+import { AgencyClientForm } from "@/components/agency-client-form";
 
 interface AgencyHomeViewProps {
   workspaceId: string;
@@ -22,6 +23,10 @@ interface AgencyHomeViewProps {
   /** range/from/to search params for the selected time range (empty for the default). */
   rangeParams: Record<string, string>;
   query: string;
+  /** Usage totals are for people who manage the organization. */
+  showUsage: boolean;
+  canAddClient: boolean;
+  managers: Array<{ id: string; email: string }>;
 }
 
 function formatRating(value: number | null) {
@@ -69,6 +74,9 @@ export function AgencyHomeView({
   clientId,
   rangeParams,
   query,
+  showUsage,
+  canAddClient,
+  managers,
 }: AgencyHomeViewProps) {
   const { kpis, rows, totalClients, page, pageSize } = data;
   const from = totalClients === 0 ? 0 : (page - 1) * pageSize + 1;
@@ -79,9 +87,7 @@ export function AgencyHomeView({
   for (const [key, value] of Object.entries(rangeParams)) exportParams.set(key, value);
   if (query) exportParams.set("q", query);
   const exportHref = `/api/usage/export${exportParams.size ? `?${exportParams}` : ""}`;
-  const reviewsHref = clientId
-    ? `/reviews?filter=approved&client=${clientId}`
-    : "/reviews?filter=approved";
+  const queueHref = clientId ? `/clients/${clientId}` : "/clients";
 
   return (
     <div className="space-y-4">
@@ -110,12 +116,36 @@ export function AgencyHomeView({
         hasPublished={data.hasPublished}
       />
 
-      <section className="grid grid-cols-2 gap-3 lg:grid-cols-5">
+      <form action="/dashboard" className="flex flex-wrap gap-2">
+        <input
+          name="q"
+          defaultValue={query}
+          placeholder="Search clients"
+          aria-label="Search clients"
+          className="h-10 min-w-0 flex-1 rounded-md border border-silver bg-white px-3 text-sm text-graphite"
+        />
+        {clientId ? <input type="hidden" name="client" value={clientId} /> : null}
+        {Object.entries(rangeParams).map(([key, value]) => (
+          <input key={key} type="hidden" name={key} value={value} />
+        ))}
+        <Button type="submit" variant="outline">Search</Button>
+      </form>
+
+      {canAddClient ? (
+        <section className="rounded-xl border border-silver bg-white p-4">
+          <h2 className="text-sm font-semibold text-graphite">Add client</h2>
+          <p className="mt-1 mb-3 text-xs text-slate">A client can exist before their Google account is connected.</p>
+          <AgencyClientForm mode="create" canAssignManager managers={managers} />
+        </section>
+      ) : null}
+
+      <section className="grid grid-cols-2 gap-3 lg:grid-cols-3 xl:grid-cols-6">
         {[
           ["Clients", kpis.clients],
           ["Locations", kpis.locations],
           ["Unreplied reviews", kpis.unreplied],
-          ["Ready to publish", kpis.waitingApproval],
+          ["Awaiting client approval", kpis.waitingApproval],
+          ["Open escalations", kpis.openEscalations],
           ["Connection problems", kpis.connectionProblems],
         ].map(([label, value]) => (
           <Card key={String(label)} size="sm" className="rounded-xl py-0 shadow-card">
@@ -130,6 +160,7 @@ export function AgencyHomeView({
       </section>
 
       <Card className="rounded-xl py-0 shadow-card">
+        <div className="overflow-x-auto">
         <Table className="min-w-[760px]">
           <TableHeader>
             <TableRow className="border-silver text-xs text-slate hover:bg-transparent">
@@ -139,6 +170,8 @@ export function AgencyHomeView({
               <TableHead className="font-medium text-slate">Reply rate</TableHead>
               <TableHead className="font-medium text-slate">Unreplied</TableHead>
               <TableHead className="font-medium text-slate">Open escalations</TableHead>
+              <TableHead className="font-medium text-slate">Client approval</TableHead>
+              <TableHead className="font-medium text-slate">Account manager</TableHead>
               <TableHead className="font-medium text-slate">Google connection</TableHead>
               <TableHead className="px-4">
                 <span className="sr-only">Action</span>
@@ -148,7 +181,7 @@ export function AgencyHomeView({
           <TableBody>
             {rows.length === 0 ? (
               <TableRow className="hover:bg-transparent">
-                <TableCell colSpan={8} className="px-4 py-10 text-center text-sm text-slate">
+                <TableCell colSpan={11} className="px-4 py-10 text-center text-sm text-slate">
                   {query || clientId
                     ? "No clients match this search."
                     : data.connectionId
@@ -169,8 +202,12 @@ export function AgencyHomeView({
                       {formatCount(row.unreplied, hasReviews)}
                     </TableCell>
                     <TableCell className="tabular-nums text-graphite">
-                      {formatCount(row.escalations, hasReviews)}
+                      {row.escalations.toLocaleString("en-US")}
                     </TableCell>
+                    <TableCell className="tabular-nums text-graphite">
+                      {row.clientApprovals.toLocaleString("en-US")}
+                    </TableCell>
+                    <TableCell className="text-graphite">{row.manager ?? "—"}</TableCell>
                     <TableCell
                       className={row.connection === "connected" ? "text-graphite" : "font-semibold text-graphite"}
                     >
@@ -192,6 +229,7 @@ export function AgencyHomeView({
             )}
           </TableBody>
         </Table>
+        </div>
         <div className="flex flex-wrap items-center justify-between gap-2 border-t border-silver px-4 py-2.5 text-xs text-slate">
           <p>
             Showing {from}–{to} of {totalClients} clients
@@ -213,10 +251,12 @@ export function AgencyHomeView({
         </div>
       </Card>
 
-      <Card id="usage" size="sm" className="scroll-mt-6 rounded-xl py-0 shadow-card">
+      <Card id={showUsage ? "usage" : undefined} size="sm" className="scroll-mt-6 rounded-xl py-0 shadow-card">
         <CardContent className="p-4 sm:p-5">
+        {showUsage ? (
+          <>
         <h2 className="text-sm font-semibold text-graphite">{data.usageHeading}</h2>
-        <p className="mt-1 text-xs text-slate">Location count and reviews received in this period.</p>
+        <p className="mt-1 text-xs text-slate">Counts of stored locations, reviews, and published replies. No price is calculated.</p>
         <ul className="mt-3 divide-y divide-silver">
           {data.usage.length === 0 ? (
             <li className="py-3 text-sm text-slate">No usage in this period.</li>
@@ -226,25 +266,28 @@ export function AgencyHomeView({
                 <span className="text-graphite">{row.name}</span>
                 <span className="shrink-0 tabular-nums text-slate">
                   {row.locations} {row.locations === 1 ? "location" : "locations"} ·{" "}
-                  {row.reviews.toLocaleString("en-US")} {row.reviews === 1 ? "review" : "reviews"}
+                  {row.reviews.toLocaleString("en-US")} {row.reviews === 1 ? "review" : "reviews"} ·{" "}
+                  {row.publishedReplies.toLocaleString("en-US")} published
                 </span>
               </li>
             ))
           )}
         </ul>
         <ExportUsageButton href={exportHref} />
+          </>
+        ) : null}
 
-        <div className="mt-5 border-t border-silver pt-4">
-          <h3 className="text-sm font-semibold text-graphite">Ready to publish</h3>
+        <div className={showUsage ? "mt-5 border-t border-silver pt-4" : ""}>
+          <h3 className="text-sm font-semibold text-graphite">Client approval queue</h3>
           <p className="mt-1 text-sm text-slate">
             {data.approvals === 0
-              ? "No replies are waiting to be published."
+              ? "No replies are waiting for the client."
               : `${data.approvals.toLocaleString("en-US")} ${
                   data.approvals === 1 ? "reply is" : "replies are"
-                } approved and waiting to be published.`}
+                } waiting for the client. Approving here does not publish to Google.`}
           </p>
-          <Link href={reviewsHref} className="mt-1 inline-block text-sm text-ink hover:underline">
-            See replies ready to publish
+          <Link href={queueHref} className="mt-1 inline-block text-sm text-ink hover:underline">
+            {clientId ? "Open this client" : "Open a client"}
           </Link>
         </div>
         </CardContent>

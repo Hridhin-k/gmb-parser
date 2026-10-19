@@ -4,11 +4,18 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { GoogleBusinessProfileService } from "@/lib/services/google-business-profile";
 import { isUnassignedClient } from "@/lib/services/unassigned-client";
 import { getLocationInsightView } from "@/lib/services/dashboard";
+import { ScopeInsightService } from "@/lib/services/scope-insights";
 import { getActiveRole, getActiveWorkspace } from "@/lib/services/session";
+import { getMemberAccess, visibleClientIds } from "@/lib/services/access";
+import { isOrgScope, workspaceGrant } from "@/lib/access";
+import { getWorkspaceRoster } from "@/lib/services/workspace";
+import { AgencyClientForm } from "@/components/agency-client-form";
+import { ClientQueue } from "@/components/client-queue";
 import { canSyncWorkspace } from "@/lib/services/workspace";
 import { PageHeader } from "@/components/page-header";
 import { LocationTable } from "@/components/location-table";
 import { ProfileInsightPanel } from "@/components/profile-insight-panel";
+import { ScopeInsightPanel } from "@/components/scope-insight-panel";
 import { UnlinkedLocationsPanel } from "@/components/unlinked-locations-panel";
 import { ArrowLeft, MessageSquareText } from "lucide-react";
 import { locationDisplayName } from "@/lib/ui/location-place";
@@ -24,12 +31,15 @@ export default async function ClientDetailPage({
   params,
   searchParams,
 }: ClientDetailPageProps) {
-  const [{ clientId }, { workspaceId }, query, role] = await Promise.all([
+  const [{ clientId }, { user, workspaceId }, query, role] = await Promise.all([
     params,
     getActiveWorkspace(),
     searchParams,
     getActiveRole(),
   ]);
+  const access = await getMemberAccess(user.id, workspaceId);
+  const allowed = await visibleClientIds(workspaceId, access?.scope);
+  if (allowed && !allowed.includes(clientId)) notFound();
   const admin = createAdminClient();
 
   const [
@@ -40,7 +50,7 @@ export default async function ClientDetailPage({
   ] = await Promise.all([
     admin
       .from("grm_clients")
-      .select("id, name, notes, is_active, created_at")
+      .select("id, name, notes, is_active, created_at, contact_email, website, brand_name, logo_url, account_manager_user_id")
       .eq("id", clientId)
       .eq("workspace_id", workspaceId)
       .single(),
@@ -74,10 +84,50 @@ export default async function ClientDetailPage({
 
   const connectedLocations = connectedLocationsRaw.data ?? [];
   const locationId = validateFilterString(query.location);
-  const insight =
+  const locationIds = connectedLocations.map((location) => location.id);
+  const [insight, orgInsight, directConnection, reviewRows] = await Promise.all([
     locationId && connectedLocations.some((location) => location.id === locationId)
-      ? await getLocationInsightView(workspaceId, locationId)
-      : null;
+      ? getLocationInsightView(workspaceId, locationId)
+      : Promise.resolve(null),
+    ScopeInsightService.getView(workspaceId, "client", clientId),
+    admin
+      .from("grm_google_connections")
+      .select("status")
+      .eq("workspace_id", workspaceId)
+      .eq("client_id", clientId)
+      .limit(1)
+      .maybeSingle(),
+    locationIds.length === 0
+      ? Promise.resolve({ data: [] as Array<{ id: string; reviewer_display_name: string; star_rating: number }> })
+      : admin
+          .from("grm_reviews")
+          .select("id, reviewer_display_name, star_rating")
+          .eq("workspace_id", workspaceId)
+          .in("location_id", locationIds)
+          .limit(200),
+  ]);
+  const reviewIds = (reviewRows.data ?? []).map((review) => review.id);
+  const waiting = reviewIds.length
+    ? await admin
+        .from("grm_review_replies")
+        .select("review_id")
+        .eq("workspace_id", workspaceId)
+        .eq("client_approval", "requested")
+        .in("review_id", reviewIds)
+    : { data: [] as Array<{ review_id: string }> };
+  const waitingIds = new Set((waiting.data ?? []).map((row) => row.review_id));
+  const queue = (reviewRows.data ?? [])
+    .filter((review) => waitingIds.has(review.id))
+    .map((review) => ({
+      reviewId: review.id,
+      label: `${review.reviewer_display_name} · ${review.star_rating} stars`,
+    }));
+  const canAssignManager = Boolean(access && isOrgScope(access.scope) && workspaceGrant(role, "manage_locations"));
+  const connectionLabel = directConnection.data?.status === "active"
+    ? "This client's Google account is connected."
+    : directConnection.data
+      ? "This client's Google connection needs attention."
+      : "Waiting for this client to connect Google.";
 
   return (
     <div className="space-y-10">
@@ -87,9 +137,41 @@ export default async function ClientDetailPage({
           className="flex items-center gap-1 text-sm font-medium text-ink underline decoration-stone/50 underline-offset-4 hover:decoration-ink"
         >
           <ArrowLeft className="h-3.5 w-3.5" />
-          Clients
+          Locations
         </Link>
       </div>
+
+      <section className="rounded-xl border border-silver bg-white p-4">
+        <h2 className="text-sm font-semibold text-graphite">{clientRow.brand_name || clientRow.name}</h2>
+        <p className="mt-1 mb-3 text-xs text-slate">
+          {connectionLabel}
+        </p>
+        {workspaceGrant(role, "manage_locations") || access?.scope.clientId === clientId ? (
+          <AgencyClientForm
+            mode="edit"
+            clientId={clientId}
+            canAssignManager={canAssignManager}
+            managers={canAssignManager
+              ? (await getWorkspaceRoster(workspaceId)).members
+                  .filter((member) => member.accessEnabled)
+                  .map((member) => ({ id: member.userId, email: member.email }))
+              : []}
+            initial={{
+              name: clientRow.name,
+              contactEmail: clientRow.contact_email ?? "",
+              website: clientRow.website ?? "",
+              brandName: clientRow.brand_name ?? "",
+              logoUrl: clientRow.logo_url ?? "",
+              accountManagerUserId: clientRow.account_manager_user_id,
+            }}
+          />
+        ) : null}
+      </section>
+
+      <section className="space-y-3">
+        <h2 className="text-sm font-semibold text-graphite">Client approval queue</h2>
+        <ClientQueue clientId={clientId} items={queue} />
+      </section>
 
       <PageHeader
         title={clientRow.name}
@@ -104,11 +186,26 @@ export default async function ClientDetailPage({
         </Link>
       </PageHeader>
 
+      <div id="org-insight" className="scroll-mt-6">
+        <Suspense>
+          <ScopeInsightPanel
+            scopeKind="client"
+            scopeId={clientId}
+            title={orgInsight.title}
+            locationCount={orgInsight.locationCount}
+            reviewCount={orgInsight.reviewCount}
+            avgRating={orgInsight.avgRating}
+            insight={orgInsight.insight}
+            heuristicSummary={orgInsight.heuristicSummary}
+          />
+        </Suspense>
+      </div>
+
       {connectedLocations.length === 0 && (
         <div className="rounded-xl border border-silver bg-paper px-5 py-4 text-sm text-graphite">
           No locations on this client yet. On the{" "}
           <Link href="/clients" className="font-medium underline">
-            Clients
+            Locations
           </Link>{" "}
           page, assign profiles from the Unassigned pool to{" "}
           <span className="font-medium">{clientRow.name}</span>.

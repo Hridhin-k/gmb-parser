@@ -6,6 +6,7 @@ import { AuditService } from "./audit";
 import { AppError } from "@/lib/errors";
 import { logger } from "@/lib/logger";
 import type { GoogleReview } from "@/lib/types/google";
+import { detectComplaintTheme, detectReviewLanguage, shouldReopenReview } from "@/lib/review-inbox";
 import type { Database } from "@/lib/types/supabase";
 
 type ReviewInsert = Database["public"]["Tables"]["grm_reviews"]["Insert"];
@@ -414,7 +415,7 @@ export class ReviewSyncService {
 
     const { data: existingRows } = await supabase
       .from("grm_reviews")
-      .select("google_review_name, sync_hash, reply_status")
+      .select("google_review_name, sync_hash, reply_status, comment, star_rating")
       .eq("workspace_id", workspaceId)
       .in(
         "google_review_name",
@@ -424,7 +425,12 @@ export class ReviewSyncService {
     const existing = new Map(
       (existingRows ?? []).map((row) => [
         row.google_review_name,
-        { hash: row.sync_hash, replyStatus: row.reply_status },
+        {
+        hash: row.sync_hash,
+        replyStatus: row.reply_status,
+        comment: row.comment,
+        stars: row.star_rating,
+      },
       ])
     );
 
@@ -436,6 +442,9 @@ export class ReviewSyncService {
       const prior = existing.get(review.name);
       if (prior?.hash === hash) continue;
 
+      const stars = STAR_RATING_MAP[review.starRating];
+      if (!stars) continue;
+      const comment = review.comment ?? null;
       const googleReply = review.reviewReply?.comment ?? null;
       const payload: ReviewInsert = {
         workspace_id: workspaceId,
@@ -446,8 +455,10 @@ export class ReviewSyncService {
         reviewer_profile_url: review.reviewer?.profilePhotoUrl ?? null,
         reviewer_is_anonymous:
           review.reviewer?.isAnonymous ?? !review.reviewer?.displayName,
-        star_rating: STAR_RATING_MAP[review.starRating] ?? 0,
-        comment: review.comment ?? null,
+        star_rating: stars,
+        comment,
+        review_language: detectReviewLanguage(comment),
+        complaint_theme: detectComplaintTheme(comment, stars),
         review_create_time: review.createTime,
         review_update_time: review.updateTime ?? null,
         google_reply_comment: googleReply,
@@ -460,6 +471,19 @@ export class ReviewSyncService {
       // Never overwrite GRM drafts / in-flight publishes.
       if (googleReply && (!prior || prior.replyStatus === "none")) {
         payload.reply_status = "published";
+      }
+
+      if (
+        prior &&
+        shouldReopenReview({
+          replyStatus: prior.replyStatus,
+          previousComment: prior.comment,
+          previousStars: prior.stars,
+          nextComment: comment,
+          nextStars: stars,
+        })
+      ) {
+        payload.reopened_at = now;
       }
 
       payloads.push(payload);

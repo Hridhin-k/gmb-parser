@@ -27,7 +27,9 @@ describe("canManageMember", () => {
 
 describe("roleLabel", () => {
   it("labels each role", () => {
-    expect(roleLabel("owner")).toBe("Owner");
+    expect(roleLabel("owner")).toBe("Organization admin");
+    expect(roleLabel("org_admin")).toBe("Organization admin");
+    expect(roleLabel("brand_manager")).toBe("Brand manager");
     expect(roleLabel("admin")).toBe("Admin");
     expect(roleLabel("member")).toBe("Member");
   });
