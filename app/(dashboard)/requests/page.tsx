@@ -1,14 +1,15 @@
 import Link from "next/link";
 import { Link2 } from "lucide-react";
 import { CopyReviewLink } from "@/components/copy-review-link";
+import { FreshMetrics } from "@/components/fresh-metrics";
 import { EmptyState } from "@/components/empty-state";
 import { PageHeader } from "@/components/page-header";
 import { RequestBoard } from "@/components/request-board";
 import { ensureLocationQr, loadRequestBoard, type QrSummary } from "@/lib/services/request-campaigns";
 import { listReviewRequestLocations } from "@/lib/services/review-requests";
-import { getMemberAccess } from "@/lib/services/access";
-import { clampListScope } from "@/lib/access";
+import { readPageScope } from "@/lib/services/scope-catalog";
 import { getActiveRole, getActiveWorkspace } from "@/lib/services/session";
+import { overviewQueryKey } from "@/lib/overview-board";
 import { isManager } from "@/lib/shell";
 import { validateFilterString } from "@/lib/validation";
 
@@ -20,22 +21,18 @@ const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 export default async function RequestsPage({ searchParams }: RequestsPageProps) {
   const [params, { user, workspaceId }, role] = await Promise.all([searchParams, getActiveWorkspace(), getActiveRole()]);
-  const clientParam = validateFilterString(params.client);
-  const access = await getMemberAccess(user.id, workspaceId);
-  const bounded = clampListScope(
-    { clientId: UUID.test(clientParam) ? clientParam : "", groupId: "", locationId: "" },
-    access?.scope ?? { clientId: null, groupId: null, locationId: null }
-  );
-  const clientId = bounded.clientId;
+  const resolved = await readPageScope(user.id, workspaceId, params);
+  const clientId = resolved.clientId ?? "";
   const campaignParam = validateFilterString(params.campaign);
-  const locations = await listReviewRequestLocations(workspaceId, clientId || null, {
-    locationId: bounded.locationId || null,
-    groupId: bounded.groupId || null,
-  });
+  const locations = await listReviewRequestLocations(
+    workspaceId,
+    resolved.blocked || resolved.level !== "organisation" ? null : clientId || null,
+    { locationIds: resolved.blocked || resolved.level !== "organisation" ? resolved.locationIds : null }
+  );
   if (locations.length > 0) await ensureLocationQr(workspaceId, locations.map((location) => location.id));
   const board = await loadRequestBoard(workspaceId);
   const locationIds = new Set(locations.map((location) => location.id));
-  const campaigns = clientId || bounded.locationId || bounded.groupId
+  const campaigns = resolved.level !== "organisation" || clientId
     ? board.campaigns.filter((campaign) => campaign.locationIds.some((id) => locationIds.has(id)))
     : board.campaigns;
   const qrByLocation: Record<string, QrSummary> = {};
@@ -51,6 +48,10 @@ export default async function RequestsPage({ searchParams }: RequestsPageProps) 
         description="Ask customers to review a location, or to send a private note. Both choices are on the same page. WhatsApp, SMS, and email send only when that provider is configured."
       />
 
+      <FreshMetrics
+        rendered={overviewQueryKey((key) => (Array.isArray(params[key]) ? params[key][0] : params[key]))}
+        surface="requests"
+      >
       {locations.length === 0 ? (
         <EmptyState
           icon={Link2}
@@ -98,6 +99,7 @@ export default async function RequestsPage({ searchParams }: RequestsPageProps) 
           </ul>
         </section>
       ) : null}
+      </FreshMetrics>
     </div>
   );
 }

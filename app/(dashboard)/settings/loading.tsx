@@ -1,11 +1,9 @@
 import { PageLoading } from "@/components/page-loading";
+import { PAGE_LOADING } from "@/lib/ui-status";
 
 export default function SettingsLoading() {
+  const copy = PAGE_LOADING.settings;
   return (
-    <PageLoading
-      variant="settings"
-      title="Loading settings"
-      detail="Checking Google connections, team members, and workspace preferences."
-    />
+    <PageLoading variant="settings" title={copy.title} detail={copy.detail} tone={copy.tone} />
   );
 }

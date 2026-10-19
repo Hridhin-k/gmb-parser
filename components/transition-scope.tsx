@@ -27,7 +27,10 @@ export function useScopedTransition(): Scope {
   return scope ?? { pending, start };
 }
 
-/** Dims its content and shows a floating status while the scope's transition is pending. */
+/**
+ * Keeps previous content visible (dimmed) while a filter/scope transition runs,
+ * and announces a short status. Prefer this over a full-page skeleton for refresh.
+ */
 export function PendingRegion({
   label,
   children,
@@ -47,7 +50,8 @@ export function PendingRegion({
           <span
             role="status"
             aria-live="polite"
-            className="mt-3 inline-flex h-fit items-center gap-2 rounded-full bg-ink px-3.5 py-1.5 text-xs font-medium text-white shadow-card-hover animate-in fade-in-0 slide-in-from-top-1"
+            aria-atomic="true"
+            className="mt-3 inline-flex h-fit items-center gap-2 rounded-full bg-ink px-3.5 py-1.5 text-xs font-medium text-white shadow-card-hover motion-safe:animate-in motion-safe:fade-in-0 motion-safe:slide-in-from-top-1"
           >
             <Spinner size="sm" />
             {label}
@@ -56,9 +60,9 @@ export function PendingRegion({
       ) : null}
       <div
         className={cn(
-          "transition-opacity duration-150",
+          "motion-safe:transition-opacity motion-safe:duration-150",
           className,
-          pending && "pointer-events-none opacity-50 [transition-delay:120ms]"
+          pending && "pointer-events-none opacity-50 motion-safe:[transition-delay:120ms]"
         )}
       >
         {children}

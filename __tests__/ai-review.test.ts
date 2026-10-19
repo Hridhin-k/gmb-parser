@@ -68,6 +68,37 @@ vi.mock("@/lib/services/audit", () => ({
   },
 }));
 
+vi.mock("@/lib/services/ai-config", () => ({
+  loadPromptContextForLocation: vi.fn(async () => ({
+    config: {
+      id: "cfg-1",
+      workspaceId: "ws-1",
+      version: 1,
+      status: "active",
+      label: "Test",
+      snapshot: {
+        org: {
+          industry: "",
+          positioning: "",
+          priorities: "",
+          policies: "",
+          legacyVoice: "",
+          legacyNote: "",
+        },
+        tone: {},
+        automation: {},
+      },
+      createdAt: "",
+      updatedAt: "",
+    },
+    knowledge: [],
+    templates: [],
+    scope: { clientId: null, groupId: null, parentGroupId: null, locationId: "loc-1" },
+  })),
+  ensureActiveAiConfig: vi.fn(),
+  syncActiveSnapshotFromReplySettings: vi.fn(),
+}));
+
 // ---------------------------------------------------------------------------
 // Tests
 // ---------------------------------------------------------------------------

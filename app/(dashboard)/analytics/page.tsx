@@ -1,46 +1,48 @@
 import { Download } from "lucide-react";
 import { AnalyticsBoard, ANALYTICS_SECTIONS, type AnalyticsSection } from "@/components/analytics-board";
-import { AnalyticsFilters } from "@/components/analytics-filters";
+import { FreshMetrics } from "@/components/fresh-metrics";
 import { PageHeader } from "@/components/page-header";
 import { PendingRegion, TransitionScope } from "@/components/transition-scope";
 import { dateRangeParams, parseDateRange } from "@/lib/date-range";
+import { loadAnalyticsSlice } from "@/lib/services/analytics-slice";
+import type { AnalyticsCompare, RankBy, RankShow } from "@/lib/analytics-metrics";
 import { getDashboardContext } from "@/lib/services/dashboard-metrics";
-import { getMemberAccess } from "@/lib/services/access";
-import { clampListScope } from "@/lib/access";
+import { readPageScope } from "@/lib/services/scope-catalog";
 import { getActiveWorkspace } from "@/lib/services/session";
+import { overviewQueryKey } from "@/lib/overview-board";
 import { getWorkspaceRoster } from "@/lib/services/workspace";
-import { validateFilterString } from "@/lib/validation";
 
 interface AnalyticsPageProps {
   searchParams: Promise<Record<string, string | string[] | undefined>>;
 }
 
 const DEFAULT_RANGE = "6m";
-const UUID = /^[0-9a-f-]{36}$/i;
 
 export default async function AnalyticsPage({ searchParams }: AnalyticsPageProps) {
   const [params, { user, workspaceId }] = await Promise.all([searchParams, getActiveWorkspace()]);
   const range = parseDateRange(params, DEFAULT_RANGE);
-  const access = await getMemberAccess(user.id, workspaceId);
-  const bounded = clampListScope(
-    {
-      clientId: UUID.test(validateFilterString(params.client)) ? validateFilterString(params.client) : "",
-      groupId: UUID.test(validateFilterString(params.group)) ? validateFilterString(params.group) : "",
-      locationId: UUID.test(validateFilterString(params.location)) ? validateFilterString(params.location) : "",
-    },
-    access?.scope ?? { clientId: null, groupId: null, locationId: null }
-  );
-  const clientId = bounded.clientId || null;
-  const groupId = bounded.groupId || null;
-  const locationId = bounded.locationId || null;
+  const resolved = await readPageScope(user.id, workspaceId, params);
+  const clientId = resolved.clientId;
+  const groupId = resolved.groupId;
+  const locationId = resolved.locationId;
+  const rankBy: RankBy =
+    params.rankBy === "reviews" || params.rankBy === "reply" || params.rankBy === "time" ? params.rankBy : "rating";
+  const show: RankShow = params.show === "groups" ? "groups" : "locations";
+  const compare: AnalyticsCompare = params.compare === "onboarding" ? "onboarding" : "previous";
   const requested = typeof params.section === "string" ? params.section : "performance";
   const section = ANALYTICS_SECTIONS.some((item) => item.id === requested)
     ? (requested as AnalyticsSection)
     : "performance";
 
-  const [loaded, roster] = await Promise.all([
+  const [loaded, roster, slice] = await Promise.all([
     getDashboardContext(workspaceId, range, { clientId, groupId, locationId }),
     getWorkspaceRoster(workspaceId),
+    loadAnalyticsSlice({
+      workspaceId,
+      locationIds: resolved.locationIds,
+      start: range.start?.toISOString() ?? null,
+      end: range.end?.toISOString() ?? null,
+    }),
   ]);
   const locationsInScope = loaded.locations.filter((location) => {
     if (locationId) return location.id === locationId;
@@ -52,7 +54,7 @@ export default async function AnalyticsPage({ searchParams }: AnalyticsPageProps
   const context = {
     ...loaded,
     clients: loaded.clients.filter((client) => (clientId ? client.id === clientId : !groupId && !locationId ? true : clientIdsInScope.has(client.id))),
-    groups: loaded.groups.filter((group) => (groupId ? group.id === groupId : true)),
+    groups: loaded.groups,
     locations: locationsInScope,
   };
 
@@ -62,11 +64,15 @@ export default async function AnalyticsPage({ searchParams }: AnalyticsPageProps
     group: groupId ?? "",
     location: locationId ?? "",
     ...dateRangeParams(range, DEFAULT_RANGE),
+    rankBy: rankBy === "rating" ? "" : rankBy,
+    show: show === "locations" ? "" : show,
+    compare: compare === "previous" ? "" : compare,
   })) {
     if (value) query.set(key, value);
   }
   const exportParams = new URLSearchParams(dateRangeParams(range, "all"));
   if (clientId) exportParams.set("client", clientId);
+  if (groupId) exportParams.set("group", groupId);
   if (locationId) exportParams.set("location", locationId);
 
   return (
@@ -84,25 +90,11 @@ export default async function AnalyticsPage({ searchParams }: AnalyticsPageProps
         </a>
       </PageHeader>
       <TransitionScope>
-        <AnalyticsFilters
-          range={{ key: range.key, from: range.from, to: range.to }}
-          defaultRange={DEFAULT_RANGE}
-          clientId={clientId ?? ""}
-          clients={context.clients}
-          groupId={groupId ?? ""}
-          groups={context.groups}
-          locationId={locationId ?? ""}
-          locations={context.locations.map((location) => ({
-            id: location.id,
-            clientId: location.clientId ?? "",
-            groupId: location.groupId,
-            parentGroupId: location.parentGroupId,
-            name: location.name,
-          }))}
-          hideClient
-          hideRange
-        />
-        <PendingRegion label="Recalculating analytics…" className="mt-6">
+        <PendingRegion label="Calculating review trends for the selected locations…" className="mt-6">
+          <FreshMetrics
+            rendered={overviewQueryKey((key) => (Array.isArray(params[key]) ? params[key][0] : params[key]))}
+            surface="analytics"
+          >
           <AnalyticsBoard
             context={context}
             range={range}
@@ -110,7 +102,12 @@ export default async function AnalyticsPage({ searchParams }: AnalyticsPageProps
             section={section}
             members={roster.members.map((member) => ({ userId: member.userId, email: member.email }))}
             query={query.toString()}
+            slice={slice}
+            rankBy={rankBy}
+            show={show}
+            compare={compare}
           />
+          </FreshMetrics>
         </PendingRegion>
       </TransitionScope>
     </div>

@@ -17,13 +17,20 @@ import { draftsPausedForLocation, resolvedToneForLocation } from "@/lib/services
 import { adjustmentInstruction, type DraftAdjustment } from "@/lib/reply-adjustments";
 import { checkReplyGuardrails } from "@/lib/reply-guardrails";
 import { EscalationService } from "@/lib/services/escalations";
+import {
+  knowledgePromptBlock,
+  orgContextPromptBlock,
+  templatesPromptBlock,
+  type AiKnowledgeRow,
+  type OrgContext,
+} from "@/lib/ai-config";
 
 // ---------------------------------------------------------------------------
 // Config
 // ---------------------------------------------------------------------------
 
 const MODEL_ID = GEMINI_MODEL_ID;
-const PROMPT_VERSION = "v3.0";
+const PROMPT_VERSION = "v3.1";
 const REQUEST_TIMEOUT_MS = 30_000;
 const MAX_COMMENT_CHARS = 4000;
 
@@ -78,6 +85,10 @@ export interface ReviewContext {
   adjustment?: DraftAdjustment | null;
   tone?: { voice: ToneVoice | null; note: string | null } | null;
   voiceGuide?: string | null;
+  /** Organisation context from the active AI config (saved instructions, not training). */
+  orgContext?: OrgContext | null;
+  knowledge?: AiKnowledgeRow[] | null;
+  templates?: Array<{ name: string; body: string }> | null;
 }
 
 export interface GenerateDraftResult {
@@ -157,7 +168,7 @@ RULES
 - Never offer refunds, discounts, gifts, or compensation.
 - Never invent facts, staff names, policies, opening hours, phone numbers, email addresses, or URLs. Never use placeholders like [Name].
 - Avoid stock phrases such as "We appreciate your kind words" or "Your feedback is valuable to us".
-${toneInstruction(ctx.tone?.voice, ctx.tone?.note)}${ctx.voiceGuide ?? ""}${playbookBlock(ctx.playbook)}${previousDraftBlock(ctx.previousDraft)}${adjustmentInstruction(ctx.adjustment, ctx.currentDraft)}
+${toneInstruction(ctx.tone?.voice, ctx.tone?.note)}${ctx.voiceGuide ?? ""}${orgContextPromptBlock(ctx.orgContext ?? { industry: "", positioning: "", priorities: "", policies: "", legacyVoice: "", legacyNote: "" })}${knowledgePromptBlock(ctx.knowledge ?? [])}${templatesPromptBlock(ctx.templates ?? [])}${playbookBlock(ctx.playbook)}${previousDraftBlock(ctx.previousDraft)}${adjustmentInstruction(ctx.adjustment, ctx.currentDraft)}
 OUTPUT
 Return only the reply text — no quotes, labels, or notes.`;
 }
@@ -303,7 +314,19 @@ export class AIReviewService {
     const tone = await resolvedToneForLocation(params.workspaceId, review.location_id);
     const { resolvedForLocation } = await import("@/lib/services/reply-settings");
     const { voiceGuide } = await import("@/lib/automation");
-    const configured = await resolvedForLocation(params.workspaceId, review.location_id);
+    const { loadPromptContextForLocation } = await import("@/lib/services/ai-config");
+    const [configured, promptContext] = await Promise.all([
+      resolvedForLocation(params.workspaceId, review.location_id),
+      loadPromptContextForLocation(params.workspaceId, review.location_id),
+    ]);
+    const org = promptContext.config.snapshot.org;
+    const legacyTone =
+      org.legacyVoice || org.legacyNote
+        ? {
+            voice: (org.legacyVoice || null) as ToneVoice | null,
+            note: org.legacyNote || null,
+          }
+        : tone;
     const ctx: ReviewContext = {
       reviewerName: review.reviewer_is_anonymous
         ? null
@@ -316,12 +339,16 @@ export class AIReviewService {
       previousDraft: revising ? null : previousDraft,
       currentDraft: revising ? previousDraft : null,
       adjustment: params.adjustment ?? null,
-      tone,
+      tone: legacyTone,
       voiceGuide: voiceGuide(configured.tone, configured.automation.varyWording),
+      orgContext: org,
+      knowledge: promptContext.knowledge,
+      templates: promptContext.templates,
     };
 
     const systemPrompt = buildReplyPrompt(ctx);
     const promptHash = hashPrompt(systemPrompt);
+    const startedAt = Date.now();
 
     // Call Gemini
     const controller = new AbortController();
@@ -344,6 +371,14 @@ export class AIReviewService {
         const body = await response.text();
         logGeminiFailure("ai_review.gemini_failed", response.status, body, {
           reviewId: params.reviewId,
+        });
+        logger.error("ai_review.generate_failed", {
+          workspaceId: params.workspaceId,
+          reviewId: params.reviewId,
+          aiConfigVersion: promptContext.config.version,
+          durationMs: Date.now() - startedAt,
+          success: false,
+          statusCode: response.status,
         });
         const classified = classifyGeminiError(response.status, body);
         throw new AppError(classified.message, `AI_${classified.type.toUpperCase()}`, 502);
@@ -394,7 +429,24 @@ export class AIReviewService {
       }
 
       responseText = cleaned;
+      logger.info("ai_review.generate_ok", {
+        workspaceId: params.workspaceId,
+        reviewId: params.reviewId,
+        aiConfigVersion: promptContext.config.version,
+        durationMs: Date.now() - startedAt,
+        success: true,
+      });
     } catch (error) {
+      if (!(error instanceof AppError) || error.code !== "VALIDATION_ERROR") {
+        logger.error("ai_review.generate_failed", {
+          workspaceId: params.workspaceId,
+          reviewId: params.reviewId,
+          aiConfigVersion: promptContext.config.version,
+          durationMs: Date.now() - startedAt,
+          success: false,
+          errorCode: error instanceof AppError ? error.code : "UNKNOWN",
+        });
+      }
       if (error instanceof AppError) throw error;
       if ((error as Error).name === "AbortError") {
         throw new AppError(
@@ -422,6 +474,7 @@ export class AIReviewService {
         ai_model: MODEL_ID,
         prompt_version: PROMPT_VERSION,
         ai_prompt_hash: promptHash,
+        ai_config_version: promptContext.config.version,
         generated_by: params.userId,
         generation_params: GENERATION_CONFIG,
       })
@@ -479,6 +532,7 @@ export class AIReviewService {
       metadata: {
         model: MODEL_ID,
         promptVersion: PROMPT_VERSION,
+        aiConfigVersion: promptContext.config.version,
         reviewId: params.reviewId,
         adjustment: params.adjustment?.kind ?? "regenerate",
         language: params.adjustment?.kind === "language" ? params.adjustment.language : null,

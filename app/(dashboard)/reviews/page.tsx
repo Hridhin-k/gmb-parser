@@ -1,13 +1,13 @@
 import { getDashboardData } from "@/lib/services/dashboard";
 import { COMPLAINT_THEMES, REVIEW_LANGUAGES, type InboxSort } from "@/lib/review-inbox";
-import { clampListScope } from "@/lib/access";
-import { getMemberAccess } from "@/lib/services/access";
+import { readPageScope } from "@/lib/services/scope-catalog";
 import { canApproveReplies, canSyncWorkspace, getWorkspaceRoster } from "@/lib/services/workspace";
 import { getActiveRole, getActiveWorkspace } from "@/lib/services/session";
 import { PageHeader } from "@/components/page-header";
 import { EmptyState } from "@/components/empty-state";
 import { SyncButton } from "@/components/sync-button";
 import { ReviewFilters } from "@/components/review-filters";
+import { FreshMetrics } from "@/components/fresh-metrics";
 import { PendingRegion, TransitionScope } from "@/components/transition-scope";
 import { ReviewList } from "@/components/review-list";
 import { PaginationBar } from "@/components/pagination-bar";
@@ -18,6 +18,7 @@ import {
   validateFilterString,
 } from "@/lib/validation";
 import { dateRangeParams, parseDateRange } from "@/lib/date-range";
+import { overviewQueryKey } from "@/lib/overview-board";
 
 interface ReviewsPageProps {
   searchParams: Promise<Record<string, string | string[] | undefined>>;
@@ -49,8 +50,9 @@ export default async function ReviewsPage({ searchParams }: ReviewsPageProps) {
       ? params.stars
       : "";
   const searchParam = validateFilterString(params.q);
-  const clientParam = validateFilterString(params.client);
-  const locationParam = validateFilterString(params.location);
+  const resolved = await readPageScope(user.id, workspaceId, params);
+  const clientParam = resolved.clientId ?? "";
+  const locationParam = resolved.locationId ?? "";
   const range = parseDateRange(params, "all");
   const hasRange = range.key !== "all";
   const hasComment = params.comment === "1" || params.comment === "true";
@@ -62,21 +64,11 @@ export default async function ReviewsPage({ searchParams }: ReviewsPageProps) {
     (typeof params.assignee === "string" && /^[0-9a-f-]{36}$/i.test(params.assignee))
       ? params.assignee
       : "";
-  const groupParam =
-    typeof params.group === "string" && /^[0-9a-f-]{36}$/i.test(params.group) ? params.group : "";
+  const groupParam = resolved.groupId ?? "";
   const sortParam: InboxSort =
     params.sort === "oldest" || params.sort === "highest" || params.sort === "lowest" ? params.sort : "newest";
   const currentPage = validatePage(params.page);
 
-  const access = await getMemberAccess(user.id, workspaceId);
-  const bounded = clampListScope(
-    {
-      clientId: clientParam,
-      locationId: locationParam,
-      groupId: groupParam,
-    },
-    access?.scope ?? { clientId: null, groupId: null, locationId: null }
-  );
   const [role, data, roster] = await Promise.all([
     getActiveRole(),
     getDashboardData(workspaceId, {
@@ -84,8 +76,8 @@ export default async function ReviewsPage({ searchParams }: ReviewsPageProps) {
       rating: ratingParam,
       ratingBucket: starsParam === "low" ? "escalation" : starsParam || undefined,
       q: searchParam,
-      clientId: bounded.clientId,
-      locationId: bounded.locationId,
+      clientId: clientParam,
+      locationId: locationParam,
       since: range.start?.toISOString() ?? null,
       until: range.end?.toISOString() ?? null,
       hasComment: hasComment || textParam === "has" || undefined,
@@ -93,7 +85,7 @@ export default async function ReviewsPage({ searchParams }: ReviewsPageProps) {
       language: languageParam || undefined,
       theme: themeParam || undefined,
       assignee: assigneeParam || undefined,
-      groupId: bounded.groupId || undefined,
+      groupId: groupParam || undefined,
       sort: sortParam,
       page: currentPage,
       profileQ: "",
@@ -186,7 +178,11 @@ export default async function ReviewsPage({ searchParams }: ReviewsPageProps) {
           ]}
         />
 
-        <PendingRegion label="Updating reviews…" className="space-y-4">
+        <FreshMetrics
+          rendered={overviewQueryKey((key) => (Array.isArray(params[key]) ? params[key][0] : params[key]))}
+          surface="reviews"
+        >
+        <PendingRegion label="Fetching reviews for the selected locations…" className="space-y-4">
           {data.reviews.length === 0 ? (
             <EmptyState
               icon={MessageSquareText}
@@ -249,6 +245,7 @@ export default async function ReviewsPage({ searchParams }: ReviewsPageProps) {
             </>
           )}
         </PendingRegion>
+        </FreshMetrics>
       </TransitionScope>
     </div>
   );

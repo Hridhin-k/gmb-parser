@@ -1,3 +1,4 @@
+import { cache } from "react";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { AuthorizationError, ValidationError } from "@/lib/errors";
 import { UNASSIGNED_CLIENT_MARKER } from "@/lib/services/unassigned-client";
@@ -25,7 +26,8 @@ interface LocationRow {
   group_id: string | null;
 }
 
-export async function getMemberAccess(userId: string, workspaceId: string): Promise<MemberAccess | null> {
+/** One membership lookup per request — layout, catalog, and pages share it. */
+export const getMemberAccess = cache(async (userId: string, workspaceId: string): Promise<MemberAccess | null> => {
   const admin = createAdminClient();
   const { data, error } = await admin
     .from("grm_workspace_members")
@@ -53,7 +55,7 @@ export async function getMemberAccess(userId: string, workspaceId: string): Prom
       locationId: row.scope_location_id ?? null,
     },
   };
-}
+});
 
 async function parentGroupId(groupId: string | null): Promise<string | null> {
   if (!groupId) return null;

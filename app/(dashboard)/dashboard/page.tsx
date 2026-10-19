@@ -5,6 +5,7 @@ import { AGENCY_DEFAULT_RANGE, dateRangeParams, parseDateRange } from "@/lib/dat
 import { getActiveRole, getActiveWorkspace } from "@/lib/services/session";
 import { canSyncWorkspace, getWorkspaceRoster } from "@/lib/services/workspace";
 import { getMemberAccess, visibleClientIds } from "@/lib/services/access";
+import { readPageScope } from "@/lib/services/scope-catalog";
 import { isOrgScope, workspaceGrant } from "@/lib/access";
 import { canOpenPath } from "@/lib/shell";
 import { validateFilterString, validatePage } from "@/lib/validation";
@@ -12,9 +13,6 @@ import { validateFilterString, validatePage } from "@/lib/validation";
 interface DashboardPageProps {
   searchParams: Promise<Record<string, string | string[] | undefined>>;
 }
-
-const UUID =
-  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 export default async function DashboardPage({ searchParams }: DashboardPageProps) {
   const role = await getActiveRole();
@@ -25,8 +23,8 @@ export default async function DashboardPage({ searchParams }: DashboardPageProps
     getActiveWorkspace(),
   ]);
 
-  const clientParam = validateFilterString(params.client);
-  const clientId = UUID.test(clientParam) ? clientParam : "";
+  const resolved = await readPageScope(user.id, workspaceId, params);
+  const clientId = resolved.clientId ?? "";
   const range = parseDateRange(params, AGENCY_DEFAULT_RANGE);
   const query = validateFilterString(params.q);
   const page = validatePage(params.page);
@@ -41,6 +39,7 @@ export default async function DashboardPage({ searchParams }: DashboardPageProps
       q: query,
       page,
       allowedClientIds,
+      locationIds: resolved.locationIds,
     }),
     canAddClient ? getWorkspaceRoster(workspaceId) : Promise.resolve(null),
   ]);

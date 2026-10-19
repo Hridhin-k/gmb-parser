@@ -1,4 +1,5 @@
 import type { ReactNode } from "react";
+import Link from "next/link";
 import { cn } from "@/lib/utils";
 
 export const CHART = {
@@ -296,6 +297,40 @@ export function ScoreRing({ score, caption }: { score: number | null; caption: s
         </text>
       </svg>
       <p className="text-xs text-slate">{caption}</p>
+    </div>
+  );
+}
+
+/** Vertical bars for a short distribution such as reply time. */
+export function VBarChart({
+  rows,
+}: {
+  rows: Array<{ label: string; value: number; href?: string }>;
+}) {
+  const max = Math.max(1, ...rows.map((row) => row.value));
+  return (
+    <div className="flex h-44 items-end gap-2 sm:gap-4">
+      {rows.map((row) => {
+        const height = row.value === 0 ? 4 : Math.max(12, Math.round((row.value / max) * 128));
+        const bar = (
+          <span className="flex w-full flex-col items-center justify-end">
+            <span className="mb-1 text-xs tabular-nums text-slate">{row.value.toLocaleString("en-US")}</span>
+            <span className="block w-full max-w-16 rounded-t-md bg-navy" style={{ height }} />
+          </span>
+        );
+        return (
+          <div key={row.label} className="flex min-w-0 flex-1 flex-col items-center">
+            {row.href ? (
+              <Link href={row.href} className="flex w-full flex-col items-center text-navy" aria-label={`${row.label}: ${row.value}`}>
+                {bar}
+              </Link>
+            ) : (
+              bar
+            )}
+            <span className="mt-2 text-center text-[11px] leading-tight text-slate sm:text-xs">{row.label}</span>
+          </div>
+        );
+      })}
     </div>
   );
 }

@@ -1,3 +1,4 @@
+import { cache } from "react";
 import { createAdminClient } from "@/lib/supabase/admin";
 
 export interface ShellSummary {
@@ -17,7 +18,7 @@ async function count(
 }
 
 /** Counts for the sidebar badges. A client list limits the counts to those clients. */
-export async function getShellSummary(
+export const getShellSummary = cache(async function getShellSummary(
   workspaceId: string,
   allowedClientIds: string[] | null = null
 ): Promise<ShellSummary> {
@@ -71,4 +72,4 @@ export async function getShellSummary(
   ]);
 
   return { unreplied, escalations, drafts, expiredConnections };
-}
+});

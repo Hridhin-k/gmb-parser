@@ -11,10 +11,12 @@ function itemClass(active: boolean): string {
 export function MobileNav({ summary }: { summary: ShellSummary }) {
   const pathname = usePathname();
   const params = useSearchParams();
-  const client = params.get("client");
-  const range = params.get("range");
   const search = new URLSearchParams();
-  if (client) search.set("client", client);
+  for (const key of ["client", "group", "location"] as const) {
+    const value = params.get(key);
+    if (value) search.set(key, value);
+  }
+  const range = params.get("range");
   if (range === "7d" || range === "30d") search.set("range", range);
   const query = search.toString();
   const href = (path: string) => (query ? `${path}?${query}` : path);

@@ -18,6 +18,8 @@ interface AnalyticsFiltersProps {
   groupId?: string;
   groups?: Array<{ id: string; name: string }>;
   hideLocation?: boolean;
+  /** Header scope selector owns organisation, group, and outlet. */
+  hidePlace?: boolean;
   /** Header already owns the client selector. */
   hideClient?: boolean;
   /** Header already owns the date range. */
@@ -34,6 +36,7 @@ export function AnalyticsFilters({
   groupId = "",
   groups = [],
   hideLocation = false,
+  hidePlace = false,
   hideClient = false,
   hideRange = false,
 }: AnalyticsFiltersProps) {
@@ -90,7 +93,7 @@ export function AnalyticsFilters({
         />
       )}
 
-      {groups.length > 0 ? (
+      {hidePlace || groups.length === 0 ? null : (
         <SelectField
           label="Filter by group"
           value={groups.some((group) => group.id === groupId) ? groupId : ""}
@@ -102,9 +105,9 @@ export function AnalyticsFilters({
             ...groups.map((group) => ({ value: group.id, label: group.name })),
           ]}
         />
-      ) : null}
+      )}
 
-      {hideLocation ? null : (
+      {hidePlace || hideLocation ? null : (
         <SelectField
           label="Filter by location"
           value={visibleLocations.some((location) => location.id === locationId) ? locationId : ""}
@@ -126,9 +129,11 @@ export function AnalyticsFilters({
         <ClearFiltersButton
           onClear={() => {
             const params = new URLSearchParams();
-            if (hideClient) {
-              const client = searchParams.get("client");
-              if (client) params.set("client", client);
+            if (hideClient || hidePlace) {
+              for (const key of ["client", "group", "location"]) {
+                const value = searchParams.get(key);
+                if (value) params.set(key, value);
+              }
             }
             if (hideRange) {
               for (const key of ["range", "from", "to"]) {

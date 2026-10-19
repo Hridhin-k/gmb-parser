@@ -12,6 +12,7 @@ export default async function MobileEscalationsPage({
     workspaceId,
     userId: user.id,
     clientParam: Array.isArray(params.client) ? params.client[0] : params.client,
+    groupParam: Array.isArray(params.group) ? params.group[0] : params.group,
     locationParam: Array.isArray(params.location) ? params.location[0] : params.location,
     idParam: Array.isArray(params.id) ? params.id[0] : params.id,
   });

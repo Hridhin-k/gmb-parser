@@ -109,9 +109,9 @@ export function LandingPage({ signedIn }: { signedIn: boolean }) {
 
         <header className="border-b border-silver bg-white/90 backdrop-blur">
           <div className="mx-auto flex h-16 max-w-[1200px] items-center justify-between gap-6 px-6">
-            <Link href="/" className="flex items-center gap-2.5" aria-label="GRM home">
+            <Link href="/" className="flex items-center gap-2.5" aria-label="RevuPilot home">
               <BrandMark />
-              <span className="font-heading text-heading-sm text-ink">GRM</span>
+              <span className="font-heading text-heading-sm text-ink">RevuPilot</span>
             </Link>
 
             <nav className="hidden items-center gap-8 md:flex" aria-label="Page">
@@ -312,7 +312,7 @@ export function LandingPage({ signedIn }: { signedIn: boolean }) {
         <div className="mx-auto flex max-w-[1200px] flex-wrap items-center justify-between gap-4 px-6 py-8 text-body-sm text-slate">
           <div className="flex items-center gap-2.5">
             <BrandMark size="sm" />
-            <span>GRM — Google review management</span>
+            <span>RevuPilot — Google review management</span>
           </div>
           <nav className="flex flex-wrap items-center gap-6" aria-label="Legal">
             <Link href="/privacy" className="hover:text-ink">

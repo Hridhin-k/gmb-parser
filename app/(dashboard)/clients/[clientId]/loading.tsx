@@ -4,8 +4,8 @@ export default function ClientDetailLoading() {
   return (
     <PageLoading
       variant="client"
-      title="Loading business"
-      detail="Gathering this client’s locations, ratings, and recent reviews."
+      title="Loading this business…"
+      detail="Gathering locations, ratings, and recent reviews for the selected client."
     />
   );
 }

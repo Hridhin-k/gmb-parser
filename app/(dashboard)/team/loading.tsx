@@ -1,11 +1,9 @@
 import { PageLoading } from "@/components/page-loading";
+import { PAGE_LOADING } from "@/lib/ui-status";
 
 export default function TeamLoading() {
+  const copy = PAGE_LOADING.team;
   return (
-    <PageLoading
-      variant="settings"
-      title="Opening the team"
-      detail="Loading people and pending invites for this workspace."
-    />
+    <PageLoading variant="settings" title={copy.title} detail={copy.detail} tone={copy.tone} />
   );
 }

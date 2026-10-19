@@ -1,3 +1,5 @@
+import { canAct, type ScopeIds } from "@/lib/access";
+
 export const ESCALATION_TIMEZONES = [
   { id: "Asia/Kolkata", label: "India (Asia/Kolkata)" },
   { id: "UTC", label: "UTC" },
@@ -139,6 +141,187 @@ export function formatInTimezone(iso: string, timeZone: string): string {
     hour: "numeric",
     minute: "2-digit",
   }).format(new Date(iso));
+}
+
+/** A public Google reply does not close the escalation. Resolution is a separate recorded action. */
+export function closesWhenReplyPublished(): boolean {
+  return false;
+}
+
+export interface AssignmentMember {
+  userId: string;
+  role: string;
+  enabled: boolean;
+  scope: ScopeIds;
+}
+
+export interface AssignmentLocation {
+  workspaceId: string;
+  clientId: string | null;
+  groupId: string | null;
+  parentGroupId: string | null;
+  locationId: string;
+}
+
+export type AssignmentReason =
+  | "location_manager"
+  | "manager_missing"
+  | "manager_inactive"
+  | "manager_unauthorised"
+  | "no_administrator";
+
+export interface AssignmentPlan {
+  /** Configured location manager, kept even when that person cannot take the case. */
+  responsibleUserId: string | null;
+  assigneeId: string | null;
+  ownership: "manager" | "fallback";
+  reason: AssignmentReason;
+}
+
+const FALLBACK_ROLES = ["owner", "org_admin", "admin"];
+
+function locationResource(location: AssignmentLocation) {
+  return {
+    workspaceId: location.workspaceId,
+    clientId: location.clientId,
+    groupId: location.groupId,
+    parentGroupId: location.parentGroupId,
+    locationId: location.locationId,
+  };
+}
+
+function canTakeCase(member: AssignmentMember, location: AssignmentLocation): boolean {
+  return canAct({
+    role: member.role,
+    enabled: member.enabled,
+    permission: "draft",
+    scope: member.scope,
+    actorWorkspaceId: location.workspaceId,
+    resource: locationResource(location),
+  });
+}
+
+/**
+ * The location manager owns the case when they are an active member who can see that location.
+ * Otherwise an active organisation admin in scope owns it, and the case is marked as a fallback.
+ */
+export function planAssignment(input: {
+  locationManagerId: string | null;
+  members: AssignmentMember[];
+  location: AssignmentLocation;
+}): AssignmentPlan {
+  const manager = input.locationManagerId
+    ? input.members.find((member) => member.userId === input.locationManagerId) ?? null
+    : null;
+  if (manager && canTakeCase(manager, input.location)) {
+    return {
+      responsibleUserId: manager.userId,
+      assigneeId: manager.userId,
+      ownership: "manager",
+      reason: "location_manager",
+    };
+  }
+
+  const reason: AssignmentReason = !input.locationManagerId
+    ? "manager_missing"
+    : !manager
+      ? "manager_unauthorised"
+      : !manager.enabled
+        ? "manager_inactive"
+        : "manager_unauthorised";
+  const fallback = input.members
+    .filter((member) => FALLBACK_ROLES.includes(member.role) && canTakeCase(member, input.location))
+    .sort((left, right) => {
+      const rank = FALLBACK_ROLES.indexOf(left.role) - FALLBACK_ROLES.indexOf(right.role);
+      return rank !== 0 ? rank : left.userId.localeCompare(right.userId);
+    })[0];
+  if (!fallback) {
+    return {
+      responsibleUserId: input.locationManagerId,
+      assigneeId: null,
+      ownership: "fallback",
+      reason: "no_administrator",
+    };
+  }
+  return {
+    responsibleUserId: input.locationManagerId,
+    assigneeId: fallback.userId,
+    ownership: "fallback",
+    reason,
+  };
+}
+
+/** One automatic step. Leadership stays at leadership. */
+export function nextEscalationLevel(level: EscalationLevel): EscalationLevel | null {
+  if (level === "store") return "regional";
+  if (level === "regional") return "leadership";
+  return null;
+}
+
+/**
+ * A claimed overdue case moves one level. A lost claim, a future due time, or a resolved case does nothing.
+ * Leadership records the overdue state once.
+ */
+export function overdueStep(input: {
+  status: string;
+  level: EscalationLevel;
+  dueAt: string;
+  now: string;
+  claimed: boolean;
+}): "wait" | "skip" | "advance" | "note" {
+  if (input.status === "resolved") return "skip";
+  if (Date.parse(input.now) < Date.parse(input.dueAt)) return "wait";
+  if (!input.claimed) return "skip";
+  return nextEscalationLevel(input.level) ? "advance" : "note";
+}
+
+/** The next level's owner. The current assignee stays when nobody at that level can see the location. */
+export function planLevelOwner(
+  level: EscalationLevel,
+  members: AssignmentMember[],
+  location: AssignmentLocation,
+  currentAssigneeId: string | null
+): string | null {
+  const eligible = members.filter((member) => canTakeCase(member, location));
+  const pick = (roles: string[]) =>
+    eligible.filter((member) => roles.includes(member.role)).sort((left, right) => left.userId.localeCompare(right.userId))[0];
+  if (level === "regional") {
+    return pick(["group_manager"])?.userId ?? pick(["brand_manager"])?.userId ?? currentAssigneeId;
+  }
+  if (level === "leadership") {
+    return pick(["owner"])?.userId ?? pick(["org_admin", "admin"])?.userId ?? currentAssigneeId;
+  }
+  return currentAssigneeId;
+}
+
+export function reassignmentError(input: {
+  actorCanAssign: boolean;
+  target: AssignmentMember | null;
+  location: AssignmentLocation;
+  reason: string;
+  currentUpdatedAt: string;
+  expectedUpdatedAt: string;
+}): string | null {
+  if (!input.actorCanAssign) return "You do not have permission to reassign this case.";
+  if (input.currentUpdatedAt !== input.expectedUpdatedAt) return "This case changed. Refresh and try again.";
+  if (input.reason.trim().length < 3) return "Enter a reason for the reassignment.";
+  if (!input.target) return "That person is not in this workspace.";
+  if (!input.target.enabled) return "That person is not active.";
+  if (!canTakeCase(input.target, input.location)) return "That person cannot take cases for this location.";
+  return null;
+}
+
+/** Organisation, group (including its cities), or one location. An empty scope is the whole workspace. */
+export function escalationVisibleInScope(input: {
+  caseClientId: string | null;
+  caseGroupId: string | null;
+  caseLocationId: string;
+  scope: { clientId: string | null; groupId: string | null; locationId: string | null; groupIds: string[] };
+}): boolean {
+  if (input.scope.locationId) return input.caseLocationId === input.scope.locationId;
+  if (input.scope.groupId) return Boolean(input.caseGroupId && input.scope.groupIds.includes(input.caseGroupId));
+  if (input.scope.clientId) return input.caseClientId === input.scope.clientId;
+  return true;
 }
 
 export function autoreplyPausedFor(input: {

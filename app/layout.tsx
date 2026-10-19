@@ -17,7 +17,7 @@ const calSans = Cal_Sans({
 });
 
 export const metadata: Metadata = {
-  title: "GRM — Google review management",
+  title: "RevuPilot — Google review management",
   description:
     "Connect the Google account that manages your businesses, then draft, approve, and publish replies in one workspace.",
 };

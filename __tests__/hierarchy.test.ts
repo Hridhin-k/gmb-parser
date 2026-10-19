@@ -4,6 +4,7 @@ import {
   describeSetting,
   emptyFields,
   groupIdsInScope,
+  groupAssignmentError,
   groupShapeError,
   locationInGroup,
   locationMoveError,
@@ -99,6 +100,14 @@ describe("hierarchy rules", () => {
     expect(groupIdsInScope("region", groups).sort()).toEqual(["kochi", "region"]);
     expect(locationInGroup("kochi", "region", groups)).toBe(true);
     expect(locationInGroup("kochi", "other", groups)).toBe(false);
+  });
+});
+
+describe("group assignment", () => {
+  it("requires locations from the same organisation", () => {
+    expect(groupAssignmentError({ clientId: "org", locationClientIds: [] })).toMatch(/at least one/);
+    expect(groupAssignmentError({ clientId: "org", locationClientIds: ["org", "other"] })).toMatch(/organisation/);
+    expect(groupAssignmentError({ clientId: "org", locationClientIds: ["org"] })).toBeNull();
   });
 });
 

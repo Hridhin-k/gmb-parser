@@ -4,7 +4,8 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
-import { ActivityStatus } from "@/components/activity-status";
+import { OperationStatus, FailureBanner } from "@/components/status-banner";
+import { ACTION_STATUS } from "@/lib/ui-status";
 import { RefreshCw } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -80,22 +81,25 @@ export function SyncButton({
         variant="outline"
         size={size}
         onClick={handleSync}
-        disabled={syncing}
+        loading={syncing}
         className="gap-1.5"
       >
-        <RefreshCw className={cn("h-3.5 w-3.5", syncing && "animate-spin")} aria-hidden />
-        {syncing ? (syncAll ? "Asking Google…" : "Syncing this location…") : label}
+        {!syncing ? (
+          <RefreshCw className={cn("h-3.5 w-3.5")} aria-hidden />
+        ) : null}
+        {syncing ? (syncAll ? ACTION_STATUS.syncAll.short : ACTION_STATUS.sync.short) : label}
       </Button>
       {syncing ? (
-        <ActivityStatus
-          tone="google"
-          title={syncAll ? "Pulling reviews from Google" : "Syncing this location’s reviews"}
-          detail="GRM is asking Google for reviews. Replies you already wrote stay in place."
+        <OperationStatus className="mt-1 max-w-sm" copy={syncAll ? ACTION_STATUS.syncAll : ACTION_STATUS.sync} />
+      ) : null}
+      {error ? (
+        <FailureBanner
+          className="mt-1 max-w-sm"
+          title="We couldn't refresh the reviews"
+          detail={error}
+          onRetry={() => void handleSync()}
         />
       ) : null}
-      {error && (
-        <p className="max-w-xs text-[11px] text-red-600" role="alert">{error}</p>
-      )}
     </div>
   );
 }

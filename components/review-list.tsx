@@ -294,21 +294,21 @@ export function ReviewList({ reviews, replies, canApprove, members = [] }: Revie
       {bulkLoading === "generate" ? (
         <ActivityStatus
           tone="gemini"
-          title="Gemini is drafting the selected replies"
-          detail="Each draft stays in GRM. Nothing is posted to Google until a person approves it."
+          title="Generating AI replies…"
+          detail="Drafting selected replies using your organisation's saved guidelines. Nothing is posted to Google until someone approves."
         />
       ) : null}
       {bulkLoading === "approve" ? (
         <ActivityStatus
-          title="Approving the selected drafts"
+          title="Approving the selected drafts…"
           detail="Approved replies are ready to publish. They are not on Google yet."
         />
       ) : null}
       {bulkLoading === "publish" ? (
         <ActivityStatus
           tone="google"
-          title="Posting the selected replies on Google"
-          detail="Google is publishing each approved reply on its Business Profile."
+          title="Submitting replies…"
+          detail="Sending each approved reply to Google Business Profile."
         />
       ) : null}
       {bulkLoading === "discard" ? (

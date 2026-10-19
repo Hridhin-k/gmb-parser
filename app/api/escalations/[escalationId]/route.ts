@@ -9,7 +9,12 @@ import { toStatusCode, toUserMessage } from "@/lib/errors";
 import { parseBody, validateId } from "@/lib/validation";
 
 const schema = z.discriminatedUnion("action", [
-  z.object({ action: z.literal("assign"), userId: z.string().uuid().nullable() }),
+  z.object({
+    action: z.literal("assign"),
+    userId: z.string().uuid(),
+    reason: z.string().trim().min(3).max(500),
+    expectedUpdatedAt: z.string().min(10).max(40),
+  }),
   z.object({
     action: z.literal("level"),
     level: z.enum(ESCALATION_LEVELS.map((item) => item.id) as ["store", "regional", "leadership"]),
@@ -71,6 +76,8 @@ export async function POST(
         escalationId,
         actorId: user.id,
         assigneeId: body.userId,
+        reason: body.reason,
+        expectedUpdatedAt: body.expectedUpdatedAt,
       });
     } else if (body.action === "level") {
       await EscalationService.changeLevel({

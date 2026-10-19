@@ -1,6 +1,5 @@
 "use client";
 
-import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { SpeakButton } from "@/components/mobile-speech";
@@ -155,20 +154,6 @@ export function MobileComplaintView({ data }: { data: MobileComplaint }) {
           {card ? `${card.position} of ${card.total}` : "No open escalations in this view."}
         </p>
       </div>
-
-      {data.clients.length > 1 ? (
-        <div className="flex gap-2 overflow-x-auto pb-1">
-          {data.clientHrefs.map((client) => (
-            <Link
-              key={client.id}
-              href={client.href}
-              className={`inline-flex h-11 shrink-0 items-center rounded-full border px-4 text-sm ${client.id === (data.clientId ?? "all") ? "border-ink bg-ink text-white" : "border-silver bg-white text-ink"}`}
-            >
-              {client.name}
-            </Link>
-          ))}
-        </div>
-      ) : null}
 
       {data.missingId ? (
         <p className="text-sm text-slate">That escalation is not in this view.</p>

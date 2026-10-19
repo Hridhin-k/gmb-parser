@@ -13,6 +13,7 @@ import {
   ChevronsUpDown,
   LayoutDashboard,
   LayoutGrid,
+  Lightbulb,
   Link2,
   MapPin,
   MessageSquareText,
@@ -27,6 +28,8 @@ import { ShellHeader } from "@/components/shell-header";
 import { MobileNav } from "@/components/mobile-nav";
 import { ActivityStatus } from "@/components/activity-status";
 import { SelectField } from "@/components/ui/select-field";
+import { ScopeSelector } from "@/components/scope-selector";
+import type { ScopeCatalog } from "@/lib/scope";
 import type { ShellSummary } from "@/lib/services/shell-summary";
 import { scopedHref, visibleNav, type ShellNavId } from "@/lib/shell";
 
@@ -38,6 +41,7 @@ const NAV: Record<
   inbox: { href: "/reviews", label: "Inbox", icon: MessageSquareText, section: "work" },
   escalations: { href: "/escalations", label: "Escalations", icon: AlertTriangle, section: "work" },
   analytics: { href: "/analytics", label: "Analytics", icon: ChartColumn, section: "work" },
+  insights: { href: "/insights", label: "Insights", icon: Lightbulb, section: "work" },
   reports: { href: "/reports", label: "Reports and alerts", icon: Bell, section: "work" },
   requests: { href: "/requests", label: "Review requests", icon: Link2, section: "work" },
   locations: { href: "/clients", label: "Locations and groups", icon: MapPin, section: "manage" },
@@ -48,7 +52,7 @@ const NAV: Record<
 };
 
 const SECTIONS = [
-  { label: null, ids: ["overview", "inbox", "escalations", "analytics", "reports", "requests"] as const },
+  { label: null, ids: ["overview", "inbox", "escalations", "analytics", "insights", "reports", "requests"] as const },
   { label: "Manage", ids: ["locations", "team", "settings"] as const },
   { label: "Agency", ids: ["clients", "usage"] as const },
 ];
@@ -60,6 +64,7 @@ interface AppShellProps {
   workspaces: Array<{ id: string; name: string }>;
   activeWorkspaceId: string;
   clients: Array<{ id: string; name: string }>;
+  catalog: ScopeCatalog | null;
   summary: ShellSummary;
   logoUrl?: string | null;
   productTitle?: string;
@@ -184,9 +189,10 @@ export function AppShell({
   workspaces,
   activeWorkspaceId,
   clients,
+  catalog,
   summary,
   logoUrl,
-  productTitle = "GRM",
+  productTitle = "RevuPilot",
   children,
 }: AppShellProps) {
   const pathname = usePathname();
@@ -223,11 +229,18 @@ export function AppShell({
   if (pathname === "/m" || pathname.startsWith("/m/")) {
     return (
       <div className="flex h-dvh flex-col overflow-hidden bg-paper">
-        <header className="flex h-14 shrink-0 items-center justify-between gap-3 border-b border-silver bg-white px-4">
-          <p className="truncate text-sm font-medium text-ink">{workspaceName}</p>
-          <Link href="/overview" className="shrink-0 text-sm text-ink underline">
-            Full app
-          </Link>
+        <header className="shrink-0 border-b border-silver bg-white px-4 py-2">
+          <div className="flex items-center justify-between gap-3">
+            <p className="truncate text-sm font-medium text-ink">{workspaceName}</p>
+            <Link href="/overview" className="shrink-0 text-sm text-ink underline">
+              Full app
+            </Link>
+          </div>
+          {catalog ? (
+            <div className="mt-2">
+              <ScopeSelector catalog={catalog} />
+            </div>
+          ) : null}
         </header>
         <main className="min-w-0 flex-1 overflow-y-auto" id="main-content">
           <div className="mx-auto w-full max-w-lg px-4 py-4 pb-28">{children}</div>
@@ -270,7 +283,12 @@ export function AppShell({
                 <Building2 className="size-3.5" aria-hidden />
               </span>
             )}
-            <span className="truncate">{productTitle === "GRM" ? workspaceName : productTitle}</span>
+            <span className="min-w-0 truncate">
+              <span className="block truncate">{productTitle}</span>
+              {productTitle !== workspaceName && workspaces.length > 1 ? (
+                <span className="block truncate text-[11px] font-normal text-white/70">{workspaceName}</span>
+              ) : null}
+            </span>
             {workspaces.length > 1 ? (
               <ChevronsUpDown className="ml-auto size-3.5 shrink-0 text-white/70" aria-hidden />
             ) : null}
@@ -378,7 +396,7 @@ export function AppShell({
           <ShellHeader
             user={user}
             role={role}
-            clients={clients}
+            catalog={catalog}
             summary={summary}
             onOpenMenu={() => setSidebarOpen(true)}
           />

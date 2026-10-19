@@ -9,6 +9,7 @@ const CLIENT_AND_RANGE = [
   "/reviews",
   "/escalations",
   "/analytics",
+  "/insights",
   "/reports",
   "/dashboard",
 ] as const;
@@ -87,6 +88,7 @@ export type ShellNavId =
   | "inbox"
   | "escalations"
   | "analytics"
+  | "insights"
   | "reports"
   | "requests"
   | "locations"
@@ -100,6 +102,7 @@ const EVERYONE: ShellNavId[] = [
   "inbox",
   "escalations",
   "analytics",
+  "insights",
   "reports",
   "requests",
   "locations",
@@ -134,6 +137,7 @@ export function scopeMode(pathname: string): ScopeMode {
 export function defaultRangeForPath(pathname: string): DateRangeKey {
   if (pathname === "/overview") return "12m";
   if (pathname === "/analytics") return "6m";
+  if (pathname === "/insights") return "12m";
   if (pathname === "/dashboard" || pathname === "/reports") return "1m";
   return "all";
 }
@@ -152,8 +156,10 @@ export function scopedHref(path: string, current: URLSearchParams, pathname: str
   if (scopeMode(base) === "none") return path;
 
   const params = new URLSearchParams(queryAt >= 0 ? beforeHash.slice(queryAt + 1) : "");
-  const client = current.get("client");
-  if (client) params.set("client", client);
+  for (const key of ["client", "group", "location"] as const) {
+    const value = current.get(key);
+    if (value) params.set(key, value);
+  }
 
   if (scopeMode(base) === "client-range") {
     const range = parseDateRange(

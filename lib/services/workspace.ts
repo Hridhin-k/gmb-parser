@@ -362,23 +362,23 @@ export async function ensurePersonalWorkspace(user: {
   id: string;
   email?: string | null;
 }): Promise<PersonalWorkspace> {
-  const accepted = await acceptPendingInvites(user);
-
-  if (accepted.length === 0) {
-    const existing = await listMemberships(user.id);
-    if (existing.length === 0) {
-      const workspaceId = await createPersonalWorkspace(user);
-      return { workspace_id: workspaceId };
-    }
-  }
+  // Invite check and membership list are independent until an invite is accepted.
+  const [accepted, memberships] = await Promise.all([
+    acceptPendingInvites(user),
+    listMemberships(user.id),
+  ]);
 
   if (accepted.length > 0) {
-    const workspaceId = accepted[accepted.length - 1];
+    const workspaceId = accepted[accepted.length - 1]!;
     await setActiveWorkspace(user.id, workspaceId);
     return { workspace_id: workspaceId };
   }
 
-  const memberships = await listMemberships(user.id);
+  if (memberships.length === 0) {
+    const workspaceId = await createPersonalWorkspace(user);
+    return { workspace_id: workspaceId };
+  }
+
   const chosen = pickActiveWorkspace(memberships);
   if (!chosen) {
     const workspaceId = await createPersonalWorkspace(user);
@@ -999,14 +999,8 @@ export async function getMemberRole(
   userId: string,
   workspaceId: string
 ): Promise<GrmMemberRole | null> {
-  const admin = createAdminClient();
-  const { data } = await admin
-    .from("grm_workspace_members")
-    .select("role")
-    .eq("user_id", userId)
-    .eq("workspace_id", workspaceId)
-    .maybeSingle();
-  return data?.role ?? null;
+  const access = await getMemberAccess(userId, workspaceId);
+  return (access?.role as GrmMemberRole | undefined) ?? null;
 }
 
 export function canApproveReplies(role: string | null | undefined): boolean {

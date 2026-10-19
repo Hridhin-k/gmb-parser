@@ -267,6 +267,7 @@ export async function getAgencyHome(
     q: string;
     page: number;
     allowedClientIds?: string[] | null;
+    locationIds?: string[] | null;
   }
 ): Promise<AgencyHome> {
   const admin = createAdminClient();
@@ -394,6 +395,7 @@ export async function getAgencyHome(
     clients,
     locations: (locationsResult.data ?? [])
       .filter((location) => location.client_id && knownClients.has(location.client_id))
+      .filter((location) => filters.locationIds == null || filters.locationIds.includes(location.id))
       .map((location) => {
         const connectionId = connectionByAccount.get(location.google_account_id);
         const status = connectionId ? connectionStatus.get(connectionId) : null;

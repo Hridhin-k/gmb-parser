@@ -1,11 +1,9 @@
 import { PageLoading } from "@/components/page-loading";
+import { PAGE_LOADING } from "@/lib/ui-status";
 
 export default function OverviewLoading() {
+  const copy = PAGE_LOADING.overview;
   return (
-    <PageLoading
-      variant="analytics"
-      title="Opening overview"
-      detail="Counting ratings, replies, and the locations that need attention."
-    />
+    <PageLoading variant="analytics" title={copy.title} detail={copy.detail} tone={copy.tone} />
   );
 }

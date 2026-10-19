@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { Download } from "lucide-react";
+import { FreshMetrics } from "@/components/fresh-metrics";
 import { ReportsBoard } from "@/components/reports-board";
 import { PageHeader } from "@/components/page-header";
 import { dateRangeParams, parseDateRange } from "@/lib/date-range";
@@ -10,16 +11,16 @@ import { getActiveRole, getActiveWorkspace } from "@/lib/services/session";
 import { getShellSummary } from "@/lib/services/shell-summary";
 import { getWorkspaceRoster } from "@/lib/services/workspace";
 import { getMemberAccess, visibleClientIds } from "@/lib/services/access";
-import { clampListScope, workspaceGrant } from "@/lib/access";
+import { readPageScope } from "@/lib/services/scope-catalog";
+import { workspaceGrant } from "@/lib/access";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { overviewQueryKey } from "@/lib/overview-board";
 import { isManager, scopedHref, shellAlerts } from "@/lib/shell";
-import { validateFilterString } from "@/lib/validation";
 
 interface ReportsPageProps {
   searchParams: Promise<Record<string, string | string[] | undefined>>;
 }
 
-const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const DEFAULT_RANGE = "1m";
 
 export default async function ReportsPage({ searchParams }: ReportsPageProps) {
@@ -30,18 +31,17 @@ export default async function ReportsPage({ searchParams }: ReportsPageProps) {
   ]);
   const access = await getMemberAccess(user.id, workspaceId);
   const allowedClientIds = await visibleClientIds(workspaceId, access?.scope);
-  const bounded = clampListScope(
-    { clientId: UUID.test(validateFilterString(params.client)) ? validateFilterString(params.client) : "", groupId: "", locationId: "" },
-    access?.scope ?? { clientId: null, groupId: null, locationId: null }
-  );
-  const clientId = bounded.clientId;
+  const resolved = await readPageScope(user.id, workspaceId, params);
+  const clientId = resolved.clientId ?? "";
+  const groupId = resolved.groupId ?? "";
+  const locationId = resolved.locationId ?? "";
   const range = parseDateRange(params, DEFAULT_RANGE);
 
   const [reviewCount, reports, alerts, scopes, roster, summary] = await Promise.all([
     countExportableReviews(workspaceId, {
       clientId: clientId || null,
-      groupId: bounded.groupId || null,
-      locationId: bounded.locationId || null,
+      groupId: groupId || null,
+      locationId: locationId || null,
       since: range.start?.toISOString() ?? null,
       until: range.end?.toISOString() ?? null,
     }),
@@ -54,14 +54,16 @@ export default async function ReportsPage({ searchParams }: ReportsPageProps) {
 
   const reviewExport = new URLSearchParams(dateRangeParams(range, "all"));
   if (clientId) reviewExport.set("client", clientId);
-  if (bounded.groupId) reviewExport.set("group", bounded.groupId);
-  if (bounded.locationId) reviewExport.set("location", bounded.locationId);
+  if (groupId) reviewExport.set("group", groupId);
+  if (locationId) reviewExport.set("location", locationId);
   const usageExport = new URLSearchParams();
   if (clientId) usageExport.set("client", clientId);
   for (const [key, value] of Object.entries(dateRangeParams(range, DEFAULT_RANGE))) usageExport.set(key, value);
 
   const current = new URLSearchParams();
   if (clientId) current.set("client", clientId);
+  if (groupId) current.set("group", groupId);
+  if (locationId) current.set("location", locationId);
   for (const [key, value] of Object.entries(dateRangeParams(range, DEFAULT_RANGE))) current.set(key, value);
   const scopedPlaces = allowedClientIds
     ? await createAdminClient()
@@ -105,6 +107,10 @@ export default async function ReportsPage({ searchParams }: ReportsPageProps) {
         description="Schedule a report from stored reviews, and turn on alert rules. Email, Slack, and WhatsApp send only when that provider is configured."
       />
 
+      <FreshMetrics
+        rendered={overviewQueryKey((key) => (Array.isArray(params[key]) ? params[key][0] : params[key]))}
+        surface="reports"
+      >
       <section className="rounded-xl bg-white p-4 shadow-card sm:p-5">
         <h2 className="text-sm font-semibold text-graphite">Exports for the dates above</h2>
         <ul className="mt-3 divide-y divide-silver">
@@ -178,6 +184,7 @@ export default async function ReportsPage({ searchParams }: ReportsPageProps) {
             : alerts.events
         }
       />
+      </FreshMetrics>
     </div>
   );
 }

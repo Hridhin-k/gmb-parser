@@ -138,7 +138,7 @@ export function ReviewFilters({
   const clearAll = () => {
     const params = new URLSearchParams();
     if (hideScope) {
-      for (const key of ["client", "range", "from", "to"]) {
+      for (const key of ["client", "group", "location", "range", "from", "to"]) {
         const value = searchParams.get(key);
         if (value) params.set(key, value);
       }
@@ -159,10 +159,10 @@ export function ReviewFilters({
     !!currentLanguage ||
     !!currentTheme ||
     !!currentAssignee ||
-    !!currentGroupId ||
+    (!hideScope && !!currentGroupId) ||
     currentSort !== "newest" ||
     (!hideScope && !!currentClientId) ||
-    !!currentLocationId;
+    (!hideScope && !!currentLocationId);
 
   const filteredLocations = currentClientId
     ? locations.filter((l) => l.clientId === currentClientId)
@@ -244,7 +244,7 @@ export function ReviewFilters({
           />
         )}
 
-        {filteredLocations.length > 0 && (
+        {hideScope || filteredLocations.length === 0 ? null : (
           <SelectField
             label="Filter by location"
             value={currentLocationId}
@@ -410,6 +410,7 @@ export function ReviewFilters({
               onValueChange={(value) => updateParam("assignee", value)}
               className="sm:w-52"
             />
+            {hideScope ? null : (
             <SelectField
               label="Group"
               value={currentGroupId}
@@ -417,6 +418,7 @@ export function ReviewFilters({
               onValueChange={(value) => updateParam("group", value)}
               className="sm:w-44"
             />
+            )}
             <SelectField
               label="Sort"
               value={currentSort}

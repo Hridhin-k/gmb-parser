@@ -1,5 +1,6 @@
 import { AppShell } from "@/components/app-shell";
 import { listAgencyClients } from "@/lib/services/agency-home";
+import { loadScopeCatalog } from "@/lib/services/scope-catalog";
 import { getShellSummary } from "@/lib/services/shell-summary";
 import { getMemberAccess, visibleClientIds } from "@/lib/services/access";
 import { loadAgencyBranding } from "@/lib/services/agency-branding";
@@ -15,7 +16,7 @@ export async function generateMetadata(): Promise<Metadata> {
   ]);
   const name = workspaces.find((workspace) => workspace.id === workspaceId)?.name ?? "Workspace";
   if (branding.hideProductName) return { title: name };
-  return { title: "GRM — Google review management" };
+  return { title: "RevuPilot — Google review management" };
 }
 
 export default async function DashboardLayout({
@@ -24,7 +25,11 @@ export default async function DashboardLayout({
   children: React.ReactNode;
 }) {
   const { user, workspaceId } = await getActiveWorkspace();
-  const access = await getMemberAccess(user.id, workspaceId);
+  // Membership is request-cached; role/catalog reuse the same row.
+  const [access, role] = await Promise.all([
+    getMemberAccess(user.id, workspaceId),
+    getActiveRole(),
+  ]);
   if (access && !access.enabled) {
     return (
       <main className="mx-auto max-w-lg px-6 py-16">
@@ -36,12 +41,12 @@ export default async function DashboardLayout({
     );
   }
   const allowedClientIds = await visibleClientIds(workspaceId, access?.scope);
-  const [workspaces, clients, role, summary, branding] = await Promise.all([
+  const [workspaces, clients, summary, branding, catalog] = await Promise.all([
     listAccessibleWorkspaces(user.id),
     listAgencyClients(workspaceId, allowedClientIds),
-    getActiveRole(),
     getShellSummary(workspaceId, allowedClientIds),
     loadAgencyBranding(workspaceId),
+    loadScopeCatalog(user.id, workspaceId),
   ]);
   const workspaceName =
     workspaces.find((workspace) => workspace.id === workspaceId)?.name ??
@@ -55,9 +60,10 @@ export default async function DashboardLayout({
       workspaces={workspaces}
       activeWorkspaceId={workspaceId}
       clients={clients}
+      catalog={catalog}
       summary={summary}
       logoUrl={branding.logoUrl}
-      productTitle={branding.hideProductName ? workspaceName : "GRM"}
+      productTitle={branding.hideProductName ? workspaceName : "RevuPilot"}
     >
       {children}
     </AppShell>

@@ -18,9 +18,11 @@ import {
   type SentimentLabel,
 } from "./location-insights";
 import type { Json } from "@/lib/types/supabase";
+import { insightLensFingerprint, insightLensPromptBlock, orgContextPromptBlock } from "@/lib/ai-config";
+import { ensureActiveAiConfig, loadResolvedInsightLens } from "@/lib/services/ai-config";
 
 const MODEL_ID = GEMINI_MODEL_ID;
-export const SCOPE_INSIGHT_PROMPT_VERSION = "scope-insight-v1.0";
+export const SCOPE_INSIGHT_PROMPT_VERSION = "scope-insight-v2.0";
 const REQUEST_TIMEOUT_MS = 55_000;
 const MAX_REVIEW_SAMPLES = 60;
 
@@ -51,6 +53,7 @@ interface ScopedLocation {
 }
 
 interface TaggedReview {
+  id: string;
   locationId: string;
   locationTitle: string;
   star_rating: number;
@@ -77,8 +80,16 @@ function asAnalysis(value: unknown): ProfileAnalysis {
     return emptyAnalysis();
   }
   try {
+    const raw = value as Record<string, unknown>;
+    const storedIds = Array.isArray(raw.evidenceReviewIds)
+      ? raw.evidenceReviewIds
+      : Array.isArray(raw.evidence_review_ids)
+        ? raw.evidence_review_ids
+        : [];
+    const allowed = storedIds.filter((id): id is string => typeof id === "string");
     return parseLocationInsightPayload(
-      JSON.stringify({ summary: "cached", ...(value as object), sentiment: "neutral" })
+      JSON.stringify({ summary: "cached", ...raw, sentiment: "neutral" }),
+      allowed
     ).analysis;
   } catch {
     return emptyAnalysis();
@@ -90,7 +101,8 @@ function buildFingerprint(
   scopeId: string,
   locationIds: string[],
   reviews: TaggedReview[],
-  avgRating: number | null
+  avgRating: number | null,
+  lensFingerprint = ""
 ): string {
   const parts = [
     kind,
@@ -98,6 +110,7 @@ function buildFingerprint(
     locationIds.slice().sort().join(","),
     String(reviews.length),
     avgRating?.toFixed(2) ?? "na",
+    lensFingerprint,
     ...reviews.map(
       (r) =>
         `${r.locationId}|${r.review_create_time}|${r.star_rating}|${(r.comment ?? "").slice(0, 60)}`
@@ -255,13 +268,14 @@ export class ScopeInsightService {
     const admin = createAdminClient();
     const { data: reviews } = await admin
       .from("grm_reviews")
-      .select("location_id, star_rating, comment, review_create_time")
+      .select("id, location_id, star_rating, comment, review_create_time")
       .eq("workspace_id", workspaceId)
       .in("location_id", locationIds)
       .order("review_create_time", { ascending: false })
       .limit(MAX_REVIEW_SAMPLES);
 
     const tagged: TaggedReview[] = (reviews ?? []).map((row) => ({
+      id: row.id,
       locationId: row.location_id,
       locationTitle: titleById.get(row.location_id) ?? "Location",
       star_rating: row.star_rating,
@@ -343,7 +357,27 @@ export class ScopeInsightService {
     scopeId: string
   ): Promise<{ insight: ScopeInsight | null; heuristicSummary: string; title: string; locationCount: number; reviewCount: number; avgRating: number | null }> {
     const stats = await this.buildScopeStats(workspaceId, kind, scopeId);
-    const cached = await this.getCached(workspaceId, kind, scopeId, stats.fingerprint, stats.title);
+    const admin = createAdminClient();
+    let clientId: string | null = kind === "client" ? scopeId : null;
+    if (kind === "group") {
+      const { data: group } = await admin
+        .from("grm_groups")
+        .select("client_id")
+        .eq("id", scopeId)
+        .eq("workspace_id", workspaceId)
+        .maybeSingle();
+      clientId = group?.client_id ?? null;
+    }
+    const { lens } = await loadResolvedInsightLens({ workspaceId, clientId });
+    const fingerprint = buildFingerprint(
+      kind,
+      scopeId,
+      stats.locations.map((location) => location.id),
+      stats.reviews,
+      stats.avgRating,
+      insightLensFingerprint(lens)
+    );
+    const cached = await this.getCached(workspaceId, kind, scopeId, fingerprint, stats.title);
     return {
       insight: cached,
       heuristicSummary: stats.heuristic.summary,
@@ -367,9 +401,32 @@ export class ScopeInsightService {
     }
 
     const stats = await this.buildScopeStats(workspaceId, kind, scopeId);
+    const admin = createAdminClient();
+    let clientId: string | null = kind === "client" ? scopeId : null;
+    if (kind === "group") {
+      const { data: group } = await admin
+        .from("grm_groups")
+        .select("client_id")
+        .eq("id", scopeId)
+        .eq("workspace_id", workspaceId)
+        .maybeSingle();
+      clientId = group?.client_id ?? null;
+    }
+    const [{ lens, notes }, config] = await Promise.all([
+      loadResolvedInsightLens({ workspaceId, clientId }),
+      ensureActiveAiConfig(workspaceId),
+    ]);
+    const fingerprint = buildFingerprint(
+      kind,
+      scopeId,
+      stats.locations.map((location) => location.id),
+      stats.reviews,
+      stats.avgRating,
+      insightLensFingerprint(lens)
+    );
 
     if (!options.force) {
-      const cached = await this.getCached(workspaceId, kind, scopeId, stats.fingerprint, stats.title);
+      const cached = await this.getCached(workspaceId, kind, scopeId, fingerprint, stats.title);
       if (cached && !cached.stale) return cached;
     }
 
@@ -379,7 +436,7 @@ export class ScopeInsightService {
         scopeId,
         title: stats.title,
         ...stats.heuristic,
-        sourceHash: stats.fingerprint,
+        sourceHash: fingerprint,
         generatedAt: new Date().toISOString(),
         stale: false,
       };
@@ -390,9 +447,10 @@ export class ScopeInsightService {
     const reviewBlock = stats.reviews
       .map(
         (r, i) =>
-          `${i + 1}. [${r.locationTitle}] ${r.star_rating}/5 — ${(readableReviewText(r.comment) ?? "(rating only)").slice(0, 350)}`
+          `${i + 1}. id=${r.id} · [${r.locationTitle}] ${r.star_rating}/5 — ${(readableReviewText(r.comment) ?? "(rating only)").slice(0, 350)}`
       )
       .join("\n");
+    const sampleIds = stats.reviews.map((r) => r.id);
 
     const locationList = stats.locations
       .slice(0, 40)
@@ -400,9 +458,12 @@ export class ScopeInsightService {
       .join("\n");
 
     const scopeLabel = kind === "client" ? "organisation / brand" : "location group";
+    const lensBlock = insightLensPromptBlock(lens, notes);
+    const orgBlock = orgContextPromptBlock(config.snapshot.org);
 
     const prompt = `You are a reputation, branding, and customer-experience analyst for a multi-location Google Business Profile ${scopeLabel}.
-
+Write a self-explanatory leadership brief. Prefer the operator's insight lens when those themes appear in the reviews.
+${orgBlock}${lensBlock}
 ${scopeLabel === "organisation / brand" ? "Brand" : "Group"}: "${stats.title}"
 Locations in scope (${stats.locations.length}):
 ${locationList || "- (none)"}
@@ -450,15 +511,18 @@ Return ONLY valid JSON (no markdown) with this exact shape:
     "tone": "how replies should sound for this brand/group",
     "do": ["up to 4 reply habits"],
     "avoid": ["up to 4 things not to say"]
-  }
+  },
+  "evidenceReviewIds": ["up to 8 review id values from the sample above that ground your summary"]
 }
 
 Rules:
 - Base every claim on the reviews. If evidence is thin, say so. Never invent staff names, services, or policies.
+- When the insight lens lists watch themes or focus questions, answer those first if the reviews support them.
+- evidenceReviewIds must be copied exactly from the id= values in the sample. Never invent ids.
 - Prefer patterns that show up at more than one location; when one shop is an outlier, name it.
 - suggestedFeatures should help the whole brand/group, not only one storefront, unless a single shop is clearly dragging reputation.
 - Prefer 4-6 suggestedFeatures.
-- Do not mention that you are an AI.`;
+- Do not mention that you are an AI. The lens is saved instructions, not model training.`;
 
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
@@ -493,7 +557,7 @@ Rules:
           scopeId,
           title: stats.title,
           ...stats.heuristic,
-          sourceHash: stats.fingerprint,
+          sourceHash: fingerprint,
           generatedAt: new Date().toISOString(),
           stale: false,
           summary: `${stats.heuristic.summary} (AI unavailable — showing automatic summary.)`,
@@ -510,9 +574,12 @@ Rules:
       if (!rawText) {
         throw new AppError("Empty AI insight response", "AI_INVALID_RESPONSE", 502);
       }
-      parsed = parseLocationInsightPayload(rawText);
+      parsed = parseLocationInsightPayload(rawText, sampleIds);
       if (!parsed.summary) {
         throw new AppError("Invalid AI insight JSON", "AI_INVALID_RESPONSE", 502);
+      }
+      if (!parsed.analysis.evidenceReviewIds.length) {
+        parsed.analysis.evidenceReviewIds = sampleIds.slice(0, 5);
       }
     } catch (error) {
       if (error instanceof AppError) throw error;
@@ -520,6 +587,9 @@ Rules:
         throw new AppError("AI insight timed out", "AI_TIMEOUT", 504);
       }
       logger.error("scope_insight.generate_failed", {
+        workspaceId,
+        scopeKind: kind,
+        scopeId,
         message: error instanceof Error ? error.message : "Unknown",
       });
       const fallback: ScopeInsight = {
@@ -527,7 +597,7 @@ Rules:
         scopeId,
         title: stats.title,
         ...stats.heuristic,
-        sourceHash: stats.fingerprint,
+        sourceHash: fingerprint,
         generatedAt: new Date().toISOString(),
         stale: false,
       };
@@ -550,7 +620,7 @@ Rules:
       reviewCount: stats.reviews.length,
       locationCount: stats.locations.length,
       avgRating: stats.avgRating,
-      sourceHash: stats.fingerprint,
+      sourceHash: fingerprint,
       generatedAt: new Date().toISOString(),
       stale: false,
     };

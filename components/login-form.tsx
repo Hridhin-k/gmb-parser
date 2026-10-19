@@ -146,7 +146,7 @@ export function LoginForm({ methods, initialError }: LoginFormProps) {
             className="mt-5 text-[31px] leading-[1.2] text-graphite"
             style={{ fontFamily: "var(--font-heading), sans-serif" }}
           >
-            Sign in to GRM
+            Sign in to RevuPilot
           </h1>
           <p className="mt-2 text-base font-light text-slate">
             Then connect the Google account that manages your businesses.
@@ -277,7 +277,7 @@ export function LoginForm({ methods, initialError }: LoginFormProps) {
 
       <p className="mt-5 text-sm text-slate">
         <Link href="/" className="font-medium text-ink underline decoration-stone/50 underline-offset-4 hover:decoration-ink">
-          Back to GRM
+          Back to RevuPilot
         </Link>
       </p>
     </div>

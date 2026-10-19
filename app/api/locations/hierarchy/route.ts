@@ -26,6 +26,8 @@ const bodySchema = z.discriminatedUnion("action", [
     kind: z.enum(["region", "city"]),
     clientId: z.string().uuid().nullable(),
     parentId: z.string().uuid().nullable(),
+    locationIds: z.array(z.string().uuid()).max(200).optional(),
+    managerUserId: z.string().uuid().nullable().optional(),
   }),
   z.object({
     action: z.literal("rename-group"),
@@ -92,7 +94,16 @@ export async function POST(request: Request) {
     const actor = await actingUser(user);
     const base = { workspaceId: actor.workspaceId, userId: actor.userId };
     if (body.action === "create-group") {
-      await createHierarchyGroup({ ...base, name: body.name, kind: body.kind, clientId: body.clientId, parentId: body.parentId });
+      const id = await createHierarchyGroup({
+        ...base,
+        name: body.name,
+        kind: body.kind,
+        clientId: body.clientId,
+        parentId: body.parentId,
+        locationIds: body.locationIds,
+        managerUserId: body.managerUserId,
+      });
+      return NextResponse.json({ ok: true, id });
     } else if (body.action === "rename-group") {
       await renameHierarchyGroup({ ...base, groupId: body.groupId, name: body.name });
     } else if (body.action === "merge-groups") {

@@ -1,11 +1,9 @@
 import { PageLoading } from "@/components/page-loading";
+import { PAGE_LOADING } from "@/lib/ui-status";
 
 export default function ClientsHomeLoading() {
+  const copy = PAGE_LOADING.clients;
   return (
-    <PageLoading
-      variant="clients"
-      title="Loading clients"
-      detail="Adding up locations, unreplied reviews, and connection status for this workspace."
-    />
+    <PageLoading variant="clients" title={copy.title} detail={copy.detail} tone={copy.tone} />
   );
 }

@@ -4,11 +4,21 @@ import {
   ChartCard,
   HBarChart,
   MonthVolumeChart,
-  ScoreRing,
   SentimentDonut,
   STAR_COLORS,
+  VBarChart,
 } from "@/components/charts";
-import type { DateRange } from "@/lib/date-range";
+import {
+  formatHours,
+  rankRows,
+  REPLY_SPEED_LABELS,
+  rollupByGroup,
+  type AnalyticsCompare,
+  type RankBy,
+  type RankShow,
+} from "@/lib/analytics-metrics";
+import type { AnalyticsSlice } from "@/lib/services/analytics-slice";
+import { dateRangeParams, type DateRange } from "@/lib/date-range";
 import { average, monthBounds, reviewDrillHref, reviewWindow, share, type DashboardFacts } from "@/lib/metrics";
 import { themeLabel } from "@/lib/review-inbox";
 import type { DashboardContext, DashboardScope } from "@/lib/services/dashboard-metrics";
@@ -60,6 +70,10 @@ export function AnalyticsBoard({
   section,
   members,
   query,
+  slice,
+  rankBy,
+  show,
+  compare,
 }: {
   context: DashboardContext;
   range: DateRange;
@@ -67,6 +81,10 @@ export function AnalyticsBoard({
   section: AnalyticsSection;
   members: Array<{ userId: string; email: string }>;
   query: string;
+  slice: AnalyticsSlice;
+  rankBy: RankBy;
+  show: RankShow;
+  compare: AnalyticsCompare;
 }) {
   const hrefFor = (id: string) => {
     const params = new URLSearchParams(query);
@@ -98,7 +116,22 @@ export function AnalyticsBoard({
         ))}
       </div>
       {section === "performance" ? (
-        <Performance facts={context.facts} previous={context.previous} names={names} drill={drill} range={range} scope={scope} />
+        <Performance
+          facts={context.facts}
+          previous={context.previous}
+          names={names}
+          groupNames={groupNames}
+          drill={drill}
+          range={range}
+          scope={scope}
+          slice={slice}
+          rankBy={rankBy}
+          show={show}
+          compare={compare}
+          query={query}
+          groupOf={(locationId) => context.locations.find((location) => location.id === locationId)?.groupId ?? null}
+          parentOf={(groupId) => context.locations.find((location) => location.groupId === groupId)?.parentGroupId ?? null}
+        />
       ) : null}
       {section === "themes" ? <Themes facts={context.facts} groupNames={groupNames} drill={drill} /> : null}
       {section === "competitors" ? <Competitors /> : null}
@@ -107,8 +140,15 @@ export function AnalyticsBoard({
       {section === "team" ? <Team facts={context.facts} members={members} drill={drill} /> : null}
       <p className="text-xs leading-relaxed text-slate">
         Negative share is the portion of reviews rated 1–3 stars. Reply rate counts a review once Google has a reply.
-        Reply time uses Google’s reply timestamp. Month buckets use {context.timezone}. An empty period shows an em dash
-        instead of zero percent.
+        Average rating is the sum of stars divided by reviews. Reply rate is reviews with a Google reply divided by reviews.
+        Median reply time is the middle elapsed time among reviews whose Google reply timestamp is present and not earlier
+        than the review. Hour buckets are under 1 hour, 1–6 hours, 6–24 hours, and over 24 hours. Reviews without that
+        timestamp stay out of the median and the bars. Since onboarding compares every review before the onboarding
+        timestamp with every review from that timestamp on, in this scope, and ignores the date range above. Language
+        shares use the stored language and count a missing language as Not set. Competitor ratings are not connected.
+        Month buckets use {context.timezone}. An empty population shows an em dash. These figures follow the latest sync,
+        not a live feed.
+        {slice.truncated ? " Reply-time and language figures use the first 8,000 reviews in the window." : ""}
       </p>
     </div>
   );
@@ -118,65 +158,208 @@ function Performance({
   facts,
   previous,
   names,
+  groupNames,
   drill,
   range,
   scope,
+  slice,
+  rankBy,
+  show,
+  compare,
+  query,
+  groupOf,
+  parentOf,
 }: {
   facts: DashboardFacts;
   previous: DashboardFacts | null;
   names: Map<string, string>;
+  groupNames: Map<string, string>;
   drill: (extra?: Record<string, string>) => string;
   range: DateRange;
   scope: DashboardScope;
+  slice: AnalyticsSlice;
+  rankBy: RankBy;
+  show: RankShow;
+  compare: AnalyticsCompare;
+  query: string;
+  groupOf: (locationId: string) => string | null;
+  parentOf: (groupId: string) => string | null;
 }) {
   const current = reviewWindow(facts);
   const before = previous ? reviewWindow(previous) : null;
   const maxStar = Math.max(1, ...facts.stars);
   const threeStar = Math.max(0, facts.oneToThree - facts.negative);
-  const score = current.avgRating === null ? null : Math.round((current.avgRating / 5) * 100);
-  const rows = [...facts.locations]
-    .filter((row) => names.has(row.locationId))
-    .sort((a, b) => b.ratingSum / Math.max(b.reviews, 1) - a.ratingSum / Math.max(a.reviews, 1) || b.reviews - a.reviews);
-  const replyBuckets = [
-    { label: "Under 1 hour", value: facts.buckets.under1h, color: CHART.green },
-    { label: "1–24 hours", value: facts.buckets.under24h, color: CHART.sky },
-    { label: "1–3 days", value: facts.buckets.under3d, color: CHART.amber },
-    { label: "Over 3 days", value: facts.buckets.later, color: CHART.rose },
-  ];
-  const maxBucket = Math.max(1, ...replyBuckets.map((row) => row.value));
+  const replyBuckets = (["under1h", "h1to6", "h6to24", "over24h"] as const).map((id) => ({
+    label: REPLY_SPEED_LABELS[id],
+    value: slice.window.buckets[id],
+  }));
+  const repliedHref = drill({ filter: "published" });
   const monthMax = Math.max(1, ...facts.months.map((month) => month.reviews));
+  const onboarding = slice.onboarding;
+  const beforeOnboarding = onboarding.completedAt ? onboarding.before : null;
+  const afterOnboarding = onboarding.completedAt ? onboarding.after : null;
+  const ratingDelta =
+    compare === "onboarding"
+      ? beforeOnboarding && afterOnboarding && beforeOnboarding.avgRating !== null && afterOnboarding.avgRating !== null
+        ? `${beforeOnboarding.avgRating.toFixed(2)} → ${afterOnboarding.avgRating.toFixed(2)} since onboarding`
+        : undefined
+      : before == null || before.avgRating === null || current.avgRating === null
+        ? undefined
+        : `${(current.avgRating - before.avgRating).toFixed(2)} vs previous`;
+  const volumeDelta =
+    compare === "onboarding"
+      ? beforeOnboarding && afterOnboarding
+        ? `${beforeOnboarding.reviews.toLocaleString("en-US")} → ${afterOnboarding.reviews.toLocaleString("en-US")} since onboarding`
+        : undefined
+      : before
+        ? `${facts.reviews - (previous?.reviews ?? 0) >= 0 ? "+" : ""}${(facts.reviews - (previous?.reviews ?? 0)).toLocaleString("en-US")} vs previous`
+        : undefined;
 
   return (
     <div className="space-y-4">
-      <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+      <div className="grid grid-cols-2 gap-3 lg:grid-cols-3">
         <Tile
           label="Reviews"
           value={facts.reviews.toLocaleString("en-US")}
           tone="blue"
-          delta={
-            before
-              ? `${facts.reviews - (previous?.reviews ?? 0) >= 0 ? "+" : ""}${(facts.reviews - (previous?.reviews ?? 0)).toLocaleString("en-US")} vs previous`
-              : undefined
-          }
+          delta={volumeDelta}
+          href={drill()}
         />
         <Tile
           label="Average rating"
           value={current.avgRating === null ? "—" : current.avgRating.toFixed(2)}
           tone="green"
-          delta={
-            before == null || before.avgRating === null || current.avgRating === null
-              ? undefined
-              : `${(current.avgRating - before.avgRating).toFixed(2)} vs previous`
-          }
+          delta={ratingDelta}
+          href={drill()}
         />
-        <Tile label="Negative share (1–3★)" value={percent(current.negativeShare)} tone="rose" />
-        <Tile label="Reply time" value={hours(current.avgResponseHours)} tone="amber" />
+        <Tile label="Reply rate" value={percent(current.replyRate)} tone="blue" href={drill({ filter: "published" })} />
+        <Tile
+          label="1–3★ share"
+          value={percent(current.negativeShare)}
+          tone="rose"
+          href={drill({ stars: "low" })}
+        />
+        <Tile label="Median reply time" value={formatHours(slice.window.medianHours)} tone="amber" href={repliedHref} />
+        <Tile label="Unreplied" value={facts.unreplied.toLocaleString("en-US")} tone="rose" href={drill({ filter: "unanswered" })} />
+        <Tile
+          label="Open escalations"
+          value={facts.openEscalations.toLocaleString("en-US")}
+          tone="amber"
+          delta={facts.overdueEscalations > 0 ? `${facts.overdueEscalations.toLocaleString("en-US")} overdue` : undefined}
+          href={escalationHref(range, scope)}
+        />
       </div>
       <p className="text-sm text-slate">
         {before && previous
           ? `Previous period: ${previous.reviews.toLocaleString("en-US")} reviews, average ${before.avgRating === null ? "—" : before.avgRating.toFixed(2)}, negative share ${percent(before.negativeShare)}.`
           : "All time has no earlier period to compare."}
       </p>
+
+      <div className="flex flex-wrap items-center gap-2 text-sm">
+        <span className="text-slate">Compare</span>
+        <FilterLink query={query} changes={{ compare: null }} current={compare === "previous"}>
+          Previous period
+        </FilterLink>
+        <FilterLink query={query} changes={{ compare: "onboarding" }} current={compare === "onboarding"}>
+          Since onboarding
+        </FilterLink>
+        <span className="text-slate sm:ml-3">Rank by</span>
+        {(
+          [
+            ["rating", "Rating"],
+            ["reviews", "Reviews"],
+            ["reply", "Reply rate"],
+            ["time", "Reply time"],
+          ] as const
+        ).map(([id, label]) => (
+          <FilterLink key={id} query={query} changes={{ rankBy: id === "rating" ? null : id }} current={rankBy === id}>
+            {label}
+          </FilterLink>
+        ))}
+        <span className="text-slate sm:ml-3">Show</span>
+        <FilterLink query={query} changes={{ show: null }} current={show === "locations"}>
+          Locations
+        </FilterLink>
+        <FilterLink query={query} changes={{ show: "groups" }} current={show === "groups"}>
+          Groups
+        </FilterLink>
+      </div>
+      <p className="text-sm text-slate">
+        {show === "locations" ? "Locations" : "Groups"} ranked by {rankBy === "time" ? "reply time" : rankBy === "reply" ? "reply rate" : rankBy}.{" "}
+        {compare === "onboarding"
+          ? "Deltas compare the period before onboarding with the period since onboarding."
+          : before
+            ? "Deltas compare this date range with the previous range of the same length."
+            : "All time has no earlier period of the same length."}{" "}
+        These controls do not change the organisation, group, or location.
+      </p>
+
+      <div className="grid gap-4 xl:grid-cols-3">
+        <ChartCard title="Reply time" hint="Elapsed time until Google recorded a reply. A bar opens the replied reviews in this period.">
+          {facts.reviews === 0 ? (
+            <p className="text-sm text-slate">No reviews in this period.</p>
+          ) : (
+            <VBarChart rows={replyBuckets.map((row) => ({ ...row, href: repliedHref }))} />
+          )}
+          <p className="mt-3 text-xs text-slate">
+            {slice.window.medianHours === null
+              ? "No confirmed Google reply time in this period."
+              : `Median ${formatHours(slice.window.medianHours)}. Average ${hours(current.avgResponseHours)}.`}
+            {slice.window.untimedReplies > 0
+              ? ` ${slice.window.untimedReplies.toLocaleString("en-US")} replied reviews have no usable reply timestamp.`
+              : ""}
+          </p>
+        </ChartCard>
+
+        <ChartCard title="Rating mix" hint="Share of reviews in this period. A bar opens that star rating.">
+          <HBarChart
+            max={maxStar}
+            rows={[...facts.stars].reverse().map((count, index) => {
+              const stars = 5 - index;
+              return {
+                label: `${stars}★`,
+                value: count,
+                color: STAR_COLORS[stars - 1],
+                href: drill({ rating: String(stars) }),
+                suffix: facts.reviews > 0 ? `· ${Math.round((count / facts.reviews) * 100)}%` : undefined,
+              };
+            })}
+          />
+          <p className="mt-3 text-xs text-slate">
+            {slice.window.languages.length === 0
+              ? "No reviews in this period."
+              : `Languages: ${slice.window.languages
+                  .slice(0, 4)
+                  .map((item) => `${item.label} ${item.share === null ? "—" : `${Math.round(item.share * 100)}%`}`)
+                  .join(" · ")}`}
+          </p>
+        </ChartCard>
+
+        <ChartCard title="Since onboarding" hint="Every review in this scope, split at the onboarding timestamp. This card ignores the date range.">
+          {onboarding.completedAt && beforeOnboarding && afterOnboarding ? (
+            <dl className="divide-y divide-silver text-sm">
+              <OnboardingRow label="Reply rate" before={percent(beforeOnboarding.replyRate)} after={percent(afterOnboarding.replyRate)} />
+              <OnboardingRow label="Median reply time" before={formatHours(beforeOnboarding.medianHours)} after={formatHours(afterOnboarding.medianHours)} />
+              <OnboardingRow
+                label="Average rating"
+                before={beforeOnboarding.avgRating === null ? "—" : beforeOnboarding.avgRating.toFixed(2)}
+                after={afterOnboarding.avgRating === null ? "—" : afterOnboarding.avgRating.toFixed(2)}
+              />
+              <OnboardingRow label="Sent by autoreply" before={percent(beforeOnboarding.autoShare)} after={percent(afterOnboarding.autoShare)} />
+            </dl>
+          ) : (
+            <p className="text-sm text-slate">Onboarding is not finished, so there is no before-and-after.</p>
+          )}
+          <p className="mt-3 text-xs text-slate">
+            Autoreply is the share of replies published from GRM whose source is the model. A Google reply with no GRM publish record is not included.
+          </p>
+          {onboarding.completedAt ? (
+            <Link className="mt-3 inline-block text-sm text-navy underline" href={drill()}>
+              Open reviews in the selected period
+            </Link>
+          ) : null}
+        </ChartCard>
+      </div>
 
       <div className="grid gap-4 xl:grid-cols-[minmax(0,1.15fr)_minmax(16rem,0.85fr)]">
         <ChartCard title="Reviews by month" hint="Stacked by star band. The line is average rating.">
@@ -217,77 +400,19 @@ function Performance({
         </ChartCard>
       </div>
 
-      <div className="grid gap-4 lg:grid-cols-2">
-        <ChartCard title="Rating distribution" hint="Tap a bar to open those reviews in the inbox.">
-          <HBarChart
-            max={maxStar}
-            rows={facts.stars.map((count, index) => ({
-              label: `${index + 1} star`,
-              value: count,
-              color: STAR_COLORS[index],
-              href: drill({ rating: String(index + 1) }),
-            }))}
-          />
-        </ChartCard>
-
-        <ChartCard title="Reply speed" hint="How long until Google recorded a reply.">
-          <div className="mb-4 flex justify-center">
-            <ScoreRing
-              score={score}
-              caption={
-                score === null
-                  ? "No rating score yet."
-                  : `${current.avgRating?.toFixed(2)} average, shown out of 100.`
-              }
-            />
-          </div>
-          <HBarChart max={maxBucket} rows={replyBuckets} />
-          <p className="mt-3 text-xs text-slate">
-            {facts.reviews - facts.responseCount > 0
-              ? `${(facts.reviews - facts.responseCount).toLocaleString("en-US")} ${facts.reviews - facts.responseCount === 1 ? "review has" : "reviews have"} no confirmed Google reply time.`
-              : "Every review in this period has a confirmed reply time."}
-          </p>
-        </ChartCard>
+      <div className="grid gap-4 xl:grid-cols-[minmax(0,1.2fr)_minmax(18rem,0.8fr)]">
+        <Leaderboard
+          facts={facts}
+          names={names}
+          groupNames={groupNames}
+          rankBy={rankBy}
+          show={show}
+          drill={drill}
+          groupOf={groupOf}
+          parentOf={parentOf}
+        />
+        <ThemeMatrix facts={facts} groupNames={groupNames} drill={drill} parentOf={parentOf} />
       </div>
-
-      <ChartCard title="Location leaderboard" hint="Sorted by average rating in this period.">
-        {rows.length === 0 ? (
-          <p className="text-sm text-slate">No reviews in this period.</p>
-        ) : (
-          <ul className="space-y-3">
-            {rows.map((row, index) => {
-              const rating = row.ratingSum / row.reviews;
-              const replyRate = share(row.replied, row.reviews);
-              return (
-                <li key={row.locationId}>
-                  <Link href={drill({ location: row.locationId })} className="block rounded-xl border border-silver px-3 py-3 hover:border-sky">
-                    <div className="flex flex-wrap items-center justify-between gap-2">
-                      <p className="text-sm font-medium text-graphite">
-                        <span className="mr-2 text-slate">{index + 1}.</span>
-                        {names.get(row.locationId)}
-                      </p>
-                      <p className="text-sm tabular-nums text-navy">{rating.toFixed(2)}</p>
-                    </div>
-                    <div className="mt-2 h-2 overflow-hidden rounded-full" style={{ background: CHART.track }}>
-                      <div
-                        className="h-full rounded-full"
-                        style={{
-                          width: `${(rating / 5) * 100}%`,
-                          background: rating >= 4.5 ? CHART.green : rating >= 3.5 ? CHART.amber : CHART.rose,
-                        }}
-                      />
-                    </div>
-                    <p className="mt-2 text-xs text-slate">
-                      {row.reviews.toLocaleString("en-US")} reviews · {percent(replyRate)} replied ·{" "}
-                      {hours(average(row.responseHoursSum, row.responseCount))} reply time
-                    </p>
-                  </Link>
-                </li>
-              );
-            })}
-          </ul>
-        )}
-      </ChartCard>
 
       {facts.months.length > 0 ? (
         <ChartCard title="Monthly volume bars" hint="Total reviews each month for the selected scope.">
@@ -319,6 +444,237 @@ function Performance({
         </ChartCard>
       ) : null}
     </div>
+  );
+}
+
+function escalationHref(range: DateRange, scope: DashboardScope): string {
+  const params = new URLSearchParams();
+  for (const [key, value] of Object.entries({
+    client: scope.clientId ?? "",
+    group: scope.groupId ?? "",
+    location: scope.locationId ?? "",
+    ...dateRangeParams(range, "all"),
+  })) {
+    if (value) params.set(key, value);
+  }
+  const text = params.toString();
+  return text ? `/escalations?${text}` : "/escalations";
+}
+
+function FilterLink({
+  query,
+  changes,
+  current,
+  children,
+}: {
+  query: string;
+  changes: Record<string, string | null>;
+  current: boolean;
+  children: string;
+}) {
+  const params = new URLSearchParams(query);
+  for (const [key, value] of Object.entries(changes)) {
+    if (value) params.set(key, value);
+    else params.delete(key);
+  }
+  params.delete("page");
+  const text = params.toString();
+  return (
+    <Link
+      href={text ? `/analytics?${text}` : "/analytics"}
+      aria-current={current ? "page" : undefined}
+      className={
+        current
+          ? "rounded-full bg-navy px-3 py-1 text-white"
+          : "rounded-full border border-silver bg-white px-3 py-1 text-graphite"
+      }
+    >
+      {children}
+    </Link>
+  );
+}
+
+function OnboardingRow({ label, before, after }: { label: string; before: string; after: string }) {
+  return (
+    <div className="flex items-center justify-between gap-3 py-2">
+      <dt className="text-slate">{label}</dt>
+      <dd className="tabular-nums text-graphite">
+        {before} → {after}
+      </dd>
+    </div>
+  );
+}
+
+function Leaderboard({
+  facts,
+  names,
+  groupNames,
+  rankBy,
+  show,
+  drill,
+  groupOf,
+  parentOf,
+}: {
+  facts: DashboardFacts;
+  names: Map<string, string>;
+  groupNames: Map<string, string>;
+  rankBy: RankBy;
+  show: RankShow;
+  drill: (extra?: Record<string, string>) => string;
+  groupOf: (locationId: string) => string | null;
+  parentOf: (groupId: string) => string | null;
+}) {
+  const ranked =
+    show === "groups"
+      ? rankRows(
+          rollupByGroup(
+            facts.locations
+              .filter((row) => names.has(row.locationId))
+              .map((row) => ({
+                id: row.locationId,
+                groupId: groupOf(row.locationId),
+                reviews: row.reviews,
+                ratingSum: row.ratingSum,
+                replied: row.replied,
+                responseHoursSum: row.responseHoursSum,
+                responseCount: row.responseCount,
+              })),
+            parentOf
+          ),
+          rankBy
+        )
+      : rankRows(
+          facts.locations
+            .filter((row) => names.has(row.locationId))
+            .map((row) => ({
+              id: row.locationId,
+              reviews: row.reviews,
+              ratingSum: row.ratingSum,
+              replied: row.replied,
+              responseHoursSum: row.responseHoursSum,
+              responseCount: row.responseCount,
+            })),
+          rankBy
+        );
+  return (
+    <ChartCard title={show === "groups" ? "Group leaderboard" : "Location leaderboard"} hint="A row opens those reviews. Competitor ratings are not connected.">
+      {ranked.length === 0 ? (
+        <p className="text-sm text-slate">No reviews in this period.</p>
+      ) : (
+        <div className="overflow-x-auto">
+          <table className="w-full min-w-[40rem] text-left text-sm">
+            <thead>
+              <tr className="text-xs text-slate">
+                <th className="py-2 pr-3 font-medium">#</th>
+                <th className="py-2 pr-3 font-medium">{show === "groups" ? "Group" : "Location"}</th>
+                {show === "locations" ? <th className="py-2 pr-3 font-medium">Group</th> : null}
+                <th className="py-2 pr-3 font-medium">Rating</th>
+                <th className="py-2 pr-3 font-medium">Reviews</th>
+                <th className="py-2 pr-3 font-medium">Reply rate</th>
+                <th className="py-2 pr-3 font-medium">Reply time</th>
+                <th className="py-2 font-medium">Vs competitor</th>
+              </tr>
+            </thead>
+            <tbody>
+              {ranked.map((row, index) => {
+                const rating = row.reviews > 0 ? row.ratingSum / row.reviews : null;
+                const directGroup = show === "locations" ? groupOf(row.id) : null;
+                const groupId = show === "groups" ? row.id || null : directGroup ? parentOf(directGroup) ?? directGroup : null;
+                const href =
+                  show === "groups"
+                    ? drill({ group: row.id, location: "" })
+                    : drill({ location: row.id });
+                return (
+                  <tr key={row.id || "none"} className="border-t border-silver">
+                    <td className="py-2 pr-3 text-slate">{index + 1}</td>
+                    <td className="py-2 pr-3">
+                      <Link href={href} className="text-navy hover:underline">
+                        {show === "groups" ? groupNames.get(row.id) ?? (row.id ? "Removed group" : "No group") : names.get(row.id)}
+                      </Link>
+                    </td>
+                    {show === "locations" ? (
+                      <td className="py-2 pr-3 text-slate">{groupId ? groupNames.get(groupId) ?? "Removed group" : "—"}</td>
+                    ) : null}
+                    <td className="py-2 pr-3 tabular-nums">{rating === null ? "—" : rating.toFixed(2)}</td>
+                    <td className="py-2 pr-3 tabular-nums">{row.reviews.toLocaleString("en-US")}</td>
+                    <td className="py-2 pr-3 tabular-nums">{percent(share(row.replied, row.reviews))}</td>
+                    <td className="py-2 pr-3 tabular-nums">{hours(average(row.responseHoursSum, row.responseCount))}</td>
+                    <td className="py-2 text-slate">—</td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </ChartCard>
+  );
+}
+
+function ThemeMatrix({
+  facts,
+  groupNames,
+  drill,
+  parentOf,
+}: {
+  facts: DashboardFacts;
+  groupNames: Map<string, string>;
+  drill: (extra?: Record<string, string>) => string;
+  parentOf: (groupId: string) => string | null;
+}) {
+  const counts = new Map<string, number>();
+  for (const row of facts.themeGroups) {
+    const parent = row.groupId ? parentOf(row.groupId) : null;
+    const groupId = parent ?? row.groupId ?? "";
+    const key = `${groupId}::${row.theme}`;
+    counts.set(key, (counts.get(key) ?? 0) + row.count);
+  }
+  const themes = [...new Set(facts.themeGroups.map((row) => row.theme))];
+  const groups = [...new Set([...counts.keys()].map((key) => key.split("::")[0]))];
+  const max = Math.max(1, ...counts.values());
+  return (
+    <ChartCard title="Complaints by theme and group" hint="Darker cells are more 1–3 star reviews with that theme. A cell opens those reviews.">
+      {themes.length === 0 ? (
+        <p className="text-sm text-slate">No 1–3 star reviews in this period.</p>
+      ) : (
+        <div className="overflow-x-auto">
+          <table className="w-full min-w-[28rem] text-left text-sm">
+            <thead>
+              <tr className="text-xs text-slate">
+                <th className="py-2 pr-3 font-medium">Theme</th>
+                {groups.map((groupId) => (
+                  <th key={groupId || "none"} className="py-2 pr-3 font-medium">
+                    {groupId ? groupNames.get(groupId) ?? "Removed group" : "No group"}
+                  </th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {themes.map((theme) => (
+                <tr key={theme} className="border-t border-silver">
+                  <td className="py-2 pr-3 text-graphite">{themeLabel(theme) ?? theme}</td>
+                  {groups.map((groupId) => {
+                    const count = counts.get(`${groupId}::${theme}`) ?? 0;
+                    const intensity = count === 0 ? 0.06 : 0.15 + (count / max) * 0.75;
+                    return (
+                      <td key={groupId || "none"} className="py-2 pr-3">
+                        <Link
+                          href={drill({ ...(groupId ? { group: groupId, location: "" } : { location: "" }), theme, stars: "low" })}
+                          className="inline-flex min-w-9 justify-center rounded-md px-1.5 py-0.5 tabular-nums text-graphite"
+                          style={{ background: `rgba(15, 23, 42, ${intensity})` }}
+                        >
+                          {count}
+                        </Link>
+                      </td>
+                    );
+                  })}
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </ChartCard>
   );
 }
 
@@ -597,11 +953,13 @@ function Tile({
   value,
   tone,
   delta,
+  href,
 }: {
   label: string;
   value: string;
   tone: "blue" | "green" | "amber" | "rose";
   delta?: string;
+  href?: string;
 }) {
   const tones = {
     blue: { bar: CHART.blue, wash: "#eff6ff" },
@@ -609,8 +967,8 @@ function Tile({
     amber: { bar: CHART.amber, wash: "#fffbeb" },
     rose: { bar: CHART.rose, wash: "#fff1f2" },
   }[tone];
-  return (
-    <div className="overflow-hidden rounded-xl border border-silver bg-white shadow-[0_1px_2px_rgba(15,39,79,0.04)]">
+  const body = (
+    <>
       <div className="h-1" style={{ background: tones.bar }} />
       <div className="p-4" style={{ background: `linear-gradient(180deg, ${tones.wash} 0%, #ffffff 70%)` }}>
         <p className="text-xs text-slate">{label}</p>
@@ -619,7 +977,15 @@ function Tile({
         </p>
         {delta ? <p className="mt-1 text-xs text-slate">{delta}</p> : null}
       </div>
-    </div>
+    </>
+  );
+  const className = "overflow-hidden rounded-xl border border-silver bg-white shadow-[0_1px_2px_rgba(15,39,79,0.04)]";
+  return href ? (
+    <Link href={href} className={`${className} block hover:border-sky`}>
+      {body}
+    </Link>
+  ) : (
+    <div className={className}>{body}</div>
   );
 }
 

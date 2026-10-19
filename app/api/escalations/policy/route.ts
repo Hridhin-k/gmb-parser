@@ -50,7 +50,7 @@ export async function POST(request: Request) {
     });
     const timezone = ESCALATION_TIMEZONES.find((item) => item.id === body.timezone);
     if (!timezone) return NextResponse.json({ error: "Choose a supported timezone." }, { status: 400 });
-    await EscalationService.savePolicy(membership.workspace_id, user.id, {
+    const { created } = await EscalationService.savePolicy(membership.workspace_id, user.id, {
       maxStars: body.maxStars,
       flagProfanity: body.flagProfanity,
       flagLegalSafety: body.flagLegalSafety,
@@ -59,7 +59,7 @@ export async function POST(request: Request) {
       dueHours: body.dueHours,
       timezone: timezone.id,
     });
-    return NextResponse.json({ ok: true });
+    return NextResponse.json({ ok: true, created });
   } catch (error) {
     return NextResponse.json({ error: toUserMessage(error) }, { status: toStatusCode(error) });
   }

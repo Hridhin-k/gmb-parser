@@ -1,5 +1,5 @@
 import { createAdminClient } from "@/lib/supabase/admin";
-import { canAct, clampListScope, reviewPermission, type ResourceRef } from "@/lib/access";
+import { canAct, reviewPermission, type ResourceRef } from "@/lib/access";
 import { ESCALATION_LEVELS } from "@/lib/escalations";
 import { reviewWindow } from "@/lib/metrics";
 import {
@@ -21,6 +21,7 @@ import { checkReplyGuardrails } from "@/lib/reply-guardrails";
 import { themeLabel } from "@/lib/review-inbox";
 import { splitGoogleTranslation } from "@/lib/review-text";
 import { getMemberAccess, visibleClientIds, type MemberAccess } from "@/lib/services/access";
+import { readPageScope } from "@/lib/services/scope-catalog";
 import {
   getDashboardContext,
   type DashboardLocation,
@@ -90,6 +91,8 @@ export interface MobileApprovalCard {
 
 export interface MobileApproval {
   clientId: string | null;
+  groupId: string | null;
+  locationId: string | null;
   clients: MobileClientOption[];
   card: MobileApprovalCard | null;
   skippedIds: string[];
@@ -134,6 +137,8 @@ export interface MobileComplaintCard {
 
 export interface MobileComplaint {
   clientId: string | null;
+  groupId: string | null;
+  locationId: string | null;
   clients: MobileClientOption[];
   card: MobileComplaintCard | null;
   missingId: boolean;
@@ -144,22 +149,43 @@ interface Placed {
   access: MemberAccess;
   scope: DashboardScope;
   denied: boolean;
+  dropped: boolean;
+  title: string;
 }
 
-async function placed(workspaceId: string, userId: string, clientParam: unknown): Promise<Placed | null> {
+function keptId(id: string | null): string | null {
+  return id && id !== NIL ? id : null;
+}
+
+function scopeQuery(scope: DashboardScope): { client: string | null; group: string | null; location: string | null } {
+  return {
+    client: keptId(scope.clientId),
+    group: keptId(scope.groupId),
+    location: keptId(scope.locationId),
+  };
+}
+
+async function placed(
+  workspaceId: string,
+  userId: string,
+  params: { client?: unknown; group?: unknown; location?: unknown }
+): Promise<Placed | null> {
   const access = await getMemberAccess(userId, workspaceId);
   if (!access?.enabled) return null;
-  const requested = oneId(clientParam) ?? "";
-  const clamped = clampListScope({ clientId: requested, locationId: "", groupId: "" }, access.scope);
-  const denied = clamped.clientId === NIL || clamped.locationId === NIL || clamped.groupId === NIL;
-  const orgWide = !access.scope.clientId && !access.scope.groupId && !access.scope.locationId;
+  const resolved = await readPageScope(userId, workspaceId, {
+    client: typeof params.client === "string" ? params.client : undefined,
+    group: typeof params.group === "string" ? params.group : undefined,
+    location: typeof params.location === "string" ? params.location : undefined,
+  });
   return {
     access,
-    denied,
+    denied: resolved.blocked,
+    dropped: resolved.dropped,
+    title: resolved.title,
     scope: {
-      clientId: denied ? NIL : orgWide ? clamped.clientId || null : access.scope.clientId,
-      groupId: denied ? NIL : access.scope.groupId,
-      locationId: denied ? NIL : access.scope.locationId,
+      clientId: resolved.clientId,
+      groupId: resolved.groupId,
+      locationId: resolved.locationId,
     },
   };
 }
@@ -231,12 +257,18 @@ export async function loadMobileOverview(input: {
   workspaceId: string;
   userId: string;
   clientParam: unknown;
+  groupParam?: unknown;
+  locationParam?: unknown;
   rangeParam: unknown;
   now?: Date;
 }): Promise<MobileOverview> {
   const now = input.now ?? new Date();
   const rangeKey = mobileRangeKey(input.rangeParam);
-  const view = await placed(input.workspaceId, input.userId, input.clientParam);
+  const view = await placed(input.workspaceId, input.userId, {
+    client: input.clientParam,
+    group: input.groupParam,
+    location: input.locationParam,
+  });
   const emptyClients: MobileClientOption[] = [];
   const base = {
     rangeKey,
@@ -274,13 +306,9 @@ export async function loadMobileOverview(input: {
   const locations = inView(context.locations, view.scope, allowedClientIds);
   const locationIds = locations.map((location) => location.id);
   const clients = context.clients.filter((client) => !allowedClientIds || allowedClientIds.includes(client.id));
-  const clientId = view.denied ? null : view.scope.clientId;
-  const requestedId = oneId(input.clientParam);
-  const unknownClient = Boolean(requestedId && !clients.some((client) => client.id === requestedId));
-  const selected = clients.find((client) => client.id === clientId);
-  const scopeLabel = view.denied || unknownClient
-    ? "That client is not in this view"
-    : selected?.name ?? (locations.length === 1 ? locations[0]!.name : "all clients in this view");
+  const clientId = view.denied ? null : keptId(view.scope.clientId);
+  const unknownClient = view.dropped;
+  const scopeLabel = view.denied || view.dropped ? "That selection is not available" : view.title;
   const weekFacts = week?.facts ?? context.facts;
   const weekPrevious = week?.previous ?? context.previous;
   const current = reviewWindow(context.facts);
@@ -316,9 +344,9 @@ export async function loadMobileOverview(input: {
     throw new Error("Could not load the mobile overview.");
   }
 
-  const query = { client: clientId, range: rangeKey };
-  const approveHref = mobileHref("/m/approve", { client: clientId });
-  const escalationsHref = mobileHref("/m/escalations", { client: clientId });
+  const query = { ...scopeQuery(view.scope), range: rangeKey };
+  const approveHref = mobileHref("/m/approve", scopeQuery(view.scope));
+  const escalationsHref = mobileHref("/m/escalations", scopeQuery(view.scope));
   const names = new Map(locations.map((location) => [location.id, location.name]));
   const worst = [...context.facts.locations]
     .filter((location) => location.oneToThree > 0 && names.has(location.locationId))
@@ -376,11 +404,7 @@ export async function loadMobileOverview(input: {
     rangeLabel: range.label,
     clientId,
     clients,
-    chooseClient:
-      !view.access.scope.clientId &&
-      !view.access.scope.groupId &&
-      !view.access.scope.locationId &&
-      clients.length > 1,
+    chooseClient: false,
     unknownClient,
     scopeLabel,
     brief: weekBrief({
@@ -425,8 +449,12 @@ interface ReplyRow {
   created_at: string;
 }
 
-async function queueContext(workspaceId: string, userId: string, clientParam: unknown) {
-  const view = await placed(workspaceId, userId, clientParam);
+async function queueContext(
+  workspaceId: string,
+  userId: string,
+  params: { client?: unknown; group?: unknown; location?: unknown }
+) {
+  const view = await placed(workspaceId, userId, params);
   if (!view) return null;
   const allowedClientIds = await visibleClientIds(workspaceId, view.access.scope);
   const context = await getDashboardContext(workspaceId, mobileDateRange("30d"), view.scope);
@@ -446,15 +474,23 @@ export async function loadMobileApproval(input: {
   workspaceId: string;
   userId: string;
   clientParam: unknown;
+  groupParam?: unknown;
+  locationParam?: unknown;
   skipParam: unknown;
   now?: Date;
 }): Promise<MobileApproval> {
   const now = input.now ?? new Date();
   const skip = new Set(skippedIds(input.skipParam));
-  const loaded = await queueContext(input.workspaceId, input.userId, input.clientParam);
+  const loaded = await queueContext(input.workspaceId, input.userId, {
+    client: input.clientParam,
+    group: input.groupParam,
+    location: input.locationParam,
+  });
   if (!loaded || loaded.locations.length === 0) {
     return {
       clientId: loaded?.clientId ?? null,
+      groupId: loaded ? keptId(loaded.view.scope.groupId) : null,
+      locationId: loaded ? keptId(loaded.view.scope.locationId) : null,
       clients: loaded?.clients ?? [],
       card: null,
       skippedIds: [...skip],
@@ -550,10 +586,12 @@ export async function loadMobileApproval(input: {
 
   return {
     clientId: loaded.clientId,
+    groupId: keptId(loaded.view.scope.groupId),
+    locationId: keptId(loaded.view.scope.locationId),
     clients: loaded.clients,
     card,
     skippedIds: [...skip],
-    clearSkipHref: mobileHref("/m/approve", { client: loaded.clientId }),
+    clearSkipHref: mobileHref("/m/approve", scopeQuery(loaded.view.scope)),
     clientHrefs: [
       { id: "all", name: "All", href: "/m/approve" },
       ...loaded.clients.map((client) => ({
@@ -569,25 +607,28 @@ export async function loadMobileComplaint(input: {
   workspaceId: string;
   userId: string;
   clientParam: unknown;
+  groupParam?: unknown;
   locationParam: unknown;
   idParam: unknown;
   now?: Date;
 }): Promise<MobileComplaint> {
   const now = input.now ?? new Date();
-  const loaded = await queueContext(input.workspaceId, input.userId, input.clientParam);
+  const loaded = await queueContext(input.workspaceId, input.userId, {
+    client: input.clientParam,
+    group: input.groupParam,
+    location: input.locationParam,
+  });
   const blank: MobileComplaint = {
     clientId: loaded?.clientId ?? null,
+    groupId: loaded ? keptId(loaded.view.scope.groupId) : null,
+    locationId: loaded ? keptId(loaded.view.scope.locationId) : null,
     clients: loaded?.clients ?? [],
     card: null,
     missingId: false,
     clientHrefs: [],
   };
   if (!loaded || loaded.locations.length === 0) return blank;
-  const locationFilter = oneId(input.locationParam);
-  const locations = locationFilter
-    ? loaded.locations.filter((location) => location.id === locationFilter)
-    : loaded.locations;
-  if (locations.length === 0) return { ...blank, clientId: loaded.clientId, clients: loaded.clients };
+  const locations = loaded.locations;
   const admin = createAdminClient();
   const locationIds = locations.map((location) => location.id);
   const { data, error } = await admin
@@ -683,6 +724,8 @@ export async function loadMobileComplaint(input: {
 
   return {
     clientId: loaded.clientId,
+    groupId: keptId(loaded.view.scope.groupId),
+    locationId: keptId(loaded.view.scope.locationId),
     clients: loaded.clients,
     card,
     missingId: Boolean(requested && !rows.some((row) => row.id === requested)),

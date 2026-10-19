@@ -25,7 +25,7 @@ export function googleReviewRequestUrl(placeId: string): string {
 export async function listReviewRequestLocations(
   workspaceId: string,
   clientId: string | null,
-  scope: { locationId?: string | null; groupId?: string | null } = {}
+  scope: { locationId?: string | null; groupId?: string | null; locationIds?: string[] | null } = {}
 ): Promise<ReviewRequestLocation[]> {
   const admin = createAdminClient();
   let query = admin
@@ -36,8 +36,14 @@ export async function listReviewRequestLocations(
     .eq("workspace_id", workspaceId)
     .order("location_title", { ascending: true });
 
-  if (scope.locationId) query = query.eq("id", scope.locationId);
-  if (scope.groupId) query = query.eq("group_id", scope.groupId);
+  if (scope.locationIds) {
+    if (scope.locationIds.length === 0) return [];
+    query = query.in("id", scope.locationIds);
+  } else if (scope.locationId) {
+    query = query.eq("id", scope.locationId);
+  } else if (scope.groupId) {
+    query = query.eq("group_id", scope.groupId);
+  }
   if (clientId) query = query.eq("client_id", clientId);
 
   const { data, error } = await query;

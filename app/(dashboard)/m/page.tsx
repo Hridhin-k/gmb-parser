@@ -12,6 +12,8 @@ export default async function MobileOverviewPage({
     workspaceId,
     userId: user.id,
     clientParam: Array.isArray(params.client) ? params.client[0] : params.client,
+    groupParam: Array.isArray(params.group) ? params.group[0] : params.group,
+    locationParam: Array.isArray(params.location) ? params.location[0] : params.location,
     rangeParam: Array.isArray(params.range) ? params.range[0] : params.range,
   });
   return <MobileOverviewView data={data} />;

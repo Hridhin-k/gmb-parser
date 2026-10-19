@@ -4,18 +4,21 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { allows, workspaceGrant } from "@/lib/access";
 import { authMethodsFromEnv } from "@/lib/auth-methods";
 import { SettingsBoard } from "@/components/settings-board";
+import { AiConfigPanel } from "@/components/ai-config-panel";
 import { GoogleConnectionCard } from "@/components/google-connection-card";
 import { PageHeader } from "@/components/page-header";
 import { EscalationService } from "@/lib/services/escalations";
 import { listScopeChoices } from "@/lib/services/access";
 import { getMemberAccess } from "@/lib/services/access";
 import { loadReplySettings, type SettingsTarget } from "@/lib/services/reply-settings";
+import { loadAiBoard } from "@/lib/services/ai-config";
 import { getActiveRole, getActiveWorkspace } from "@/lib/services/session";
 import { canOpenPath } from "@/lib/shell";
 import { visibleClientIds } from "@/lib/services/access";
 import { loadAgencyBranding } from "@/lib/services/agency-branding";
 import { domainStatus, senderStatus } from "@/lib/agency-portal";
 import { BrandingForm } from "@/components/branding-form";
+import type { AiKnowledgeKind } from "@/lib/ai-config";
 
 const ERROR_MESSAGES: Record<string, string> = {
   access_denied: "You denied access to your Google account. You can try again when ready.",
@@ -24,7 +27,7 @@ const ERROR_MESSAGES: Record<string, string> = {
 };
 
 const SECTIONS = [
-  ["tone", "Tone and automation"],
+  ["tone", "AI configuration"],
   ["templates", "Templates"],
   ["sla", "SLAs and routing"],
   ["notifications", "Notifications"],
@@ -88,7 +91,7 @@ export default async function SettingsPage({
       redirect("/settings?section=tone");
     }
   }
-  const [settings, scopes, policy, connections, branding] = await Promise.all([
+  const [settings, scopes, policy, connections, branding, aiBoard] = await Promise.all([
     loadReplySettings(workspaceId, target),
     listScopeChoices(workspaceId),
     EscalationService.policy(workspaceId),
@@ -99,6 +102,7 @@ export default async function SettingsPage({
       .neq("status", "revoked")
       .order("created_at", { ascending: false }),
     canBill ? loadAgencyBranding(workspaceId) : Promise.resolve(null),
+    section === "tone" ? loadAiBoard(workspaceId, user.id) : Promise.resolve(null),
   ]);
 
   const googleError = typeof params.google_error === "string" ? params.google_error : null;
@@ -136,9 +140,60 @@ export default async function SettingsPage({
         ))}
       </nav>
 
-      {section === "tone" || section === "templates" ? (
+      {section === "tone" && aiBoard ? (
+        <div className="space-y-8">
+          <AiConfigPanel
+            canEdit={canEdit}
+            target={target}
+            active={{
+              version: aiBoard.active.version,
+              label: aiBoard.active.label,
+              snapshot: {
+                org: aiBoard.active.snapshot.org,
+                insights: aiBoard.active.snapshot.insights,
+              },
+            }}
+            versions={aiBoard.versions.map((row) => ({
+              version: row.version,
+              status: row.status,
+              label: row.label,
+              createdAt: row.createdAt,
+            }))}
+            knowledge={aiBoard.knowledge
+              .filter((row) => {
+                if (target.kind === "workspace") {
+                  return !row.clientId && !row.groupId && !row.locationId;
+                }
+                if (target.kind === "client") return row.clientId === target.id;
+                if (target.kind === "group") return row.groupId === target.id;
+                return row.locationId === target.id;
+              })
+              .map((row) => ({
+                id: row.id,
+                kind: row.kind as AiKnowledgeKind,
+                title: row.title,
+                body: row.body,
+                enabled: row.enabled,
+                clientId: row.clientId,
+                groupId: row.groupId,
+                locationId: row.locationId,
+                metadata: row.metadata,
+              }))}
+          />
+          <SettingsBoard
+            section="tone"
+            target={target}
+            canEdit={canEdit}
+            tone={settings.tone}
+            automation={settings.automation}
+            templates={settings.templates}
+          />
+        </div>
+      ) : null}
+
+      {section === "templates" ? (
         <SettingsBoard
-          section={section === "templates" ? "templates" : "tone"}
+          section="templates"
           target={target}
           canEdit={canEdit}
           tone={settings.tone}

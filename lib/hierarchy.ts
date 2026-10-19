@@ -104,6 +104,18 @@ export function groupShapeError(input: GroupShape): string | null {
   return null;
 }
 
+/** A location has one group. Every chosen location must already belong to the organisation that owns the group. */
+export function groupAssignmentError(input: {
+  clientId: string;
+  locationClientIds: Array<string | null>;
+}): string | null {
+  if (input.locationClientIds.length === 0) return "Select at least one location.";
+  if (input.locationClientIds.some((clientId) => clientId !== input.clientId)) {
+    return "Every location has to belong to this organisation.";
+  }
+  return null;
+}
+
 export function locationMoveError(input: {
   locationWorkspaceId: string;
   groupWorkspaceId: string;

@@ -65,38 +65,56 @@ export async function getDashboardContext(
 ): Promise<DashboardContext> {
   const admin = createAdminClient();
   const previousWindow = previousDateRange(range);
-  const [policy, clientsResult, groupsResult, locationsResult, connectionsResult, pausesResult, insightsResult] =
-    await Promise.all([
-      admin
-        .from("grm_escalation_policies")
-        .select("timezone, reply_rate_target")
-        .eq("workspace_id", workspaceId)
-        .maybeSingle(),
-      admin
-        .from("grm_clients")
-        .select("id, name, notes")
-        .eq("workspace_id", workspaceId)
-        .eq("is_active", true)
-        .or(`notes.is.null,notes.neq.${UNASSIGNED_CLIENT_MARKER}`)
-        .order("name"),
-      admin.from("grm_groups").select("id, name, parent_id").eq("workspace_id", workspaceId).order("name"),
-      admin
-        .from("grm_google_locations")
-        .select(
-          "id, client_id, group_id, location_title, store_code, address_formatted, is_active, hold_reason, voice_of_merchant, last_synced_at"
-        )
-        .eq("workspace_id", workspaceId),
-      admin.from("grm_google_connections").select("status").eq("workspace_id", workspaceId),
-      admin
-        .from("grm_autoreply_pauses")
-        .select("scope, client_id, location_id")
-        .eq("workspace_id", workspaceId)
-        .is("cleared_at", null),
-      admin
-        .from("grm_location_insights")
-        .select("location_id, summary, review_count, generated_at")
-        .eq("workspace_id", workspaceId),
-    ]);
+  // Metrics RPCs do not depend on the catalog rows — start them with the default
+  // timezone, then redo only if the workspace policy uses a different zone.
+  const defaultTimezone = "Asia/Kolkata";
+  const startIso = range.start?.toISOString() ?? null;
+  const endIso = range.end?.toISOString() ?? null;
+  const [
+    policy,
+    clientsResult,
+    groupsResult,
+    locationsResult,
+    connectionsResult,
+    pausesResult,
+    insightsResult,
+    factsDefault,
+    previousDefault,
+  ] = await Promise.all([
+    admin
+      .from("grm_escalation_policies")
+      .select("timezone, reply_rate_target")
+      .eq("workspace_id", workspaceId)
+      .maybeSingle(),
+    admin
+      .from("grm_clients")
+      .select("id, name, notes")
+      .eq("workspace_id", workspaceId)
+      .eq("is_active", true)
+      .or(`notes.is.null,notes.neq.${UNASSIGNED_CLIENT_MARKER}`)
+      .order("name"),
+    admin.from("grm_groups").select("id, name, parent_id").eq("workspace_id", workspaceId).order("name"),
+    admin
+      .from("grm_google_locations")
+      .select(
+        "id, client_id, group_id, location_title, store_code, address_formatted, is_active, hold_reason, voice_of_merchant, last_synced_at"
+      )
+      .eq("workspace_id", workspaceId),
+    admin.from("grm_google_connections").select("status").eq("workspace_id", workspaceId),
+    admin
+      .from("grm_autoreply_pauses")
+      .select("scope, client_id, location_id")
+      .eq("workspace_id", workspaceId)
+      .is("cleared_at", null),
+    admin
+      .from("grm_location_insights")
+      .select("location_id, summary, review_count, generated_at")
+      .eq("workspace_id", workspaceId),
+    loadFacts(workspaceId, scope, startIso, endIso, defaultTimezone),
+    previousWindow
+      ? loadFacts(workspaceId, scope, previousWindow.start.toISOString(), previousWindow.end.toISOString(), defaultTimezone)
+      : Promise.resolve(null),
+  ]);
 
   if (policy.error) throw new Error(`Failed to load dashboard settings: ${policy.error.message}`);
   if (clientsResult.error) throw new Error(`Failed to load clients: ${clientsResult.error.message}`);
@@ -108,9 +126,25 @@ export async function getDashboardContext(
 
   const timezone = ESCALATION_TIMEZONES.some((zone) => zone.id === policy.data?.timezone)
     ? policy.data!.timezone
-    : "Asia/Kolkata";
+    : defaultTimezone;
   const target = policy.data?.reply_rate_target;
   const replyTarget = target === null || target === undefined ? null : Number(target);
+
+  const [facts, previous] =
+    timezone === defaultTimezone
+      ? [factsDefault, previousDefault]
+      : await Promise.all([
+          loadFacts(workspaceId, scope, startIso, endIso, timezone),
+          previousWindow
+            ? loadFacts(
+                workspaceId,
+                scope,
+                previousWindow.start.toISOString(),
+                previousWindow.end.toISOString(),
+                timezone
+              )
+            : Promise.resolve(null),
+        ]);
 
   const clients = (clientsResult.data ?? [])
     .filter((client) => client.notes !== UNASSIGNED_CLIENT_MARKER)
@@ -135,19 +169,6 @@ export async function getDashboardContext(
       voiceOfMerchant: location.voice_of_merchant,
       lastSyncedAt: location.last_synced_at,
     }));
-
-  const [facts, previous] = await Promise.all([
-    loadFacts(workspaceId, scope, range.start?.toISOString() ?? null, range.end?.toISOString() ?? null, timezone),
-    previousWindow
-      ? loadFacts(
-          workspaceId,
-          scope,
-          previousWindow.start.toISOString(),
-          previousWindow.end.toISOString(),
-          timezone
-        )
-      : Promise.resolve(null),
-  ]);
 
   const connections = connectionsResult.data ?? [];
   const pauses = pausesResult.data ?? [];

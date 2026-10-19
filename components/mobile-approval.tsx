@@ -190,6 +190,8 @@ export function MobileApprovalView({ data }: { data: MobileApproval }) {
   const skipHref = card
     ? mobileHref("/m/approve", {
         client: data.clientId,
+        group: data.groupId,
+        location: data.locationId,
         skip: [...data.skippedIds, card.reviewId].join(","),
       })
     : data.clearSkipHref;
@@ -204,20 +206,6 @@ export function MobileApprovalView({ data }: { data: MobileApproval }) {
             : "No replies are waiting for a decision."}
         </p>
       </div>
-
-      {data.clients.length > 1 ? (
-        <div className="flex gap-2 overflow-x-auto pb-1">
-          {data.clientHrefs.map((client) => (
-            <Link
-              key={client.id}
-              href={client.href}
-              className={`inline-flex h-11 shrink-0 items-center rounded-full border px-4 text-sm ${client.id === (data.clientId ?? "all") ? "border-ink bg-ink text-white" : "border-silver bg-white text-ink"}`}
-            >
-              {client.name}
-            </Link>
-          ))}
-        </div>
-      ) : null}
 
       {!card ? (
         <p className="text-sm text-slate">
@@ -353,7 +341,7 @@ export function MobileApprovalView({ data }: { data: MobileApproval }) {
           <div className="space-y-2">
             {card.canDraft ? (
               card.openEscalationId ? (
-                <Link href={`/m/escalations?id=${card.openEscalationId}`} className="flex h-12 items-center justify-center rounded-full border border-silver text-sm text-ink">
+                <Link href={mobileHref("/m/escalations", { client: data.clientId, group: data.groupId, location: data.locationId, id: card.openEscalationId })} className="flex h-12 items-center justify-center rounded-full border border-silver text-sm text-ink">
                   On the escalation list
                 </Link>
               ) : (

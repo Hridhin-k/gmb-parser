@@ -1,11 +1,7 @@
 import { PageLoading } from "@/components/page-loading";
+import { PAGE_LOADING } from "@/lib/ui-status";
 
 export default function ReportsLoading() {
-  return (
-    <PageLoading
-      variant="list"
-      title="Loading reports"
-      detail="Opening scheduled reports and alert rules."
-    />
-  );
+  const copy = PAGE_LOADING.reports;
+  return <PageLoading variant="list" title={copy.title} detail={copy.detail} tone={copy.tone} />;
 }

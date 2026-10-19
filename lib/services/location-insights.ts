@@ -11,9 +11,11 @@ import {
 } from "@/lib/gemini";
 import { readableReviewText } from "@/lib/review-text";
 import type { Json } from "@/lib/types/supabase";
+import { insightLensFingerprint, insightLensPromptBlock, orgContextPromptBlock } from "@/lib/ai-config";
+import { loadResolvedInsightLens, ensureActiveAiConfig } from "@/lib/services/ai-config";
 
 const MODEL_ID = GEMINI_MODEL_ID;
-export const INSIGHT_PROMPT_VERSION = "insight-v2.0";
+export const INSIGHT_PROMPT_VERSION = "insight-v3.0";
 const REQUEST_TIMEOUT_MS = 45_000;
 const MAX_REVIEW_SAMPLES = 50;
 
@@ -34,6 +36,8 @@ export interface ProfileAnalysis {
   operations: { summary: string; notes: string[] };
   suggestedFeatures: SuggestedFeature[];
   replyPlaybook: { tone: string; do: string[]; avoid: string[] };
+  /** Review ids from the sample set that grounded the model text (optional). */
+  evidenceReviewIds: string[];
 }
 
 export interface LocationInsight {
@@ -52,6 +56,7 @@ export interface LocationInsight {
 }
 
 interface ReviewSample {
+  id: string;
   star_rating: number;
   comment: string | null;
   review_create_time: string;
@@ -61,21 +66,32 @@ function hashSource(payload: string): string {
   return createHash("sha256").update(payload).digest("hex").slice(0, 24);
 }
 
-function buildSourceFingerprint(
+export function buildLocationInsightFingerprint(
   locationId: string,
-  reviews: ReviewSample[],
-  avgRating: number | null
+  reviews: Array<{ review_create_time: string; star_rating: number; comment: string | null }>,
+  avgRating: number | null,
+  lensFingerprint = ""
 ): string {
   const parts = [
     locationId,
     String(reviews.length),
     avgRating?.toFixed(2) ?? "na",
+    lensFingerprint,
     ...reviews.map(
       (r) =>
         `${r.review_create_time}|${r.star_rating}|${(r.comment ?? "").slice(0, 80)}`
     ),
   ];
   return hashSource(parts.join("\n"));
+}
+
+function buildSourceFingerprint(
+  locationId: string,
+  reviews: ReviewSample[],
+  avgRating: number | null,
+  lensFingerprint = ""
+): string {
+  return buildLocationInsightFingerprint(locationId, reviews, avgRating, lensFingerprint);
 }
 
 function strings(value: unknown, max = 6, len = 220): string[] {
@@ -98,7 +114,21 @@ export function emptyAnalysis(): ProfileAnalysis {
     operations: { summary: "", notes: [] },
     suggestedFeatures: [],
     replyPlaybook: { tone: "", do: [], avoid: [] },
+    evidenceReviewIds: [],
   };
+}
+
+function parseEvidenceIds(value: unknown, allowed: Set<string>): string[] {
+  if (!Array.isArray(value)) return [];
+  const out: string[] = [];
+  for (const item of value) {
+    if (typeof item !== "string") continue;
+    const id = item.trim();
+    if (!allowed.has(id) || out.includes(id)) continue;
+    out.push(id);
+    if (out.length >= 8) break;
+  }
+  return out;
 }
 
 function parseFeatures(value: unknown): SuggestedFeature[] {
@@ -124,7 +154,10 @@ function parseFeatures(value: unknown): SuggestedFeature[] {
   return out;
 }
 
-export function parseLocationInsightPayload(raw: string): {
+export function parseLocationInsightPayload(
+  raw: string,
+  allowedReviewIds: string[] = []
+): {
   summary: string;
   sentiment: SentimentLabel;
   themes: string[];
@@ -156,6 +189,7 @@ export function parseLocationInsightPayload(raw: string): {
     string,
     unknown
   >;
+  const allowed = new Set(allowedReviewIds);
 
   return {
     summary: text(parsed.summary, 900),
@@ -191,6 +225,10 @@ export function parseLocationInsightPayload(raw: string): {
         do: strings(playbook.do, 4),
         avoid: strings(playbook.avoid, 4),
       },
+      evidenceReviewIds: parseEvidenceIds(
+        parsed.evidenceReviewIds ?? parsed.evidence_review_ids,
+        allowed
+      ),
     },
   };
 }
@@ -247,8 +285,16 @@ function asAnalysis(value: unknown): ProfileAnalysis {
     return emptyAnalysis();
   }
   try {
+    const raw = value as Record<string, unknown>;
+    const storedIds = Array.isArray(raw.evidenceReviewIds)
+      ? raw.evidenceReviewIds
+      : Array.isArray(raw.evidence_review_ids)
+        ? raw.evidence_review_ids
+        : [];
+    const allowed = storedIds.filter((id): id is string => typeof id === "string");
     return parseLocationInsightPayload(
-      JSON.stringify({ summary: "cached", ...(value as object), sentiment: "neutral" })
+      JSON.stringify({ summary: "cached", ...raw, sentiment: "neutral" }),
+      allowed
     ).analysis;
   } catch {
     return emptyAnalysis();
@@ -361,7 +407,7 @@ export class LocationInsightService {
         .in("id", locationIds),
       supabase
         .from("grm_reviews")
-        .select("location_id, star_rating, comment, review_create_time")
+        .select("id, location_id, star_rating, comment, review_create_time")
         .eq("workspace_id", workspaceId)
         .in("location_id", locationIds)
         .order("review_create_time", { ascending: false }),
@@ -377,6 +423,7 @@ export class LocationInsightService {
       if (!list) continue;
       if (list.length < MAX_REVIEW_SAMPLES) {
         list.push({
+          id: r.id,
           star_rating: r.star_rating,
           comment: r.comment,
           review_create_time: r.review_create_time,
@@ -422,19 +469,9 @@ export class LocationInsightService {
       throw new AppError("Location not found", "NOT_FOUND", 404);
     }
 
-    if (!options.force) {
-      const cached = await this.getCachedInsights(
-        workspaceId,
-        [locationId],
-        new Map([[locationId, stats.fingerprint]])
-      );
-      const hit = cached.get(locationId);
-      if (hit && !hit.stale) return hit;
-    }
-
     const { data: location } = await supabase
       .from("grm_google_locations")
-      .select("location_title, grm_clients(name)")
+      .select("location_title, client_id, grm_clients(name)")
       .eq("id", locationId)
       .eq("workspace_id", workspaceId)
       .single();
@@ -451,11 +488,33 @@ export class LocationInsightService {
       ? (clientData[0]?.name ?? location.location_title)
       : (clientData?.name ?? location.location_title);
 
+    const [{ lens, notes }, config] = await Promise.all([
+      loadResolvedInsightLens({ workspaceId, clientId: location.client_id }),
+      ensureActiveAiConfig(workspaceId),
+    ]);
+    const lensFp = insightLensFingerprint(lens);
+    const fingerprint = buildSourceFingerprint(
+      locationId,
+      stats.reviews,
+      stats.avgRating,
+      lensFp
+    );
+
+    if (!options.force) {
+      const cached = await this.getCachedInsights(
+        workspaceId,
+        [locationId],
+        new Map([[locationId, fingerprint]])
+      );
+      const hit = cached.get(locationId);
+      if (hit && !hit.stale) return hit;
+    }
+
     if (stats.reviews.length === 0) {
       const empty = {
         ...stats.heuristic,
         locationId,
-        sourceHash: stats.fingerprint,
+        sourceHash: fingerprint,
         generatedAt: new Date().toISOString(),
         stale: false,
       };
@@ -466,12 +525,16 @@ export class LocationInsightService {
     const reviewBlock = stats.reviews
       .map(
         (r, i) =>
-          `${i + 1}. ${r.star_rating}/5 — ${(readableReviewText(r.comment) ?? "(rating only)").slice(0, 400)}`
+          `${i + 1}. id=${r.id} · ${r.star_rating}/5 — ${(readableReviewText(r.comment) ?? "(rating only)").slice(0, 400)}`
       )
       .join("\n");
+    const sampleIds = stats.reviews.map((r) => r.id);
+    const lensBlock = insightLensPromptBlock(lens, notes);
+    const orgBlock = orgContextPromptBlock(config.snapshot.org);
 
     const prompt = `You are a reputation, branding, and customer-experience analyst for one Google Business Profile.
-
+Write a self-explanatory brief an owner can act on. Prefer the operator's insight lens when those themes appear in the reviews.
+${orgBlock}${lensBlock}
 Business: "${businessName}"
 Location: "${location.location_title}"
 Reviews in this sample: ${stats.reviews.length}
@@ -518,14 +581,17 @@ Return ONLY valid JSON (no markdown) with this exact shape:
     "tone": "how replies from this location should sound",
     "do": ["up to 4 reply habits"],
     "avoid": ["up to 4 things not to say"]
-  }
+  },
+  "evidenceReviewIds": ["up to 8 review id values from the sample above that ground your summary"]
 }
 
 Rules:
 - Base every claim on the reviews. If evidence is thin, say so. Never invent staff names, services, or policies.
-- suggestedFeatures must be specific to THIS profile. Mix Google listing ideas (photos, Q&A, products, booking, posts, attributes) with on-the-ground ideas (waitlist, staff name badges, kids menu, accessibility, parking signage) when the reviews support them.
+- When the insight lens lists watch themes or focus questions, answer those first if the reviews support them.
+- evidenceReviewIds must be copied exactly from the id= values in the sample. Never invent ids.
+- suggestedFeatures must be specific to THIS profile. Mix Google listing ideas (photos, Q&A, products, booking, posts, attributes) with on-the-ground ideas when the reviews support them.
 - Prefer 4-6 suggestedFeatures. Use effort "quick" for listing/content changes, "medium" for process changes, "project" for bigger investment.
-- Do not mention that you are an AI.`;
+- Do not mention that you are an AI. The lens is saved instructions, not model training.`;
 
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
@@ -558,7 +624,7 @@ Rules:
         const fallback = {
           ...stats.heuristic,
           locationId,
-          sourceHash: stats.fingerprint,
+          sourceHash: fingerprint,
           generatedAt: new Date().toISOString(),
           stale: false,
         };
@@ -581,9 +647,12 @@ Rules:
       if (!rawText) {
         throw new AppError("Empty AI insight response", "AI_INVALID_RESPONSE", 502);
       }
-      parsed = parseLocationInsightPayload(rawText);
+      parsed = parseLocationInsightPayload(rawText, sampleIds);
       if (!parsed.summary) {
         throw new AppError("Invalid AI insight JSON", "AI_INVALID_RESPONSE", 502);
+      }
+      if (!parsed.analysis.evidenceReviewIds.length) {
+        parsed.analysis.evidenceReviewIds = sampleIds.slice(0, 5);
       }
     } catch (error) {
       if (error instanceof AppError) throw error;
@@ -591,12 +660,14 @@ Rules:
         throw new AppError("AI insight timed out", "AI_TIMEOUT", 504);
       }
       logger.error("location_insight.generate_failed", {
+        workspaceId,
+        locationId,
         message: error instanceof Error ? error.message : "Unknown",
       });
       const fallback = {
         ...stats.heuristic,
         locationId,
-        sourceHash: stats.fingerprint,
+        sourceHash: fingerprint,
         generatedAt: new Date().toISOString(),
         stale: false,
       };
@@ -616,7 +687,7 @@ Rules:
       analysis: parsed.analysis,
       reviewCount: stats.reviews.length,
       avgRating: stats.avgRating,
-      sourceHash: stats.fingerprint,
+      sourceHash: fingerprint,
       generatedAt: new Date().toISOString(),
       stale: false,
     };

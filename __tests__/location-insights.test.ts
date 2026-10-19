@@ -89,5 +89,20 @@ describe("emptyAnalysis", () => {
   it("has no invented features", () => {
     expect(emptyAnalysis().suggestedFeatures).toEqual([]);
     expect(emptyAnalysis().staff.praise).toEqual([]);
+    expect(emptyAnalysis().evidenceReviewIds).toEqual([]);
+  });
+});
+
+describe("evidenceReviewIds", () => {
+  it("keeps only ids from the sample set", () => {
+    const allowed = ["rev-1", "rev-2"];
+    const parsed = parseLocationInsightPayload(
+      JSON.stringify({
+        ...sample,
+        evidenceReviewIds: ["rev-1", "rev-999", "rev-2", "rev-1"],
+      }),
+      allowed
+    );
+    expect(parsed.analysis.evidenceReviewIds).toEqual(["rev-1", "rev-2"]);
   });
 });

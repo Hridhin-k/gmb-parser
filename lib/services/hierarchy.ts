@@ -12,6 +12,7 @@ import {
   describeSetting,
   emptyFields,
   groupIdsInScope,
+  groupAssignmentError,
   groupShapeError,
   locationMoveError,
   mergeGroupsError,
@@ -77,9 +78,11 @@ export interface HierarchyView {
     regions: Array<{ id: string; name: string; count: number; cities: Array<{ id: string; name: string; count: number }> }>;
   }>;
   loose: Array<{ id: string; name: string; count: number }>;
+  ungrouped: Array<{ clientId: string; count: number }>;
+  places: Array<{ id: string; name: string; clientId: string | null; groupId: string | null; groupName: string | null }>;
   attention: { expired: number; duplicates: number; unverified: number };
   selected: {
-    kind: "brand" | "group" | "location" | "attention";
+    kind: "brand" | "group" | "location" | "attention" | "ungrouped";
     id: string;
     /** Client (brand) this selection belongs to, when known. */
     clientId: string | null;
@@ -209,7 +212,13 @@ export async function scopedGroupIds(workspaceId: string, groupId: string): Prom
 
 export async function loadHierarchy(
   workspaceId: string,
-  selection: { brandId?: string | null; groupId?: string | null; locationId?: string | null; attention?: string | null },
+  selection: {
+    brandId?: string | null;
+    groupId?: string | null;
+    locationId?: string | null;
+    ungroupedClientId?: string | null;
+    attention?: string | null;
+  },
   allowedClientIds: string[] | null = null
 ): Promise<HierarchyView> {
   const admin = createAdminClient();
@@ -313,6 +322,22 @@ export async function loadHierarchy(
   const loose = groupRows
     .filter((group) => !group.client_id)
     .map((group) => ({ id: group.id, name: group.name, count: countFor(group.id) }));
+  const ungrouped = brandRows.map((brand) => ({
+    clientId: brand.id,
+    count: locationRows.filter((location) => location.client_id === brand.id && !location.group_id).length,
+  }));
+  const places = locationRows.map((location) => ({
+    id: location.id,
+    name: locationDisplayName({
+      title: location.location_title ?? "",
+      brand: location.client_id ? brandNames.get(location.client_id) : null,
+      storeCode: location.store_code,
+      address: location.address_formatted,
+    }),
+    clientId: location.client_id,
+    groupId: location.group_id,
+    groupName: location.group_id ? groupById.get(location.group_id)?.name ?? null : null,
+  }));
 
   function viewLocation(location: LocationRow, subgroup: string | null): HierarchyLocation {
     const place = location.place_id?.trim() ?? "";
@@ -432,6 +457,19 @@ export async function loadHierarchy(
           return viewLocation(location, home && home.id !== group.id ? home.name : home?.parent_id ? home.name : null);
         }),
     };
+  } else if (selection.ungroupedClientId && brandNames.has(selection.ungroupedClientId)) {
+    const clientId = selection.ungroupedClientId;
+    selected = {
+      kind: "ungrouped",
+      id: clientId,
+      clientId,
+      title: `Ungrouped · ${brandNames.get(clientId)}`,
+      path: brandNames.get(clientId) ?? "Organisation",
+      settings: null,
+      locations: locationRows
+        .filter((location) => location.client_id === clientId && !location.group_id)
+        .map((location) => viewLocation(location, null)),
+    };
   } else if (selection.brandId && brandNames.has(selection.brandId)) {
     selected = {
       kind: "brand",
@@ -476,7 +514,32 @@ export async function loadHierarchy(
     moveTargets,
     tags: [...tagName.values()],
     members: memberIds.map((id) => ({ id, label: emailById.get(id) ?? "Member" })),
+    ungrouped,
+    places,
   };
+}
+
+async function ensureBrandId(
+  admin: ReturnType<typeof createAdminClient>,
+  workspaceId: string,
+  clientId: string
+): Promise<string> {
+  const existing = await admin.from("grm_brands").select("id").eq("workspace_id", workspaceId).eq("client_id", clientId).limit(1);
+  if (existing.error) throw new AppError("Could not load the organisation.", "DB_ERROR", 500);
+  if (existing.data?.[0]?.id) return existing.data[0].id;
+  const client = await admin.from("grm_clients").select("id, name").eq("id", clientId).eq("workspace_id", workspaceId).maybeSingle();
+  if (client.error || !client.data) throw new ValidationError("That organisation is not in this workspace.");
+  const inserted = await admin
+    .from("grm_brands")
+    .insert({ workspace_id: workspaceId, client_id: clientId, name: client.data.name })
+    .select("id")
+    .maybeSingle();
+  if (inserted.data?.id) return inserted.data.id;
+  if (inserted.error?.code === "23505") {
+    const again = await admin.from("grm_brands").select("id").eq("workspace_id", workspaceId).eq("client_id", clientId).limit(1);
+    if (again.data?.[0]?.id) return again.data[0].id;
+  }
+  throw new AppError("Could not prepare this organisation for groups.", "DB_ERROR", 500);
 }
 
 export async function createHierarchyGroup(input: {
@@ -486,19 +549,17 @@ export async function createHierarchyGroup(input: {
   kind: GroupKind;
   clientId: string | null;
   parentId: string | null;
-}): Promise<void> {
-  if (!input.clientId) throw new ValidationError("A group needs a brand.");
+  locationIds?: string[];
+  managerUserId?: string | null;
+}): Promise<string> {
+  if (!input.clientId) throw new ValidationError("A group needs an organisation.");
+  const locationIds = input.locationIds ?? [];
+  if (input.kind === "region" && !input.parentId && locationIds.length === 0) {
+    throw new ValidationError("Select at least one location.");
+  }
   await assertManager(input.userId, input.workspaceId, { kind: "client", id: input.clientId });
   const admin = createAdminClient();
-  const brand = await admin
-    .from("grm_brands")
-    .select("id")
-    .eq("workspace_id", input.workspaceId)
-    .eq("client_id", input.clientId)
-    .limit(1);
-  if (brand.error) throw new AppError("Could not load the brand.", "DB_ERROR", 500);
-  const brandId = brand.data?.[0]?.id;
-  if (!brandId) throw new ValidationError("That brand is not ready for groups yet.");
+  const brandId = await ensureBrandId(admin, input.workspaceId, input.clientId);
   const parent = input.parentId
     ? await admin
         .from("grm_groups")
@@ -524,6 +585,22 @@ export async function createHierarchyGroup(input: {
       : null,
   });
   if (shapeError) throw new ValidationError(shapeError);
+  if (locationIds.length > 0) {
+    const chosen = await admin
+      .from("grm_google_locations")
+      .select("id, client_id")
+      .eq("workspace_id", input.workspaceId)
+      .in("id", locationIds);
+    if (chosen.error) throw new AppError("Could not load the locations.", "DB_ERROR", 500);
+    if ((chosen.data ?? []).length !== locationIds.length) {
+      throw new ValidationError("One of those locations is not in this organisation.");
+    }
+    const assignment = groupAssignmentError({
+      clientId: input.clientId,
+      locationClientIds: (chosen.data ?? []).map((location) => location.client_id),
+    });
+    if (assignment) throw new ValidationError(assignment);
+  }
   const { data, error } = await admin
     .from("grm_groups")
     .insert({
@@ -537,14 +614,44 @@ export async function createHierarchyGroup(input: {
     .select("id")
     .maybeSingle();
   if (error || !data) dbMessage(error ?? { message: "" }, "Could not create the group.");
+  try {
+    if (locationIds.length > 0) {
+      await moveHierarchyLocations({
+        workspaceId: input.workspaceId,
+        userId: input.userId,
+        locationIds,
+        groupId: data.id,
+        confirmHold: true,
+      });
+    }
+    if (input.managerUserId) {
+      await Promise.all(
+        locationIds.map((locationId) =>
+          setLocationManager({
+            workspaceId: input.workspaceId,
+            userId: input.userId,
+            locationId,
+            managerUserId: input.managerUserId ?? null,
+          })
+        )
+      );
+    }
+  } catch (cause) {
+    const held = await admin.from("grm_google_locations").select("id").eq("workspace_id", input.workspaceId).eq("group_id", data.id).limit(1);
+    if (!held.data?.length) {
+      await admin.from("grm_groups").delete().eq("id", data.id).eq("workspace_id", input.workspaceId);
+    }
+    throw cause;
+  }
   await AuditService.log({
     workspaceId: input.workspaceId,
     userId: input.userId,
     action: "location_group.created",
     entityType: "grm_groups",
     entityId: data.id,
-    metadata: { name: input.name.trim(), kind: input.kind },
+    metadata: { name: input.name.trim(), kind: input.kind, locations: locationIds.length },
   });
+  return data.id;
 }
 
 export async function renameHierarchyGroup(input: {

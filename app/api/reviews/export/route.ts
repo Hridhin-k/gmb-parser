@@ -1,8 +1,7 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { ensurePersonalWorkspace } from "@/lib/services/workspace";
-import { getMemberAccess } from "@/lib/services/access";
-import { clampListScope } from "@/lib/access";
+import { readPageScope } from "@/lib/services/scope-catalog";
 import { reviewCsvLines, type ReviewExportFilters } from "@/lib/services/review-export";
 import { checkRateLimit, EXPORT_LIMIT } from "@/lib/rate-limit";
 import { logger } from "@/lib/logger";
@@ -48,21 +47,18 @@ export async function GET(request: Request) {
   }
 
   const membership = await ensurePersonalWorkspace(user);
-  const requested = parseFilters(new URL(request.url).searchParams);
-  const access = await getMemberAccess(user.id, membership.workspace_id);
-  const bounded = clampListScope(
-    {
-      clientId: requested.clientId ?? "",
-      groupId: requested.groupId ?? "",
-      locationId: requested.locationId ?? "",
-    },
-    access?.scope ?? { clientId: null, groupId: null, locationId: null }
-  );
+  const search = new URL(request.url).searchParams;
+  const requested = parseFilters(search);
+  const resolved = await readPageScope(user.id, membership.workspace_id, {
+    client: search.get("client") ?? undefined,
+    group: search.get("group") ?? undefined,
+    location: search.get("location") ?? undefined,
+  });
   const filters = {
     ...requested,
-    clientId: bounded.clientId || null,
-    groupId: bounded.groupId || null,
-    locationId: bounded.locationId || null,
+    clientId: resolved.clientId,
+    groupId: resolved.groupId,
+    locationId: resolved.locationId,
   };
   const lines = reviewCsvLines(membership.workspace_id, filters);
   const encoder = new TextEncoder();

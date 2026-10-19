@@ -14,8 +14,9 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { SelectField } from "@/components/ui/select-field";
+import { ScopeSelector } from "@/components/scope-selector";
 import { parseDateRange } from "@/lib/date-range";
+import type { ScopeCatalog } from "@/lib/scope";
 import type { ShellSummary } from "@/lib/services/shell-summary";
 import { defaultRangeForPath, scopedHref, scopeMode, shellAlerts } from "@/lib/shell";
 import { createClient } from "@/lib/supabase/client";
@@ -23,12 +24,12 @@ import { createClient } from "@/lib/supabase/client";
 interface ShellHeaderProps {
   user: User;
   role: string | null;
-  clients: Array<{ id: string; name: string }>;
+  catalog: ScopeCatalog | null;
   summary: ShellSummary;
   onOpenMenu?: () => void;
 }
 
-export function ShellHeader({ user, role, clients, summary, onOpenMenu }: ShellHeaderProps) {
+export function ShellHeader({ user, role, catalog, summary, onOpenMenu }: ShellHeaderProps) {
   const pathname = usePathname();
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -51,10 +52,6 @@ export function ShellHeader({ user, role, clients, summary, onOpenMenu }: ShellH
     },
     rangeDefault
   );
-  const clientId = clients.some((client) => client.id === searchParams.get("client"))
-    ? (searchParams.get("client") ?? "")
-    : "";
-
   if (syncedQuery !== (searchParams.get("q") ?? "")) {
     const next = searchParams.get("q") ?? "";
     setSyncedQuery(next);
@@ -103,25 +100,9 @@ export function ShellHeader({ user, role, clients, summary, onOpenMenu }: ShellH
     router.push(href);
   }
 
-  const scope = mode === "none" ? null : (
+  const scope = mode === "none" || !catalog ? null : (
     <div className="flex min-w-0 flex-col gap-2 sm:flex-row sm:items-center">
-      <SelectField
-        label="Client"
-        value={clientId}
-        placeholder="All clients"
-        className="min-w-0 sm:w-56"
-        onValueChange={(next) =>
-          writeParams((params) => {
-            params.delete("location");
-            if (next) params.set("client", next);
-            else params.delete("client");
-          })
-        }
-        options={[
-          { value: "", label: "All clients" },
-          ...clients.map((client) => ({ value: client.id, label: client.name })),
-        ]}
-      />
+      <ScopeSelector catalog={catalog} />
       {mode === "client-range" ? (
         <DateRangeFilter
           value={{ key: range.key, from: range.from, to: range.to }}

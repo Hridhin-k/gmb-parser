@@ -1,11 +1,7 @@
 import { PageLoading } from "@/components/page-loading";
+import { PAGE_LOADING } from "@/lib/ui-status";
 
 export default function RequestsLoading() {
-  return (
-    <PageLoading
-      variant="list"
-      title="Loading review requests"
-      detail="Opening campaigns, QR codes, and the request limit."
-    />
-  );
+  const copy = PAGE_LOADING.requests;
+  return <PageLoading variant="list" title={copy.title} detail={copy.detail} tone={copy.tone} />;
 }

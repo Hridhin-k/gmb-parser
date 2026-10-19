@@ -24,12 +24,14 @@ export async function GET(request: Request) {
 
   let reminders = 0;
   let created = 0;
+  let advanced = 0;
   let paused = 0;
   for (const workspace of data ?? []) {
     try {
       const result = await EscalationService.runScheduled(workspace.id);
       reminders += result.reminders;
       created += result.created;
+      advanced += result.advanced;
       if (result.autoreplies === "paused") paused += 1;
     } catch (err) {
       logger.error("cron.escalations.workspace_failed", {
@@ -61,6 +63,7 @@ export async function GET(request: Request) {
     workspaces: data?.length ?? 0,
     escalationsOpened: created,
     remindersRecorded: reminders,
+    levelsAdvanced: advanced,
     pausedWorkspaces: paused,
     reportsDelivered: reporting?.reportsDelivered ?? 0,
     alertsOpened: reporting?.alertsOpened ?? 0,

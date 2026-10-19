@@ -218,6 +218,17 @@ export async function saveReplySettings(input: {
     entityType: "grm_reply_settings",
     metadata: { target: input.target.kind, id: input.target.kind === "workspace" ? input.workspaceId : input.target.id },
   });
+  if (input.target.kind === "workspace") {
+    try {
+      const { syncActiveSnapshotFromReplySettings } = await import("@/lib/services/ai-config");
+      await syncActiveSnapshotFromReplySettings({
+        workspaceId: input.workspaceId,
+        userId: input.userId,
+      });
+    } catch {
+      // AI config tables may not be migrated yet; tone still saves to grm_reply_settings.
+    }
+  }
 }
 
 export async function saveTemplate(input: {

@@ -521,32 +521,32 @@ export function ReviewDetailPanel({
         {loading === "generate" ? (
           <ActivityStatus
             tone="gemini"
-            title="Gemini is writing a reply"
-            detail="It reads this review and drafts a response inside GRM. Nothing is posted to Google until you approve it."
+            title="Generating your AI reply…"
+            detail="AI is drafting a reply using your organisation's saved guidelines. Nothing is posted to Google until you approve it."
           />
         ) : null}
         {loading === "publish" ? (
           <ActivityStatus
             tone="google"
-            title="Posting this reply on Google"
-            detail="Google is publishing it on the Business Profile. Keep this open until it finishes."
+            title="Submitting your reply…"
+            detail="Sending the approved reply to Google Business Profile. Keep this open until it finishes."
           />
         ) : null}
         {loading === "approve" ? (
           <ActivityStatus
-            title="Approving this reply"
+            title="Approving this reply…"
             detail="It stays in GRM as ready to publish. It is not on Google yet."
           />
         ) : null}
         {loading === "create" || loading === "edit" ? (
           <ActivityStatus
-            title="Saving the draft"
+            title="Saving your changes…"
             detail="The reply stays in GRM. Publishing to Google is a separate step."
           />
         ) : null}
         {loading === "delete" ? (
           <ActivityStatus
-            title="Removing this draft"
+            title="Removing this draft…"
             detail="The reply leaves GRM. A reply already on Google is not deleted from there."
           />
         ) : null}
@@ -554,8 +554,17 @@ export function ReviewDetailPanel({
         {/* Error display */}
         {error && (
           <div className="rounded-md border border-red-200 bg-red-50 px-3 py-2.5 text-sm text-red-700" role="alert">
-            <p className="font-medium">Action failed</p>
+            <p className="font-medium">
+              {/generat|gemini|ai reply/i.test(error)
+                ? "Your AI reply couldn't be generated"
+                : /publish|submit/i.test(error)
+                  ? "The reply couldn't be submitted"
+                  : "Action failed"}
+            </p>
             <p className="mt-0.5 text-[13px]">{error}</p>
+            {/generat|gemini|ai reply/i.test(error) ? (
+              <p className="mt-1 text-[11px] text-red-600">Your existing draft has been preserved.</p>
+            ) : null}
           </div>
         )}
 
@@ -577,15 +586,11 @@ export function ReviewDetailPanel({
               <Button
                 size="sm"
                 onClick={handleGenerateAI}
-                disabled={loading === "generate"}
+                loading={loading === "generate"}
                 className="gap-1.5"
               >
-                {loading === "generate" ? (
-                  <Spinner size="sm" />
-                ) : (
-                  <Sparkles className="h-3.5 w-3.5" aria-hidden />
-                )}
-                {loading === "generate" ? "Gemini is writing…" : "Generate AI Response"}
+                {loading !== "generate" ? <Sparkles className="h-3.5 w-3.5" aria-hidden /> : null}
+                {loading === "generate" ? "Generating reply…" : "Generate AI Response"}
               </Button>
               <Button
                 variant="outline"

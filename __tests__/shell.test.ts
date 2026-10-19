@@ -8,6 +8,7 @@ describe("visibleNav", () => {
       "inbox",
       "escalations",
       "analytics",
+      "insights",
       "reports",
       "requests",
       "locations",
@@ -54,6 +55,12 @@ describe("scopedHref", () => {
     const current = new URLSearchParams("client=c1&range=3m&q=staff");
     expect(scopedHref("/analytics", current, "/reviews")).toBe("/analytics?client=c1&range=3m");
     expect(scopedHref("/team", current, "/reviews")).toBe("/team");
+  });
+
+  it("carries the organisation, group, and outlet onto the next review screen", () => {
+    const current = new URLSearchParams("client=c1&group=g1&location=l1&range=12m&rating=2");
+    expect(scopedHref("/reviews", current, "/overview")).toBe("/reviews?client=c1&group=g1&location=l1&range=12m");
+    expect(scopedHref("/analytics", current, "/overview")).toBe("/analytics?client=c1&group=g1&location=l1&range=12m");
   });
 
   it("drops the date range on review-request links", () => {

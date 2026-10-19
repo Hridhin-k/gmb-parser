@@ -1,9 +1,11 @@
 "use client";
 
-import { useState } from "react";
+import { useState, type ReactNode } from "react";
 import { useRouter } from "next/navigation";
+import { toast } from "sonner";
 import { AlertTriangle } from "lucide-react";
 import { EmptyState } from "@/components/empty-state";
+import { roleLabel } from "@/lib/access";
 import {
   ESCALATION_LEVELS,
   ESCALATION_TIMEZONES,
@@ -16,6 +18,8 @@ import type { EscalationQueueItem } from "@/lib/services/escalations";
 interface Member {
   userId: string;
   email: string;
+  role: string;
+  scopeLabel: string;
 }
 
 interface BoardProps {
@@ -49,7 +53,17 @@ function eventLabel(action: string, metadata: Record<string, unknown>): string {
     return "Opened from the complaint rules.";
   }
   if (action === "reopened") return "Reopened because the review changed.";
-  if (action === "assigned") return "Assignment changed.";
+  if (action === "assigned") {
+    const reason = typeof metadata.reason === "string" ? metadata.reason : "";
+    const next = typeof metadata.assigneeId === "string" ? metadata.assigneeId : "someone";
+    const previous = typeof metadata.previousAssigneeId === "string" ? metadata.previousAssigneeId : "nobody";
+    return reason
+      ? `Assignee changed from ${previous} to ${next}. Reason: ${reason}.`
+      : "Assigned from the location manager rules.";
+  }
+  if (action === "fallback") return "Fallback owner. The configured location manager could not take this case.";
+  if (action === "notified") return "Notice recorded for the current owner.";
+  if (action === "overdue_noted") return "Still overdue at leadership. The level did not change again.";
   if (action === "level_changed") return `Handed to ${String(metadata.level ?? "the next level")}.`;
   if (action === "resolved") return "Resolution recorded. This does not confirm a callback, replacement, or visit.";
   if (action === "next_step") {
@@ -74,11 +88,26 @@ export function EscalationBoard(props: BoardProps) {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(body),
     });
-    const payload = (await response.json().catch(() => ({}))) as { error?: string };
+    const payload = (await response.json().catch(() => ({}))) as {
+      error?: string;
+      created?: number;
+    };
     setPending(false);
     if (!response.ok) {
       setError(payload.error ?? "That change could not be saved.");
       return;
+    }
+    if (url === "/api/escalations/policy") {
+      const created = typeof payload.created === "number" ? payload.created : 0;
+      if (created > 0) {
+        toast.success(
+          created === 1
+            ? "Rules saved. Opened 1 matching case from synced reviews."
+            : `Rules saved. Opened ${created} matching cases from synced reviews.`
+        );
+      } else {
+        toast.success("Rules saved. No new matching cases in the recent synced reviews.");
+      }
     }
     router.refresh();
   }
@@ -100,7 +129,7 @@ export function EscalationBoard(props: BoardProps) {
         </p>
       ) : null}
 
-      <div className="flex flex-wrap gap-2">
+      <div className="flex flex-wrap items-center gap-2">
         {TABS.map((tab) => (
           <a
             key={tab.id}
@@ -115,18 +144,21 @@ export function EscalationBoard(props: BoardProps) {
             {tab.label} ({props.counts[tab.id]})
           </a>
         ))}
+        <a href={sortHref(props.query, props.bucket)} className="text-sm text-slate underline">
+          {props.query.includes("sort=opened") ? "Sort by due time" : "Sort by opened time"}
+        </a>
       </div>
 
       {props.items.length === 0 ? (
         <EmptyState
           icon={AlertTriangle}
           title="Nothing in this queue"
-          description="A review appears here when it matches the star threshold, profanity, legal or safety wording, or an extra keyword. Publishing a reply does not close an escalation."
+          description={emptyQueueCopy(props.bucket, props.counts, hrefFor)}
         />
       ) : (
         <ul className="space-y-3">
           {props.items.map((item) => (
-            <li key={item.id} className="rounded-xl bg-white p-4 shadow-card">
+            <li key={item.id} id={`case-${item.id}`} className="scroll-mt-24 rounded-xl bg-white p-4 shadow-card">
               <div className="flex flex-wrap items-start justify-between gap-3">
                 <div className="min-w-0">
                   <p className="text-sm font-medium text-ink">
@@ -134,6 +166,8 @@ export function EscalationBoard(props: BoardProps) {
                   </p>
                   <p className="mt-1 text-sm text-slate">
                     {item.locationName}
+                    {item.groupName ? ` · ${item.groupName}` : ""}
+                    {item.clientName ? ` · ${item.clientName}` : ""}
                     {themeLabel(item.theme) ? ` · ${themeLabel(item.theme)}` : ""}
                   </p>
                   {item.comment ? <p className="mt-2 text-sm text-ink">{item.comment}</p> : null}
@@ -147,7 +181,9 @@ export function EscalationBoard(props: BoardProps) {
               </div>
 
               <p className="mt-3 text-xs text-slate">
-                Triggers: {item.triggerReasons.map((reason) => (reason === "recorded" ? "already open" : reason)).join(", ")}. Level: {item.level}. Reply status: {item.replyStatus}.
+                Triggers: {item.triggerReasons.map((reason) => (reason === "recorded" ? "already open" : reason)).join(", ")}. These rules are keyword and star checks, not a model classification. Level: {item.level}. Reply status: {item.replyStatus}.
+                {" "}Owner: {memberLabel(props.members, item.assignedTo)}. Responsible manager: {memberLabel(props.members, item.responsibleUserId)}.
+                {item.ownership === "fallback" ? " Fallback: the location manager was missing, inactive, or not allowed to see this outlet." : ""}
                 {item.replyStatus === "published"
                   ? " A public reply is on Google. This escalation stays open until someone records a resolution."
                   : " A public reply still needs owner or admin approval before it is published."}
@@ -155,27 +191,19 @@ export function EscalationBoard(props: BoardProps) {
 
               {item.status !== "resolved" ? (
                 <div className="mt-3 flex flex-wrap items-end gap-2">
-                  <label className="text-xs text-slate">
-                    Assignee
-                    <select
-                      className="mt-1 block rounded-md border border-line bg-white px-2 py-1.5 text-sm text-ink"
-                      value={item.assignedTo ?? ""}
-                      disabled={pending}
-                      onChange={(event) =>
-                        send(`/api/escalations/${item.id}`, {
-                          action: "assign",
-                          userId: event.target.value || null,
-                        })
-                      }
-                    >
-                      <option value="">Unassigned</option>
-                      {props.members.map((member) => (
-                        <option key={member.userId} value={member.userId}>
-                          {member.email}
-                        </option>
-                      ))}
-                    </select>
-                  </label>
+                  <ReassignForm
+                    members={props.members}
+                    assignedTo={item.assignedTo}
+                    disabled={pending}
+                    onAssign={(userId, reason) =>
+                      send(`/api/escalations/${item.id}`, {
+                        action: "assign",
+                        userId,
+                        reason,
+                        expectedUpdatedAt: item.updatedAt,
+                      })
+                    }
+                  />
                   {props.canManage ? (
                     <label className="text-xs text-slate">
                       Level
@@ -250,6 +278,104 @@ export function EscalationBoard(props: BoardProps) {
         </div>
       ) : null}
     </div>
+  );
+}
+
+function sortHref(query: string, bucket: string): string {
+  const params = new URLSearchParams(query);
+  params.set("queue", bucket);
+  if (params.get("sort") === "opened") params.delete("sort");
+  else params.set("sort", "opened");
+  params.delete("page");
+  const text = params.toString();
+  return text ? `/escalations?${text}` : "/escalations";
+}
+
+function memberLabel(members: Member[], userId: string | null): string {
+  if (!userId) return "nobody";
+  const member = members.find((item) => item.userId === userId);
+  return member ? member.email : "a former member";
+}
+
+function ReassignForm({
+  members,
+  assignedTo,
+  disabled,
+  onAssign,
+}: {
+  members: Member[];
+  assignedTo: string | null;
+  disabled: boolean;
+  onAssign: (userId: string, reason: string) => void;
+}) {
+  const [query, setQuery] = useState("");
+  const [userId, setUserId] = useState(assignedTo ?? "");
+  const [reason, setReason] = useState("");
+  const needle = query.trim().toLowerCase();
+  const choices = members.filter((member) => {
+    if (!needle) return true;
+    return (
+      member.email.toLowerCase().includes(needle) ||
+      roleLabel(member.role).toLowerCase().includes(needle) ||
+      member.scopeLabel.toLowerCase().includes(needle)
+    );
+  });
+  const selected = members.find((member) => member.userId === userId);
+  return (
+    <form
+      className="flex flex-wrap items-end gap-2"
+      onSubmit={(event) => {
+        event.preventDefault();
+        if (!userId || reason.trim().length < 3) return;
+        onAssign(userId, reason.trim());
+        setReason("");
+      }}
+    >
+      <label className="text-xs text-slate">
+        Find a person
+        <input
+          value={query}
+          onChange={(event) => setQuery(event.target.value)}
+          placeholder="Name, role, or scope"
+          className="mt-1 block rounded-md border border-line bg-white px-2 py-1.5 text-sm text-ink"
+        />
+      </label>
+      <label className="text-xs text-slate">
+        Assignee
+        <select
+          className="mt-1 block max-w-xs rounded-md border border-line bg-white px-2 py-1.5 text-sm text-ink"
+          value={choices.some((member) => member.userId === userId) ? userId : ""}
+          disabled={disabled}
+          onChange={(event) => setUserId(event.target.value)}
+        >
+          <option value="">Choose…</option>
+          {choices.map((member) => (
+            <option key={member.userId} value={member.userId}>
+              {member.email} · {roleLabel(member.role)} · {member.scopeLabel}
+            </option>
+          ))}
+        </select>
+      </label>
+      <label className="text-xs text-slate">
+        Reason
+        <input
+          required
+          minLength={3}
+          maxLength={500}
+          value={reason}
+          onChange={(event) => setReason(event.target.value)}
+          className="mt-1 block rounded-md border border-line bg-white px-2 py-1.5 text-sm text-ink"
+        />
+      </label>
+      <button type="submit" disabled={disabled || !userId || reason.trim().length < 3} className="rounded-md border border-line px-3 py-1.5 text-sm text-ink disabled:opacity-40">
+        Reassign
+      </button>
+      {selected ? (
+        <p className="basis-full text-xs text-slate">
+          {selected.email} is {roleLabel(selected.role)} for {selected.scopeLabel}. The responsible manager stays on the case.
+        </p>
+      ) : null}
+    </form>
   );
 }
 
@@ -427,13 +553,43 @@ function PolicyForm({
         </select>
       </label>
       <button type="submit" disabled={disabled} className="rounded-md bg-ink px-3 py-1.5 text-sm text-white">
-        Save rules
+        {disabled ? "Saving…" : "Save rules"}
       </button>
       <p className="text-xs text-slate">
-        Saved rules apply to reviews that arrive after the change. Reminders are recorded in GRM. No email is sent.
+        Saving scans recent synced reviews and opens cases that match these rules. Complaints already past the due
+        window appear under Past SLA. Reminders are recorded in GRM. No email is sent.
       </p>
     </form>
   );
+}
+
+function emptyQueueCopy(
+  bucket: BoardProps["bucket"],
+  counts: BoardProps["counts"],
+  hrefFor: (bucket: string) => string
+): ReactNode {
+  const past = counts.past_sla;
+  const open =
+    counts.needs_human + counts.in_progress + counts.past_sla;
+  if (bucket === "needs_human" && past > 0) {
+    return (
+      <>
+        No cases are still inside the due window. {past} matching complaint
+        {past === 1 ? " is" : "s are"} already overdue — open{" "}
+        <a href={hrefFor("past_sla")} className="font-medium text-[#163a7a] underline">
+          Past SLA
+        </a>
+        . Publishing a reply does not close an escalation.
+      </>
+    );
+  }
+  if (bucket !== "resolved" && open === 0) {
+    return "No open cases yet. Save the complaint rules below to scan synced reviews, or wait for the next matching review. Publishing a reply does not close an escalation.";
+  }
+  if (bucket === "resolved") {
+    return "No resolved cases in this view. Resolve a case from Needs human, In progress, or Past SLA.";
+  }
+  return "A review appears here when it matches the star threshold, profanity, legal or safety wording, or an extra keyword. Publishing a reply does not close an escalation.";
 }
 
 function PauseForm({

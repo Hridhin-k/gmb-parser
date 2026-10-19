@@ -493,6 +493,108 @@ export type Database = {
         }
         Relationships: []
       }
+      grm_ai_configs: {
+        Row: {
+          id: string
+          workspace_id: string
+          version: number
+          status: string
+          label: string
+          snapshot: Json
+          created_by: string | null
+          created_at: string
+          updated_at: string
+        }
+        Insert: {
+          id?: string
+          workspace_id: string
+          version: number
+          status: string
+          label?: string
+          snapshot?: Json
+          created_by?: string | null
+          created_at?: string
+          updated_at?: string
+        }
+        Update: {
+          status?: string
+          label?: string
+          snapshot?: Json
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      grm_ai_knowledge: {
+        Row: {
+          id: string
+          workspace_id: string
+          client_id: string | null
+          group_id: string | null
+          location_id: string | null
+          kind: string
+          title: string
+          body: string
+          metadata: Json
+          enabled: boolean
+          created_by: string | null
+          created_at: string
+          updated_at: string
+        }
+        Insert: {
+          id?: string
+          workspace_id: string
+          client_id?: string | null
+          group_id?: string | null
+          location_id?: string | null
+          kind: string
+          title: string
+          body: string
+          metadata?: Json
+          enabled?: boolean
+          created_by?: string | null
+          created_at?: string
+          updated_at?: string
+        }
+        Update: {
+          client_id?: string | null
+          group_id?: string | null
+          location_id?: string | null
+          kind?: string
+          title?: string
+          body?: string
+          metadata?: Json
+          enabled?: boolean
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      grm_insight_feedback: {
+        Row: {
+          id: string
+          workspace_id: string
+          insight_kind: string
+          scope_id: string
+          rating: string
+          note: string | null
+          user_id: string
+          created_at: string
+        }
+        Insert: {
+          id?: string
+          workspace_id: string
+          insight_kind: string
+          scope_id: string
+          rating: string
+          note?: string | null
+          user_id: string
+          created_at?: string
+        }
+        Update: {
+          rating?: string
+          note?: string | null
+        }
+        Relationships: []
+      }
       grm_reply_settings: {
         Row: { workspace_id: string; tone: Json; automation: Json; updated_at: string }
         Insert: { workspace_id: string; tone?: Json; automation?: Json; updated_at?: string }
@@ -680,6 +782,7 @@ export type Database = {
       }
       grm_review_ai_drafts: {
         Row: {
+          ai_config_version: number | null
           ai_model: string
           ai_prompt_hash: string
           content: string
@@ -697,6 +800,7 @@ export type Database = {
           workspace_id: string
         }
         Insert: {
+          ai_config_version?: number | null
           ai_model: string
           ai_prompt_hash: string
           content: string
@@ -714,6 +818,7 @@ export type Database = {
           workspace_id: string
         }
         Update: {
+          ai_config_version?: number | null
           ai_model?: string
           ai_prompt_hash?: string
           content?: string
@@ -1292,6 +1397,11 @@ export type Database = {
           level: string
           theme: string | null
           assignee_user_id: string | null
+          responsible_user_id: string | null
+          ownership: string
+          assignment_reason: string | null
+          assignment_decided_at: string | null
+          sla_advanced_at: string | null
           opened_at: string
           due_at: string
           resolved_at: string | null
@@ -1312,6 +1422,11 @@ export type Database = {
           level?: string
           theme?: string | null
           assignee_user_id?: string | null
+          responsible_user_id?: string | null
+          ownership?: string
+          assignment_reason?: string | null
+          assignment_decided_at?: string | null
+          sla_advanced_at?: string | null
           opened_at: string
           due_at: string
           resolved_at?: string | null
@@ -1328,6 +1443,11 @@ export type Database = {
           level?: string
           theme?: string | null
           assignee_user_id?: string | null
+          responsible_user_id?: string | null
+          ownership?: string
+          assignment_reason?: string | null
+          assignment_decided_at?: string | null
+          sla_advanced_at?: string | null
           opened_at?: string
           due_at?: string
           resolved_at?: string | null

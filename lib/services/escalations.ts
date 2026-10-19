@@ -1,12 +1,20 @@
 import { createHash } from "crypto";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { AuditService } from "@/lib/services/audit";
-import { AppError } from "@/lib/errors";
+import { deliverMessage } from "@/lib/delivery";
+import { readDeliveryEnv } from "@/lib/reporting";
+import { AppError, ValidationError } from "@/lib/errors";
 import {
   DEFAULT_ESCALATION_POLICY,
   ESCALATION_TIMEZONES,
   escalationReasons,
+  nextEscalationLevel,
+  planAssignment,
+  planLevelOwner,
+  reassignmentError,
   shouldSkipTrigger,
+  type AssignmentLocation,
+  type AssignmentMember,
   type EscalationLevel,
   type EscalationPolicy,
   type EscalationTimezone,
@@ -14,6 +22,7 @@ import {
 } from "@/lib/escalations";
 import type { Json } from "@/lib/types/supabase";
 import { escalationTiming, scopedGroupIds } from "@/lib/services/hierarchy";
+import { logger } from "@/lib/logger";
 
 const REMINDER_ATTEMPT_LIMIT = 5;
 
@@ -57,6 +66,12 @@ export interface EscalationQueueItem {
   status: string;
   level: string;
   assignedTo: string | null;
+  responsibleUserId: string | null;
+  ownership: string;
+  assignmentReason: string | null;
+  updatedAt: string;
+  clientName: string | null;
+  groupName: string | null;
   openedAt: string;
   dueAt: string;
   resolvedAt: string | null;
@@ -87,7 +102,11 @@ export class EscalationService {
     return mapPolicy(data);
   }
 
-  static async savePolicy(workspaceId: string, userId: string, policy: EscalationPolicy): Promise<void> {
+  static async savePolicy(
+    workspaceId: string,
+    userId: string,
+    policy: EscalationPolicy
+  ): Promise<{ created: number }> {
     const admin = createAdminClient();
     const { error } = await admin.from("grm_escalation_policies").upsert({
       workspace_id: workspaceId,
@@ -109,21 +128,51 @@ export class EscalationService {
       entityId: workspaceId,
       metadata: { dueHours: policy.dueHours, maxStars: policy.maxStars, reminderHours: policy.reminderHours },
     });
+    // Open cases for matching synced reviews now — saving alone used to leave the queue empty.
+    return this.ensure(workspaceId);
+  }
+
+  /** True when the assignment columns from 20261019003 are present. */
+  static async assignmentColumnsReady(): Promise<boolean> {
+    const admin = createAdminClient();
+    const probe = await admin.from("grm_escalations").select("assignment_decided_at").limit(1);
+    return !probe.error;
   }
 
   /** Creates one open escalation per matching review. The same trigger key is ignored. */
   static async ensure(workspaceId: string): Promise<{ created: number }> {
     const admin = createAdminClient();
     const policy = await this.policy(workspaceId);
-    const { data: reviews, error } = await admin
-      .from("grm_reviews")
-      .select("id, star_rating, comment, review_create_time, location_id, complaint_theme")
-      .eq("workspace_id", workspaceId)
-      .order("review_create_time", { ascending: false })
-      .limit(300);
-    if (error) throw new AppError("Could not read reviews for escalation.", "DB_ERROR", 500);
+    const reviewSelect =
+      "id, star_rating, comment, review_create_time, location_id, complaint_theme" as const;
+    // Prefer low-star rows, then recent commented rows for keyword / safety checks.
+    // A plain latest-300 scan misses older complaints when other clients dominate the feed.
+    const [byStars, recentCommented] = await Promise.all([
+      admin
+        .from("grm_reviews")
+        .select(reviewSelect)
+        .eq("workspace_id", workspaceId)
+        .lte("star_rating", policy.maxStars)
+        .order("review_create_time", { ascending: false })
+        .limit(500),
+      admin
+        .from("grm_reviews")
+        .select(reviewSelect)
+        .eq("workspace_id", workspaceId)
+        .not("comment", "is", null)
+        .order("review_create_time", { ascending: false })
+        .limit(250),
+    ]);
+    if (byStars.error || recentCommented.error) {
+      throw new AppError("Could not read reviews for escalation.", "DB_ERROR", 500);
+    }
+    const reviews = [
+      ...new Map(
+        [...(byStars.data ?? []), ...(recentCommented.data ?? [])].map((row) => [row.id, row])
+      ).values(),
+    ];
 
-    const matches = (reviews ?? [])
+    const matches = reviews
       .map((review) => ({
         review,
         reasons: escalationReasons(
@@ -135,24 +184,32 @@ export class EscalationService {
     if (matches.length === 0) return { created: 0 };
 
     const ids = matches.map((item) => item.review.id);
-      const { data: existing, error: existingError } = await admin
-      .from("grm_escalations")
-      .select("id, review_id, trigger_key, status")
-      .eq("workspace_id", workspaceId)
-      .in("review_id", ids);
-    if (existingError) throw new AppError("Could not read existing escalations.", "DB_ERROR", 500);
+    const existing: Array<{ id: string; review_id: string; trigger_key: string; status: string }> = [];
+    for (let index = 0; index < ids.length; index += 100) {
+      const chunk = ids.slice(index, index + 100);
+      const page = await admin
+        .from("grm_escalations")
+        .select("id, review_id, trigger_key, status")
+        .eq("workspace_id", workspaceId)
+        .in("review_id", chunk);
+      if (page.error) throw new AppError("Could not read existing escalations.", "DB_ERROR", 500);
+      existing.push(...(page.data ?? []));
+    }
 
     const open = new Set(
-      (existing ?? []).filter((row) => row.status !== "resolved").map((row) => row.review_id)
+      existing.filter((row) => row.status !== "resolved").map((row) => row.review_id)
     );
-    const keys = new Set((existing ?? []).map((row) => `${row.review_id}:${row.trigger_key}`));
-    const byReview = new Map((existing ?? []).map((row) => [row.review_id, row]));
+    const keys = new Set(existing.map((row) => `${row.review_id}:${row.trigger_key}`));
+    const byReview = new Map(existing.map((row) => [row.review_id, row]));
 
-    const timing = await escalationTiming(
-      workspaceId,
-      matches.map((item) => item.review.location_id),
-      policy.dueHours
-    );
+    const [timing, assignmentReady] = await Promise.all([
+      escalationTiming(
+        workspaceId,
+        matches.map((item) => item.review.location_id),
+        policy.dueHours
+      ),
+      EscalationService.assignmentColumnsReady(),
+    ]);
     let created = 0;
     for (const item of matches) {
       const key = triggerKey(item.review.id, item.review.star_rating, item.review.comment, item.reasons);
@@ -172,6 +229,7 @@ export class EscalationService {
           .update({
             status: "needs_human",
             assignee_user_id: null,
+            ...(assignmentReady ? { assignment_decided_at: null, sla_advanced_at: null } : {}),
             opened_at: openedAt,
             due_at: addHours(openedAt, timing.get(item.review.location_id)?.hours ?? policy.dueHours),
             ...(timing.get(item.review.location_id)?.level
@@ -195,7 +253,7 @@ export class EscalationService {
           escalation_id: prior.id,
           kind: "reopened",
           body: "Reopened because the review changed.",
-          metadata: { reasons: item.reasons },
+          metadata: { reasons: item.reasons, source: "rules", model: null },
         });
         open.add(item.review.id);
         continue;
@@ -230,7 +288,7 @@ export class EscalationService {
         escalation_id: inserted.id,
         kind: "opened",
         body: "Opened from the complaint rules.",
-        metadata: { reasons: item.reasons },
+        metadata: { reasons: item.reasons, source: "rules", model: null },
       });
       const reminders = [...new Set(policy.reminderHours)]
         .filter((hour) => hour > 0 && hour < policy.dueHours)
@@ -244,7 +302,197 @@ export class EscalationService {
         await admin.from("grm_escalation_reminders").insert(reminders);
       }
     }
+    await this.settleOpenAssignments(workspaceId);
     return { created };
+  }
+
+  /** Assigns open cases that do not yet have an owner decision. Safe to run again. */
+  static async settleOpenAssignments(workspaceId: string): Promise<number> {
+    const admin = createAdminClient();
+    const pending = await admin
+      .from("grm_escalations")
+      .select("id, location_id")
+      .eq("workspace_id", workspaceId)
+      .is("assignment_decided_at", null)
+      .neq("status", "resolved")
+      .limit(50);
+    if (pending.error) {
+      if (/assignment_decided_at/i.test(pending.error.message)) return 0;
+      throw new AppError("Could not load unassigned escalations.", "DB_ERROR", 500);
+    }
+    const rows = pending.data ?? [];
+    if (rows.length === 0) return 0;
+    const context = await this.assignmentContext(workspaceId, rows.map((row) => row.location_id));
+    let settled = 0;
+    for (const row of rows) {
+      const applied = await this.applyAssignmentPlan(workspaceId, row.id, context.locations.get(row.location_id) ?? null, context.members);
+      if (applied) settled += 1;
+    }
+    return settled;
+  }
+
+  private static async assignmentContext(workspaceId: string, locationIds: string[]): Promise<{
+    locations: Map<string, AssignmentLocation & { managerUserId: string | null }>;
+    members: Array<AssignmentMember & { alertEmail: boolean; alertInApp: boolean }>;
+  }> {
+    const admin = createAdminClient();
+    const unique = [...new Set(locationIds)];
+    const [locations, groups, members] = await Promise.all([
+      unique.length
+        ? admin
+            .from("grm_google_locations")
+            .select("id, client_id, group_id, manager_user_id")
+            .eq("workspace_id", workspaceId)
+            .in("id", unique)
+        : Promise.resolve({ data: [], error: null }),
+      admin.from("grm_groups").select("id, parent_id").eq("workspace_id", workspaceId),
+      admin
+        .from("grm_workspace_members")
+        .select("user_id, role, access_enabled, scope_client_id, scope_group_id, scope_location_id, alert_email, alert_in_app")
+        .eq("workspace_id", workspaceId),
+    ]);
+    if (locations.error || groups.error || members.error) {
+      throw new AppError("Could not load assignment rules.", "DB_ERROR", 500);
+    }
+    const parentByGroup = new Map((groups.data ?? []).map((group) => [group.id, group.parent_id]));
+    return {
+      locations: new Map(
+        (locations.data ?? []).map((location) => [
+          location.id,
+          {
+            workspaceId,
+            clientId: location.client_id,
+            groupId: location.group_id,
+            parentGroupId: location.group_id ? parentByGroup.get(location.group_id) ?? null : null,
+            locationId: location.id,
+            managerUserId: location.manager_user_id,
+          },
+        ])
+      ),
+      members: (members.data ?? []).map((member) => ({
+        userId: member.user_id,
+        role: member.role,
+        enabled: member.access_enabled !== false,
+        scope: {
+          clientId: member.scope_client_id,
+          groupId: member.scope_group_id,
+          locationId: member.scope_location_id,
+        },
+        alertEmail: member.alert_email,
+        alertInApp: member.alert_in_app,
+      })),
+    };
+  }
+
+  /** Writes the owner once. A second call sees assignment_decided_at and leaves the case alone. */
+  private static async applyAssignmentPlan(
+    workspaceId: string,
+    escalationId: string,
+    location: (AssignmentLocation & { managerUserId: string | null }) | null,
+    members: Array<AssignmentMember & { alertEmail: boolean; alertInApp: boolean }>
+  ): Promise<boolean> {
+    const admin = createAdminClient();
+    const plan = location
+      ? planAssignment({ locationManagerId: location.managerUserId, members, location })
+      : {
+          responsibleUserId: null,
+          assigneeId: null,
+          ownership: "fallback" as const,
+          reason: "manager_missing" as const,
+        };
+    const now = new Date().toISOString();
+    const { data, error } = await admin
+      .from("grm_escalations")
+      .update({
+        responsible_user_id: plan.responsibleUserId,
+        assignee_user_id: plan.assigneeId,
+        ownership: plan.ownership,
+        status: plan.assigneeId ? "in_progress" : "needs_human",
+        assignment_reason: plan.reason,
+        assignment_decided_at: now,
+        updated_at: now,
+      })
+      .eq("id", escalationId)
+      .eq("workspace_id", workspaceId)
+      .is("assignment_decided_at", null)
+      .neq("status", "resolved")
+      .select("id")
+      .maybeSingle();
+    if (error || !data) return false;
+    await admin.from("grm_escalation_events").insert({
+      workspace_id: workspaceId,
+      escalation_id: escalationId,
+      kind: "assigned",
+      body: plan.assigneeId ? "Assigned from the location manager rules." : "No owner could be assigned.",
+      metadata: {
+        assigneeId: plan.assigneeId,
+        previousAssigneeId: null,
+        responsibleUserId: plan.responsibleUserId,
+        ownership: plan.ownership,
+        reason: plan.reason,
+        source: "rules",
+      },
+    });
+    if (plan.ownership === "fallback") {
+      await admin.from("grm_escalation_events").insert({
+        workspace_id: workspaceId,
+        escalation_id: escalationId,
+        kind: "fallback",
+        body: plan.assigneeId
+          ? "The location manager could not take this case. An administrator owns it until someone reassigns it."
+          : "The location manager could not take this case, and no administrator can see this location.",
+        metadata: { reason: plan.reason, assigneeId: plan.assigneeId, responsibleUserId: plan.responsibleUserId },
+      });
+    }
+    const owner = members.find((member) => member.userId === plan.assigneeId);
+    if (owner) await this.notifyOwner(workspaceId, escalationId, owner, plan.ownership === "fallback");
+    const actor = members.find((member) => member.role === "owner") ?? owner;
+    if (actor) {
+      await AuditService.log({
+        workspaceId,
+        userId: actor.userId,
+        action: plan.ownership === "fallback" ? "escalation.fallback" : "escalation.assigned",
+        entityType: "grm_escalations",
+        entityId: escalationId,
+        metadata: { assigneeId: plan.assigneeId, reason: plan.reason, source: "rules" },
+      });
+    }
+    return true;
+  }
+
+  private static async notifyOwner(
+    workspaceId: string,
+    escalationId: string,
+    member: { userId: string; alertEmail: boolean; alertInApp: boolean },
+    fallback: boolean
+  ): Promise<void> {
+    const admin = createAdminClient();
+    const user = await admin.auth.admin.getUserById(member.userId).catch(() => null);
+    const email = user?.data.user?.email ?? null;
+    const subject = fallback ? "Escalation needs an owner" : "Escalation assigned to you";
+    const body = fallback
+      ? "A complaint had no active location manager. You are the fallback owner."
+      : "A complaint was assigned to you from the location manager rules.";
+    let emailStatus = "not_requested";
+    if (member.alertEmail && email) {
+      const result = await deliverMessage({
+        env: readDeliveryEnv(process.env),
+        channel: "email",
+        recipient: email,
+        subject,
+        body,
+      });
+      emailStatus = result.status;
+    }
+    await admin.from("grm_escalation_events").insert({
+      workspace_id: workspaceId,
+      escalation_id: escalationId,
+      kind: "notified",
+      body: member.alertInApp
+        ? "In-app notice recorded. Email is sent only when that member asked for email and the provider is configured."
+        : "Assignment recorded. This member turned in-app alerts off.",
+      metadata: { userId: member.userId, email: emailStatus, inApp: member.alertInApp },
+    });
   }
 
   /**
@@ -318,21 +566,95 @@ export class EscalationService {
     return { recorded };
   }
 
-  /** Opens matching complaints, records due reminders, and reports whether automation is paused. */
+  /**
+   * Moves an overdue case one level, once. The claim matches the current level and an empty sla_advanced_at,
+   * so a retry does not take the next step.
+   */
+  static async advanceOverdue(workspaceId: string): Promise<{ advanced: number }> {
+    const admin = createAdminClient();
+    const now = new Date().toISOString();
+    const due = await admin
+      .from("grm_escalations")
+      .select("id, level, due_at, status, assignee_user_id, location_id")
+      .eq("workspace_id", workspaceId)
+      .neq("status", "resolved")
+      .lt("due_at", now)
+      .is("sla_advanced_at", null)
+      .limit(50);
+    if (due.error) {
+      if (/sla_advanced_at/i.test(due.error.message)) return { advanced: 0 };
+      throw new AppError("Could not read overdue escalations.", "DB_ERROR", 500);
+    }
+    const rows = due.data ?? [];
+    if (rows.length === 0) return { advanced: 0 };
+    const context = await this.assignmentContext(workspaceId, rows.map((row) => row.location_id));
+    let advanced = 0;
+    for (const row of rows) {
+      const level = (row.level === "regional" || row.level === "leadership" ? row.level : "store") as EscalationLevel;
+      const next = nextEscalationLevel(level);
+      const location = context.locations.get(row.location_id) ?? null;
+      const assigneeId = next && location
+        ? planLevelOwner(next, context.members, location, row.assignee_user_id)
+        : row.assignee_user_id;
+      const claimed = await admin
+        .from("grm_escalations")
+        .update({
+          level: next ?? level,
+          assignee_user_id: assigneeId,
+          sla_advanced_at: now,
+          updated_at: now,
+          ...(assigneeId ? { status: "in_progress" as const } : {}),
+        })
+        .eq("id", row.id)
+        .eq("workspace_id", workspaceId)
+        .eq("level", row.level)
+        .eq("due_at", row.due_at)
+        .is("sla_advanced_at", null)
+        .neq("status", "resolved")
+        .select("id");
+      if (claimed.error || !claimed.data?.length) continue;
+      advanced += 1;
+      await admin.from("grm_escalation_events").insert({
+        workspace_id: workspaceId,
+        escalation_id: row.id,
+        kind: next ? "level_changed" : "overdue_noted",
+        body: next
+          ? `Moved from ${level} to ${next} because the SLA passed. The due time is unchanged.`
+          : "Still overdue at leadership. The level did not change.",
+        metadata: {
+          from: level,
+          to: next ?? level,
+          previousAssigneeId: row.assignee_user_id,
+          assigneeId,
+          automatic: true,
+        },
+      });
+      const owner = context.members.find((member) => member.userId === assigneeId);
+      if (owner && owner.userId !== row.assignee_user_id) {
+        await this.notifyOwner(workspaceId, row.id, owner, false);
+      }
+    }
+    return { advanced };
+  }
+
+  /** Opens matching complaints, records due reminders, and moves each overdue case one level. */
   static async runScheduled(workspaceId: string): Promise<{
     created: number;
     reminders: number;
+    advanced: number;
     autoreplies: "paused" | "no_autoreply_worker";
   }> {
     const created = await this.ensure(workspaceId);
-    const [reminders, pauses] = await Promise.all([
+    const [reminders, advanced, pauses] = await Promise.all([
       this.processReminders(workspaceId),
+      this.advanceOverdue(workspaceId),
       this.pausedTargets(workspaceId),
     ]);
     const paused = pauses.workspace || pauses.locationIds.length > 0 || pauses.clientIds.length > 0;
     return {
       created: created.created,
       reminders: reminders.recorded,
+      advanced: advanced.advanced,
       autoreplies: paused ? "paused" : "no_autoreply_worker",
     };
   }
@@ -391,12 +713,15 @@ export class EscalationService {
     groupId: string | null;
     since: string | null;
     until: string | null;
+    query: string | null;
+    sort: "due" | "opened";
     page: number;
     pageSize: number;
   }): Promise<{ items: EscalationQueueItem[]; total: number }> {
     const admin = createAdminClient();
     const now = new Date().toISOString();
-    let reviewIds: string[] | null = null;
+    // Scope through location_id on escalations — never materialise every review id into .in().
+    let scopedLocationIds: string[] | null = null;
     if (input.clientId || input.locationId || input.groupId) {
       let locations = admin.from("grm_google_locations").select("id").eq("workspace_id", input.workspaceId);
       if (input.clientId) locations = locations.eq("client_id", input.clientId);
@@ -407,17 +732,54 @@ export class EscalationService {
       }
       const locationRows = await locations;
       if (locationRows.error) throw new AppError("Could not load locations.", "DB_ERROR", 500);
-      const ids = (locationRows.data ?? []).map((row) => row.id);
-      if (ids.length === 0) return { items: [], total: 0 };
-      const reviewRows = await admin.from("grm_reviews").select("id").eq("workspace_id", input.workspaceId).in("location_id", ids);
-      if (reviewRows.error) throw new AppError("Could not load reviews.", "DB_ERROR", 500);
-      reviewIds = (reviewRows.data ?? []).map((row) => row.id);
-      if (reviewIds.length === 0) return { items: [], total: 0 };
+      scopedLocationIds = (locationRows.data ?? []).map((row) => row.id);
+      if (scopedLocationIds.length === 0) return { items: [], total: 0 };
     }
+    let searchReviewIds: string[] | null = null;
+    const needle = input.query?.replace(/[%_,]/g, " ").trim().slice(0, 80) ?? "";
+    if (needle) {
+      const pattern = `%${needle}%`;
+      let textQuery = admin
+        .from("grm_reviews")
+        .select("id")
+        .eq("workspace_id", input.workspaceId)
+        .or(`reviewer_display_name.ilike.${pattern},comment.ilike.${pattern}`)
+        .limit(200);
+      let placeQuery = admin
+        .from("grm_google_locations")
+        .select("id")
+        .eq("workspace_id", input.workspaceId)
+        .ilike("location_title", pattern)
+        .limit(50);
+      if (scopedLocationIds) {
+        textQuery = textQuery.in("location_id", scopedLocationIds);
+        placeQuery = placeQuery.in("id", scopedLocationIds);
+      }
+      const [byText, byLocation] = await Promise.all([textQuery, placeQuery]);
+      if (byText.error || byLocation.error) throw new AppError("Could not search escalations.", "DB_ERROR", 500);
+      const placeIds = (byLocation.data ?? []).map((row) => row.id);
+      const byPlace = placeIds.length
+        ? await admin
+            .from("grm_reviews")
+            .select("id")
+            .eq("workspace_id", input.workspaceId)
+            .in("location_id", placeIds)
+            .limit(200)
+        : { data: [], error: null };
+      if (byPlace.error) throw new AppError("Could not search escalations.", "DB_ERROR", 500);
+      searchReviewIds = [
+        ...new Set([
+          ...(byText.data ?? []).map((row) => row.id),
+          ...(byPlace.data ?? []).map((row) => row.id),
+        ]),
+      ];
+      if (searchReviewIds.length === 0) return { items: [], total: 0 };
+    }
+    const assignmentReady = await EscalationService.assignmentColumnsReady();
     let query = admin
       .from("grm_escalations")
       .select(
-        "id, status, level, assignee_user_id, opened_at, due_at, resolved_at, resolution_code, internal_note, trigger_reasons, review_id",
+        "id, status, level, assignee_user_id, updated_at, opened_at, due_at, resolved_at, resolution_code, internal_note, trigger_reasons, review_id",
         { count: "exact" }
       )
       .eq("workspace_id", input.workspaceId);
@@ -427,17 +789,41 @@ export class EscalationService {
     else if (input.bucket === "in_progress") {
       query = query.eq("status", "in_progress").gte("due_at", now);
     } else query = query.eq("status", "needs_human").gte("due_at", now);
-    if (reviewIds) query = query.in("review_id", reviewIds);
+    if (scopedLocationIds) query = query.in("location_id", scopedLocationIds);
+    if (searchReviewIds) query = query.in("review_id", searchReviewIds);
     if (input.since) query = query.gte("opened_at", input.since);
     if (input.until) query = query.lte("opened_at", input.until);
 
     const from = (input.page - 1) * input.pageSize;
+    const orderColumn = input.sort === "opened" ? "opened_at" : "due_at";
     const { data, error, count } = await query
-      .order("due_at", { ascending: input.bucket !== "resolved" })
+      .order(orderColumn, { ascending: input.bucket !== "resolved" })
       .range(from, from + input.pageSize - 1);
-    if (error) throw new AppError("Could not load the escalation queue.", "DB_ERROR", 500);
+    if (error) {
+      logger.error("escalations.queue_failed", {
+        workspaceId: input.workspaceId,
+        bucket: input.bucket,
+        message: error.message,
+        code: error.code,
+      });
+      throw new AppError("Could not load the escalation queue.", "DB_ERROR", 500);
+    }
 
     const rows = data ?? [];
+    const owners = new Map<string, { responsibleUserId: string | null; ownership: string; assignmentReason: string | null }>();
+    if (assignmentReady && rows.length > 0) {
+      const extra = await admin
+        .from("grm_escalations")
+        .select("id, responsible_user_id, ownership, assignment_reason")
+        .in("id", rows.map((row) => row.id));
+      for (const row of extra.data ?? []) {
+        owners.set(row.id, {
+          responsibleUserId: row.responsible_user_id,
+          ownership: row.ownership === "manager" ? "manager" : "fallback",
+          assignmentReason: row.assignment_reason,
+        });
+      }
+    }
     const pageReviewIds = rows.map((row) => row.review_id);
     const escalationIds = rows.map((row) => row.id);
     const [reviews, events] = await Promise.all([
@@ -460,12 +846,25 @@ export class EscalationService {
 
     const locationIds = [...new Set((reviews.data ?? []).map((review) => review.location_id))];
     const locations = locationIds.length
-      ? await admin.from("grm_google_locations").select("id, location_title, client_id").in("id", locationIds)
+      ? await admin.from("grm_google_locations").select("id, location_title, client_id, group_id").in("id", locationIds)
       : { data: [], error: null };
     if (locations.error) throw new AppError("Could not load locations.", "DB_ERROR", 500);
+    const clientIds = [...new Set((locations.data ?? []).flatMap((location) => (location.client_id ? [location.client_id] : [])))];
+    const groupIds = [...new Set((locations.data ?? []).flatMap((location) => (location.group_id ? [location.group_id] : [])))];
+    const [clients, groups] = await Promise.all([
+      clientIds.length
+        ? admin.from("grm_clients").select("id, name").eq("workspace_id", input.workspaceId).in("id", clientIds)
+        : Promise.resolve({ data: [], error: null }),
+      groupIds.length
+        ? admin.from("grm_groups").select("id, name").eq("workspace_id", input.workspaceId).in("id", groupIds)
+        : Promise.resolve({ data: [], error: null }),
+    ]);
+    if (clients.error || groups.error) throw new AppError("Could not load escalation context.", "DB_ERROR", 500);
 
     const reviewMap = new Map((reviews.data ?? []).map((review) => [review.id, review]));
     const locationMap = new Map((locations.data ?? []).map((location) => [location.id, location]));
+    const clientNames = new Map((clients.data ?? []).map((client) => [client.id, client.name]));
+    const groupNames = new Map((groups.data ?? []).map((group) => [group.id, group.name]));
 
     const items: EscalationQueueItem[] = [];
     for (const row of rows) {
@@ -477,6 +876,12 @@ export class EscalationService {
         status: row.status,
         level: row.level,
         assignedTo: row.assignee_user_id,
+        responsibleUserId: owners.get(row.id)?.responsibleUserId ?? null,
+        ownership: owners.get(row.id)?.ownership ?? "",
+        assignmentReason: owners.get(row.id)?.assignmentReason ?? null,
+        updatedAt: row.updated_at,
+        clientName: location?.client_id ? clientNames.get(location.client_id) ?? null : null,
+        groupName: location?.group_id ? groupNames.get(location.group_id) ?? null : null,
         openedAt: row.opened_at,
         dueAt: row.due_at,
         resolvedAt: row.resolved_at,
@@ -510,7 +915,7 @@ export class EscalationService {
   ): Promise<Record<"needs_human" | "in_progress" | "past_sla" | "resolved", number>> {
     const admin = createAdminClient();
     const now = new Date().toISOString();
-    let reviewIds: string[] | null = null;
+    let scopedLocationIds: string[] | null = null;
     if (scope?.clientId || scope?.locationId || scope?.groupId) {
       let locations = admin.from("grm_google_locations").select("id").eq("workspace_id", workspaceId);
       if (scope.clientId) locations = locations.eq("client_id", scope.clientId);
@@ -521,19 +926,15 @@ export class EscalationService {
       }
       const locationRows = await locations;
       if (locationRows.error) throw new AppError("Could not count escalations.", "DB_ERROR", 500);
-      const ids = (locationRows.data ?? []).map((row) => row.id);
-      if (ids.length === 0) return { needs_human: 0, in_progress: 0, past_sla: 0, resolved: 0 };
-      const reviewRows = await admin.from("grm_reviews").select("id").in("location_id", ids);
-      if (reviewRows.error) throw new AppError("Could not count escalations.", "DB_ERROR", 500);
-      reviewIds = (reviewRows.data ?? []).map((row) => row.id);
-      if (reviewIds.length === 0) return { needs_human: 0, in_progress: 0, past_sla: 0, resolved: 0 };
+      scopedLocationIds = (locationRows.data ?? []).map((row) => row.id);
+      if (scopedLocationIds.length === 0) return { needs_human: 0, in_progress: 0, past_sla: 0, resolved: 0 };
     }
     const head = (status?: string, past?: boolean, open?: boolean) => {
       let query = admin
         .from("grm_escalations")
         .select("id", { count: "exact", head: true })
         .eq("workspace_id", workspaceId);
-      if (reviewIds) query = query.in("review_id", reviewIds);
+      if (scopedLocationIds) query = query.in("location_id", scopedLocationIds);
       if (status) query = query.eq("status", status);
       if (open) query = query.neq("status", "resolved");
       if (past === true) query = query.lt("due_at", now);
@@ -564,47 +965,87 @@ export class EscalationService {
     workspaceId: string;
     escalationId: string;
     actorId: string;
-    assigneeId: string | null;
+    assigneeId: string;
+    reason: string;
+    expectedUpdatedAt: string;
   }): Promise<void> {
     const admin = createAdminClient();
-    if (input.assigneeId) {
-      const member = await admin
-        .from("grm_workspace_members")
-        .select("user_id")
-        .eq("workspace_id", input.workspaceId)
-        .eq("user_id", input.assigneeId)
-        .maybeSingle();
-      if (!member.data) throw new AppError("That person is not in this workspace.", "VALIDATION_ERROR", 400);
-    }
-    const nextStatus = input.assigneeId ? "in_progress" : "needs_human";
+    const assignmentReady = await EscalationService.assignmentColumnsReady();
+    const current = await admin
+      .from("grm_escalations")
+      .select("id, location_id, assignee_user_id, updated_at, status")
+      .eq("id", input.escalationId)
+      .eq("workspace_id", input.workspaceId)
+      .maybeSingle();
+    if (current.error || !current.data) throw new AppError("Could not assign this escalation.", "DB_ERROR", 400);
+    if (current.data.status === "resolved") throw new ValidationError("A resolved case cannot be reassigned.");
+    const context = await this.assignmentContext(input.workspaceId, [current.data.location_id]);
+    const location = context.locations.get(current.data.location_id);
+    if (!location) throw new ValidationError("That location is not in this workspace.");
+    const target = context.members.find((member) => member.userId === input.assigneeId) ?? null;
+    const problem = reassignmentError({
+      actorCanAssign: true,
+      target,
+      location,
+      reason: input.reason,
+      currentUpdatedAt: current.data.updated_at,
+      expectedUpdatedAt: input.expectedUpdatedAt,
+    });
+    if (problem) throw new ValidationError(problem);
+    if (current.data.assignee_user_id === input.assigneeId) return;
+    const now = new Date().toISOString();
     const { data, error } = await admin
       .from("grm_escalations")
       .update({
         assignee_user_id: input.assigneeId,
-        status: nextStatus,
-        updated_at: new Date().toISOString(),
+        ...(assignmentReady ? { assignment_reason: input.reason.trim() } : {}),
+        status: "in_progress",
+        updated_at: now,
       })
       .eq("id", input.escalationId)
       .eq("workspace_id", input.workspaceId)
+      .eq("updated_at", input.expectedUpdatedAt)
       .neq("status", "resolved")
       .select("id")
       .maybeSingle();
-    if (error || !data) throw new AppError("Could not assign this escalation.", "DB_ERROR", 400);
+    if (error || !data) throw new ValidationError("This case changed. Refresh and try again.");
+    let responsibleUserId: string | null = null;
+    if (assignmentReady) {
+      const owner = await admin
+        .from("grm_escalations")
+        .select("responsible_user_id")
+        .eq("id", input.escalationId)
+        .maybeSingle();
+      responsibleUserId = owner.data?.responsible_user_id ?? null;
+    }
     await admin.from("grm_escalation_events").insert({
       workspace_id: input.workspaceId,
       escalation_id: input.escalationId,
       actor_id: input.actorId,
       kind: "assigned",
-      body: "Assignment changed.",
-      metadata: { assigneeId: input.assigneeId },
+      body: "Reassigned. The responsible manager was left in place.",
+      metadata: {
+        previousAssigneeId: current.data.assignee_user_id,
+        assigneeId: input.assigneeId,
+        responsibleUserId,
+        reason: input.reason.trim(),
+        actorId: input.actorId,
+        at: now,
+      },
     });
+    const owner = context.members.find((member) => member.userId === input.assigneeId);
+    if (owner) await this.notifyOwner(input.workspaceId, input.escalationId, owner, false);
     await AuditService.log({
       workspaceId: input.workspaceId,
       userId: input.actorId,
       action: "escalation.assigned",
       entityType: "grm_escalations",
       entityId: input.escalationId,
-      metadata: { assigneeId: input.assigneeId },
+      metadata: {
+        previousAssigneeId: current.data.assignee_user_id,
+        assigneeId: input.assigneeId,
+        reason: input.reason.trim(),
+      },
     });
   }
 
@@ -769,6 +1210,7 @@ export class EscalationService {
       entityId: inserted.id,
       metadata: { reviewId: input.reviewId, source: "manual" },
     });
+    await this.settleOpenAssignments(input.workspaceId);
     return { id: inserted.id, created: true };
   }
 

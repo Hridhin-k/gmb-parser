@@ -141,7 +141,11 @@ export function SettingsBoard({ section, target, canEdit, tone, automation, temp
         }}
       >
         <section className="space-y-3 rounded-xl border border-silver bg-white p-4">
-          <h2 className="text-base font-medium text-graphite">Tone</h2>
+          <h2 className="text-base font-medium text-graphite">Brand voice</h2>
+          <p className="text-sm text-slate">
+            Greeting, warmth, and never-say rules for this scope. Location and group overrides still apply through
+            the target picker.
+          </p>
           <div className="grid gap-3 sm:grid-cols-2">
             <label className="text-sm text-slate">
               Greeting
@@ -235,7 +239,7 @@ export function SettingsBoard({ section, target, canEdit, tone, automation, temp
         {error ? <p className="text-sm text-red-700">{error}</p> : null}
         {canEdit ? (
           <div className="flex flex-wrap gap-2">
-            <Button type="submit" disabled={pending}>{pending ? "Saving…" : "Save changes"}</Button>
+            <Button type="submit" loading={pending}>{pending ? "Saving…" : "Save changes"}</Button>
             {target.kind !== "workspace" ? (
               <Button
                 type="button"
@@ -284,7 +288,11 @@ export function SettingsBoard({ section, target, canEdit, tone, automation, temp
       </form>
 
       <section className="space-y-3 rounded-xl border border-silver bg-white p-4">
-        <h2 className="text-base font-medium text-graphite">Try it</h2>
+        <h2 className="text-base font-medium text-graphite">Local template preview</h2>
+        <p className="text-sm text-slate">
+          Instant local preview of greeting and template fill-ins. For a full AI draft with saved instructions, use
+          Draft preview above.
+        </p>
         <textarea value={comment} onChange={(event) => setComment(event.target.value)} rows={3} className="w-full rounded-md border border-silver p-2 text-sm text-graphite" />
         <div className="flex flex-wrap gap-2">
           <Button type="button" variant="outline" onClick={() => runPreview(comment)}>
@@ -312,6 +320,7 @@ export function SettingsBoard({ section, target, canEdit, tone, automation, temp
             </p>
           </div>
         ) : null}
+        {error ? <p className="text-sm text-red-700">{error}</p> : null}
       </section>
       </>
       ) : null}

@@ -26,8 +26,6 @@ import type {
   ProfileAnalysis,
   SuggestedFeature,
 } from "@/lib/services/location-insights";
-import { Spinner } from "@/components/ui/spinner";
-
 const SENTIMENT_STYLES: Record<string, string> = {
   positive: "bg-emerald-50 text-emerald-700 border-emerald-100",
   mixed: "bg-amber-50 text-amber-800 border-amber-100",
@@ -372,8 +370,8 @@ export function ProfileInsightPanel({
         <div className="mt-3">
           <ActivityStatus
             tone="gemini"
-            title={`Gemini is reading ${profile.title}`}
-            detail="It uses only this location’s reviews to summarise branding, staff, and what customers mention. The summary above stays until the new one is ready."
+            title="Analysing customer feedback…"
+            detail={`Preparing a model interpretation for ${profile.title}. The summary above stays until the new one is ready.`}
           />
         </div>
       ) : null}
@@ -393,35 +391,41 @@ export function ProfileInsightPanel({
 
       {rich && active ? <AnalysisGrid analysis={active.analysis} /> : null}
 
-      {error && (
+      {error ? (
         <p className="mt-3 text-[12px] text-red-600" role="alert">
-          {error}
+          Insights couldn&apos;t be updated. {error} The previous summary stays visible.
         </p>
-      )}
+      ) : null}
 
       <div className="mt-5 flex flex-wrap items-center gap-2">
         <Button
           type="button"
           size="sm"
           className="gap-1.5"
-          disabled={loading || profile.reviewCount === 0}
+          loading={loading}
+          disabled={profile.reviewCount === 0}
           onClick={() => generate(Boolean(active))}
         >
-          {loading ? (
-            <Spinner size="sm" />
-          ) : stale || !rich ? (
+          {!loading && (stale || !rich) ? (
             <Sparkles className="h-3.5 w-3.5" aria-hidden />
-          ) : (
+          ) : null}
+          {!loading && rich && !stale ? (
             <RefreshCw className="h-3.5 w-3.5" aria-hidden />
-          )}
-          {loading ? "Gemini is reading reviews…" : !rich ? "Generate profile insights" : stale ? "Update insights" : "Refresh insights"}
+          ) : null}
+          {loading
+            ? "Analysing feedback…"
+            : !rich
+              ? "Generate profile insights"
+              : stale
+                ? "Update insights"
+                : "Refresh insights"}
         </Button>
         {stale && rich && (
-          <span className="text-[11px] text-amber-600">Reviews changed — regenerate</span>
+          <span className="text-[11px] text-amber-600">Reviews changed — this text is not current</span>
         )}
         <span className="text-[11px] text-slate">
           {loading
-            ? "This usually takes a few seconds. You can leave the rest of the page as it is."
+            ? "You can keep using the rest of the page while this finishes."
             : "Gemini reads this profile’s reviews only: branding, staff, feedback, and feature ideas."}
         </span>
       </div>

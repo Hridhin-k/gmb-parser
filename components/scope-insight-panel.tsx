@@ -7,7 +7,6 @@ import { cn } from "@/lib/utils";
 import { Star, Sparkles, RefreshCw } from "lucide-react";
 import { ActivityStatus } from "@/components/activity-status";
 import { Button } from "@/components/ui/button";
-import { Spinner } from "@/components/ui/spinner";
 import { AnalysisGrid } from "@/components/profile-insight-panel";
 import type { ScopeInsight, ScopeInsightKind } from "@/lib/services/scope-insights";
 
@@ -139,8 +138,8 @@ export function ScopeInsightPanel({
         <div className="mt-3">
           <ActivityStatus
             tone="gemini"
-            title={`Gemini is reading ${title}`}
-            detail={`It samples recent reviews from ${locationCount} location${locationCount === 1 ? "" : "s"} to summarise branding, staff, and customer themes for the whole ${scopeKind === "client" ? "organisation" : "group"}.`}
+            title="Analysing customer feedback…"
+            detail={`Preparing a model interpretation for ${title} (${locationCount} location${locationCount === 1 ? "" : "s"}). The summary above stays until the new one is ready.`}
           />
         </div>
       ) : null}
@@ -160,29 +159,29 @@ export function ScopeInsightPanel({
 
       {rich && active ? <AnalysisGrid analysis={active.analysis} /> : null}
 
-      {error && (
+      {error ? (
         <p className="mt-3 text-[12px] text-red-600" role="alert">
-          {error}
+          Insights couldn&apos;t be updated. {error} Counted data on this page stays available.
         </p>
-      )}
+      ) : null}
 
       <div className="mt-5 flex flex-wrap items-center gap-2">
         <Button
           type="button"
           size="sm"
           className="gap-1.5"
-          disabled={loading || reviewCount === 0}
+          loading={loading}
+          disabled={reviewCount === 0}
           onClick={() => generate(Boolean(active))}
         >
-          {loading ? (
-            <Spinner size="sm" />
-          ) : stale || !rich ? (
+          {!loading && (stale || !rich) ? (
             <Sparkles className="h-3.5 w-3.5" aria-hidden />
-          ) : (
+          ) : null}
+          {!loading && rich && !stale ? (
             <RefreshCw className="h-3.5 w-3.5" aria-hidden />
-          )}
+          ) : null}
           {loading
-            ? "Gemini is reading reviews…"
+            ? "Analysing feedback…"
             : !rich
               ? `Generate ${kindLabel.toLowerCase()} insights`
               : stale
@@ -190,7 +189,7 @@ export function ScopeInsightPanel({
                 : "Refresh insights"}
         </Button>
         {stale && rich && (
-          <span className="text-[11px] text-amber-600">Reviews changed — regenerate</span>
+          <span className="text-[11px] text-amber-600">Reviews changed — this text is not current</span>
         )}
         <span className="text-[11px] text-slate">
           {reviewCount === 0
