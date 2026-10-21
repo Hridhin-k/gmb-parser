@@ -73,7 +73,7 @@ describe("permission matrix", () => {
     expect(act("owner", "manage_people", { clientId: null, groupId: null, locationId: null })).toBe(true);
     expect(act("org_admin", "manage_people", { clientId: null, groupId: null, locationId: null })).toBe(true);
     expect(act("brand_manager", "manage_people", { clientId: BRAND, groupId: null, locationId: null })).toBe(false);
-    expect(act("admin", "manage_people", { clientId: null, groupId: null, locationId: null })).toBe(false);
+    expect(act("admin", "manage_people", { clientId: null, groupId: null, locationId: null })).toBe(true);
   });
 });
 

@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
-import { classifyGeminiError } from "@/lib/services/ai-review";
+import { classifyGeminiError, draftModelRoute } from "@/lib/services/ai-review";
 
 // ---------------------------------------------------------------------------
 // Mock Supabase admin
@@ -163,6 +163,29 @@ describe("classifyGeminiError", () => {
   });
 });
 
+describe("draftModelRoute", () => {
+  it("uses the fast route for rating-only and short positive reviews", () => {
+    expect(draftModelRoute({ starRating: 5, comment: null })).toBe("fast");
+    expect(draftModelRoute({ starRating: 4, comment: "Great service, friendly team." })).toBe("fast");
+  });
+
+  it("uses the full route for negative, questioning, or nuanced reviews", () => {
+    expect(draftModelRoute({ starRating: 2, comment: "Waited 40 minutes." })).toBe("full");
+    expect(draftModelRoute({ starRating: 5, comment: "Good food, but the wait was long." })).toBe("full");
+    expect(draftModelRoute({ starRating: 4, comment: "Do you open on Sundays?" })).toBe("full");
+    expect(draftModelRoute({ starRating: 5, comment: "നല്ല കട" })).toBe("full");
+  });
+
+  it("uses the full route for revisions and replacements", () => {
+    expect(
+      draftModelRoute({ starRating: 5, comment: "Great.", adjustmentKind: "warmer" })
+    ).toBe("full");
+    expect(
+      draftModelRoute({ starRating: 5, comment: "Great.", hasPreviousDraft: true })
+    ).toBe("full");
+  });
+});
+
 describe("AIReviewService.generateDraft", () => {
   const originalEnv = process.env;
 
@@ -233,6 +256,9 @@ describe("AIReviewService.generateDraft", () => {
         { status: 200 }
       )
     );
+
+    // The usage ledger records the draft call before persistence.
+    mockInsert.mockReturnValueOnce({ error: null });
 
     // Mock draft insert
     const draftInsertSingle = vi.fn().mockReturnValue({ data: { id: "draft-1" }, error: null });

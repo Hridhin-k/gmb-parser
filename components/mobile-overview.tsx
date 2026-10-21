@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { ChartTip } from "@/components/charts";
 import type { MobileOverview } from "@/lib/services/mobile-work";
 
 function Metric({
@@ -120,7 +121,7 @@ export function MobileOverviewView({ data }: { data: MobileOverview }) {
         ) : (
           <ul className="mt-3 space-y-3">
             {data.themes.map((theme) => (
-              <li key={theme.id}>
+              <li key={theme.id} className="group relative">
                 <div className="flex items-baseline justify-between gap-3 text-sm">
                   <span className="text-ink">{theme.label}</span>
                   <span className="text-slate">{theme.count}</span>
@@ -128,6 +129,12 @@ export function MobileOverviewView({ data }: { data: MobileOverview }) {
                 <div className="mt-1 h-2 overflow-hidden rounded-full bg-paper">
                   <div className="h-full rounded-full bg-ink" style={{ width: `${theme.width}%` }} />
                 </div>
+                <ChartTip
+                  title={`${theme.label} · ${theme.count.toLocaleString("en-US")}`}
+                  lines={["1–3 star reviews with this theme"]}
+                  stars={theme.stars}
+                  className="bottom-full left-0 mb-1"
+                />
               </li>
             ))}
           </ul>

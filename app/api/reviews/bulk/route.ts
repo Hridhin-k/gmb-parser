@@ -7,7 +7,7 @@ import { AuditService } from "@/lib/services/audit";
 import { AppError, toUserMessage } from "@/lib/errors";
 import { logger } from "@/lib/logger";
 import { parseBody, bulkReviewsBodySchema } from "@/lib/validation";
-import { checkRateLimit, AI_GENERATE_LIMIT, PUBLISH_LIMIT } from "@/lib/rate-limit";
+import { checkRateLimit, AI_GENERATE_LIMIT, PUBLISH_LIMIT, WORKSPACE_AI_LIMIT } from "@/lib/rate-limit";
 import { ensurePersonalWorkspace } from "@/lib/services/workspace";
 import { assertReviewAction } from "@/lib/services/access";
 import { assertSafePublicReply } from "@/lib/services/reply-checks";
@@ -56,6 +56,15 @@ export async function POST(request: Request) {
 
   const admin = createAdminClient();
   const membership = await ensurePersonalWorkspace(user);
+  if (body.action === "generate") {
+    const workspaceLimit = checkRateLimit(`workspace:${membership.workspace_id}`, "ai.generate", WORKSPACE_AI_LIMIT);
+    if (!workspaceLimit.allowed) {
+      return NextResponse.json(
+        { error: "This workspace has reached its AI draft limit. Please wait." },
+        { status: 429 }
+      );
+    }
+  }
   const workspaceId = membership.workspace_id;
   const userId = user.id;
 
@@ -69,7 +78,13 @@ export async function POST(request: Request) {
     }
   }
 
-  const results: Array<{ reviewId: string; ok: boolean; error?: string }> = [];
+  const results: Array<{
+    reviewId: string;
+    ok: boolean;
+    error?: string;
+    replyId?: string;
+    content?: string;
+  }> = [];
 
   if (body.action === "assign") {
     const assigneeId = body.assigneeId ?? null;
@@ -129,12 +144,17 @@ export async function POST(request: Request) {
           results.push({ reviewId, ok: false, error: denied });
           continue;
         }
-        await AIReviewService.generateDraft({
+        const draft = await AIReviewService.generateDraft({
           reviewId,
           workspaceId,
           userId: user.id,
         });
-        results.push({ reviewId, ok: true });
+        results.push({
+          reviewId,
+          ok: true,
+          replyId: draft.replyId,
+          content: draft.content,
+        });
         continue;
       }
 

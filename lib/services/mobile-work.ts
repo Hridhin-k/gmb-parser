@@ -21,6 +21,7 @@ import { checkReplyGuardrails } from "@/lib/reply-guardrails";
 import { themeLabel } from "@/lib/review-inbox";
 import { splitGoogleTranslation } from "@/lib/review-text";
 import { getMemberAccess, visibleClientIds, type MemberAccess } from "@/lib/services/access";
+import { EscalationContactStore } from "@/lib/services/escalations";
 import { readPageScope } from "@/lib/services/scope-catalog";
 import {
   getDashboardContext,
@@ -60,7 +61,7 @@ export interface MobileOverview {
   openEscalations: number;
   overdueEscalations: number;
   alerts: MobileAlert[];
-  themes: Array<{ id: string; label: string; count: number; width: number }>;
+  themes: Array<{ id: string; label: string; count: number; width: number; stars?: import("@/lib/metrics").StarCounts }>;
   approveHref: string;
   escalationsHref: string;
   sevenHref: string;
@@ -143,6 +144,8 @@ export interface MobileComplaint {
   card: MobileComplaintCard | null;
   missingId: boolean;
   clientHrefs: Array<{ id: string; name: string; href: string }>;
+  resolutionPhone: string | null;
+  resolutionEmail: string | null;
 }
 
 interface Placed {
@@ -313,7 +316,7 @@ export async function loadMobileOverview(input: {
   const weekPrevious = week?.previous ?? context.previous;
   const current = reviewWindow(context.facts);
   const previousWindow = context.previous ? reviewWindow(context.previous) : null;
-  const rates = replyRateLabel(context.facts, context.replyTarget);
+  const rates = replyRateLabel(context.facts);
   const admin = createAdminClient();
   const openQuery = admin
     .from("grm_escalations")
@@ -410,7 +413,6 @@ export async function loadMobileOverview(input: {
     brief: weekBrief({
       facts: weekFacts,
       previous: weekPrevious,
-      replyTarget: context.replyTarget,
       scopeLabel,
     }),
     average: current.avgRating === null ? "—" : current.avgRating.toFixed(2),
@@ -626,6 +628,8 @@ export async function loadMobileComplaint(input: {
     card: null,
     missingId: false,
     clientHrefs: [],
+    resolutionPhone: null,
+    resolutionEmail: null,
   };
   if (!loaded || loaded.locations.length === 0) return blank;
   const locations = loaded.locations;
@@ -722,12 +726,15 @@ export async function loadMobileComplaint(input: {
     };
   }
 
+  const contact = await EscalationContactStore.read(input.workspaceId);
   return {
     clientId: loaded.clientId,
     groupId: keptId(loaded.view.scope.groupId),
     locationId: keptId(loaded.view.scope.locationId),
     clients: loaded.clients,
     card,
+    resolutionPhone: contact.phone,
+    resolutionEmail: contact.email,
     missingId: Boolean(requested && !rows.some((row) => row.id === requested)),
     clientHrefs: [
       { id: "all", name: "All", href: "/m/escalations" },

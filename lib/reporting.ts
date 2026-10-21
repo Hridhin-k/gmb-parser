@@ -7,7 +7,6 @@ export const REPORT_SECTIONS = [
   { id: "trends", label: "Trends" },
   { id: "leaderboard", label: "Location leaderboard" },
   { id: "themes", label: "Themes" },
-  { id: "competitors", label: "Competitor comparison" },
 ] as const;
 
 export type ReportSectionId = (typeof REPORT_SECTIONS)[number]["id"];
@@ -445,7 +444,7 @@ export const reportBodySchema = z
     name: z.string().trim().min(1).max(80),
     scope: z.enum(["workspace", "client", "group", "location"]),
     scopeId: z.string().uuid().nullable(),
-    sections: z.array(z.enum(["scorecard", "trends", "leaderboard", "themes", "competitors"])).min(1),
+    sections: z.array(z.enum(["scorecard", "trends", "leaderboard", "themes"])).min(1),
     frequency: z.enum(["daily", "weekly", "monthly"]),
     deliveryTime: z.string().trim(),
     timezone: z.enum(timezoneIds),

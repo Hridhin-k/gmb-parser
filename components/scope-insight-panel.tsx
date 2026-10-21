@@ -1,7 +1,6 @@
 "use client";
 
 import { useState } from "react";
-import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import { Star, Sparkles, RefreshCw } from "lucide-react";
@@ -9,6 +8,9 @@ import { ActivityStatus } from "@/components/activity-status";
 import { Button } from "@/components/ui/button";
 import { AnalysisGrid } from "@/components/profile-insight-panel";
 import type { ScopeInsight, ScopeInsightKind } from "@/lib/services/scope-insights";
+import { useServerRefresh, useSettleWhenUpdated } from "@/hooks/use-server-refresh";
+import { pollAiGeneration } from "@/lib/ai-generation-client";
+import { ACTION_STATUS } from "@/lib/ui-status";
 
 const SENTIMENT_STYLES: Record<string, string> = {
   positive: "bg-emerald-50 text-emerald-700 border-emerald-100",
@@ -40,7 +42,8 @@ export function ScopeInsightPanel({
   insight,
   heuristicSummary,
 }: ScopeInsightPanelProps) {
-  const router = useRouter();
+  const { pending: refreshing, refresh, settle } = useServerRefresh();
+  useSettleWhenUpdated(refreshing, settle, insight);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [local, setLocal] = useState<ScopeInsight | null>(null);
@@ -61,22 +64,37 @@ export function ScopeInsightPanel({
   async function generate(force = false) {
     setLoading(true);
     setError(null);
-    try {
+    const post = async (preview: boolean) => {
       const res = await fetch("/api/insights/generate", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ scopeKind, scopeId, force }),
+        body: JSON.stringify({ scopeKind, scopeId, force, preview }),
       });
       const data = (await res.json()) as { error?: string; insight?: ScopeInsight };
-      if (!res.ok) {
-        setError(data.error ?? "Failed to generate insight");
-        return;
+      if (!res.ok) throw new Error(data.error ?? "Failed to generate insight");
+      return data.insight;
+    };
+    try {
+      try {
+        const preview = await post(true);
+        if (preview) setLocal(preview);
+      } catch {
+        // Preview is optional; the full brief below is the saved result.
       }
-      if (data.insight) setLocal(data.insight);
+      const insight = await post(false);
+      if (insight) setLocal(insight);
       toast.success(`${kindLabel} insights ready`);
-      router.refresh();
-    } catch {
-      setError("Unable to reach the server");
+      if (insight?.jobId) {
+        const jobId = insight.jobId;
+        void pollAiGeneration(jobId).then((result) => {
+          if (result.status === "saved") refresh();
+          else setError("The brief above is on screen. Its background save has not finished yet.");
+        });
+      } else {
+        refresh();
+      }
+    } catch (caught: unknown) {
+      setError(caught instanceof Error ? caught.message : "Unable to reach the server");
     } finally {
       setLoading(false);
     }
@@ -141,6 +159,10 @@ export function ScopeInsightPanel({
             title="Analysing customer feedback…"
             detail={`Preparing a model interpretation for ${title} (${locationCount} location${locationCount === 1 ? "" : "s"}). The summary above stays until the new one is ready.`}
           />
+        </div>
+      ) : refreshing ? (
+        <div className="mt-3">
+          <ActivityStatus title={ACTION_STATUS.applying.title} detail={ACTION_STATUS.applying.detail} />
         </div>
       ) : null}
 

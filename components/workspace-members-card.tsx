@@ -79,7 +79,7 @@ export function WorkspaceMembersCard({
   const canInvite = allows(currentRole, "manage_people") || currentRole === "admin";
   const isOwner = allows(currentRole, "manage_people");
   const [email, setEmail] = useState("");
-  const [role, setRole] = useState<string>("agent");
+  const [role, setRole] = useState<string>("member");
   const [scopeId, setScopeId] = useState("organization");
   const [inviting, setInviting] = useState(false);
   const [busyId, setBusyId] = useState<string | null>(null);
@@ -463,15 +463,15 @@ export function WorkspaceMembersCard({
           </form>
         ) : (
           <p className="text-xs text-slate">
-            An organization admin can invite people and change roles.
+            An owner or admin can invite people and change roles.
           </p>
         )}
 
         <div className="rounded-xl bg-paper px-4 py-3 text-xs leading-relaxed text-graphite">
-          <span className="font-semibold text-graphite">Owner</span> manages everyone.{" "}
-          <span className="font-semibold text-graphite">Admins</span> approve replies and manage
-          members. <span className="font-semibold text-graphite">Members</span> draft replies and
-          publish approved ones.
+          <span className="font-semibold text-graphite">Owner</span> runs the organisation and is not reassigned here.{" "}
+          <span className="font-semibold text-graphite">Admin</span> manages people across the whole organisation.{" "}
+          <span className="font-semibold text-graphite">Managers</span> cover one brand, one group, or one location.{" "}
+          <span className="font-semibold text-graphite">Members</span> draft replies.
         </div>
 
         {error ? (

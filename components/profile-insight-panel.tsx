@@ -19,6 +19,9 @@ import {
 } from "lucide-react";
 import { ActivityStatus } from "@/components/activity-status";
 import { Button } from "@/components/ui/button";
+import { useServerRefresh, useSettleWhenUpdated } from "@/hooks/use-server-refresh";
+import { pollAiGeneration } from "@/lib/ai-generation-client";
+import { ACTION_STATUS } from "@/lib/ui-status";
 import type { ProfileRow } from "@/lib/services/dashboard";
 import { locationPlaceLabel } from "@/lib/ui/location-place";
 import type {
@@ -225,6 +228,8 @@ export function ProfileInsightPanel({
   heuristicSummary,
 }: ProfileInsightPanelProps) {
   const router = useRouter();
+  const { pending: refreshing, refresh, settle } = useServerRefresh();
+  useSettleWhenUpdated(refreshing, settle, insight);
   const pathname = usePathname();
   const searchParams = useSearchParams();
   const [loading, setLoading] = useState(false);
@@ -255,22 +260,37 @@ export function ProfileInsightPanel({
   async function generate(force = false) {
     setLoading(true);
     setError(null);
-    try {
+    const post = async (preview: boolean) => {
       const res = await fetch("/api/insights/generate", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ locationId: profile.id, force }),
+        body: JSON.stringify({ locationId: profile.id, force, preview }),
       });
       const data = (await res.json()) as { error?: string; insight?: LocationInsight };
-      if (!res.ok) {
-        setError(data.error ?? "Failed to generate insight");
-        return;
+      if (!res.ok) throw new Error(data.error ?? "Failed to generate insight");
+      return data.insight;
+    };
+    try {
+      try {
+        const preview = await post(true);
+        if (preview) setLocal(preview);
+      } catch {
+        // Preview is optional; the full brief below is the saved result.
       }
-      if (data.insight) setLocal(data.insight);
+      const insight = await post(false);
+      if (insight) setLocal(insight);
       toast.success("Profile insights ready");
-      router.refresh();
-    } catch {
-      setError("Unable to reach the server");
+      if (insight?.jobId) {
+        const jobId = insight.jobId;
+        void pollAiGeneration(jobId).then((result) => {
+          if (result.status === "saved") refresh();
+          else setError("The brief above is on screen. Its background save has not finished yet.");
+        });
+      } else {
+        refresh();
+      }
+    } catch (caught: unknown) {
+      setError(caught instanceof Error ? caught.message : "Unable to reach the server");
     } finally {
       setLoading(false);
     }
@@ -373,6 +393,10 @@ export function ProfileInsightPanel({
             title="Analysing customer feedback…"
             detail={`Preparing a model interpretation for ${profile.title}. The summary above stays until the new one is ready.`}
           />
+        </div>
+      ) : refreshing ? (
+        <div className="mt-3">
+          <ActivityStatus title={ACTION_STATUS.applying.title} detail={ACTION_STATUS.applying.detail} />
         </div>
       ) : null}
 

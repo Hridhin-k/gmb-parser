@@ -3,7 +3,9 @@
 import { useMemo, useRef, useState } from "react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { Building2, ChevronDown, MapPin, Search, UsersRound } from "lucide-react";
+import { useFilterNavigation } from "@/components/filter-navigation";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { scopeFilterApply } from "@/lib/filter-apply";
 import {
   choiceMatchesScope,
   filterScopeChoices,
@@ -28,6 +30,7 @@ export function ScopeSelector({ catalog }: { catalog: ScopeCatalog }) {
   const pathname = usePathname();
   const router = useRouter();
   const searchParams = useSearchParams();
+  const { begin } = useFilterNavigation();
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState("");
   const [syncedOpen, setSyncedOpen] = useState(false);
@@ -50,8 +53,9 @@ export function ScopeSelector({ catalog }: { catalog: ScopeCatalog }) {
     const params = new URLSearchParams(searchParams.toString());
     writeScopeParams(params, choice);
     const next = params.toString();
+    const href = next ? `${pathname}?${next}` : pathname;
     setOpen(false);
-    router.push(next ? `${pathname}?${next}` : pathname);
+    begin({ ...scopeFilterApply(choice), href }, () => router.push(href));
   }
 
   function onSearchKeyDown(event: React.KeyboardEvent<HTMLInputElement>) {

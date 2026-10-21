@@ -1,11 +1,13 @@
 "use client";
 
 import Link from "next/link";
-import { useState } from "react";
-import { useRouter } from "next/navigation";
+import { useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
+import { useServerRefresh, useSettleWhenUpdated } from "@/hooks/use-server-refresh";
+import { pollAiGeneration } from "@/lib/ai-generation-client";
 import { FailureBanner, OperationStatus } from "@/components/status-banner";
 import { ChartCard, CHART, HBarChart, SentimentDonut } from "@/components/charts";
+import type { StarCounts } from "@/lib/metrics";
 import { AnalysisGrid } from "@/components/profile-insight-panel";
 import { ACTION_STATUS } from "@/lib/ui-status";
 import type { ComplaintSample } from "@/lib/services/insight-evidence";
@@ -33,7 +35,8 @@ export interface InsightContextFacts {
   positive: number;
   neutral: number;
   negative: number;
-  themes: Array<{ label: string; count: number }>;
+  themes: Array<{ label: string; count: number; stars?: StarCounts }>;
+  stars?: StarCounts;
 }
 
 interface InsightsBoardProps {
@@ -47,6 +50,9 @@ interface InsightsBoardProps {
   saved: SavedInsightView | null;
   modelUnavailable: string | null;
   generate: { locationId: string } | { scopeKind: "client" | "group"; scopeId: string } | null;
+  hideContext?: boolean;
+  /** The unified insight report renders the brief; hide the legacy brief section. */
+  hideBrief?: boolean;
 }
 
 function stars(value: number | null): string {
@@ -65,11 +71,24 @@ function when(value: string): string {
 }
 
 export function InsightsBoard(props: InsightsBoardProps) {
+  const [localSaved, setLocalSaved] = useState<SavedInsightView | null>(null);
+  const saved = localSaved ?? props.saved;
   const themeMax = Math.max(1, ...props.facts.themes.map((theme) => theme.count), 0);
   const threeStar = Math.max(0, props.facts.neutral);
 
+  useEffect(() => {
+    if (!localSaved || !props.saved) return;
+    if (
+      props.saved.summary === localSaved.summary &&
+      props.saved.generatedAt === localSaved.generatedAt
+    ) {
+      setLocalSaved(null);
+    }
+  }, [props.saved, localSaved]);
+
   return (
     <div className="space-y-8">
+      {props.hideContext ? null : (
       <section className="rounded-2xl border border-[#e6ebf2] bg-white p-5">
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div>
@@ -89,7 +108,9 @@ export function InsightsBoard(props: InsightsBoardProps) {
           <Fact label="Reply rate" value={percent(props.facts.replyRate)} href={props.reviewsHref} />
         </dl>
       </section>
+      )}
 
+      {props.hideBrief ? null : (
       <section className="rounded-2xl border border-[#163a7a]/20 bg-[#f4f7fb] p-5">
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div>
@@ -103,13 +124,19 @@ export function InsightsBoard(props: InsightsBoardProps) {
               .
             </p>
           </div>
-          {props.generate ? <GenerateButton target={props.generate} /> : null}
+          {props.generate ? (
+            <GenerateButton
+              target={props.generate}
+              savedAt={props.saved?.generatedAt ?? ""}
+              onGenerated={setLocalSaved}
+            />
+          ) : null}
         </div>
-        {props.modelUnavailable ? (
+        {props.modelUnavailable && !localSaved ? (
           <p className="mt-4 rounded-lg border border-[#e6ebf2] bg-white px-3 py-3 text-sm text-ink" role="status">
             {props.modelUnavailable}
           </p>
-        ) : !props.saved ? (
+        ) : !saved ? (
           <p className="mt-4 text-sm text-ink">
             {props.generate
               ? "No model brief is saved for this scope yet. Generate one to interpret the counted evidence below."
@@ -118,37 +145,37 @@ export function InsightsBoard(props: InsightsBoardProps) {
         ) : (
           <div className="mt-4 space-y-4">
             <p className="text-xs text-[#5c6b82]">
-              Saved {when(props.saved.generatedAt)} from {props.saved.reviewCount.toLocaleString("en-US")} reviews
-              {props.saved.stale
+              Saved {when(saved.generatedAt)} from {saved.reviewCount.toLocaleString("en-US")} reviews
+              {saved.stale
                 ? ". Reviews or the insight lens have changed since then, so regenerate for a current brief."
                 : ". It still matches the reviews and lens used when it was saved."}
             </p>
-            <p className="text-base text-ink">{props.saved.summary}</p>
-            {props.saved.highlights.length > 0 ? (
+            <p className="text-base text-ink">{saved.summary}</p>
+            {saved.highlights.length > 0 ? (
               <div>
                 <p className="text-xs font-semibold uppercase tracking-wide text-[#5c6b82]">What stands out</p>
                 <ul className="mt-1 list-disc space-y-1 pl-5 text-sm text-ink">
-                  {props.saved.highlights.slice(0, 5).map((line) => (
+                  {saved.highlights.slice(0, 5).map((line) => (
                     <li key={line}>{line}</li>
                   ))}
                 </ul>
               </div>
             ) : null}
-            {props.saved.risks.length > 0 ? (
+            {saved.risks.length > 0 ? (
               <div>
                 <p className="text-xs font-semibold uppercase tracking-wide text-[#5c6b82]">Risks to watch</p>
                 <ul className="mt-1 list-disc space-y-1 pl-5 text-sm text-ink">
-                  {props.saved.risks.slice(0, 5).map((line) => (
+                  {saved.risks.slice(0, 5).map((line) => (
                     <li key={line}>{line}</li>
                   ))}
                 </ul>
               </div>
             ) : null}
-            {props.saved.suggestions.length > 0 ? (
+            {saved.suggestions.length > 0 ? (
               <div>
                 <p className="text-xs font-semibold uppercase tracking-wide text-[#5c6b82]">Suggested next moves</p>
                 <ul className="mt-1 space-y-2">
-                  {props.saved.suggestions.slice(0, 4).map((item) => (
+                  {saved.suggestions.slice(0, 4).map((item) => (
                     <li key={item.title} className="text-sm text-ink">
                       <span className="font-medium">{item.title}.</span> {item.why}
                       {item.basedOn ? ` Based on: ${item.basedOn}` : ""}
@@ -157,12 +184,12 @@ export function InsightsBoard(props: InsightsBoardProps) {
                 </ul>
               </div>
             ) : null}
-            {props.saved.analysis ? <AnalysisGrid analysis={props.saved.analysis} /> : null}
-            {props.saved.evidenceLinks.length > 0 ? (
+            {saved.analysis ? <AnalysisGrid analysis={saved.analysis} /> : null}
+            {saved.evidenceLinks.length > 0 ? (
               <div>
                 <p className="text-xs font-semibold uppercase tracking-wide text-[#5c6b82]">Reviews the model cited</p>
                 <ul className="mt-1 flex flex-wrap gap-2">
-                  {props.saved.evidenceLinks.slice(0, 8).map((link) => (
+                  {saved.evidenceLinks.slice(0, 8).map((link) => (
                     <li key={link.id}>
                       <Link href={link.href} className="text-sm text-[#163a7a] underline">
                         {link.label}
@@ -172,10 +199,11 @@ export function InsightsBoard(props: InsightsBoardProps) {
                 </ul>
               </div>
             ) : null}
-            {props.saved.feedback ? <InsightFeedback target={props.saved.feedback} /> : null}
+            {saved.feedback ? <InsightFeedback target={saved.feedback} /> : null}
           </div>
         )}
       </section>
+      )}
 
       <section className="grid gap-4 lg:grid-cols-2">
         <ChartCard
@@ -189,6 +217,7 @@ export function InsightsBoard(props: InsightsBoardProps) {
               positive={props.facts.positive}
               neutral={threeStar}
               negative={props.facts.negative}
+              stars={props.facts.stars}
             />
           )}
         </ChartCard>
@@ -210,6 +239,8 @@ export function InsightsBoard(props: InsightsBoardProps) {
                 label: theme.label,
                 value: theme.count,
                 color: CHART.rose,
+                stars: theme.stars,
+                lines: ["1–3 star reviews with this theme"],
               }))}
             />
           )}
@@ -257,14 +288,59 @@ function Fact({ label, value, href }: { label: string; value: string; href: stri
   );
 }
 
+function insightView(
+  insight: {
+    summary: string;
+    sentimentLabel: string;
+    highlights?: string[];
+    risks?: string[];
+    analysis: ProfileAnalysis;
+    reviewCount: number;
+    generatedAt: string;
+    stale: boolean;
+  },
+  feedback: SavedInsightView["feedback"]
+): SavedInsightView {
+  return {
+    summary: insight.summary,
+    sentimentLabel: insight.sentimentLabel,
+    highlights: insight.highlights ?? [],
+    risks: insight.risks ?? [],
+    suggestions: (insight.analysis?.suggestedFeatures ?? []).map((item) => ({
+      title: item.title,
+      why: item.why,
+      basedOn: item.basedOn,
+    })),
+    analysis: insight.analysis,
+    reviewCount: insight.reviewCount,
+    generatedAt: insight.generatedAt,
+    stale: insight.stale,
+    evidenceLinks: (insight.analysis?.evidenceReviewIds ?? []).map((id, index) => ({
+      id,
+      href: `/reviews?review=${id}`,
+      label: `Evidence ${index + 1}`,
+    })),
+    feedback,
+  };
+}
+
 function GenerateButton({
   target,
+  savedAt,
+  onGenerated,
 }: {
   target: { locationId: string } | { scopeKind: "client" | "group"; scopeId: string };
+  savedAt: string;
+  onGenerated: (view: SavedInsightView) => void;
 }) {
-  const router = useRouter();
+  const { pending: refreshing, refresh, settle } = useServerRefresh();
+  useSettleWhenUpdated(refreshing, settle, savedAt);
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const feedback: SavedInsightView["feedback"] =
+    "locationId" in target
+      ? { insightKind: "location", scopeId: target.locationId }
+      : { insightKind: "scope", scopeId: target.scopeId };
 
   return (
     <div className="space-y-2">
@@ -275,25 +351,50 @@ function GenerateButton({
           if (pending) return;
           setPending(true);
           setError(null);
-          void fetch("/api/insights/generate", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ ...target, force: true }),
-          })
-            .then(async (response) => {
-              const data = (await response.json().catch(() => ({}))) as { error?: string };
+          void (async () => {
+            const post = async (preview: boolean) => {
+              const response = await fetch("/api/insights/generate", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ ...target, force: true, preview }),
+              });
+              const data = (await response.json().catch(() => ({}))) as {
+                error?: string;
+                insight?: Parameters<typeof insightView>[0];
+              };
               if (!response.ok) throw new Error(data.error ?? "Could not generate the brief.");
-              router.refresh();
-            })
-            .catch((caught: unknown) =>
-              setError(caught instanceof Error ? caught.message : "Could not generate the brief.")
-            )
-            .finally(() => setPending(false));
+              return data.insight;
+            };
+            try {
+              try {
+                const preview = await post(true);
+                if (preview) onGenerated(insightView(preview, feedback));
+              } catch {
+                // Preview is optional; the full brief below is the saved result.
+              }
+              const insight = await post(false);
+              if (insight) onGenerated(insightView(insight, feedback));
+              if ((insight as { jobId?: string } | undefined)?.jobId) {
+                const jobId = (insight as { jobId?: string }).jobId!;
+                void pollAiGeneration(jobId).then((result) => {
+                  if (result.status === "saved") refresh();
+                  else setError("The brief above is on screen. Saving it in the background needs another try from the cron or a refresh.");
+                });
+              } else {
+                refresh();
+              }
+            } catch (caught: unknown) {
+              setError(caught instanceof Error ? caught.message : "Could not generate the brief.");
+            } finally {
+              setPending(false);
+            }
+          })();
         }}
       >
         {pending ? ACTION_STATUS.aiInsight.short : "Generate AI brief"}
       </Button>
       {pending ? <OperationStatus copy={ACTION_STATUS.aiInsight} /> : null}
+      {!pending && refreshing ? <OperationStatus copy={ACTION_STATUS.applying} /> : null}
       {error ? <FailureBanner title="Brief unavailable" detail={error} /> : null}
     </div>
   );

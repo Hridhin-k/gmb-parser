@@ -1,4 +1,4 @@
-import { NextResponse } from "next/server";
+import { NextResponse, after } from "next/server";
 import { z } from "zod";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
@@ -7,8 +7,9 @@ import { ScopeInsightService } from "@/lib/services/scope-insights";
 import { AppError } from "@/lib/errors";
 import { logger } from "@/lib/logger";
 import { parseBody } from "@/lib/validation";
-import { checkRateLimit, AI_GENERATE_LIMIT } from "@/lib/rate-limit";
+import { checkRateLimit, AI_GENERATE_LIMIT, WORKSPACE_INSIGHT_LIMIT } from "@/lib/rate-limit";
 import { getMemberAccess, visibleClientIds } from "@/lib/services/access";
+import { persistAiGenerationJob } from "@/lib/services/ai-generation-persist";
 
 const bodySchema = z
   .object({
@@ -16,6 +17,7 @@ const bodySchema = z
     scopeKind: z.enum(["client", "group"]).optional(),
     scopeId: z.string().uuid().optional(),
     force: z.boolean().optional(),
+    preview: z.boolean().optional(),
   })
   .superRefine((value, ctx) => {
     const hasLocation = Boolean(value.locationId);
@@ -94,13 +96,28 @@ export async function POST(request: Request) {
         return NextResponse.json({ error: "Forbidden" }, { status: 403 });
       }
 
+      const workspaceLimit = checkRateLimit(`workspace:${location.workspace_id}`, "insights.generate", WORKSPACE_INSIGHT_LIMIT);
+      if (!workspaceLimit.allowed) {
+        return NextResponse.json({ error: "This workspace has reached its insight limit. Please wait." }, { status: 429 });
+      }
+
       const insight = await LocationInsightService.generateForLocation(
         location.workspace_id,
         body.locationId,
         user.id,
-        { force: body.force === true }
+        {
+          force: body.force === true,
+          preview: body.preview === true,
+          deferPersistence: body.preview !== true,
+        }
       );
-      return NextResponse.json({ success: true, insight });
+      if (insight.jobId) {
+        const jobId = insight.jobId;
+        after(async () => {
+          await persistAiGenerationJob(jobId);
+        });
+      }
+      return NextResponse.json({ success: true, insight, preview: body.preview === true });
     }
 
     const scopeKind = body.scopeKind!;
@@ -150,14 +167,29 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "Forbidden" }, { status: 403 });
     }
 
+    const workspaceLimit = checkRateLimit(`workspace:${workspaceId}`, "insights.generate", WORKSPACE_INSIGHT_LIMIT);
+    if (!workspaceLimit.allowed) {
+      return NextResponse.json({ error: "This workspace has reached its insight limit. Please wait." }, { status: 429 });
+    }
+
     const insight = await ScopeInsightService.generate(
       workspaceId,
       scopeKind,
       scopeId,
       user.id,
-      { force: body.force === true }
+      {
+        force: body.force === true,
+        preview: body.preview === true,
+        deferPersistence: body.preview !== true,
+      }
     );
-    return NextResponse.json({ success: true, insight });
+    if (insight.jobId) {
+      const jobId = insight.jobId;
+      after(async () => {
+        await persistAiGenerationJob(jobId);
+      });
+    }
+    return NextResponse.json({ success: true, insight, preview: body.preview === true });
   } catch (error) {
     if (error instanceof AppError) {
       return NextResponse.json(

@@ -5,8 +5,10 @@ import { deliverMessage } from "@/lib/delivery";
 import { readDeliveryEnv } from "@/lib/reporting";
 import { AppError, ValidationError } from "@/lib/errors";
 import {
+  AUTOMATIC_ASSIGNMENT_REASONS,
   DEFAULT_ESCALATION_POLICY,
   ESCALATION_TIMEZONES,
+  canReassignEscalation,
   escalationReasons,
   nextEscalationLevel,
   planAssignment,
@@ -23,6 +25,7 @@ import {
 import type { Json } from "@/lib/types/supabase";
 import { escalationTiming, scopedGroupIds } from "@/lib/services/hierarchy";
 import { logger } from "@/lib/logger";
+import { normalizeResolutionContact, type ResolutionContact } from "@/lib/resolution-contact";
 
 const REMINDER_ATTEMPT_LIMIT = 5;
 
@@ -35,6 +38,22 @@ function triggerKey(reviewId: string, stars: number, comment: string | null, rea
 
 function addHours(iso: string, hours: number): string {
   return new Date(Date.parse(iso) + hours * 3_600_000).toISOString();
+}
+
+function assignmentNotice(
+  reason: string,
+  ownership: "manager" | "fallback",
+  assigneeRole: string | null,
+  assigned: boolean
+): string {
+  if (!assigned) return "No manager or admin could take this case.";
+  if (reason === "location_manager") return "Assigned to the manager for this location.";
+  if (reason === "group_manager") return "Assigned to the manager for this group.";
+  if (reason === "organisation_manager") return "Assigned to the manager for this organisation.";
+  if (ownership === "fallback" && assigneeRole === "owner") {
+    return "No manager or admin is available. Assigned to the owner.";
+  }
+  return "No manager is available for this location. Assigned to an admin.";
 }
 
 function mapPolicy(row: {
@@ -61,6 +80,59 @@ function mapPolicy(row: {
   };
 }
 
+function missingContactColumn(error: { code?: string; message?: string } | null): boolean {
+  if (!error) return false;
+  return error.code === "42703" || /resolution_phone|resolution_email/.test(error.message ?? "");
+}
+
+export class EscalationContactStore {
+  static async read(workspaceId: string): Promise<ResolutionContact> {
+    const admin = createAdminClient();
+    const { data, error } = await admin
+      .from("grm_escalation_policies")
+      .select("resolution_phone, resolution_email")
+      .eq("workspace_id", workspaceId)
+      .maybeSingle();
+    if (missingContactColumn(error)) return { phone: null, email: null };
+    if (error) throw new AppError("Could not load the resolution contact.", "DB_ERROR", 500);
+    return {
+      phone: data?.resolution_phone ?? null,
+      email: data?.resolution_email ?? null,
+    };
+  }
+
+  static async save(
+    workspaceId: string,
+    userId: string,
+    input: { phone: string; email: string }
+  ): Promise<ResolutionContact> {
+    const contact = normalizeResolutionContact(input);
+    const admin = createAdminClient();
+    const { error } = await admin.from("grm_escalation_policies").upsert(
+      {
+        workspace_id: workspaceId,
+        resolution_phone: contact.phone,
+        resolution_email: contact.email,
+        updated_at: new Date().toISOString(),
+      },
+      { onConflict: "workspace_id" }
+    );
+    if (missingContactColumn(error)) {
+      throw new AppError("Resolution contact is not stored yet. Apply the latest database migration.", "DB_ERROR", 500);
+    }
+    if (error) throw new AppError("Could not save the resolution contact.", "DB_ERROR", 500);
+    await AuditService.log({
+      workspaceId,
+      userId,
+      action: "escalation.contact_updated",
+      entityType: "grm_escalation_policies",
+      entityId: workspaceId,
+      metadata: { hasPhone: Boolean(contact.phone), hasEmail: Boolean(contact.email) },
+    });
+    return contact;
+  }
+}
+
 export interface EscalationQueueItem {
   id: string;
   status: string;
@@ -79,15 +151,20 @@ export interface EscalationQueueItem {
   resolutionNote: string | null;
   triggerReasons: string[];
   reviewId: string;
+  ticketNo: number | null;
   reviewerName: string;
   starRating: number;
   comment: string | null;
   theme: string | null;
   replyStatus: string;
+  replyId: string | null;
+  replyContent: string;
   locationName: string;
   locationId: string;
   clientId: string | null;
-  events: Array<{ action: string; createdAt: string; metadata: Json }>;
+  groupId?: string | null;
+  parentGroupId?: string | null;
+  events: Array<{ action: string; createdAt: string; metadata: Json; body?: string; actorId?: string | null }>;
 }
 
 export class EscalationService {
@@ -306,26 +383,72 @@ export class EscalationService {
     return { created };
   }
 
-  /** Assigns open cases that do not yet have an owner decision. Safe to run again. */
-  static async settleOpenAssignments(workspaceId: string): Promise<number> {
+  /**
+   * Assigns open cases that have no owner yet, and corrects automatic fallbacks
+   * when a manager or an admin should have the case. Manual reassignments are left alone.
+   */
+  static async settleOpenAssignments(workspaceId: string, focusId?: string): Promise<number> {
     const admin = createAdminClient();
-    const pending = await admin
-      .from("grm_escalations")
-      .select("id, location_id")
-      .eq("workspace_id", workspaceId)
-      .is("assignment_decided_at", null)
-      .neq("status", "resolved")
-      .limit(50);
+    const [pending, automatic] = await Promise.all([
+      admin
+        .from("grm_escalations")
+        .select("id, location_id, assignee_user_id")
+        .eq("workspace_id", workspaceId)
+        .is("assignment_decided_at", null)
+        .neq("status", "resolved")
+        .limit(50),
+      admin
+        .from("grm_escalations")
+        .select("id, location_id, assignee_user_id")
+        .eq("workspace_id", workspaceId)
+        .eq("ownership", "fallback")
+        .in("assignment_reason", [...AUTOMATIC_ASSIGNMENT_REASONS])
+        .neq("status", "resolved")
+        .limit(80),
+    ]);
     if (pending.error) {
       if (/assignment_decided_at/i.test(pending.error.message)) return 0;
       throw new AppError("Could not load unassigned escalations.", "DB_ERROR", 500);
     }
-    const rows = pending.data ?? [];
-    if (rows.length === 0) return 0;
-    const context = await this.assignmentContext(workspaceId, rows.map((row) => row.location_id));
+    if (automatic.error && !/assignment_reason|ownership/i.test(automatic.error.message)) {
+      throw new AppError("Could not load automatic assignments.", "DB_ERROR", 500);
+    }
+    const rows = new Map<string, { id: string; location_id: string; assignee_user_id: string | null }>();
+    for (const row of [...(pending.data ?? []), ...(automatic.error ? [] : automatic.data ?? [])]) {
+      rows.set(row.id, row);
+    }
+    if (focusId && !rows.has(focusId)) {
+      const focus = await admin
+        .from("grm_escalations")
+        .select("id, location_id, assignee_user_id, status, ownership, assignment_reason, assignment_decided_at")
+        .eq("workspace_id", workspaceId)
+        .eq("id", focusId)
+        .maybeSingle();
+      const open = focus.data && focus.data.status !== "resolved";
+      const undecided = open && !focus.data?.assignment_decided_at;
+      const automaticFallback =
+        open &&
+        focus.data?.ownership === "fallback" &&
+        AUTOMATIC_ASSIGNMENT_REASONS.includes(focus.data.assignment_reason as (typeof AUTOMATIC_ASSIGNMENT_REASONS)[number]);
+      if (focus.data && (undecided || automaticFallback)) {
+        rows.set(focus.data.id, {
+          id: focus.data.id,
+          location_id: focus.data.location_id,
+          assignee_user_id: focus.data.assignee_user_id,
+        });
+      }
+    }
+    if (rows.size === 0) return 0;
+    const context = await this.assignmentContext(workspaceId, [...rows.values()].map((row) => row.location_id));
     let settled = 0;
-    for (const row of rows) {
-      const applied = await this.applyAssignmentPlan(workspaceId, row.id, context.locations.get(row.location_id) ?? null, context.members);
+    for (const row of rows.values()) {
+      const applied = await this.applyAssignmentPlan(
+        workspaceId,
+        row.id,
+        context.locations.get(row.location_id) ?? null,
+        context.members,
+        row.assignee_user_id
+      );
       if (applied) settled += 1;
     }
     return settled;
@@ -384,12 +507,16 @@ export class EscalationService {
     };
   }
 
-  /** Writes the owner once. A second call sees assignment_decided_at and leaves the case alone. */
+  /**
+   * Writes the owner. A case that already matches this plan is left alone.
+   * A manual reassignment (any reason outside the automatic list) is left alone.
+   */
   private static async applyAssignmentPlan(
     workspaceId: string,
     escalationId: string,
     location: (AssignmentLocation & { managerUserId: string | null }) | null,
-    members: Array<AssignmentMember & { alertEmail: boolean; alertInApp: boolean }>
+    members: Array<AssignmentMember & { alertEmail: boolean; alertInApp: boolean }>,
+    currentAssigneeId: string | null = null
   ): Promise<boolean> {
     const admin = createAdminClient();
     const plan = location
@@ -400,8 +527,10 @@ export class EscalationService {
           ownership: "fallback" as const,
           reason: "manager_missing" as const,
         };
+    if (currentAssigneeId && currentAssigneeId === plan.assigneeId) return false;
     const now = new Date().toISOString();
-    const { data, error } = await admin
+    const assignee = members.find((member) => member.userId === plan.assigneeId);
+    let claim = admin
       .from("grm_escalations")
       .update({
         responsible_user_id: plan.responsibleUserId,
@@ -414,19 +543,21 @@ export class EscalationService {
       })
       .eq("id", escalationId)
       .eq("workspace_id", workspaceId)
-      .is("assignment_decided_at", null)
-      .neq("status", "resolved")
-      .select("id")
-      .maybeSingle();
+      .neq("status", "resolved");
+    claim = currentAssigneeId
+      ? claim.eq("ownership", "fallback").in("assignment_reason", [...AUTOMATIC_ASSIGNMENT_REASONS]).eq("assignee_user_id", currentAssigneeId)
+      : claim.is("assignment_decided_at", null);
+    const { data, error } = await claim.select("id").maybeSingle();
     if (error || !data) return false;
+    const assignedBody = assignmentNotice(plan.reason, plan.ownership, assignee?.role ?? null, Boolean(plan.assigneeId));
     await admin.from("grm_escalation_events").insert({
       workspace_id: workspaceId,
       escalation_id: escalationId,
       kind: "assigned",
-      body: plan.assigneeId ? "Assigned from the location manager rules." : "No owner could be assigned.",
+      body: assignedBody,
       metadata: {
         assigneeId: plan.assigneeId,
-        previousAssigneeId: null,
+        previousAssigneeId: currentAssigneeId,
         responsibleUserId: plan.responsibleUserId,
         ownership: plan.ownership,
         reason: plan.reason,
@@ -439,12 +570,14 @@ export class EscalationService {
         escalation_id: escalationId,
         kind: "fallback",
         body: plan.assigneeId
-          ? "The location manager could not take this case. An administrator owns it until someone reassigns it."
-          : "The location manager could not take this case, and no administrator can see this location.",
+          ? assignee?.role === "owner"
+            ? "No manager or admin can take this case. The owner has it until someone reassigns it."
+            : "No manager covers this location. An admin has it until the owner or an admin reassigns it."
+          : "No manager or admin can take this case.",
         metadata: { reason: plan.reason, assigneeId: plan.assigneeId, responsibleUserId: plan.responsibleUserId },
       });
     }
-    const owner = members.find((member) => member.userId === plan.assigneeId);
+    const owner = assignee;
     if (owner) await this.notifyOwner(workspaceId, escalationId, owner, plan.ownership === "fallback");
     const actor = members.find((member) => member.role === "owner") ?? owner;
     if (actor) {
@@ -469,10 +602,10 @@ export class EscalationService {
     const admin = createAdminClient();
     const user = await admin.auth.admin.getUserById(member.userId).catch(() => null);
     const email = user?.data.user?.email ?? null;
-    const subject = fallback ? "Escalation needs an owner" : "Escalation assigned to you";
+    const subject = "Escalation assigned to you";
     const body = fallback
-      ? "A complaint had no active location manager. You are the fallback owner."
-      : "A complaint was assigned to you from the location manager rules.";
+      ? "A complaint had no available manager. You have it until an owner or admin reassigns it."
+      : "A complaint was assigned to you because you manage this location, group, or organisation.";
     let emailStatus = "not_requested";
     if (member.alertEmail && email) {
       const result = await deliverMessage({
@@ -736,8 +869,11 @@ export class EscalationService {
       if (scopedLocationIds.length === 0) return { items: [], total: 0 };
     }
     let searchReviewIds: string[] | null = null;
+    let ticketNo: number | null = null;
     const needle = input.query?.replace(/[%_,]/g, " ").trim().slice(0, 80) ?? "";
-    if (needle) {
+    const ticketMatch = needle.match(/^(?:esc-)?(\d+)$/i);
+    if (ticketMatch) ticketNo = Number(ticketMatch[1]);
+    if (needle && ticketNo === null) {
       const pattern = `%${needle}%`;
       let textQuery = admin
         .from("grm_reviews")
@@ -779,7 +915,7 @@ export class EscalationService {
     let query = admin
       .from("grm_escalations")
       .select(
-        "id, status, level, assignee_user_id, updated_at, opened_at, due_at, resolved_at, resolution_code, internal_note, trigger_reasons, review_id",
+        "id, status, level, assignee_user_id, updated_at, opened_at, due_at, resolved_at, resolution_code, internal_note, trigger_reasons, review_id, ticket_no",
         { count: "exact" }
       )
       .eq("workspace_id", input.workspaceId);
@@ -790,6 +926,7 @@ export class EscalationService {
       query = query.eq("status", "in_progress").gte("due_at", now);
     } else query = query.eq("status", "needs_human").gte("due_at", now);
     if (scopedLocationIds) query = query.in("location_id", scopedLocationIds);
+    if (ticketNo !== null) query = query.eq("ticket_no", ticketNo);
     if (searchReviewIds) query = query.in("review_id", searchReviewIds);
     if (input.since) query = query.gte("opened_at", input.since);
     if (input.until) query = query.lte("opened_at", input.until);
@@ -826,7 +963,7 @@ export class EscalationService {
     }
     const pageReviewIds = rows.map((row) => row.review_id);
     const escalationIds = rows.map((row) => row.id);
-    const [reviews, events] = await Promise.all([
+    const [reviews, events, replies] = await Promise.all([
       pageReviewIds.length
         ? admin
             .from("grm_reviews")
@@ -841,8 +978,21 @@ export class EscalationService {
             .order("created_at", { ascending: false })
             .limit(200)
         : Promise.resolve({ data: [], error: null }),
+      pageReviewIds.length
+        ? admin
+            .from("grm_review_replies")
+            .select("id, review_id, content, status, created_at")
+            .eq("workspace_id", input.workspaceId)
+            .in("review_id", pageReviewIds)
+            .in("status", ["draft", "approved", "failed"])
+            .order("created_at", { ascending: false })
+        : Promise.resolve({ data: [], error: null }),
     ]);
-    if (reviews.error || events.error) throw new AppError("Could not load escalation details.", "DB_ERROR", 500);
+    if (reviews.error || events.error || replies.error) throw new AppError("Could not load escalation details.", "DB_ERROR", 500);
+    const latestReply = new Map<string, { id: string; content: string }>();
+    for (const reply of replies.data ?? []) {
+      if (!latestReply.has(reply.review_id)) latestReply.set(reply.review_id, { id: reply.id, content: reply.content });
+    }
 
     const locationIds = [...new Set((reviews.data ?? []).map((review) => review.location_id))];
     const locations = locationIds.length
@@ -889,11 +1039,14 @@ export class EscalationService {
         resolutionNote: row.internal_note,
         triggerReasons: row.trigger_reasons,
         reviewId: review.id,
+        ticketNo: row.ticket_no,
         reviewerName: review.reviewer_display_name,
         starRating: review.star_rating,
         comment: review.comment,
         theme: review.complaint_theme,
         replyStatus: review.reply_status,
+        replyId: latestReply.get(review.id)?.id ?? null,
+        replyContent: latestReply.get(review.id)?.content ?? "",
         locationName: location?.location_title ?? "Location",
         locationId: review.location_id,
         clientId: location?.client_id ?? null,
@@ -961,6 +1114,178 @@ export class EscalationService {
     };
   }
 
+  static async get(workspaceId: string, escalationId: string): Promise<EscalationQueueItem | null> {
+    const admin = createAdminClient();
+    const row = await admin
+      .from("grm_escalations")
+      .select(
+        "id, status, level, assignee_user_id, updated_at, opened_at, due_at, resolved_at, resolution_code, internal_note, trigger_reasons, review_id, ticket_no, location_id"
+      )
+      .eq("workspace_id", workspaceId)
+      .eq("id", escalationId)
+      .maybeSingle();
+    if (row.error) throw new AppError("Could not load this case.", "DB_ERROR", 500);
+    if (!row.data) return null;
+    const current = row.data;
+    const [reviewResult, locationResult, events, replyResult, ownerResult] = await Promise.all([
+      admin
+        .from("grm_reviews")
+        .select("id, reviewer_display_name, star_rating, comment, complaint_theme, reply_status")
+        .eq("id", current.review_id)
+        .eq("workspace_id", workspaceId)
+        .maybeSingle(),
+      admin
+        .from("grm_google_locations")
+        .select("id, location_title, client_id, group_id")
+        .eq("id", current.location_id)
+        .eq("workspace_id", workspaceId)
+        .maybeSingle(),
+      admin
+        .from("grm_escalation_events")
+        .select("kind, created_at, metadata, body, actor_id")
+        .eq("workspace_id", workspaceId)
+        .eq("escalation_id", escalationId)
+        .order("created_at", { ascending: true })
+        .limit(100),
+      admin
+        .from("grm_review_replies")
+        .select("id, content, status, created_at")
+        .eq("workspace_id", workspaceId)
+        .eq("review_id", current.review_id)
+        .in("status", ["draft", "approved", "failed"])
+        .order("created_at", { ascending: false })
+        .limit(1)
+        .maybeSingle(),
+      admin
+        .from("grm_escalations")
+        .select("responsible_user_id, ownership, assignment_reason")
+        .eq("id", escalationId)
+        .maybeSingle(),
+    ]);
+    if (reviewResult.error || locationResult.error || events.error || replyResult.error || !reviewResult.data) {
+      throw new AppError("Could not load this case.", "DB_ERROR", 500);
+    }
+    const location = locationResult.data;
+    const [clientName, groupName] = await Promise.all([
+      location?.client_id
+        ? admin.from("grm_clients").select("name").eq("id", location.client_id).maybeSingle()
+        : Promise.resolve({ data: null, error: null }),
+      location?.group_id
+        ? admin.from("grm_groups").select("name, parent_id").eq("id", location.group_id).maybeSingle()
+        : Promise.resolve({ data: null, error: null }),
+    ]);
+    const reply = replyResult.data;
+    const owner = ownerResult.error ? null : ownerResult.data;
+    return {
+      id: current.id,
+      status: current.status,
+      level: current.level,
+      assignedTo: current.assignee_user_id,
+      responsibleUserId: owner?.responsible_user_id ?? null,
+      ownership: owner?.ownership === "manager" ? "manager" : owner?.ownership === "fallback" ? "fallback" : "",
+      assignmentReason: owner?.assignment_reason ?? null,
+      updatedAt: current.updated_at,
+      clientName: clientName.data?.name ?? null,
+      groupName: groupName.data?.name ?? null,
+      openedAt: current.opened_at,
+      dueAt: current.due_at,
+      resolvedAt: current.resolved_at,
+      resolutionCode: current.resolution_code,
+      resolutionNote: current.internal_note,
+      triggerReasons: current.trigger_reasons,
+      reviewId: reviewResult.data.id,
+      ticketNo: current.ticket_no,
+      reviewerName: reviewResult.data.reviewer_display_name || "No name stored",
+      starRating: reviewResult.data.star_rating,
+      comment: reviewResult.data.comment,
+      theme: reviewResult.data.complaint_theme,
+      replyStatus: reviewResult.data.reply_status,
+      replyId: reply?.id ?? null,
+      replyContent: reply?.content ?? "",
+      locationName: location?.location_title ?? "Location",
+      locationId: current.location_id,
+      clientId: location?.client_id ?? null,
+      groupId: location?.group_id ?? null,
+      parentGroupId: groupName.data?.parent_id ?? null,
+      events: (events.data ?? []).map((event) => ({
+        action: event.kind,
+        createdAt: event.created_at,
+        metadata: event.metadata,
+        body: event.body,
+        actorId: event.actor_id,
+      })),
+    };
+  }
+
+  static async start(input: { workspaceId: string; escalationId: string; actorId: string }): Promise<void> {
+    const admin = createAdminClient();
+    const now = new Date().toISOString();
+    const { data, error } = await admin
+      .from("grm_escalations")
+      .update({ status: "in_progress", updated_at: now })
+      .eq("id", input.escalationId)
+      .eq("workspace_id", input.workspaceId)
+      .eq("status", "needs_human")
+      .select("id")
+      .maybeSingle();
+    if (error || !data) throw new ValidationError("This case is already in progress or resolved.");
+    await admin.from("grm_escalation_events").insert({
+      workspace_id: input.workspaceId,
+      escalation_id: input.escalationId,
+      actor_id: input.actorId,
+      kind: "status_changed",
+      body: "Status set to in progress.",
+      metadata: { status: "in_progress" },
+    });
+    await AuditService.log({
+      workspaceId: input.workspaceId,
+      userId: input.actorId,
+      action: "escalation.started",
+      entityType: "grm_escalations",
+      entityId: input.escalationId,
+    });
+  }
+
+  static async comment(input: {
+    workspaceId: string;
+    escalationId: string;
+    actorId: string;
+    body: string;
+  }): Promise<void> {
+    const body = input.body.trim();
+    if (body.length < 1 || body.length > 2000) throw new ValidationError("Write a comment of 2,000 characters or fewer.");
+    const admin = createAdminClient();
+    const current = await admin
+      .from("grm_escalations")
+      .select("id")
+      .eq("id", input.escalationId)
+      .eq("workspace_id", input.workspaceId)
+      .maybeSingle();
+    if (current.error || !current.data) throw new AppError("That case is not in this organization.", "NOT_FOUND", 404);
+    const now = new Date().toISOString();
+    const { error } = await admin.from("grm_escalation_events").insert({
+      workspace_id: input.workspaceId,
+      escalation_id: input.escalationId,
+      actor_id: input.actorId,
+      kind: "comment",
+      body,
+      metadata: {},
+    });
+    if (error) throw new AppError("Could not save the comment.", "DB_ERROR", 500);
+    await admin
+      .from("grm_escalations")
+      .update({ updated_at: now })
+      .eq("id", input.escalationId)
+      .eq("workspace_id", input.workspaceId);
+    await AuditService.log({
+      workspaceId: input.workspaceId,
+      userId: input.actorId,
+      action: "escalation.commented",
+      entityType: "grm_escalations",
+      entityId: input.escalationId,
+    });
+  }
+
   static async assign(input: {
     workspaceId: string;
     escalationId: string;
@@ -982,9 +1307,10 @@ export class EscalationService {
     const context = await this.assignmentContext(input.workspaceId, [current.data.location_id]);
     const location = context.locations.get(current.data.location_id);
     if (!location) throw new ValidationError("That location is not in this workspace.");
+    const actor = context.members.find((member) => member.userId === input.actorId) ?? null;
     const target = context.members.find((member) => member.userId === input.assigneeId) ?? null;
     const problem = reassignmentError({
-      actorCanAssign: true,
+      actorCanAssign: canReassignEscalation(actor?.role),
       target,
       location,
       reason: input.reason,

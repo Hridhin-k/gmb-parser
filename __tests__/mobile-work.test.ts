@@ -26,13 +26,12 @@ describe("mobile work", () => {
     const brief = weekBrief({
       facts: { ...EMPTY_FACTS, reviews: 4, ratingSum: 16, replied: 2, oneToThree: 1 },
       previous: { ...EMPTY_FACTS, reviews: 2, ratingSum: 10 },
-      replyTarget: null,
       scopeLabel: "all clients in this view",
     });
     expect(brief).toContain("Last 7 days");
     expect(brief).toContain("4 reviews");
     expect(brief).not.toMatch(/Kochi|billing/i);
-    expect(brief).toContain("No reply target is saved.");
+    expect(brief).toContain("Reply rate is 50%.");
   });
 
   it("compares a period only when the previous one has reviews", () => {

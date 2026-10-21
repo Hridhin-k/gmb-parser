@@ -295,7 +295,13 @@ function ReportForm(props: {
   const [scope, setScope] = useState(initialScope);
   const [scopeId, setScopeId] = useState(props.report?.locationId ?? props.report?.groupId ?? props.report?.clientId ?? "");
   const [frequency, setFrequency] = useState(props.report?.frequency ?? "weekly");
-  const [sections, setSections] = useState<string[]>(props.report?.sections ?? ["scorecard", "trends", "leaderboard", "themes"]);
+  const [sections, setSections] = useState<string[]>(() => {
+    const allowed = new Set<string>(REPORT_SECTIONS.map((section) => section.id));
+    const saved = (props.report?.sections ?? ["scorecard", "trends", "leaderboard", "themes"]).filter((id) =>
+      allowed.has(id)
+    );
+    return saved.length > 0 ? saved : ["scorecard"];
+  });
   const [recipients, setRecipients] = useState<string[]>(props.report?.recipients ?? []);
   const [channels, setChannels] = useState<string[]>(
     (props.report?.channels ?? ["in_app"]).filter(
@@ -381,7 +387,6 @@ function ReportForm(props: {
             </label>
           ))}
         </div>
-        <p className="mt-1 text-xs text-slate">Competitor comparison says ratings are not connected. It does not estimate them.</p>
       </fieldset>
       <div className="grid gap-3 sm:grid-cols-3">
         <label className="text-xs text-slate">

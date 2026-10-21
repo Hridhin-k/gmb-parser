@@ -38,7 +38,7 @@ export default async function TeamPage({
     <div className="space-y-6">
       <PageHeader
         title="Team and roles"
-        description="Invite people, set what they can see, and turn access on or off. Permissions are checked on the server."
+        description="Owner, admin, managers, and members. A manager is limited to one brand, one group, or one location."
       >
         <Link
           href="/audit"

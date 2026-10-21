@@ -1,14 +1,15 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { createClient } from "@/lib/supabase/server";
-import { createAdminClient } from "@/lib/supabase/admin";
+import { EscalationContactStore } from "@/lib/services/escalations";
 import { ensurePersonalWorkspace } from "@/lib/services/workspace";
 import { assertScoped } from "@/lib/services/access";
 import { toStatusCode, toUserMessage } from "@/lib/errors";
 import { parseBody } from "@/lib/validation";
 
 const schema = z.object({
-  target: z.number().int().min(1).max(100).nullable(),
+  phone: z.string().trim().max(40),
+  email: z.string().trim().max(320),
 });
 
 export async function POST(request: Request) {
@@ -33,14 +34,8 @@ export async function POST(request: Request) {
       permission: "edit_rules",
       target: { kind: "workspace" },
     });
-    const admin = createAdminClient();
-    const { error } = await admin.from("grm_escalation_policies").upsert({
-      workspace_id: membership.workspace_id,
-      reply_rate_target: body.target === null ? null : body.target / 100,
-      updated_at: new Date().toISOString(),
-    });
-    if (error) return NextResponse.json({ error: "Could not save the reply target." }, { status: 500 });
-    return NextResponse.json({ ok: true });
+    const contact = await EscalationContactStore.save(membership.workspace_id, user.id, body);
+    return NextResponse.json({ ok: true, phone: contact.phone, email: contact.email });
   } catch (error) {
     return NextResponse.json({ error: toUserMessage(error) }, { status: toStatusCode(error) });
   }

@@ -7,6 +7,7 @@ import type { GrmMemberRole } from "@/lib/types";
 import { allows, canAssignRole, roleScopeError, type ScopeIds } from "@/lib/access";
 import { canManageMember } from "@/lib/roles";
 import { assertScopeAssignment, getMemberAccess } from "@/lib/services/access";
+import { loadAuthProfiles } from "@/lib/services/auth-profiles";
 
 const WORKSPACE_SLUG = /^[a-z0-9][a-z0-9-]{0,61}[a-z0-9]$/;
 
@@ -968,29 +969,24 @@ export async function getWorkspaceRoster(workspaceId: string): Promise<{
       };
     });
 
-  const members = await Promise.all(
-    memberRows.map(async (member) => {
-      const { data } = await admin.auth.admin.getUserById(member.user_id);
-      const authUser = data.user as { email?: string | null; last_sign_in_at?: string | null; factors?: Array<{ status?: string }> } | undefined;
-      const factors = authUser?.factors;
-      const twoStep =
-        factors === undefined ? "unavailable" : factors.some((factor) => factor.status === "verified") ? "on" : "off";
-      const scope = scopeOf(member);
-      return {
-        userId: member.user_id,
-        email: authUser?.email ?? "Unknown email",
-        role: member.role,
-        joinedAt: member.joined_at,
-        accessEnabled: member.access_enabled,
-        scope,
-        scopeLabel: scopeLabel(scope),
-        alertEmail: member.alert_email,
-        alertInApp: member.alert_in_app,
-        twoStep: twoStep as "on" | "off" | "unavailable",
-        lastActive: authUser?.last_sign_in_at ?? null,
-      };
-    })
-  );
+  const profiles = await loadAuthProfiles(memberRows.map((member) => member.user_id));
+  const members = memberRows.map((member) => {
+    const profile = profiles.get(member.user_id);
+    const scope = scopeOf(member);
+    return {
+      userId: member.user_id,
+      email: profile?.email ?? "Unknown email",
+      role: member.role,
+      joinedAt: member.joined_at,
+      accessEnabled: member.access_enabled,
+      scope,
+      scopeLabel: scopeLabel(scope),
+      alertEmail: member.alert_email,
+      alertInApp: member.alert_in_app,
+      twoStep: profile?.twoStep ?? ("unavailable" as const),
+      lastActive: profile?.lastActive ?? null,
+    };
+  });
 
   return { name: workspace.name, members, invites };
 }
@@ -1007,9 +1003,9 @@ export function canApproveReplies(role: string | null | undefined): boolean {
   return allows(role, "approve_negative");
 }
 
-/** Profile and review sync use the workspace Google connection. Only the owner may start them. */
+/** Profile and review sync use the workspace Google connection. The owner and an admin may start them. */
 export function canSyncWorkspace(role: string | null | undefined): boolean {
-  return role === "owner";
+  return role === "owner" || role === "org_admin" || role === "admin";
 }
 
 export async function assertCanSyncWorkspace(
@@ -1018,7 +1014,7 @@ export async function assertCanSyncWorkspace(
 ): Promise<void> {
   const role = await getMemberRole(userId, workspaceId);
   if (!canSyncWorkspace(role)) {
-    throw new AuthorizationError("Only the workspace owner can sync Google profiles and reviews.");
+    throw new AuthorizationError("Only the workspace owner or an admin can sync Google profiles and reviews.");
   }
 }
 

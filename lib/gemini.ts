@@ -3,11 +3,24 @@ import { logger } from "@/lib/logger";
 /** Replacement for gemini-2.0-flash, which Google shut down on 1 June 2026. */
 export const GEMINI_MODEL_ID = "gemini-3.8-flash";
 
-const GENERATE_CONTENT_URL =
-  `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL_ID}:generateContent`;
+/** Fast model for simple drafts and quick insight previews. Complex work stays on GEMINI_MODEL_ID. */
+export const GEMINI_FAST_MODEL_ID = "gemini-3.5-flash-lite";
 
-export function geminiGenerateUrl(apiKey: string): string {
-  return `${GENERATE_CONTENT_URL}?key=${apiKey}`;
+/**
+ * Text embeddings. 768 matches grm_review_embeddings and is one of the
+ * documented sizes. gemini-embedding-2 can collapse several inputs into one
+ * vector, so each review is a separate embedContent call on this model.
+ * Published text price is $0.15 per 1M input tokens.
+ */
+export const GEMINI_EMBEDDING_MODEL_ID = "gemini-embedding-001";
+export const EMBEDDING_DIMENSIONS = 768;
+
+export function geminiEmbedUrl(apiKey: string, modelId: string = GEMINI_EMBEDDING_MODEL_ID): string {
+  return `https://generativelanguage.googleapis.com/v1beta/models/${modelId}:embedContent?key=${apiKey}`;
+}
+
+export function geminiGenerateUrl(apiKey: string, modelId: string = GEMINI_MODEL_ID): string {
+  return `https://generativelanguage.googleapis.com/v1beta/models/${modelId}:generateContent?key=${apiKey}`;
 }
 
 /**
@@ -16,6 +29,9 @@ export function geminiGenerateUrl(apiKey: string): string {
  * This model rejects "minimal".
  */
 export const GEMINI_THINKING_LOW = { thinkingLevel: "low" } as const;
+
+/** Shortest reasoning pass Flash-Lite offers; used only on the fast route. */
+export const GEMINI_THINKING_MINIMAL = { thinkingLevel: "minimal" } as const;
 
 export interface GeminiCandidateText {
   text: string;

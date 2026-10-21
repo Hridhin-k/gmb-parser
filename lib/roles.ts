@@ -2,16 +2,14 @@ import { roleLabel as labelForRole } from "@/lib/access";
 
 /**
  * Whether `actorRole` may change or remove someone holding `targetRole`.
- * The organization owner cannot be changed. Organization admins manage everyone else.
- * A legacy admin manages members only.
+ * The owner cannot be changed. An admin manages admins, managers, and members.
  */
 export function canManageMember(
   actorRole: string | null | undefined,
   targetRole: string
 ): boolean {
   if (targetRole === "owner") return false;
-  if (actorRole === "owner" || actorRole === "org_admin") return true;
-  if (actorRole === "admin") return targetRole === "member";
+  if (actorRole === "owner" || actorRole === "org_admin" || actorRole === "admin") return true;
   return false;
 }
 

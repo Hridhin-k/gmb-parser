@@ -1,7 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
-import { useRouter } from "next/navigation";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import {
@@ -20,6 +19,8 @@ import { ReviewDetailPanel } from "@/components/review-detail-panel";
 import { SelectField } from "@/components/ui/select-field";
 import { Spinner } from "@/components/ui/spinner";
 import { languageLabel, themeLabel, workflowState } from "@/lib/review-inbox";
+import { useServerRefresh, useSettleWhenUpdated } from "@/hooks/use-server-refresh";
+import { ACTION_STATUS } from "@/lib/ui-status";
 
 interface ReviewItem {
   id: string;
@@ -121,16 +122,88 @@ function ReplyStatusPill({ status, source }: { status: string; source?: string }
   );
 }
 
+type ReplyPatch = { status: string; reply: ReplyItem | null };
+
 export function ReviewList({ reviews, replies, canApprove, members = [] }: ReviewListProps) {
-  const router = useRouter();
+  const { pending: refreshing, refresh, settle } = useServerRefresh();
+  useSettleWhenUpdated(refreshing, settle, reviews);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [checked, setChecked] = useState<Record<string, boolean>>({});
   const [bulkLoading, setBulkLoading] = useState<BulkAction | null>(null);
   const [bulkError, setBulkError] = useState<string | null>(null);
   const [assigneeId, setAssigneeId] = useState("");
+  const [patches, setPatches] = useState<Record<string, ReplyPatch>>({});
+  const [inboxRevision, setInboxRevision] = useState(0);
+  const serverReviews = useRef(reviews);
 
-  const selectedReview = reviews.find((r) => r.id === selectedId) ?? null;
-  const selectedReply = selectedId ? (replies[selectedId] ?? null) : null;
+  useEffect(() => {
+    if (serverReviews.current === reviews) return;
+    serverReviews.current = reviews;
+    setInboxRevision((revision) => revision + 1);
+  }, [reviews]);
+
+  const viewReviews = useMemo(
+    () =>
+      reviews.map((review) => {
+        const patch = patches[review.id];
+        return patch ? { ...review, reply_status: patch.status } : review;
+      }),
+    [reviews, patches]
+  );
+  const viewReplies = useMemo(() => {
+    const next = { ...replies };
+    for (const [id, patch] of Object.entries(patches)) {
+      if (patch.reply) next[id] = patch.reply;
+      else delete next[id];
+    }
+    return next;
+  }, [replies, patches]);
+
+  const selectedReview = viewReviews.find((r) => r.id === selectedId) ?? null;
+  const selectedReply = selectedId ? (viewReplies[selectedId] ?? null) : null;
+
+  // Keep the open review mounted from its last known copy when a refresh drops
+  // it from the filtered list — a fresh draft leaves "Needs reply", and the
+  // modal must stay open so the user can approve or publish next.
+  const lastSelectedRef = useRef<{ review: ReviewItem; reply: ReplyItem | null } | null>(null);
+  useEffect(() => {
+    if (!selectedId) {
+      lastSelectedRef.current = null;
+      return;
+    }
+    if (selectedReview) {
+      lastSelectedRef.current = { review: selectedReview, reply: selectedReply };
+    }
+  }, [selectedId, selectedReview, selectedReply]);
+
+  const panelReview =
+    selectedReview ??
+    (selectedId && lastSelectedRef.current?.review.id === selectedId
+      ? lastSelectedRef.current.review
+      : null);
+  const panelReply = selectedId
+    ? (viewReplies[selectedId] ?? lastSelectedRef.current?.reply ?? null)
+    : null;
+
+  useEffect(() => {
+    setPatches((current) => {
+      let changed = false;
+      const next = { ...current };
+      for (const [id, patch] of Object.entries(current)) {
+        const server = reviews.find((review) => review.id === id);
+        const serverReply = replies[id];
+        const statusOk = server?.reply_status === patch.status;
+        const replyOk = patch.reply
+          ? serverReply?.id === patch.reply.id && serverReply.content === patch.reply.content
+          : !serverReply;
+        if (statusOk && replyOk) {
+          delete next[id];
+          changed = true;
+        }
+      }
+      return changed ? next : current;
+    });
+  }, [reviews, replies]);
 
   useEffect(() => {
     if (!selectedId) return;
@@ -147,11 +220,11 @@ export function ReviewList({ reviews, replies, canApprove, members = [] }: Revie
   );
 
   const allChecked =
-    reviews.length > 0 && reviews.every((r) => checked[r.id]);
+    viewReviews.length > 0 && viewReviews.every((r) => checked[r.id]);
 
   function toggleAll(next: boolean) {
     const nextMap: Record<string, boolean> = {};
-    for (const r of reviews) nextMap[r.id] = next;
+    for (const r of viewReviews) nextMap[r.id] = next;
     setChecked(nextMap);
   }
 
@@ -169,7 +242,13 @@ export function ReviewList({ reviews, replies, canApprove, members = [] }: Revie
         error?: string;
         succeeded?: number;
         failed?: number;
-        results?: Array<{ ok: boolean; error?: string }>;
+        results?: Array<{
+          reviewId?: string;
+          ok: boolean;
+          error?: string;
+          replyId?: string;
+          content?: string;
+        }>;
       };
       if (!response.ok) {
         setBulkError(data.error ?? "Bulk action failed");
@@ -192,8 +271,57 @@ export function ReviewList({ reviews, replies, canApprove, members = [] }: Revie
       } else {
         toast.success(`${ok} review${ok === 1 ? "" : "s"} ${verb}`);
       }
+      const failedIds = new Set(
+        (data.results ?? []).filter((item) => !item.ok && item.reviewId).map((item) => item.reviewId as string)
+      );
+      if (action === "generate") {
+        const drafted: Record<string, ReplyPatch> = {};
+        for (const item of data.results ?? []) {
+          if (!item.ok || !item.reviewId || !item.replyId || !item.content) continue;
+          drafted[item.reviewId] = {
+            status: "draft",
+            reply: {
+              id: item.replyId,
+              content: item.content,
+              source: "ai",
+              status: "draft",
+              created_at: new Date().toISOString(),
+              approved_at: null,
+              published_at: null,
+              last_error: null,
+              failure_count: 0,
+            },
+          };
+        }
+        if (Object.keys(drafted).length > 0) {
+          setPatches((prev) => ({ ...prev, ...drafted }));
+        }
+      } else if (action === "approve" || action === "publish" || action === "discard") {
+        const status = action === "approve" ? "approved" : action === "publish" ? "published" : "none";
+        setPatches((prev) => {
+          const next = { ...prev };
+          for (const id of selectedIds) {
+            if (failedIds.has(id)) continue;
+            const existing = prev[id]?.reply ?? replies[id] ?? null;
+            if (status === "none") {
+              next[id] = { status, reply: null };
+            } else if (existing) {
+              next[id] = {
+                status,
+                reply: {
+                  ...existing,
+                  status,
+                  approved_at: status === "approved" ? new Date().toISOString() : existing.approved_at,
+                  published_at: status === "published" ? new Date().toISOString() : existing.published_at,
+                },
+              };
+            }
+          }
+          return next;
+        });
+      }
       setChecked({});
-      router.refresh();
+      refresh();
     } catch {
       setBulkError("Unable to run bulk action");
     } finally {
@@ -295,7 +423,12 @@ export function ReviewList({ reviews, replies, canApprove, members = [] }: Revie
         <ActivityStatus
           tone="gemini"
           title="Generating AI replies…"
-          detail="Drafting selected replies using your organisation's saved guidelines. Nothing is posted to Google until someone approves."
+          detail={`Drafting ${selectedIds.length} selected ${selectedIds.length === 1 ? "reply" : "replies"} one at a time, using your organisation's saved guidelines. Nothing is posted to Google until someone approves.`}
+        />
+      ) : refreshing ? (
+        <ActivityStatus
+          title={ACTION_STATUS.applying.title}
+          detail="New drafts are already on the cards. The saved inbox is catching up."
         />
       ) : null}
       {bulkLoading === "approve" ? (
@@ -329,9 +462,9 @@ export function ReviewList({ reviews, replies, canApprove, members = [] }: Revie
         role="list"
         aria-label="Reviews"
       >
-        {reviews.map((review) => {
+        {viewReviews.map((review) => {
           const isActive = review.id === selectedId;
-          const reply = replies[review.id];
+          const reply = viewReplies[review.id];
           const hasGoogleReply = !!review.google_reply_comment;
           const name = review.reviewer_is_anonymous
             ? "Anonymous"
@@ -455,7 +588,7 @@ export function ReviewList({ reviews, replies, canApprove, members = [] }: Revie
         })}
       </div>
 
-      {selectedReview && (
+      {panelReview && (
         <div
           className="fixed inset-0 z-50 flex items-stretch justify-center bg-graphite/45 sm:items-center sm:p-6"
           role="presentation"
@@ -464,16 +597,23 @@ export function ReviewList({ reviews, replies, canApprove, members = [] }: Revie
           <div
             role="dialog"
             aria-modal="true"
-            aria-label={`Review by ${selectedReview.reviewer_display_name || "reviewer"}`}
+            aria-label={`Review by ${panelReview.reviewer_display_name || "reviewer"}`}
             className="flex h-dvh w-full max-w-2xl flex-col overflow-hidden bg-white sm:h-[min(92dvh,860px)] sm:rounded-xl sm:border sm:border-silver"
             onClick={(event) => event.stopPropagation()}
           >
             <ReviewDetailPanel
-              review={selectedReview}
-              reply={selectedReply}
+              review={panelReview}
+              reply={panelReply}
               canApprove={canApprove}
               members={members}
               onClose={() => setSelectedId(null)}
+              inboxRevision={inboxRevision}
+              onDraft={(reviewId, next) => {
+                setPatches((prev) => ({
+                  ...prev,
+                  [reviewId]: { status: "draft", reply: next },
+                }));
+              }}
             />
           </div>
         </div>

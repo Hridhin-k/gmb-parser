@@ -48,7 +48,6 @@ describe("buildOverviewBoard", () => {
         { locationId: "b", theme: "staff", count: 2 },
       ],
       themesTruncated: false,
-      replyTarget: 0.9,
       links,
       attention: [],
     });
@@ -59,7 +58,6 @@ describe("buildOverviewBoard", () => {
     expect(board.worst?.complaint).toBe("Staff");
     expect(board.worst?.href).toBe("/overview?location=b");
     expect(board.lowest.map((row) => row.id)).toEqual(["b", "a"]);
-    expect(board.kpis.replyTarget).toBe(0.9);
   });
 
   it("hides outlet ranking when the scope is a single outlet", () => {
@@ -75,7 +73,6 @@ describe("buildOverviewBoard", () => {
       places: [places[0]!],
       themes: [],
       themesTruncated: false,
-      replyTarget: null,
       links,
       attention: [],
     });
@@ -104,7 +101,6 @@ describe("buildOverviewBoard", () => {
       places,
       themes: [],
       themesTruncated: false,
-      replyTarget: null,
       links,
       attention: [],
     });
@@ -117,7 +113,6 @@ describe("buildOverviewBoard", () => {
       places,
       themes: [],
       themesTruncated: false,
-      replyTarget: null,
       links,
       attention: [],
     });
@@ -135,7 +130,6 @@ describe("buildOverviewBoard", () => {
       places,
       themes: [],
       themesTruncated: false,
-      replyTarget: null,
       links,
       attention: [],
     });
@@ -159,7 +153,6 @@ describe("buildOverviewBoard", () => {
       places: [places[0]!],
       themes: [],
       themesTruncated: false,
-      replyTarget: null,
       links,
       attention: [],
     });

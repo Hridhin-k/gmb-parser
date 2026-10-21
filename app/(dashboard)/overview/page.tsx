@@ -130,7 +130,6 @@ export default async function OverviewPage({ searchParams }: OverviewPageProps) 
     places: boardPlaces,
     themes: signals.themes,
     themesTruncated: signals.themesTruncated,
-    replyTarget: loaded.replyTarget,
     links: {
       reviews,
       escalations,
@@ -162,11 +161,6 @@ export default async function OverviewPage({ searchParams }: OverviewPageProps) 
           title="Overview"
           description={[summary.eyebrow, summary.title, summary.trail].filter(Boolean).join(" · ")}
         >
-          {isManager(role) ? (
-            <a href="#reply-target" className="inline-flex h-9 items-center rounded-full border border-[#e6ebf2] bg-white px-4 text-sm text-graphite hover:border-[#163a7a]">
-              Set targets
-            </a>
-          ) : null}
           <Link
             href={board.reportsHref}
             className="inline-flex h-9 items-center rounded-full bg-[#163a7a] px-4 text-sm font-medium text-white hover:bg-[#0f2c5e]"
@@ -195,7 +189,6 @@ export default async function OverviewPage({ searchParams }: OverviewPageProps) 
               negativeHref={reviews({ stars: "low" })}
               unansweredHref={reviews({ filter: "unanswered" })}
               escalationsHref={escalations()}
-              canSetTarget={isManager(role)}
               savedSummary={scopeInsight?.insight?.summary ?? null}
               generate={generate}
             />

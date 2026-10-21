@@ -7,7 +7,8 @@ import { SettingsBoard } from "@/components/settings-board";
 import { AiConfigPanel } from "@/components/ai-config-panel";
 import { GoogleConnectionCard } from "@/components/google-connection-card";
 import { PageHeader } from "@/components/page-header";
-import { EscalationService } from "@/lib/services/escalations";
+import { EscalationContactStore, EscalationService } from "@/lib/services/escalations";
+import { ResolutionContactForm } from "@/components/resolution-contact-form";
 import { listScopeChoices } from "@/lib/services/access";
 import { getMemberAccess } from "@/lib/services/access";
 import { loadReplySettings, type SettingsTarget } from "@/lib/services/reply-settings";
@@ -91,10 +92,11 @@ export default async function SettingsPage({
       redirect("/settings?section=tone");
     }
   }
-  const [settings, scopes, policy, connections, branding, aiBoard] = await Promise.all([
+  const [settings, scopes, policy, contact, connections, branding, aiBoard] = await Promise.all([
     loadReplySettings(workspaceId, target),
     listScopeChoices(workspaceId),
     EscalationService.policy(workspaceId),
+    EscalationContactStore.read(workspaceId),
     createAdminClient()
       .from("grm_google_connections")
       .select("id, google_email, status, created_at, last_refreshed_at")
@@ -203,12 +205,15 @@ export default async function SettingsPage({
       ) : null}
 
       {section === "sla" ? (
-        <section className="space-y-3 rounded-xl border border-silver bg-white p-4 text-sm text-graphite">
-          <p>Complaints at {policy.maxStars} stars or below open an escalation. The due time is {policy.dueHours} hours in {policy.timezone}.</p>
-          <p>Reminders are recorded in the app at {policy.reminderHours.join(" and ")} hours. No email or text is sent.</p>
-          <p>Brand, group, and location SLA overrides stay on Locations and groups. A nearer override replaces this organization rule.</p>
-          <Link href="/escalations" className="font-medium text-ink underline underline-offset-4">Open escalations</Link>
-        </section>
+        <>
+          <section className="space-y-3 rounded-xl border border-silver bg-white p-4 text-sm text-graphite">
+            <p>Complaints at {policy.maxStars} stars or below open an escalation. The due time is {policy.dueHours} hours in {policy.timezone}.</p>
+            <p>Reminders are recorded in the app at {policy.reminderHours.join(" and ")} hours. No email or text is sent.</p>
+            <p>Brand, group, and location SLA overrides stay on Locations and groups. A nearer override replaces this organization rule.</p>
+            <Link href="/escalations" className="font-medium text-ink underline underline-offset-4">Open escalations</Link>
+          </section>
+          <ResolutionContactForm contact={contact} canEdit={canEditWorkspace} />
+        </>
       ) : null}
 
       {section === "notifications" ? (

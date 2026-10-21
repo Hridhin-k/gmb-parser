@@ -13,6 +13,8 @@ import {
   reassignmentError,
   shouldSkipTrigger,
   slaClock,
+  ticketKey,
+  escalationEventLabel,
   type AssignmentLocation,
   type AssignmentMember,
 } from "@/lib/escalations";
@@ -104,20 +106,55 @@ describe("automatic assignment", () => {
     });
   });
 
-  it("uses an administrator when the manager is missing, inactive, or outside this location", () => {
-    expect(planAssignment({ locationManagerId: null, members: [owner], location }).reason).toBe("manager_missing");
+  it("uses an admin when no manager can take the case, and the owner only when there is no admin", () => {
+    const admin = member({ userId: "admin", role: "org_admin" });
+    expect(planAssignment({ locationManagerId: null, members: [owner, admin], location })).toMatchObject({
+      assigneeId: "admin",
+      ownership: "fallback",
+      reason: "manager_missing",
+    });
+    expect(planAssignment({ locationManagerId: null, members: [owner], location })).toMatchObject({
+      assigneeId: "owner",
+      reason: "manager_missing",
+    });
     expect(
       planAssignment({
         locationManagerId: "manager",
-        members: [{ ...manager, enabled: false }, owner],
+        members: [{ ...manager, enabled: false }, owner, admin],
         location,
       })
-    ).toMatchObject({ assigneeId: "owner", ownership: "fallback", reason: "manager_inactive", responsibleUserId: "manager" });
+    ).toMatchObject({ assigneeId: "admin", ownership: "fallback", reason: "manager_inactive", responsibleUserId: "manager" });
     expect(planAssignment({ locationManagerId: "manager", members: [otherOrg, owner], location })).toMatchObject({
       assigneeId: "owner",
       reason: "manager_unauthorised",
       responsibleUserId: "manager",
     });
+  });
+
+  it("walks from the location manager to the group manager and then the organisation manager", () => {
+    const group = member({ userId: "group", role: "group_manager", scope: { clientId: null, groupId: "region", locationId: null } });
+    const brand = member({ userId: "brand", role: "brand_manager", scope: { clientId: "org-a", groupId: null, locationId: null } });
+    const admin = member({ userId: "admin", role: "org_admin" });
+    expect(planAssignment({ locationManagerId: null, members: [manager, group, brand, admin, owner], location })).toMatchObject({
+      assigneeId: "manager",
+      reason: "location_manager",
+    });
+    expect(planAssignment({ locationManagerId: null, members: [group, brand, admin], location })).toMatchObject({
+      assigneeId: "group",
+      ownership: "manager",
+      reason: "group_manager",
+    });
+    expect(planAssignment({ locationManagerId: null, members: [brand, admin, owner], location })).toMatchObject({
+      assigneeId: "brand",
+      reason: "organisation_manager",
+    });
+    expect(
+      planAssignment({
+        locationManagerId: null,
+        members: [{ ...manager, enabled: false }, { ...group, enabled: false }, brand],
+        location,
+      }).assigneeId
+    ).toBe("brand");
   });
 
   it("leaves the assignee empty only when no administrator can see the location", () => {
@@ -152,6 +189,7 @@ describe("reassignment", () => {
     expect(reassignmentError({ ...base, target: outsider })).toMatch(/cannot take cases/);
     expect(reassignmentError({ ...base, actorCanAssign: false, target: regional })).toMatch(/permission/);
     expect(reassignmentError({ ...base, target: null })).toMatch(/not in this workspace/);
+    expect(reassignmentError({ ...base, target: member({ userId: "member", role: "member" }) })).toMatch(/manager or an admin/);
   });
 });
 
@@ -205,6 +243,18 @@ describe("escalation scope", () => {
     expect(
       escalationVisibleInScope({ ...row, scope: { clientId: null, groupId: null, locationId: "elsewhere", groupIds: [] } })
     ).toBe(false);
+  });
+});
+
+describe("escalation tickets", () => {
+  it("numbers a case and names the people in an assignment change", () => {
+    expect(ticketKey(12)).toBe("ESC-12");
+    expect(ticketKey(null)).toBe("ESC");
+    expect(
+      escalationEventLabel("assigned", { assigneeId: "b", previousAssigneeId: "a", reason: "Covering the store" }, (id) =>
+        id === "b" ? "bea@example.com" : "ada@example.com"
+      )
+    ).toBe("Assignee changed from ada@example.com to bea@example.com. Reason: Covering the store.");
   });
 });
 

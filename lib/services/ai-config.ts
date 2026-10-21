@@ -1,4 +1,5 @@
 import { createAdminClient } from "@/lib/supabase/admin";
+import { logger } from "@/lib/logger";
 import { AuditService } from "@/lib/services/audit";
 import { assertScoped } from "@/lib/services/access";
 import { getMemberRole } from "@/lib/services/workspace";
@@ -9,6 +10,7 @@ import {
   AI_KNOWLEDGE_KINDS,
   assertSameWorkspace,
   defaultSnapshot,
+  insightLensFingerprint,
   insightLensFromMetadata,
   knowledgeInScope,
   parseInsightLens,
@@ -23,6 +25,7 @@ import {
   type OrgContext,
 } from "@/lib/ai-config";
 import { flattenAutomation, flattenTone } from "@/lib/automation";
+import { rulesHash } from "@/lib/intelligence/tenant-context";
 import type { SettingsTarget } from "@/lib/services/reply-settings";
 
 const KNOWLEDGE_SELECT =
@@ -245,6 +248,19 @@ export async function saveActiveAiSnapshot(input: {
     .eq("id", active.id)
     .eq("workspace_id", input.workspaceId);
   if (error) throw new AppError("Could not save AI configuration.", "DB_ERROR", 500);
+
+  const previousLens = insightLensFingerprint(parseSnapshot(active.snapshot).insights);
+  const nextLens = insightLensFingerprint(next.insights);
+  if (previousLens !== nextLens) {
+    try {
+      const { noteTenantRulesChange } = await import("@/lib/services/intelligence-freshness");
+      await noteTenantRulesChange(admin, input.workspaceId, nextLens);
+    } catch (rulesError) {
+      logger.warn("intelligence.rules_invalidation_failed", {
+        message: rulesError instanceof Error ? rulesError.message : "rules",
+      });
+    }
+  }
 
   await AuditService.log({
     workspaceId: input.workspaceId,
@@ -478,6 +494,7 @@ export async function upsertKnowledge(input: {
       entityId: updated.data.id,
       metadata: { kind: input.kind },
     });
+    await noteKnowledgeChange(admin, input.workspaceId, updated.data.id, body);
     return mapKnowledge(updated.data);
   }
 
@@ -504,6 +521,7 @@ export async function upsertKnowledge(input: {
     entityId: inserted.data.id,
     metadata: { kind: input.kind },
   });
+  await noteKnowledgeChange(admin, input.workspaceId, inserted.data.id, body);
   return mapKnowledge(inserted.data);
 }
 
@@ -568,6 +586,54 @@ export async function deleteKnowledge(input: {
     entityId: input.id,
     metadata: {},
   });
+  await noteKnowledgeChange(admin, input.workspaceId, input.id, "deleted");
+}
+
+async function noteKnowledgeChange(
+  admin: ReturnType<typeof createAdminClient>,
+  workspaceId: string,
+  id: string,
+  body: string
+): Promise<void> {
+  try {
+    const { noteTenantRulesChange } = await import("@/lib/services/intelligence-freshness");
+    await noteTenantRulesChange(admin, workspaceId, rulesHash({ version: 0, lensFingerprint: id, knowledge: [{ id, body }] }));
+  } catch (error) {
+    logger.warn("intelligence.rules_invalidation_failed", {
+      message: error instanceof Error ? error.message : "knowledge",
+    });
+  }
+}
+
+/** Active configuration for this workspace, plus knowledge for the already authorised scope. */
+export async function loadAuthorisedTenantBundle(
+  workspaceId: string,
+  scope: KnowledgeScope
+): Promise<{ version: number; rulesHash: string; lensFingerprint: string; knowledge: AiKnowledgeRow[] }> {
+  if (scope.workspaceId && scope.workspaceId !== workspaceId) {
+    throw new AuthorizationError("That configuration belongs to another workspace.");
+  }
+  const admin = createAdminClient();
+  const [config, knowledge] = await Promise.all([
+    ensureActiveAiConfig(workspaceId),
+    admin.from("grm_ai_knowledge").select(KNOWLEDGE_SELECT).eq("workspace_id", workspaceId).eq("enabled", true),
+  ]);
+  if (knowledge.error) throw new AppError("Could not load saved instructions.", "DB_ERROR", 500);
+  const scoped = knowledgeInScope(assertSameWorkspace((knowledge.data ?? []).map(mapKnowledge), workspaceId), {
+    ...scope,
+    workspaceId,
+  });
+  const lensFingerprint = insightLensFingerprint(config.snapshot.insights);
+  return {
+    version: config.version,
+    lensFingerprint,
+    rulesHash: rulesHash({
+      version: config.version,
+      lensFingerprint,
+      knowledge: scoped.map((row) => ({ id: row.id, body: row.body })),
+    }),
+    knowledge: scoped,
+  };
 }
 
 export async function loadPromptContextForLocation(

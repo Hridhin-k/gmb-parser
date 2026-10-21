@@ -167,6 +167,12 @@ export const ACTION_STATUS = {
     short: "Generating summary…",
     tone: "gemini" as const,
   },
+  applying: {
+    title: "Updating this page…",
+    detail: "The new text is already on screen. The rest of the page is catching up.",
+    short: "Updating…",
+    tone: "work" as const,
+  },
   aiPreview: {
     title: "Running draft preview…",
     detail: "Building a sample reply with your saved instructions. Nothing is published or stored.",

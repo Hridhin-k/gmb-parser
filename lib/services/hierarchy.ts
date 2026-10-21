@@ -1,5 +1,6 @@
 import { createAdminClient } from "@/lib/supabase/admin";
 import { AuditService } from "@/lib/services/audit";
+import { loadAuthProfiles } from "@/lib/services/auth-profiles";
 import { getWorkspaceTone } from "@/lib/services/onboarding";
 import { assertScoped } from "@/lib/services/access";
 import { AppError, ValidationError } from "@/lib/errors";
@@ -286,13 +287,10 @@ export async function loadHierarchy(
     locationRows.flatMap((location) => (location.manager_user_id ? [[location.id, location.manager_user_id] as const] : []))
   );
   const memberIds = (members.data ?? []).map((member) => member.user_id);
-  const emails = await Promise.all(
-    memberIds.map(async (userId) => {
-      const user = await admin.auth.admin.getUserById(userId);
-      return [userId, user.data.user?.email ?? "Member"] as const;
-    })
+  const profiles = await loadAuthProfiles(memberIds);
+  const emailById = new Map(
+    memberIds.map((userId) => [userId, profiles.get(userId)?.email ?? "Member"] as const)
   );
-  const emailById = new Map(emails);
 
   const directCount = new Map<string, number>();
   for (const location of locationRows) {
@@ -718,6 +716,13 @@ export async function mergeHierarchyGroups(input: {
     .eq("workspace_id", input.workspaceId)
     .eq("group_id", source.id);
   if (moved.error) throw new AppError("Could not move locations into the group.", "DB_ERROR", 500);
+  const { data: movedLocations } = await admin
+    .from("grm_google_locations")
+    .select("id")
+    .eq("workspace_id", input.workspaceId)
+    .eq("group_id", target.id);
+  const { noteMembershipChange } = await import("@/lib/services/summary-service");
+  await noteMembershipChange(admin, input.workspaceId, (movedLocations ?? []).map((location) => location.id));
   const removed = await admin.from("grm_groups").delete().eq("id", source.id).eq("workspace_id", input.workspaceId);
   if (removed.error) dbMessage(removed.error, "Could not remove the merged group.");
   await AuditService.log({
@@ -794,6 +799,8 @@ export async function moveHierarchyLocations(input: {
     .eq("workspace_id", input.workspaceId)
     .in("id", input.locationIds);
   if (error) dbMessage(error, "Could not move the locations.");
+  const { noteMembershipChange } = await import("@/lib/services/summary-service");
+  await noteMembershipChange(admin, input.workspaceId, input.locationIds);
   await AuditService.log({
     workspaceId: input.workspaceId,
     userId: input.userId,

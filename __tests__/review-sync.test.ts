@@ -79,6 +79,7 @@ vi.mock("@/lib/services/audit", () => ({
 }));
 
 import { ReviewSyncService, classifyReviewError } from "@/lib/services/review-sync";
+import * as intelligenceIngest from "@/lib/services/intelligence-ingest";
 import { GoogleApiError } from "@/lib/errors";
 
 // ---------------------------------------------------------------------------
@@ -407,5 +408,25 @@ describe("audit logging", () => {
 
     const actions = logSpy.mock.calls.map((c) => c[0].action);
     expect(actions).toContain("review.sync_failed");
+  });
+});
+
+describe("absence detection", () => {
+  it("does not treat a provider failure as deleted reviews", async () => {
+    const spy = vi.spyOn(intelligenceIngest, "markConfirmedAbsences").mockResolvedValue(0);
+    mockApiResponse(403, { error: { code: 403, message: "Forbidden", status: "PERMISSION_DENIED" } });
+    await ReviewSyncService.syncLocation("loc-1", "conn-1", "ws-1", "user-1", { mode: "full" });
+    expect(spy).not.toHaveBeenCalled();
+    spy.mockRestore();
+  });
+
+  it("checks absences only after a full sync that read every page", async () => {
+    const spy = vi.spyOn(intelligenceIngest, "markConfirmedAbsences").mockResolvedValue(0);
+    mockApiResponse(200, { reviews: [makeReview("r1")] });
+    await ReviewSyncService.syncLocation("loc-1", "conn-1", "ws-1", "user-1", { mode: "full" });
+    expect(spy).toHaveBeenCalledTimes(1);
+    const names = spy.mock.calls[0]?.[1].seenNames ?? [];
+    expect(names).toContain("accounts/123/locations/456/reviews/r1");
+    spy.mockRestore();
   });
 });

@@ -13,7 +13,7 @@ import {
 
 const createInviteSchema = z.object({
   email: z.string().trim().min(3).max(320),
-  role: z.enum([...ASSIGNABLE_ROLES, "member"]),
+  role: z.enum(ASSIGNABLE_ROLES),
   clientId: z.string().uuid().nullable().optional(),
   groupId: z.string().uuid().nullable().optional(),
   locationId: z.string().uuid().nullable().optional(),

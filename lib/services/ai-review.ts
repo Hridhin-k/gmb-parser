@@ -4,19 +4,30 @@ import { AppError, ValidationError } from "@/lib/errors";
 import { logger } from "@/lib/logger";
 import { createHash } from "crypto";
 import {
+  GEMINI_FAST_MODEL_ID,
   GEMINI_MODEL_ID,
   GEMINI_THINKING_LOW,
+  GEMINI_THINKING_MINIMAL,
   classifyGeminiError,
   extractGeminiText,
   geminiGenerateUrl,
   logGeminiFailure,
 } from "@/lib/gemini";
 import { splitGoogleTranslation } from "@/lib/review-text";
+import type { Json } from "@/lib/types/supabase";
 import { toneInstruction, type ToneVoice } from "@/lib/onboarding";
 import { draftsPausedForLocation, resolvedToneForLocation } from "@/lib/services/hierarchy";
 import { adjustmentInstruction, type DraftAdjustment } from "@/lib/reply-adjustments";
 import { checkReplyGuardrails } from "@/lib/reply-guardrails";
 import { EscalationService } from "@/lib/services/escalations";
+import {
+  claimAiGenerationJob,
+  completeAiGenerationJob,
+  createAiGenerationJob,
+  failAiGenerationJob,
+} from "@/lib/services/ai-generation-jobs";
+import { voiceGuide } from "@/lib/automation";
+import { loadPromptContextForLocation } from "@/lib/services/ai-config";
 import {
   knowledgePromptBlock,
   orgContextPromptBlock,
@@ -24,6 +35,10 @@ import {
   type AiKnowledgeRow,
   type OrgContext,
 } from "@/lib/ai-config";
+import { replyTopicBlock, inventedPromiseViolations, neverSayViolations, presentTopics, retrieveKnowledge, topicExtensionsFromKnowledge } from "@/lib/intelligence/tenant-context";
+import { usageFromResponse } from "@/lib/services/intelligence-extract";
+import { getAiBudget, recordAiUsage } from "@/lib/services/ai-usage-ledger";
+import { EXTRACT_ANALYSIS_VERSION } from "@/lib/intelligence/extraction";
 
 // ---------------------------------------------------------------------------
 // Config
@@ -40,6 +55,37 @@ const GENERATION_CONFIG = {
   topP: 0.9,
   thinkingConfig: GEMINI_THINKING_LOW,
 };
+
+export type DraftModelRoute = "fast" | "full";
+
+const COMPLEX_REVIEW_CUES =
+  /\b(but|however|although|though|except|wait(ed|ing)?|rude|dirty|unclean|refund|worst|terrible|awful|horrible|disappoint(ed|ing)?|problem|issue|broken|damaged|late|slow|cold|stale|cancel|booking|appointment|billing|charge[ds]?|pricey|expensive|overpriced|quality|missing|wrong|never|not good|not happy|poor|bad experience|complaint)\b/i;
+const NON_LATIN_SCRIPT =
+  /[\u0400-\u06FF\u0900-\u097F\u0D00-\u0D7F\u4E00-\u9FFF\u3040-\u30FF\uAC00-\uD7AF]/;
+
+/**
+ * Hybrid routing: a short, clearly positive review with no question, contrast,
+ * or complaint cue is safe for the fast model. Anything else uses the full model.
+ */
+export function draftModelRoute(input: {
+  starRating: number;
+  comment: string | null;
+  adjustmentKind?: string | null;
+  hasPreviousDraft?: boolean;
+}): DraftModelRoute {
+  if (input.starRating <= 3) return "full";
+  if (input.adjustmentKind && input.adjustmentKind !== "regenerate") return "full";
+  if (input.hasPreviousDraft) return "full";
+  const comment = input.comment?.trim() ?? "";
+  if (!comment) return "fast";
+  if (comment.length > 240) return "full";
+  if (comment.includes("?")) return "full";
+  if (NON_LATIN_SCRIPT.test(comment)) return "full";
+  if (COMPLEX_REVIEW_CUES.test(comment)) return "full";
+  const sentences = comment.split(/[.!?]+/).filter((part) => part.trim().length > 0);
+  if (sentences.length > 2) return "full";
+  return "fast";
+}
 
 const BLOCKED_FINISH_REASONS = new Set([
   "SAFETY",
@@ -62,6 +108,11 @@ export interface GenerateDraftParams {
   replaceEdited?: boolean;
   /** True only for a background worker. A pause blocks this path. A person drafting is unaffected. */
   automated?: boolean;
+  /**
+   * Save in the background: the generated text lands in grm_ai_generation_jobs
+   * (one write) and the route schedules persistGenerationJob after responding.
+   */
+  deferPersistence?: boolean;
 }
 
 export interface ReplyPlaybook {
@@ -89,12 +140,17 @@ export interface ReviewContext {
   orgContext?: OrgContext | null;
   knowledge?: AiKnowledgeRow[] | null;
   templates?: Array<{ name: string; body: string }> | null;
+  /** Canonical topic labels. They do not replace `comment`. */
+  topics?: Array<{ code: string; label: string }> | null;
 }
 
 export interface GenerateDraftResult {
   draftId: string;
   replyId: string;
   content: string;
+  /** Set when persistence is deferred; replyId is provisional until the job saves. */
+  jobId?: string;
+  persistence?: "pending" | "saved";
 }
 
 // ---------------------------------------------------------------------------
@@ -144,6 +200,7 @@ REVIEW
 Reviewer name: ${ctx.reviewerName ?? "(anonymous — do not use a name)"}
 Star rating: ${ctx.starRating}/5
 ${commentBlock(comment)}
+${replyTopicBlock(comment, ctx.topics ?? [])}
 
 READ THE REVIEW FIRST
 - Base the tone on what the reviewer actually wrote. The star rating is only a hint: a 5-star review can contain a complaint and a 1-star review can contain praise. Respond to both sides.
@@ -198,6 +255,20 @@ function hashPrompt(prompt: string): string {
   return createHash("sha256").update(prompt).digest("hex").slice(0, 16);
 }
 
+async function loadCanonicalTopics(admin: ReturnType<typeof createAdminClient>, workspaceId: string, reviewId: string): Promise<string[]> {
+  const { data, error } = await admin
+    .from("grm_review_intelligence")
+    .select("extraction")
+    .eq("workspace_id", workspaceId)
+    .eq("review_id", reviewId)
+    .eq("analysis_version", EXTRACT_ANALYSIS_VERSION)
+    .eq("is_current", true)
+    .maybeSingle();
+  if (error || !data?.extraction || typeof data.extraction !== "object" || Array.isArray(data.extraction)) return [];
+  const quotations = (data.extraction as { facts?: { quotations?: Array<{ topicCode?: string }> } }).facts?.quotations ?? [];
+  return [...new Set(quotations.map((item) => item.topicCode).filter((code): code is string => Boolean(code)))];
+}
+
 export { classifyGeminiError } from "@/lib/gemini";
 
 // ---------------------------------------------------------------------------
@@ -227,6 +298,8 @@ export class AIReviewService {
          grm_google_locations!inner(
            location_title,
            hold_reason,
+           client_id,
+           group_id,
            grm_clients(name),
            grm_location_insights(workspace_id, analysis)
          ),
@@ -266,6 +339,8 @@ export class AIReviewService {
     const locTyped = loc as {
       location_title: string;
       hold_reason?: string | null;
+      client_id?: string | null;
+      group_id?: string | null;
       grm_clients?: { name: string } | Array<{ name: string }> | null;
       grm_location_insights?: Array<{ workspace_id: string; analysis: unknown }> | null;
     };
@@ -311,15 +386,21 @@ export class AIReviewService {
     const previousDraft = activeReply?.content;
     const revising = params.adjustment && params.adjustment.kind !== "regenerate";
 
-    const tone = await resolvedToneForLocation(params.workspaceId, review.location_id);
-    const { resolvedForLocation } = await import("@/lib/services/reply-settings");
-    const { voiceGuide } = await import("@/lib/automation");
-    const { loadPromptContextForLocation } = await import("@/lib/services/ai-config");
-    const [configured, promptContext] = await Promise.all([
-      resolvedForLocation(params.workspaceId, review.location_id),
+    const [tone, configured, promptContext] = await Promise.all([
+      resolvedToneForLocation(params.workspaceId, review.location_id),
+      import("@/lib/services/reply-settings").then((mod) =>
+        mod.resolvedVoiceForDraft(params.workspaceId, {
+          id: review.location_id,
+          clientId: locTyped.client_id ?? null,
+          groupId: locTyped.group_id ?? null,
+          title: locTyped.location_title,
+        })
+      ),
       loadPromptContextForLocation(params.workspaceId, review.location_id),
     ]);
     const org = promptContext.config.snapshot.org;
+    const topics = presentTopics(await loadCanonicalTopics(admin, params.workspaceId, review.id), topicExtensionsFromKnowledge(promptContext.knowledge));
+    const knowledge = retrieveKnowledge(promptContext.knowledge, promptContext.scope, review.comment ?? "");
     const legacyTone =
       org.legacyVoice || org.legacyNote
         ? {
@@ -342,12 +423,30 @@ export class AIReviewService {
       tone: legacyTone,
       voiceGuide: voiceGuide(configured.tone, configured.automation.varyWording),
       orgContext: org,
-      knowledge: promptContext.knowledge,
+      knowledge,
       templates: promptContext.templates,
+      topics,
     };
 
     const systemPrompt = buildReplyPrompt(ctx);
     const promptHash = hashPrompt(systemPrompt);
+    const route = draftModelRoute({
+      starRating: review.star_rating,
+      comment: review.comment,
+      adjustmentKind: params.adjustment?.kind ?? null,
+      hasPreviousDraft: Boolean(previousDraft),
+    });
+    let modelId = route === "fast" ? GEMINI_FAST_MODEL_ID : MODEL_ID;
+    // At the monthly budget, drafts stay available on the cheap model and the
+    // full model is skipped. Deterministic features are unaffected.
+    if (modelId !== GEMINI_FAST_MODEL_ID) {
+      const budget = await getAiBudget(admin, params.workspaceId);
+      if (budget.exceeded) modelId = GEMINI_FAST_MODEL_ID;
+    }
+    const generationConfig =
+      modelId === GEMINI_FAST_MODEL_ID
+        ? { ...GENERATION_CONFIG, thinkingConfig: GEMINI_THINKING_MINIMAL }
+        : GENERATION_CONFIG;
     const startedAt = Date.now();
 
     // Call Gemini
@@ -356,12 +455,12 @@ export class AIReviewService {
 
     let responseText: string;
     try {
-      const response = await fetch(geminiGenerateUrl(apiKey), {
+      const response = await fetch(geminiGenerateUrl(apiKey, modelId), {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           contents: [{ parts: [{ text: systemPrompt }] }],
-          generationConfig: GENERATION_CONFIG,
+          generationConfig,
         }),
         signal: controller.signal,
         cache: "no-store",
@@ -385,6 +484,14 @@ export class AIReviewService {
       }
 
       const data = await response.json();
+      const draftUsage = usageFromResponse(data);
+      await recordAiUsage(admin, {
+        workspaceId: params.workspaceId,
+        operation: "reply_draft",
+        model: modelId,
+        inputTokens: draftUsage.inputTokens,
+        outputTokens: draftUsage.outputTokens,
+      });
       const { text, finishReason } = extractGeminiText(data);
       const blockReason = (data as { promptFeedback?: { blockReason?: string } })
         .promptFeedback?.blockReason;
@@ -416,6 +523,13 @@ export class AIReviewService {
       }
 
       const violations = checkReplyGuardrails(cleaned);
+      const forbidden = [
+        ...neverSayViolations(cleaned, promptContext.config.snapshot.tone.neverSay ?? []),
+        ...inventedPromiseViolations(cleaned, [org.policies]),
+      ];
+      if (forbidden.length) {
+        throw new ValidationError("The draft used a phrase this organisation's rules do not allow.");
+      }
       if (violations.length) {
         await AuditService.log({
           workspaceId: params.workspaceId,
@@ -435,6 +549,8 @@ export class AIReviewService {
         aiConfigVersion: promptContext.config.version,
         durationMs: Date.now() - startedAt,
         success: true,
+        model: modelId,
+        route,
       });
     } catch (error) {
       if (!(error instanceof AppError) || error.code !== "VALIDATION_ERROR") {
@@ -464,85 +580,209 @@ export class AIReviewService {
       clearTimeout(timeout);
     }
 
-    // Store AI draft (preserves the original AI output permanently)
-    const { data: draft, error: draftErr } = await admin
-      .from("grm_review_ai_drafts")
-      .insert({
-        workspace_id: params.workspaceId,
-        review_id: params.reviewId,
+    if (params.deferPersistence) {
+      const jobId = await createAiGenerationJob({
+        workspaceId: params.workspaceId,
+        userId: params.userId,
+        kind: "reply",
+        reviewId: params.reviewId,
+        model: modelId,
+        route,
         content: responseText,
-        ai_model: MODEL_ID,
-        prompt_version: PROMPT_VERSION,
-        ai_prompt_hash: promptHash,
-        ai_config_version: promptContext.config.version,
-        generated_by: params.userId,
-        generation_params: GENERATION_CONFIG,
-      })
-      .select("id")
-      .single();
-
-    if (draftErr || !draft) {
-      logger.error("ai_review.store_draft_failed", {
-        message: draftErr instanceof Error ? draftErr.message : "Unknown",
+        payload: {
+          promptHash,
+          aiConfigVersion: promptContext.config.version,
+          generationParams: generationConfig as unknown as Record<string, unknown>,
+          adjustmentKind: params.adjustment?.kind ?? "regenerate",
+          language: params.adjustment?.kind === "language" ? params.adjustment.language : null,
+        },
       });
-      throw new AppError("Failed to store AI draft", "DB_ERROR", 500);
+      if (jobId) {
+        return {
+          draftId: jobId,
+          replyId: `pending:${jobId}`,
+          content: responseText,
+          jobId,
+          persistence: "pending",
+        };
+      }
+      // Jobs table unavailable: save synchronously below so the draft is safe.
     }
 
-    // Delete any existing non-published reply to avoid conflicts, then create new one
-    await admin
-      .from("grm_review_replies")
-      .delete()
-      .eq("review_id", params.reviewId)
-      .eq("workspace_id", params.workspaceId)
-      .in("status", ["draft", "failed"]);
+    const saved = await this.persistGeneratedDraft({
+      workspaceId: params.workspaceId,
+      reviewId: params.reviewId,
+      userId: params.userId,
+      content: responseText,
+      modelId,
+      route,
+      promptHash,
+      aiConfigVersion: promptContext.config.version,
+      generationParams: generationConfig,
+      adjustmentKind: params.adjustment?.kind ?? "regenerate",
+      language: params.adjustment?.kind === "language" ? params.adjustment.language : null,
+      generationId: null,
+    });
 
-    const { data: reply, error: replyErr } = await admin
-      .from("grm_review_replies")
-      .insert({
-        workspace_id: params.workspaceId,
-        review_id: params.reviewId,
-        content: responseText,
-        source: "ai" as const,
-        status: "draft" as const,
-        created_by: params.userId,
-        ai_draft_id: draft.id,
-      })
-      .select("id")
-      .single();
+    return { ...saved, content: responseText, persistence: "saved" };
+  }
 
-    if (replyErr || !reply) {
-      logger.error("ai_review.create_reply_failed", {
-        message: replyErr instanceof Error ? replyErr.message : "Unknown",
-      });
-      throw new AppError("Failed to create reply from AI draft", "DB_ERROR", 500);
+  /**
+   * Writes a generated reply into place: AI draft row, draft reply, review
+   * status, audit. Idempotent when generationId is set — a retry reuses the
+   * draft and reply created by an earlier attempt.
+   */
+  static async persistGeneratedDraft(input: {
+    workspaceId: string;
+    reviewId: string;
+    userId: string;
+    content: string;
+    modelId: string;
+    route: string;
+    promptHash: string;
+    aiConfigVersion: number;
+    generationParams: Record<string, unknown>;
+    adjustmentKind: string;
+    language: string | null;
+    generationId: string | null;
+  }): Promise<{ draftId: string; replyId: string }> {
+    const admin = createAdminClient();
+
+    let draftId: string | null = null;
+    if (input.generationId) {
+      const { data: existing } = await admin
+        .from("grm_review_ai_drafts")
+        .select("id")
+        .eq("generation_id", input.generationId)
+        .maybeSingle();
+      draftId = existing?.id ?? null;
     }
 
-    // Update review reply_status
+    if (!draftId) {
+      const { data: draft, error: draftErr } = await admin
+        .from("grm_review_ai_drafts")
+        .insert({
+          workspace_id: input.workspaceId,
+          review_id: input.reviewId,
+          content: input.content,
+          ai_model: input.modelId,
+          prompt_version: PROMPT_VERSION,
+          ai_prompt_hash: input.promptHash,
+          ai_config_version: input.aiConfigVersion,
+          generated_by: input.userId,
+          generation_params: input.generationParams as unknown as Json,
+          ...(input.generationId ? { generation_id: input.generationId } : {}),
+        })
+        .select("id")
+        .single();
+
+      if (draftErr || !draft) {
+        logger.error("ai_review.store_draft_failed", {
+          message: draftErr instanceof Error ? draftErr.message : "Unknown",
+        });
+        throw new AppError("Failed to store AI draft", "DB_ERROR", 500);
+      }
+      draftId = draft.id as string;
+    }
+
+    let replyId: string | null = null;
+    let replyCreated = false;
+    const { data: existingReply } = await admin
+      .from("grm_review_replies")
+      .select("id")
+      .eq("ai_draft_id", draftId)
+      .maybeSingle();
+    replyId = existingReply?.id ?? null;
+
+    if (!replyId) {
+      // Delete any existing non-published reply to avoid conflicts, then create new one
+      await admin
+        .from("grm_review_replies")
+        .delete()
+        .eq("review_id", input.reviewId)
+        .eq("workspace_id", input.workspaceId)
+        .in("status", ["draft", "failed"]);
+
+      const { data: reply, error: replyErr } = await admin
+        .from("grm_review_replies")
+        .insert({
+          workspace_id: input.workspaceId,
+          review_id: input.reviewId,
+          content: input.content,
+          source: "ai" as const,
+          status: "draft" as const,
+          created_by: input.userId,
+          ai_draft_id: draftId,
+        })
+        .select("id")
+        .single();
+
+      if (replyErr || !reply) {
+        logger.error("ai_review.create_reply_failed", {
+          message: replyErr instanceof Error ? replyErr.message : "Unknown",
+        });
+        throw new AppError("Failed to create reply from AI draft", "DB_ERROR", 500);
+      }
+      replyId = reply.id as string;
+      replyCreated = true;
+    }
+
     await admin
       .from("grm_reviews")
       .update({ reply_status: "draft" })
-      .eq("id", params.reviewId);
+      .eq("id", input.reviewId);
 
-    await AuditService.log({
-      workspaceId: params.workspaceId,
-      userId: params.userId,
-      action: "reply.ai_generated",
-      entityType: "grm_review_ai_drafts",
-      entityId: draft.id,
-      metadata: {
-        model: MODEL_ID,
-        promptVersion: PROMPT_VERSION,
-        aiConfigVersion: promptContext.config.version,
-        reviewId: params.reviewId,
-        adjustment: params.adjustment?.kind ?? "regenerate",
-        language: params.adjustment?.kind === "language" ? params.adjustment.language : null,
-      },
-    });
+    if (replyCreated) {
+      await AuditService.log({
+        workspaceId: input.workspaceId,
+        userId: input.userId,
+        action: "reply.ai_generated",
+        entityType: "grm_review_ai_drafts",
+        entityId: draftId,
+        metadata: {
+          model: input.modelId,
+          route: input.route,
+          promptVersion: PROMPT_VERSION,
+          aiConfigVersion: input.aiConfigVersion,
+          reviewId: input.reviewId,
+          adjustment: input.adjustmentKind,
+          language: input.language,
+        },
+      });
+    }
 
-    return {
-      draftId: draft.id,
-      replyId: reply.id,
-      content: responseText,
-    };
+    return { draftId, replyId };
+  }
+
+  /** Background persister for a deferred reply generation job. Safe to retry. */
+  static async persistGenerationJob(jobId: string): Promise<void> {
+    const job = await claimAiGenerationJob(jobId);
+    if (!job || job.kind !== "reply" || !job.review_id || !job.content) return;
+    try {
+      const payload = job.payload as {
+        promptHash?: string;
+        aiConfigVersion?: number;
+        generationParams?: Record<string, unknown>;
+        adjustmentKind?: string;
+        language?: string | null;
+      };
+      const saved = await this.persistGeneratedDraft({
+        workspaceId: job.workspace_id,
+        reviewId: job.review_id,
+        userId: job.user_id,
+        content: job.content,
+        modelId: job.model,
+        route: job.route ?? "full",
+        promptHash: payload.promptHash ?? "",
+        aiConfigVersion: payload.aiConfigVersion ?? 0,
+        generationParams: payload.generationParams ?? {},
+        adjustmentKind: payload.adjustmentKind ?? "regenerate",
+        language: payload.language ?? null,
+        generationId: job.id,
+      });
+      await completeAiGenerationJob(jobId, saved);
+    } catch (error) {
+      await failAiGenerationJob(jobId, job.attempts + 1, error);
+    }
   }
 }

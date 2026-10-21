@@ -1,8 +1,8 @@
 /**
- * Permission matrix from the team wireframe.
- * A blank cell is denied. Nothing here adds a permission the matrix does not list.
- * `owner` is the workspace owner and has the organization-admin column.
- * `admin` and `member` are existing memberships and keep the access they already had.
+ * Tenant roles, in order: owner, admin, managers, members.
+ * Owner is the person who created the organisation and cannot be assigned.
+ * Admin is the whole organisation. Managers are scoped to a brand, a group, or a location.
+ * Member is everyone else who works replies. Agent and auditor remain only for people who already have them.
  */
 
 export const ASSIGNABLE_ROLES = [
@@ -10,8 +10,7 @@ export const ASSIGNABLE_ROLES = [
   "brand_manager",
   "group_manager",
   "store_manager",
-  "agent",
-  "auditor",
+  "member",
 ] as const;
 
 export type AssignableRole = (typeof ASSIGNABLE_ROLES)[number];
@@ -98,7 +97,7 @@ const MATRIX: Record<string, Record<Permission, Grant>> = {
     approve_negative: true,
     edit_rules: true,
     manage_locations: true,
-    manage_people: false,
+    manage_people: true,
   },
   member: {
     view: true,
@@ -130,9 +129,10 @@ export const EMPTY_SCOPE: ScopeIds = { clientId: null, groupId: null, locationId
 export function roleLabel(role: string): string {
   switch (role) {
     case "owner":
-      return "Organization admin";
+      return "Owner";
     case "org_admin":
-      return "Organization admin";
+    case "admin":
+      return "Admin";
     case "brand_manager":
       return "Brand manager";
     case "group_manager":
@@ -143,8 +143,6 @@ export function roleLabel(role: string): string {
       return "Agent";
     case "auditor":
       return "Auditor";
-    case "admin":
-      return "Admin";
     default:
       return "Member";
   }
@@ -257,9 +255,8 @@ export function clampListScope<T extends { clientId: string; locationId: string;
 
 export function canAssignRole(actorRole: string | null | undefined, nextRole: string): boolean {
   if (nextRole === "owner") return false;
-  if (actorRole === "owner" || actorRole === "org_admin") {
-    return nextRole === "member" || (ASSIGNABLE_ROLES as readonly string[]).includes(nextRole);
+  if (actorRole === "owner" || actorRole === "org_admin" || actorRole === "admin") {
+    return (ASSIGNABLE_ROLES as readonly string[]).includes(nextRole);
   }
-  if (actorRole === "admin") return nextRole === "member";
   return false;
 }

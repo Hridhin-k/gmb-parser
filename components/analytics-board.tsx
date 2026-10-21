@@ -2,6 +2,7 @@ import Link from "next/link";
 import {
   CHART,
   ChartCard,
+  ChartTip,
   HBarChart,
   MonthVolumeChart,
   SentimentDonut,
@@ -19,16 +20,17 @@ import {
 } from "@/lib/analytics-metrics";
 import type { AnalyticsSlice } from "@/lib/services/analytics-slice";
 import { dateRangeParams, type DateRange } from "@/lib/date-range";
-import { average, monthBounds, reviewDrillHref, reviewWindow, share, type DashboardFacts } from "@/lib/metrics";
+import { average, monthBounds, reviewDrillHref, reviewWindow, share, type DashboardFacts, type StarCounts } from "@/lib/metrics";
+import { sumStarCounts } from "@/lib/star-breakdown";
 import { themeLabel } from "@/lib/review-inbox";
 import type { DashboardContext, DashboardScope } from "@/lib/services/dashboard-metrics";
+import { formatFriendlyDate } from "@/lib/format-date";
 
 const HEADING = { fontFamily: "var(--font-heading), sans-serif" };
 
 export const ANALYTICS_SECTIONS = [
   { id: "performance", label: "Performance" },
   { id: "themes", label: "Themes" },
-  { id: "competitors", label: "Competitors" },
   { id: "profile", label: "Google profile" },
   { id: "automation", label: "Automation health" },
   { id: "team", label: "Team" },
@@ -134,7 +136,6 @@ export function AnalyticsBoard({
         />
       ) : null}
       {section === "themes" ? <Themes facts={context.facts} groupNames={groupNames} drill={drill} /> : null}
-      {section === "competitors" ? <Competitors /> : null}
       {section === "profile" ? <Profile context={context} scope={scope} /> : null}
       {section === "automation" ? <Automation context={context} scope={scope} /> : null}
       {section === "team" ? <Team facts={context.facts} members={members} drill={drill} /> : null}
@@ -145,7 +146,7 @@ export function AnalyticsBoard({
         than the review. Hour buckets are under 1 hour, 1–6 hours, 6–24 hours, and over 24 hours. Reviews without that
         timestamp stay out of the median and the bars. Since onboarding compares every review before the onboarding
         timestamp with every review from that timestamp on, in this scope, and ignores the date range above. Language
-        shares use the stored language and count a missing language as Not set. Competitor ratings are not connected.
+        shares use the stored language and count a missing language as Not set.
         Month buckets use {context.timezone}. An empty population shows an em dash. These figures follow the latest sync,
         not a live feed.
         {slice.truncated ? " Reply-time and language figures use the first 8,000 reviews in the window." : ""}
@@ -192,6 +193,8 @@ function Performance({
   const replyBuckets = (["under1h", "h1to6", "h6to24", "over24h"] as const).map((id) => ({
     label: REPLY_SPEED_LABELS[id],
     value: slice.window.buckets[id],
+    stars: slice.window.bucketStars[id],
+    lines: ["Reviews with a confirmed reply time in this bucket"],
   }));
   const repliedHref = drill({ filter: "published" });
   const monthMax = Math.max(1, ...facts.months.map((month) => month.reviews));
@@ -322,6 +325,8 @@ function Performance({
                 color: STAR_COLORS[stars - 1],
                 href: drill({ rating: String(stars) }),
                 suffix: facts.reviews > 0 ? `· ${Math.round((count / facts.reviews) * 100)}%` : undefined,
+                stars: facts.stars,
+                lines: ["Share of reviews in this period"],
               };
             })}
           />
@@ -377,6 +382,7 @@ function Performance({
                   neutral: three,
                   negative: month.negative,
                   avgRating: month.reviews ? month.ratingSum / month.reviews : null,
+                  stars: month.stars,
                   href: reviewDrillHref(
                     {
                       ...range,
@@ -396,7 +402,7 @@ function Performance({
         </ChartCard>
 
         <ChartCard title="Sentiment" hint="Positive 4–5★ · Neutral 3★ · Negative 1–2★">
-          <SentimentDonut positive={facts.positive} neutral={threeStar} negative={facts.negative} />
+          <SentimentDonut positive={facts.positive} neutral={threeStar} negative={facts.negative} stars={facts.stars} />
         </ChartCard>
       </div>
 
@@ -438,6 +444,8 @@ function Performance({
                   scope
                 ),
                 suffix: month.reviews ? `· ${(month.ratingSum / month.reviews).toFixed(2)}` : undefined,
+                stars: month.stars,
+                lines: ["Total reviews in this month"],
               };
             })}
           />
@@ -557,7 +565,7 @@ function Leaderboard({
           rankBy
         );
   return (
-    <ChartCard title={show === "groups" ? "Group leaderboard" : "Location leaderboard"} hint="A row opens those reviews. Competitor ratings are not connected.">
+    <ChartCard title={show === "groups" ? "Group leaderboard" : "Location leaderboard"} hint="A row opens those reviews.">
       {ranked.length === 0 ? (
         <p className="text-sm text-slate">No reviews in this period.</p>
       ) : (
@@ -571,8 +579,7 @@ function Leaderboard({
                 <th className="py-2 pr-3 font-medium">Rating</th>
                 <th className="py-2 pr-3 font-medium">Reviews</th>
                 <th className="py-2 pr-3 font-medium">Reply rate</th>
-                <th className="py-2 pr-3 font-medium">Reply time</th>
-                <th className="py-2 font-medium">Vs competitor</th>
+                <th className="py-2 font-medium">Reply time</th>
               </tr>
             </thead>
             <tbody>
@@ -598,8 +605,7 @@ function Leaderboard({
                     <td className="py-2 pr-3 tabular-nums">{rating === null ? "—" : rating.toFixed(2)}</td>
                     <td className="py-2 pr-3 tabular-nums">{row.reviews.toLocaleString("en-US")}</td>
                     <td className="py-2 pr-3 tabular-nums">{percent(share(row.replied, row.reviews))}</td>
-                    <td className="py-2 pr-3 tabular-nums">{hours(average(row.responseHoursSum, row.responseCount))}</td>
-                    <td className="py-2 text-slate">—</td>
+                    <td className="py-2 tabular-nums">{hours(average(row.responseHoursSum, row.responseCount))}</td>
                   </tr>
                 );
               })}
@@ -623,11 +629,15 @@ function ThemeMatrix({
   parentOf: (groupId: string) => string | null;
 }) {
   const counts = new Map<string, number>();
+  const starRows = new Map<string, Array<StarCounts | undefined>>();
   for (const row of facts.themeGroups) {
     const parent = row.groupId ? parentOf(row.groupId) : null;
     const groupId = parent ?? row.groupId ?? "";
     const key = `${groupId}::${row.theme}`;
     counts.set(key, (counts.get(key) ?? 0) + row.count);
+    const list = starRows.get(key) ?? [];
+    list.push(row.stars);
+    starRows.set(key, list);
   }
   const themes = [...new Set(facts.themeGroups.map((row) => row.theme))];
   const groups = [...new Set([...counts.keys()].map((key) => key.split("::")[0]))];
@@ -654,10 +664,12 @@ function ThemeMatrix({
                 <tr key={theme} className="border-t border-silver">
                   <td className="py-2 pr-3 text-graphite">{themeLabel(theme) ?? theme}</td>
                   {groups.map((groupId) => {
-                    const count = counts.get(`${groupId}::${theme}`) ?? 0;
+                    const key = `${groupId}::${theme}`;
+                    const count = counts.get(key) ?? 0;
                     const intensity = count === 0 ? 0.06 : 0.15 + (count / max) * 0.75;
+                    const groupName = groupId ? groupNames.get(groupId) ?? "Removed group" : "No group";
                     return (
-                      <td key={groupId || "none"} className="py-2 pr-3">
+                      <td key={groupId || "none"} className="group relative py-2 pr-3 hover:z-20">
                         <Link
                           href={drill({ ...(groupId ? { group: groupId, location: "" } : { location: "" }), theme, stars: "low" })}
                           className="inline-flex min-w-9 justify-center rounded-md px-1.5 py-0.5 tabular-nums text-graphite"
@@ -665,6 +677,12 @@ function ThemeMatrix({
                         >
                           {count}
                         </Link>
+                        <ChartTip
+                          title={`${themeLabel(theme) ?? theme} · ${groupName}`}
+                          lines={[`${count.toLocaleString("en-US")} reviews`]}
+                          stars={sumStarCounts(starRows.get(key) ?? [])}
+                          className="bottom-full left-1/2 mb-1 -translate-x-1/2"
+                        />
                       </td>
                     );
                   })}
@@ -691,8 +709,12 @@ function Themes({
   const groups = [...new Set(facts.groups.map((row) => row.groupId))];
   const max = Math.max(1, ...facts.themeGroups.map((row) => row.count));
   const themeTotals = new Map<string, number>();
+  const themeStarRows = new Map<string, Array<StarCounts | undefined>>();
   for (const row of facts.themeMonths) {
     themeTotals.set(row.theme, (themeTotals.get(row.theme) ?? 0) + row.count);
+    const list = themeStarRows.get(row.theme) ?? [];
+    list.push(row.stars);
+    themeStarRows.set(row.theme, list);
   }
   const ranked = [...themeTotals.entries()].sort((a, b) => b[1] - a[1]);
   const themeColors = [CHART.rose, CHART.orange, CHART.amber, CHART.indigo, CHART.blue, CHART.sky];
@@ -711,6 +733,8 @@ function Themes({
                 value: count,
                 color: themeColors[index % themeColors.length],
                 href: drill({ theme, stars: "low" }),
+                stars: sumStarCounts(themeStarRows.get(theme) ?? []),
+                lines: ["1–3 star reviews with this theme"],
               }))}
             />
           )}
@@ -731,6 +755,8 @@ function Themes({
                   color: themeColors[index % themeColors.length],
                   href: group.groupId ? drill({ group: group.groupId }) : drill(),
                   suffix: `· ${percent(share(group.oneToThree, group.reviews))} 1–3★`,
+                  stars: group.stars,
+                  lines: ["Reviews in this group"],
                 }))}
             />
           )}
@@ -760,11 +786,12 @@ function Themes({
                       {groupId ? groupNames.get(groupId) ?? "Removed group" : "No group"}
                     </td>
                     {themes.map((theme) => {
-                      const count =
-                        facts.themeGroups.find((row) => row.groupId === groupId && row.theme === theme)?.count ?? 0;
+                      const match = facts.themeGroups.find((row) => row.groupId === groupId && row.theme === theme);
+                      const count = match?.count ?? 0;
                       const intensity = count === 0 ? 0 : 0.12 + (count / max) * 0.75;
+                      const groupName = groupId ? groupNames.get(groupId) ?? "Removed group" : "No group";
                       return (
-                        <td key={theme} className="py-2 pr-3">
+                        <td key={theme} className="group relative py-2 pr-3 hover:z-20">
                           <Link
                             href={drill({ ...(groupId ? { group: groupId } : {}), theme, stars: "low" })}
                             className="inline-flex min-w-9 justify-center rounded-md px-1.5 py-0.5 tabular-nums text-graphite"
@@ -772,6 +799,12 @@ function Themes({
                           >
                             {count}
                           </Link>
+                          <ChartTip
+                            title={`${themeLabel(theme) ?? theme} · ${groupName}`}
+                            lines={[`${count.toLocaleString("en-US")} reviews`]}
+                            stars={match?.stars}
+                            className="bottom-full left-1/2 mb-1 -translate-x-1/2"
+                          />
                         </td>
                       );
                     })}
@@ -783,16 +816,6 @@ function Themes({
         )}
       </ChartCard>
     </div>
-  );
-}
-
-function Competitors() {
-  return (
-    <ChartCard title="Competitors">
-      <p className="max-w-xl text-sm text-slate">
-        Competitor ratings are not connected. This screen does not estimate them or compare a location with another business.
-      </p>
-    </ChartCard>
   );
 }
 
@@ -858,7 +881,7 @@ function Profile({ context, scope }: { context: DashboardContext; scope: Dashboa
                     />
                   </td>
                   <td className="py-2 pr-3">{location.holdReason ?? "—"}</td>
-                  <td className="py-2">{location.lastSyncedAt ? location.lastSyncedAt.slice(0, 10) : "Not synced"}</td>
+                  <td className="py-2">{location.lastSyncedAt ? formatFriendlyDate(location.lastSyncedAt) : "Not synced"}</td>
                 </tr>
               ))}
             </tbody>

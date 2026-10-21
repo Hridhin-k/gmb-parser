@@ -5,8 +5,9 @@ import { logger } from "@/lib/logger";
 import { groupIdsInScope } from "@/lib/hierarchy";
 import { readableReviewText } from "@/lib/review-text";
 import {
-  GEMINI_MODEL_ID,
+  GEMINI_FAST_MODEL_ID,
   GEMINI_THINKING_LOW,
+  GEMINI_THINKING_MINIMAL,
   extractGeminiText,
   geminiGenerateUrl,
 } from "@/lib/gemini";
@@ -20,15 +21,27 @@ import {
 import type { Json } from "@/lib/types/supabase";
 import { insightLensFingerprint, insightLensPromptBlock, orgContextPromptBlock } from "@/lib/ai-config";
 import { ensureActiveAiConfig, loadResolvedInsightLens } from "@/lib/services/ai-config";
+import {
+  claimAiGenerationJob,
+  completeAiGenerationJob,
+  createAiGenerationJob,
+  failAiGenerationJob,
+} from "@/lib/services/ai-generation-jobs";
+import { summaryBriefBlock, summaryEvidenceIds, tryAllTimeSummaryBrief } from "@/lib/services/summary-brief";
+import { usageFromResponse } from "@/lib/services/intelligence-extract";
+import { getAiBudget, recordAiUsage } from "@/lib/services/ai-usage-ledger";
 
-const MODEL_ID = GEMINI_MODEL_ID;
+const MODEL_ID = GEMINI_FAST_MODEL_ID;
 export const SCOPE_INSIGHT_PROMPT_VERSION = "scope-insight-v2.0";
 const REQUEST_TIMEOUT_MS = 55_000;
 const MAX_REVIEW_SAMPLES = 60;
+const PREVIEW_REVIEW_SAMPLES = 20;
 
 export type ScopeInsightKind = "client" | "group";
 
 export interface ScopeInsight {
+  /** Set when saving runs in the background; the brief is already displayable. */
+  jobId?: string;
   scopeKind: ScopeInsightKind;
   scopeId: string;
   title: string;
@@ -393,7 +406,7 @@ export class ScopeInsightService {
     kind: ScopeInsightKind,
     scopeId: string,
     userId: string,
-    options: { force?: boolean } = {}
+    options: { force?: boolean; preview?: boolean; deferPersistence?: boolean } = {}
   ): Promise<ScopeInsight> {
     const apiKey = process.env.GEMINI_API_KEY;
     if (!apiKey) {
@@ -425,12 +438,24 @@ export class ScopeInsightService {
       insightLensFingerprint(lens)
     );
 
-    if (!options.force) {
+    if (!options.force && !options.preview) {
       const cached = await this.getCached(workspaceId, kind, scopeId, fingerprint, stats.title);
       if (cached && !cached.stale) return cached;
     }
 
-    if (stats.reviews.length === 0) {
+    // Preferred source: the stored all-time summary for this scope. The
+    // brief is then written from counted topics and stored evidence quotes,
+    // never from a fresh read of raw reviews.
+    const summaryDocument = await tryAllTimeSummaryBrief(
+      admin,
+      workspaceId,
+      kind === "client" ? "organisation" : "group",
+      scopeId,
+      stats.locations.map((location) => location.id)
+    );
+    const useSummary = summaryDocument !== null && summaryDocument.coverage.reviewCount > 0;
+
+    if (stats.reviews.length === 0 && !useSummary) {
       const empty: ScopeInsight = {
         scopeKind: kind,
         scopeId,
@@ -440,17 +465,22 @@ export class ScopeInsightService {
         generatedAt: new Date().toISOString(),
         stale: false,
       };
-      await this.upsert(workspaceId, userId, empty);
+      if (!options.preview) await this.upsert(workspaceId, userId, empty);
       return empty;
     }
 
-    const reviewBlock = stats.reviews
-      .map(
-        (r, i) =>
-          `${i + 1}. id=${r.id} · [${r.locationTitle}] ${r.star_rating}/5 — ${(readableReviewText(r.comment) ?? "(rating only)").slice(0, 350)}`
-      )
-      .join("\n");
-    const sampleIds = stats.reviews.map((r) => r.id);
+    const promptReviews = options.preview
+      ? stats.reviews.slice(0, PREVIEW_REVIEW_SAMPLES)
+      : stats.reviews;
+    const reviewBlock = useSummary
+      ? summaryBriefBlock(summaryDocument, new Map(stats.locations.map((location) => [location.id, location.title])))
+      : promptReviews
+          .map(
+            (r, i) =>
+              `${i + 1}. id=${r.id} · [${r.locationTitle}] ${r.star_rating}/5 — ${(readableReviewText(r.comment) ?? "(rating only)").slice(0, options.preview ? 160 : 350)}`
+          )
+          .join("\n");
+    const sampleIds = useSummary ? summaryEvidenceIds(summaryDocument) : promptReviews.map((r) => r.id);
 
     const locationList = stats.locations
       .slice(0, 40)
@@ -467,10 +497,10 @@ ${orgBlock}${lensBlock}
 ${scopeLabel === "organisation / brand" ? "Brand" : "Group"}: "${stats.title}"
 Locations in scope (${stats.locations.length}):
 ${locationList || "- (none)"}
-Reviews in this sample: ${stats.reviews.length} (newest across all locations)
-Average rating in sample: ${stats.avgRating?.toFixed(2) ?? "n/a"}
+${useSummary ? `Reviews counted: ${summaryDocument.coverage.reviewCount} (all time, from the stored summary below)` : `Reviews in this sample: ${promptReviews.length} (newest across all locations)`}
+Average rating${useSummary ? "" : " in sample"}: ${(useSummary ? summaryDocument.metrics.averageRating : stats.avgRating)?.toFixed(2) ?? "n/a"}
 
-REVIEWS (each line starts with the shop name):
+${useSummary ? "STORED SUMMARY (base every claim on these counts and quotes; never recount or invent numbers):" : "REVIEWS (each line starts with the shop name):"}
 ${reviewBlock}
 
 Return ONLY valid JSON (no markdown) with this exact shape:
@@ -524,22 +554,38 @@ Rules:
 - Prefer 4-6 suggestedFeatures.
 - Do not mention that you are an AI. The lens is saved instructions, not model training.`;
 
+    if ((await getAiBudget(admin, workspaceId)).exceeded) {
+      const fallback: ScopeInsight = {
+        scopeKind: kind,
+        scopeId,
+        title: stats.title,
+        ...stats.heuristic,
+        sourceHash: fingerprint,
+        generatedAt: new Date().toISOString(),
+        stale: false,
+      };
+      if (!options.preview) await this.upsert(workspaceId, userId, fallback);
+      return fallback;
+    }
+
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
 
     let parsed: ReturnType<typeof parseLocationInsightPayload>;
     try {
-      const response = await fetch(geminiGenerateUrl(apiKey), {
+      const response = await fetch(
+        geminiGenerateUrl(apiKey, options.preview ? GEMINI_FAST_MODEL_ID : MODEL_ID),
+        {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           contents: [{ parts: [{ text: prompt }] }],
           generationConfig: {
             temperature: 0.4,
-            maxOutputTokens: 8192,
+            maxOutputTokens: options.preview ? 3072 : 8192,
             topP: 0.9,
             responseMimeType: "application/json",
-            thinkingConfig: GEMINI_THINKING_LOW,
+            thinkingConfig: options.preview ? GEMINI_THINKING_MINIMAL : GEMINI_THINKING_LOW,
           },
         }),
         signal: controller.signal,
@@ -552,6 +598,9 @@ Rules:
           status: response.status,
           body: body.slice(0, 200),
         });
+        if (options.preview) {
+          throw new AppError("Quick preview unavailable", "AI_UNAVAILABLE", 502);
+        }
         const fallback: ScopeInsight = {
           scopeKind: kind,
           scopeId,
@@ -567,6 +616,14 @@ Rules:
       }
 
       const data = await response.json();
+      const usage = usageFromResponse(data);
+      await recordAiUsage(admin, {
+        workspaceId,
+        operation: "insight_brief",
+        model: MODEL_ID,
+        inputTokens: usage.inputTokens,
+        outputTokens: usage.outputTokens,
+      });
       const { text: rawText, finishReason } = extractGeminiText(data);
       if (finishReason === "MAX_TOKENS") {
         throw new AppError("AI insight was cut off. Please try again.", "AI_INVALID_RESPONSE", 502);
@@ -592,6 +649,9 @@ Rules:
         scopeId,
         message: error instanceof Error ? error.message : "Unknown",
       });
+      if (options.preview) {
+        throw new AppError("Quick preview unavailable", "AI_UNAVAILABLE", 502);
+      }
       const fallback: ScopeInsight = {
         scopeKind: kind,
         scopeId,
@@ -617,13 +677,28 @@ Rules:
       highlights: parsed.highlights,
       risks: parsed.risks,
       analysis: parsed.analysis,
-      reviewCount: stats.reviews.length,
+      reviewCount: useSummary ? summaryDocument.coverage.reviewCount : promptReviews.length,
       locationCount: stats.locations.length,
-      avgRating: stats.avgRating,
+      avgRating: useSummary ? summaryDocument.metrics.averageRating : stats.avgRating,
       sourceHash: fingerprint,
       generatedAt: new Date().toISOString(),
       stale: false,
     };
+
+    if (options.preview) return insight;
+
+    if (options.deferPersistence) {
+      const jobId = await createAiGenerationJob({
+        workspaceId,
+        userId,
+        kind: "scope_insight",
+        scopeKind: kind,
+        scopeId,
+        model: MODEL_ID,
+        payload: insight as unknown as Record<string, unknown>,
+      });
+      if (jobId) return { ...insight, jobId };
+    }
 
     await this.upsert(workspaceId, userId, insight);
     await AuditService.log({
@@ -642,6 +717,33 @@ Rules:
     });
 
     return insight;
+  }
+
+  /** Background persister for a deferred scope insight job. Safe to retry. */
+  static async persistGenerationJob(jobId: string): Promise<void> {
+    const job = await claimAiGenerationJob(jobId);
+    if (!job || job.kind !== "scope_insight") return;
+    try {
+      const insight = job.payload as unknown as ScopeInsight;
+      await this.upsert(job.workspace_id, job.user_id, insight);
+      await AuditService.log({
+        workspaceId: job.workspace_id,
+        userId: job.user_id,
+        action: "scope_insight.generated",
+        entityType: "grm_scope_insights",
+        entityId: insight.scopeId,
+        metadata: {
+          model: job.model,
+          promptVersion: SCOPE_INSIGHT_PROMPT_VERSION,
+          scopeKind: insight.scopeKind,
+          reviewCount: insight.reviewCount,
+          locationCount: insight.locationCount,
+        },
+      });
+      await completeAiGenerationJob(jobId, {});
+    } catch (error) {
+      await failAiGenerationJob(jobId, job.attempts + 1, error);
+    }
   }
 
   private static async upsert(

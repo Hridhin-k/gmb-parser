@@ -1,8 +1,7 @@
 import type { ReactNode } from "react";
 import Link from "next/link";
-import { CHART } from "@/components/charts";
+import { ChartTip, CHART } from "@/components/charts";
 import { OverviewInsightFeed } from "@/components/overview-insight-feed";
-import { ReplyTargetForm } from "@/components/reply-target-form";
 import type { OverviewBoard, OverviewStoreRow } from "@/lib/overview-board";
 import { cn } from "@/lib/utils";
 
@@ -102,19 +101,38 @@ function MonthChart({ months }: { months: OverviewBoard["months"] }) {
           Average rating
         </span>
       </div>
-      <div className="relative h-48">
+      <div className="relative h-64">
         <div className="flex h-full items-end gap-1 sm:gap-2">
-          {months.map((month) => {
+          {months.map((month, index) => {
             const total = month.positive + month.negative;
-            const height = total === 0 ? 4 : Math.max(8, (total / max) * 100);
+            const height = total === 0 ? 3 : Math.max(8, (total / max) * 58);
+            const tipAlign =
+              index === 0 ? "left-0" : index === months.length - 1 ? "right-0" : "left-1/2 -translate-x-1/2";
             return (
               <Link
                 key={month.key}
                 href={month.href}
-                className="flex h-full min-w-0 flex-1 flex-col items-center justify-end"
-                aria-label={`${month.label}: ${total} reviews`}
+                className="group relative z-0 flex h-full min-w-0 flex-1 flex-col items-center justify-end hover:z-20 focus-visible:z-20"
+                aria-label={
+                  month.avgRating === null
+                    ? `${month.label}: ${total.toLocaleString("en-US")} reviews`
+                    : `${month.label}: ${total.toLocaleString("en-US")} reviews, average ${month.avgRating.toFixed(2)}`
+                }
               >
-                <span className="flex w-full max-w-8 flex-col-reverse overflow-hidden rounded-t-sm" style={{ height: `${height}%` }}>
+                <ChartTip
+                  title={`${month.label} · ${total.toLocaleString("en-US")}`}
+                  lines={[
+                    `${month.positive.toLocaleString("en-US")} positive · ${month.negative.toLocaleString("en-US")} negative`,
+                    month.avgRating === null ? "No average" : `Average ${month.avgRating.toFixed(2)}`,
+                  ]}
+                  stars={month.stars}
+                  className={tipAlign}
+                  style={{ bottom: `calc(${height}% + 6px)` }}
+                />
+                <span
+                  className="flex w-full max-w-8 flex-col-reverse overflow-hidden rounded-t-sm group-hover:brightness-95 group-focus-visible:brightness-95"
+                  style={{ height: `${height}%` }}
+                >
                   {total > 0 ? (
                     <>
                       <span style={{ height: `${(month.positive / total) * 100}%`, background: "#d5dbe3" }} />
@@ -171,7 +189,6 @@ export function ClientOverviewView({
   negativeHref,
   unansweredHref,
   escalationsHref,
-  canSetTarget,
   savedSummary,
   generate,
 }: {
@@ -180,7 +197,6 @@ export function ClientOverviewView({
   negativeHref: string;
   unansweredHref: string;
   escalationsHref: string;
-  canSetTarget: boolean;
   savedSummary: string | null;
   generate: { scopeKind: "client" | "group"; scopeId: string } | null;
 }) {
@@ -236,7 +252,6 @@ export function ClientOverviewView({
           detail={
             <span className="block text-xs text-slate">
               {kpis.unreplied.toLocaleString("en-US")} without a reply
-              {kpis.replyTarget === null ? "" : ` · target ${Math.round(kpis.replyTarget * 100)}%`}
             </span>
           }
         />
@@ -348,7 +363,7 @@ export function ClientOverviewView({
           ) : (
             <ul className="mt-4 space-y-3">
               {board.themes.map((theme) => (
-                <li key={theme.label}>
+                <li key={theme.label} className="group relative hover:z-20">
                   <Link href={theme.href} className="block hover:text-[#163a7a]">
                     <span className="flex items-baseline justify-between gap-3 text-sm">
                       <span className="text-graphite">
@@ -363,6 +378,12 @@ export function ClientOverviewView({
                       <span className="block h-full rounded-full bg-[#1f2937]" style={{ width: `${(theme.count / themeMax) * 100}%` }} />
                     </span>
                   </Link>
+                  <ChartTip
+                    title={`${theme.label} · ${theme.count.toLocaleString("en-US")}`}
+                    lines={["1–3 star reviews with this theme"]}
+                    stars={theme.stars}
+                    className="bottom-full left-0 mb-1"
+                  />
                 </li>
               ))}
             </ul>
@@ -371,11 +392,6 @@ export function ClientOverviewView({
         </Panel>
       </div>
 
-      {canSetTarget ? (
-        <div id="reply-target">
-          <ReplyTargetForm target={kpis.replyTarget} />
-        </div>
-      ) : null}
     </div>
   );
 }

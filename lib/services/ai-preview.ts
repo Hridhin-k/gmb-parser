@@ -2,8 +2,10 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { AppError, ValidationError } from "@/lib/errors";
 import { logger } from "@/lib/logger";
 import {
+  GEMINI_FAST_MODEL_ID,
   GEMINI_MODEL_ID,
   GEMINI_THINKING_LOW,
+  GEMINI_THINKING_MINIMAL,
   classifyGeminiError,
   extractGeminiText,
   geminiGenerateUrl,
@@ -13,7 +15,7 @@ import { checkReplyGuardrails } from "@/lib/reply-guardrails";
 import { voiceGuide } from "@/lib/automation";
 import { resolvedForLocation } from "@/lib/services/reply-settings";
 import { loadPromptContextForLocation, ensureActiveAiConfig } from "@/lib/services/ai-config";
-import { buildReplyPrompt } from "@/lib/services/ai-review";
+import { buildReplyPrompt, draftModelRoute } from "@/lib/services/ai-review";
 import { resolvedToneForLocation } from "@/lib/services/hierarchy";
 import type { ToneVoice } from "@/lib/onboarding";
 
@@ -127,11 +129,13 @@ export async function previewAiDraft(input: {
     };
   }
 
+  const route = draftModelRoute({ starRating: 5, comment: input.comment });
+  const modelId = route === "fast" ? GEMINI_FAST_MODEL_ID : GEMINI_MODEL_ID;
   const startedAt = Date.now();
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
   try {
-    const response = await fetch(geminiGenerateUrl(apiKey), {
+    const response = await fetch(geminiGenerateUrl(apiKey, modelId), {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
@@ -140,7 +144,7 @@ export async function previewAiDraft(input: {
           temperature: 0.6,
           maxOutputTokens: 1024,
           topP: 0.9,
-          thinkingConfig: GEMINI_THINKING_LOW,
+          thinkingConfig: route === "fast" ? GEMINI_THINKING_MINIMAL : GEMINI_THINKING_LOW,
         },
       }),
       signal: controller.signal,
@@ -181,7 +185,8 @@ export async function previewAiDraft(input: {
       aiConfigVersion: config.version,
       durationMs: Date.now() - startedAt,
       success: true,
-      model: GEMINI_MODEL_ID,
+      model: modelId,
+      route,
     });
     return {
       text: cleaned,

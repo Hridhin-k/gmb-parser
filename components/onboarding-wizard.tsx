@@ -694,7 +694,7 @@ function InviteStep({
   return (
     <section className="space-y-4">
       <p className="text-sm text-slate">
-        Invites cover the whole workspace. Organization admin and member are the roles available here. No email is
+        Invites cover the whole workspace. Admin and member are the roles available here. Managers are set later from Team, on a brand, group, or location. No email is
         sent; the person joins the next time they sign in with that Google address. Invites expire after 14 days.
       </p>
       <form onSubmit={invite} className="flex flex-col gap-2 sm:flex-row">
@@ -712,7 +712,7 @@ function InviteStep({
             value={role}
             options={[
               { value: "member", label: "Member" },
-              { value: "org_admin", label: "Organization admin" },
+              { value: "org_admin", label: "Admin" },
             ]}
             onValueChange={(value) => setRole(value === "org_admin" ? "org_admin" : "member")}
           />
@@ -726,9 +726,7 @@ function InviteStep({
             <li key={invite.id} className="px-4 py-3 text-sm">
               <span className="text-graphite">{invite.email}</span>
               <span className="ml-2 text-slate">
-                {invite.role === "org_admin" || invite.role === "admin"
-                  ? "Organization admin"
-                  : "Member"}{" "}
+                {invite.role === "org_admin" || invite.role === "admin" ? "Admin" : "Member"}{" "}
                 · expires {new Date(invite.expiresAt).toLocaleDateString()}
               </span>
             </li>

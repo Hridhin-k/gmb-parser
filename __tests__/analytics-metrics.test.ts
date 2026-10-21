@@ -58,6 +58,24 @@ describe("analytics aggregation", () => {
     expect(summary.medianHours).toBeNull();
     expect(summary.autoShare).toBeNull();
     expect(summary.buckets).toEqual({ under1h: 0, h1to6: 0, h6to24: 0, over24h: 0 });
+    expect(summary.bucketStars.under1h).toEqual([0, 0, 0, 0, 0]);
+  });
+
+  it("counts stars inside the reply-time bucket", () => {
+    const summary = summarizeSamples([
+      sample({
+        stars: 5,
+        hasReply: true,
+        replyAt: "2026-06-01T00:30:00.000Z",
+      }),
+      sample({
+        stars: 2,
+        hasReply: true,
+        replyAt: "2026-06-02T00:00:00.000Z",
+      }),
+    ]);
+    expect(summary.bucketStars.under1h).toEqual([0, 0, 0, 0, 1]);
+    expect(summary.bucketStars.over24h).toEqual([0, 1, 0, 0, 0]);
   });
 });
 

@@ -1,3 +1,4 @@
+import { after } from "next/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { rpcLocationReviewStats } from "@/lib/supabase/rpc";
 import { UNASSIGNED_CLIENT_MARKER } from "@/lib/services/unassigned-client";
@@ -99,35 +100,37 @@ export interface DashboardReviewRow {
 
 const INBOX_PAGE_SIZE = 30;
 const PROFILE_PAGE_SIZE = 25;
-const ATTENTION_LIMIT = 12;
 
-function attentionScore(row: {
-  unanswered: number;
-  critical: number;
-  lastReviewAt: string | null;
-}): number {
-  let score = row.unanswered * 10 + row.critical * 6;
-  if (row.lastReviewAt) {
-    const ageHours =
-      (Date.now() - new Date(row.lastReviewAt).getTime()) / 3_600_000;
-    if (ageHours < 48) score += 5;
-    else if (ageHours < 168) score += 2;
-  }
-  return score;
-}
+const EMPTY_KPIS: DashboardKpis = {
+  totalReviews: 0,
+  unanswered: 0,
+  drafts: 0,
+  approved: 0,
+  failed: 0,
+  published: 0,
+  avgRating: null,
+  ratingDistribution: { 1: 0, 2: 0, 3: 0, 4: 0, 5: 0 },
+  clientsActive: 0,
+  locationsActive: 0,
+  reviewsLast7d: 0,
+  reviewsLast30d: 0,
+  profilesNeedingReply: 0,
+  criticalReviews: 0,
+};
 
 export async function getDashboardData(
   workspaceId: string,
   filters: DashboardFilters
 ) {
   const admin = createAdminClient();
-  await backfillReviewSignals(admin, workspaceId);
+  // One small batch, and never two at once. A wide update loop starves the
+  // next page (reports, insights, clients) until the browser times out.
+  scheduleReviewBackfill(admin, workspaceId);
 
   const [
     { data: allClients },
     { data: allLocations },
     { data: connections },
-    locationStats,
     { data: unassignedClients },
     { data: locationGroups },
   ] = await Promise.all([
@@ -153,7 +156,6 @@ export async function getDashboardData(
       .eq("workspace_id", workspaceId)
       .eq("status", "active")
       .limit(1),
-    rpcLocationReviewStats(admin, workspaceId),
     admin
       .from("grm_clients")
       .select("id")
@@ -166,10 +168,6 @@ export async function getDashboardData(
       .order("name"),
   ]);
 
-  if (locationStats.error) {
-    throw new Error(`Failed to load review stats: ${locationStats.error.message}`);
-  }
-
   const unassignedIds = new Set((unassignedClients ?? []).map((c) => c.id));
 
   const locations = (allLocations ?? []).filter((l) => {
@@ -181,201 +179,41 @@ export async function getDashboardData(
     );
   });
 
-  const statsRows = locationStats.data ?? [];
-  const byLocStats = new Map(statsRows.map((s) => [s.location_id, s]));
-
-  const ratingDistribution: Record<1 | 2 | 3 | 4 | 5, number> = {
-    1: 0,
-    2: 0,
-    3: 0,
-    4: 0,
-    5: 0,
-  };
-  let totalReviews = 0;
-  let ratingSum = 0;
-  let unanswered = 0;
-  let drafts = 0;
-  let approved = 0;
-  let failed = 0;
-  let published = 0;
-  let reviewsLast7d = 0;
-  let reviewsLast30d = 0;
-  let criticalReviews = 0;
-
-  for (const s of statsRows) {
-    totalReviews += s.review_count;
-    ratingSum += Number(s.rating_sum);
-    unanswered += s.unanswered;
-    drafts += s.drafts;
-    approved += s.approved;
-    failed += s.failed;
-    published += s.published;
-    criticalReviews += s.critical;
-    reviewsLast7d += s.last_7d;
-    reviewsLast30d += s.last_30d;
-    ratingDistribution[1] += s.r1;
-    ratingDistribution[2] += s.r2;
-    ratingDistribution[3] += s.r3;
-    ratingDistribution[4] += s.r4;
-    ratingDistribution[5] += s.r5;
-  }
-
-  const allProfiles: ProfileRow[] = locations.map((l) => {
-    const client = Array.isArray(l.grm_clients) ? l.grm_clients[0] : l.grm_clients;
-    const clientName = (client as { name?: string } | null)?.name ?? null;
-    const s = byLocStats.get(l.id);
-    const count = s?.review_count ?? 0;
-    const row = {
-      id: l.id,
-      title: l.location_title,
-      clientId: l.client_id,
-      clientName,
-      storeCode: l.store_code,
-      address: l.address_formatted,
-      reviewCount: count,
-      unanswered: s?.unanswered ?? 0,
-      critical: s?.critical ?? 0,
-      avgRating: s && count > 0 ? Number(s.rating_sum) / count : null,
-      lastReviewAt: s?.last_review_at ?? null,
-      attentionScore: 0,
-    };
-    row.attentionScore = attentionScore(row);
-    return row;
-  });
-
-  const profilesNeedingReply = allProfiles.filter((p) => p.unanswered > 0).length;
-
+  // The inbox only needs locations, filters, and the current page of reviews.
+  // Org-wide stats and saved insights are loaded by the pages that render them.
   const kpis: DashboardKpis = {
-    totalReviews,
-    unanswered,
-    drafts,
-    approved,
-    failed,
-    published,
-    avgRating: totalReviews > 0 ? ratingSum / totalReviews : null,
-    ratingDistribution,
+    ...EMPTY_KPIS,
     clientsActive: (allClients ?? []).length,
     locationsActive: locations.length,
-    reviewsLast7d,
-    reviewsLast30d,
-    profilesNeedingReply,
-    criticalReviews,
   };
-
-  // Attention queue — top N only (not all profiles)
-  const attentionQueue = [...allProfiles]
-    .filter((p) => p.attentionScore > 0)
-    .sort((a, b) => b.attentionScore - a.attentionScore)
-    .slice(0, ATTENTION_LIMIT);
-
-  // Profile directory — search + sort + paginate
-  const pq = filters.profileQ.trim().toLowerCase();
-  const directory = allProfiles.filter((p) => {
-    if (filters.clientId && p.clientId !== filters.clientId) return false;
-    if (!pq) return true;
-    return (
-      p.title.toLowerCase().includes(pq) ||
-      (p.clientName?.toLowerCase().includes(pq) ?? false) ||
-      (p.storeCode?.toLowerCase().includes(pq) ?? false) ||
-      (p.address?.toLowerCase().includes(pq) ?? false)
-    );
-  });
-
-  switch (filters.profileSort) {
-    case "name":
-      directory.sort((a, b) => a.title.localeCompare(b.title));
-      break;
-    case "rating":
-      directory.sort(
-        (a, b) => (a.avgRating ?? 99) - (b.avgRating ?? 99)
-      );
-      break;
-    case "reviews":
-      directory.sort((a, b) => b.reviewCount - a.reviewCount);
-      break;
-    case "unanswered":
-      directory.sort((a, b) => b.unanswered - a.unanswered);
-      break;
-    case "attention":
-    default:
-      directory.sort((a, b) => {
-        if (b.attentionScore !== a.attentionScore)
-          return b.attentionScore - a.attentionScore;
-        return a.title.localeCompare(b.title);
-      });
-      break;
-  }
-
-  const profileTotal = directory.length;
+  const attentionQueue: ProfileRow[] = [];
+  const profileDirectory: ProfileRow[] = [];
+  const profileTotal = 0;
   const profilePageSize = PROFILE_PAGE_SIZE;
-  const profilePage = Math.max(1, filters.profilePage);
-  const profileFrom = (profilePage - 1) * profilePageSize;
-  const profileDirectory = directory.slice(
-    profileFrom,
-    profileFrom + profilePageSize
-  );
+  const selectedInsight: LocationInsight | null = null;
+  const selectedHeuristic: string | null = null;
+  const selectedProfile: ProfileRow | null = null;
 
-  // AI insight ONLY for the selected location — never for all profiles
-  let selectedInsight: LocationInsight | null = null;
-  let selectedHeuristic: string | null = null;
-  let selectedProfile: ProfileRow | null = null;
-
-  if (filters.locationId && /^[0-9a-f-]{36}$/i.test(filters.locationId)) {
-    selectedProfile = allProfiles.find((p) => p.id === filters.locationId) ?? null;
-    if (selectedProfile) {
-      const statsMap = await LocationInsightService.buildLocationReviewStats(
-        workspaceId,
-        [filters.locationId]
-      );
-      const stats = statsMap.get(filters.locationId);
-      selectedHeuristic = stats?.heuristic.summary ?? null;
-      if (stats) {
-        const cached = await LocationInsightService.getCachedInsights(
-          workspaceId,
-          [filters.locationId],
-          new Map([[filters.locationId, stats.fingerprint]])
-        );
-        selectedInsight = cached.get(filters.locationId) ?? null;
-      }
-    }
-  }
-
-  // Filter dropdown options: for scale, pass clients always; locations only
-  // for the selected client (or empty → directory handles discovery)
   const clients = (allClients ?? []).map((c) => ({ id: c.id, name: c.name }));
-  const locationsForFilters = filters.clientId
-    ? locations
-        .filter((l) => l.client_id === filters.clientId)
-        .map((l) => {
-          const client = Array.isArray(l.grm_clients)
-            ? l.grm_clients[0]
-            : l.grm_clients;
-          const brand = (client as { name?: string } | null)?.name ?? null;
-          return {
-            id: l.id,
-            location_title: formatLocationOption({
-              brand,
-              title: l.location_title,
-              storeCode: l.store_code,
-              address: l.address_formatted,
-            }),
-            clientId: l.client_id,
-          };
-        })
-    : selectedProfile
-      ? [
-          {
-            id: selectedProfile.id,
-            location_title: formatLocationOption({
-              brand: selectedProfile.clientName,
-              title: selectedProfile.title,
-              storeCode: selectedProfile.storeCode,
-              address: selectedProfile.address,
-            }),
-            clientId: selectedProfile.clientId,
-          },
-        ]
+  const filterSource = filters.clientId
+    ? locations.filter((l) => l.client_id === filters.clientId)
+    : filters.locationId
+      ? locations.filter((l) => l.id === filters.locationId)
       : [];
+  const locationsForFilters = filterSource.map((l) => {
+    const client = Array.isArray(l.grm_clients) ? l.grm_clients[0] : l.grm_clients;
+    const brand = (client as { name?: string } | null)?.name ?? null;
+    return {
+      id: l.id,
+      location_title: formatLocationOption({
+        brand,
+        title: l.location_title,
+        storeCode: l.store_code,
+        address: l.address_formatted,
+      }),
+      clientId: l.client_id,
+    };
+  });
 
   // Inbox
   const rangeFrom = (filters.page - 1) * INBOX_PAGE_SIZE;
@@ -723,6 +561,23 @@ export async function getDashboardData(
   };
 }
 
+let reviewBackfillRunning = false;
+
+function scheduleReviewBackfill(
+  admin: ReturnType<typeof createAdminClient>,
+  workspaceId: string
+) {
+  if (reviewBackfillRunning) return;
+  reviewBackfillRunning = true;
+  after(async () => {
+    try {
+      await backfillReviewSignals(admin, workspaceId);
+    } finally {
+      reviewBackfillRunning = false;
+    }
+  });
+}
+
 async function backfillReviewSignals(
   admin: ReturnType<typeof createAdminClient>,
   workspaceId: string
@@ -732,7 +587,7 @@ async function backfillReviewSignals(
     .select("id, comment, star_rating")
     .eq("workspace_id", workspaceId)
     .is("review_language", null)
-    .limit(80);
+    .limit(8);
   if (error || !data?.length) return;
 
   // Small batches only. A wide Promise.all of updates can starve the inbox

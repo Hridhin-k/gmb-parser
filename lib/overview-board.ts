@@ -1,4 +1,5 @@
-import { average, reviewWindow, type DashboardFacts } from "@/lib/metrics";
+import { average, reviewWindow, type DashboardFacts, type StarCounts } from "@/lib/metrics";
+import { sumStarCounts } from "@/lib/star-breakdown";
 import { themeLabel } from "@/lib/review-inbox";
 
 /**
@@ -48,7 +49,6 @@ export interface OverviewKpis {
   previousNegativeShare: number | null;
   replyRate: number | null;
   previousReplyRate: number | null;
-  replyTarget: number | null;
   unreplied: number;
   openEscalations: number;
   overdueEscalations: number;
@@ -89,6 +89,7 @@ export interface OverviewMonthBar {
   negative: number;
   avgRating: number | null;
   href: string;
+  stars?: StarCounts;
 }
 
 export interface OverviewAttentionRow {
@@ -104,6 +105,7 @@ export interface OverviewThemeBar {
   previous: number | null;
   direction: "new" | "rising" | "falling" | "steady" | null;
   href: string;
+  stars?: StarCounts;
 }
 
 export interface OverviewBoard {
@@ -341,7 +343,6 @@ export function buildOverviewBoard(input: {
   places: BoardPlace[];
   themes: BoardThemeRow[];
   themesTruncated: boolean;
-  replyTarget: number | null;
   links: BoardLinks;
   attention: OverviewAttentionRow[];
 }): OverviewBoard {
@@ -351,8 +352,14 @@ export function buildOverviewBoard(input: {
   const multiple = ranked.length > 1;
 
   const themeTotals = new Map<string, number>();
+  const themeStarRows = new Map<string, Array<StarCounts | undefined>>();
   const previousTotals = new Map<string, number>();
-  for (const row of input.facts.themeMonths) themeTotals.set(row.theme, (themeTotals.get(row.theme) ?? 0) + row.count);
+  for (const row of input.facts.themeMonths) {
+    themeTotals.set(row.theme, (themeTotals.get(row.theme) ?? 0) + row.count);
+    const list = themeStarRows.get(row.theme) ?? [];
+    list.push(row.stars);
+    themeStarRows.set(row.theme, list);
+  }
   for (const row of input.previous?.themeMonths ?? []) previousTotals.set(row.theme, (previousTotals.get(row.theme) ?? 0) + row.count);
 
   return {
@@ -365,7 +372,6 @@ export function buildOverviewBoard(input: {
       previousNegativeShare: earlier?.negativeShare ?? null,
       replyRate: current.replyRate,
       previousReplyRate: earlier?.replyRate ?? null,
-      replyTarget: input.replyTarget,
       unreplied: input.facts.unreplied,
       openEscalations: input.facts.openEscalations,
       overdueEscalations: input.facts.overdueEscalations,
@@ -381,6 +387,7 @@ export function buildOverviewBoard(input: {
         negative: month.oneToThree,
         avgRating: average(month.ratingSum, month.reviews),
         href: input.links.reviews({ range: "custom", from: bounds.from, to: bounds.to }),
+        stars: month.stars,
       };
     }),
     trendCaption: trendCaption(input.facts.months),
@@ -397,6 +404,7 @@ export function buildOverviewBoard(input: {
         previous: input.previous ? previousTotals.get(theme) ?? 0 : null,
         direction: themeDirection(count, input.previous ? previousTotals.get(theme) ?? 0 : null),
         href: input.links.reviews({ theme, stars: "low" }),
+        stars: sumStarCounts(themeStarRows.get(theme) ?? []),
       })),
     themesTruncated: input.themesTruncated,
     analyticsHref: input.links.analytics,

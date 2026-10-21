@@ -24,6 +24,7 @@ import {
 } from "lucide-react";
 import { NavLinkIcon } from "@/components/nav-link-icon";
 import { Button } from "@/components/ui/button";
+import { FilterApplyFrame, FilterNavigation } from "@/components/filter-navigation";
 import { ShellHeader } from "@/components/shell-header";
 import { MobileNav } from "@/components/mobile-nav";
 import { ActivityStatus } from "@/components/activity-status";
@@ -144,6 +145,7 @@ function SidebarNav({
                   <Link
                     key={id}
                     href={href}
+                    prefetch={false}
                     onClick={onNavigate}
                     className={linkClass(active)}
                     aria-current={active ? "page" : undefined}
@@ -228,6 +230,7 @@ export function AppShell({
 
   if (pathname === "/m" || pathname.startsWith("/m/")) {
     return (
+      <FilterNavigation>
       <div className="flex h-dvh flex-col overflow-hidden bg-paper">
         <header className="shrink-0 border-b border-silver bg-white px-4 py-2">
           <div className="flex items-center justify-between gap-3">
@@ -243,16 +246,20 @@ export function AppShell({
           ) : null}
         </header>
         <main className="min-w-0 flex-1 overflow-y-auto" id="main-content">
-          <div className="mx-auto w-full max-w-lg px-4 py-4 pb-28">{children}</div>
+          <div className="mx-auto w-full max-w-lg px-4 py-4 pb-28">
+            <FilterApplyFrame>{children}</FilterApplyFrame>
+          </div>
         </main>
         <Suspense fallback={null}>
           <MobileNav summary={summary} />
         </Suspense>
       </div>
+      </FilterNavigation>
     );
   }
 
   return (
+    <FilterNavigation>
     <div className="flex h-dvh overflow-hidden bg-paper">
       {sidebarOpen && (
         <div
@@ -368,6 +375,7 @@ export function AppShell({
                   <Link
                     key={client.id}
                     href={href}
+                    prefetch={false}
                     onClick={closeSidebar}
                     className={linkClass(active)}
                     aria-current={active ? "page" : undefined}
@@ -403,10 +411,11 @@ export function AppShell({
         </Suspense>
         <main className="flex-1 overflow-y-auto" id="main-content">
           <div className="mx-auto max-w-[1280px] px-4 py-4 sm:px-6 sm:py-5 lg:px-8 lg:py-6">
-            {children}
+            <FilterApplyFrame>{children}</FilterApplyFrame>
           </div>
         </main>
       </div>
     </div>
+    </FilterNavigation>
   );
 }

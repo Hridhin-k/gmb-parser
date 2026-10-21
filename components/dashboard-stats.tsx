@@ -1,4 +1,6 @@
 import Link from "next/link";
+import { ChartTip } from "@/components/charts";
+import type { StarCounts } from "@/lib/metrics";
 import { cn } from "@/lib/utils";
 import type { DashboardKpis } from "@/lib/services/dashboard";
 
@@ -48,6 +50,13 @@ export function DashboardStats({
   basePath = "/dashboard",
 }: DashboardStatsProps) {
   const maxBar = Math.max(1, ...Object.values(kpis.ratingDistribution));
+  const starMix: StarCounts = [
+    kpis.ratingDistribution[1],
+    kpis.ratingDistribution[2],
+    kpis.ratingDistribution[3],
+    kpis.ratingDistribution[4],
+    kpis.ratingDistribution[5],
+  ];
   const average =
     kpis.avgRating != null ? kpis.avgRating.toFixed(1) : "—";
   const averageClass =
@@ -133,8 +142,14 @@ export function DashboardStats({
                 <Link
                   key={star}
                   href={`${basePath}?rating=${star}`}
-                  className="flex items-center gap-2 rounded-md px-1 py-0.5 hover:bg-paper"
+                  className="group relative flex items-center gap-2 rounded-md px-1 py-0.5 hover:z-20 hover:bg-paper"
                 >
+                  <ChartTip
+                    title={`${star}★ · ${count.toLocaleString("en-US")}`}
+                    lines={["Rating distribution"]}
+                    stars={starMix}
+                    className="bottom-full left-0 mb-1"
+                  />
                   <span
                     className={cn(
                       "w-7 text-right text-xs tabular-nums",

@@ -37,7 +37,11 @@ export default async function ReportsPage({ searchParams }: ReportsPageProps) {
   const locationId = resolved.locationId ?? "";
   const range = parseDateRange(params, DEFAULT_RANGE);
 
-  const [reviewCount, reports, alerts, scopes, roster, summary] = await Promise.all([
+  const admin = createAdminClient();
+  const scopedClientIds = allowedClientIds?.length
+    ? allowedClientIds
+    : ["00000000-0000-0000-0000-000000000000"];
+  const [reviewCount, reports, alerts, scopes, roster, summary, scopedPlaces, scopedGroups] = await Promise.all([
     countExportableReviews(workspaceId, {
       clientId: clientId || null,
       groupId: groupId || null,
@@ -50,6 +54,20 @@ export default async function ReportsPage({ searchParams }: ReportsPageProps) {
     listReportScopes(workspaceId),
     getWorkspaceRoster(workspaceId),
     getShellSummary(workspaceId, allowedClientIds),
+    allowedClientIds
+      ? admin
+          .from("grm_google_locations")
+          .select("id, group_id")
+          .eq("workspace_id", workspaceId)
+          .in("client_id", scopedClientIds)
+      : Promise.resolve(null),
+    allowedClientIds
+      ? admin
+          .from("grm_groups")
+          .select("id")
+          .eq("workspace_id", workspaceId)
+          .in("client_id", scopedClientIds)
+      : Promise.resolve(null),
   ]);
 
   const reviewExport = new URLSearchParams(dateRangeParams(range, "all"));
@@ -65,20 +83,6 @@ export default async function ReportsPage({ searchParams }: ReportsPageProps) {
   if (groupId) current.set("group", groupId);
   if (locationId) current.set("location", locationId);
   for (const [key, value] of Object.entries(dateRangeParams(range, DEFAULT_RANGE))) current.set(key, value);
-  const scopedPlaces = allowedClientIds
-    ? await createAdminClient()
-        .from("grm_google_locations")
-        .select("id, group_id")
-        .eq("workspace_id", workspaceId)
-        .in("client_id", allowedClientIds.length ? allowedClientIds : ["00000000-0000-0000-0000-000000000000"])
-    : null;
-  const scopedGroups = allowedClientIds
-    ? await createAdminClient()
-        .from("grm_groups")
-        .select("id")
-        .eq("workspace_id", workspaceId)
-        .in("client_id", allowedClientIds.length ? allowedClientIds : ["00000000-0000-0000-0000-000000000000"])
-    : null;
   const locationOk = new Set((scopedPlaces?.data ?? []).map((place) => place.id));
   const groupOk = new Set([
     ...(scopedPlaces?.data ?? []).flatMap((place) => (place.group_id ? [place.group_id] : [])),

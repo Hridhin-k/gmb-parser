@@ -1,6 +1,53 @@
-import type { ReactNode } from "react";
+import type { CSSProperties, ReactNode } from "react";
 import Link from "next/link";
+import type { StarCounts } from "@/lib/metrics";
 import { cn } from "@/lib/utils";
+
+const TIP_FONT = { fontFamily: "var(--font-heading), sans-serif" };
+
+/** Hover card for a chart mark: the mark's own numbers, then 1★–5★. */
+export function ChartTip({
+  title,
+  lines,
+  stars,
+  className,
+  style,
+}: {
+  title: string;
+  lines?: string[];
+  stars?: StarCounts | null;
+  className?: string;
+  style?: CSSProperties;
+}) {
+  return (
+    <span
+      className={cn(
+        "pointer-events-none absolute z-20 hidden w-max max-w-[18rem] rounded-md border border-[#e6ebf2] bg-white px-2.5 py-1.5 text-left shadow-[0_4px_12px_rgba(16,24,40,0.12)] group-hover:block group-focus-visible:block",
+        className
+      )}
+      style={style}
+    >
+      <span className="block text-sm tabular-nums text-graphite" style={TIP_FONT}>
+        {title}
+      </span>
+      {lines?.map((line, index) => (
+        <span key={`${index}-${line}`} className="block text-[10px] leading-snug tabular-nums text-slate">
+          {line}
+        </span>
+      ))}
+      {stars ? (
+        <span className="mt-1.5 grid grid-cols-5 gap-2 border-t border-[#eef2f7] pt-1.5">
+          {stars.map((count, index) => (
+            <span key={index} className="text-center">
+              <span className="block text-[11px] tabular-nums text-graphite">{count.toLocaleString("en-US")}</span>
+              <span className="block text-[10px] text-slate">{index + 1}★</span>
+            </span>
+          ))}
+        </span>
+      ) : null}
+    </span>
+  );
+}
 
 export const CHART = {
   blue: "#2563eb",
@@ -55,7 +102,16 @@ export function HBarChart({
   rows,
   max,
 }: {
-  rows: Array<{ id?: string; label: string; value: number; color: string; href?: string; suffix?: string }>;
+  rows: Array<{
+    id?: string;
+    label: string;
+    value: number;
+    color: string;
+    href?: string;
+    suffix?: string;
+    lines?: string[];
+    stars?: StarCounts | null;
+  }>;
   max: number;
 }) {
   const ceiling = Math.max(1, max);
@@ -79,8 +135,16 @@ export function HBarChart({
             </span>
           </>
         );
+        const tip = (
+          <ChartTip
+            title={`${row.label} · ${row.value.toLocaleString("en-US")}`}
+            lines={[...(row.suffix ? [row.suffix.replace(/^·\s*/, "")] : []), ...(row.lines ?? [])]}
+            stars={row.stars}
+            className="bottom-full left-0 mb-1"
+          />
+        );
         return (
-          <li key={row.id ?? row.label}>
+          <li key={row.id ?? row.label} className="group relative hover:z-20">
             {row.href ? (
               <a href={row.href} className="block hover:opacity-90">
                 {inner}
@@ -88,6 +152,7 @@ export function HBarChart({
             ) : (
               inner
             )}
+            {tip}
           </li>
         );
       })}
@@ -107,6 +172,7 @@ export function MonthVolumeChart({
     negative: number;
     avgRating: number | null;
     href?: string;
+    stars?: StarCounts | null;
   }>;
 }) {
   const totals = months.map((month) => month.positive + month.neutral + month.negative);
@@ -118,16 +184,16 @@ export function MonthVolumeChart({
 
   return (
     <div>
-      <div className="relative h-48">
+      <div className="relative h-64">
         <div className="flex h-full items-end gap-1.5 sm:gap-2" role="img" aria-label="Reviews by month">
-          {months.map((month) => {
+          {months.map((month, index) => {
             const total = month.positive + month.neutral + month.negative;
-            const height = total === 0 ? 0 : Math.max(8, (total / max) * 100);
+            const height = total === 0 ? 0 : Math.max(8, (total / max) * 62);
+            const tipAlign = index === 0 ? "left-0" : index === months.length - 1 ? "right-0" : "left-1/2 -translate-x-1/2";
             const bar = (
               <div
                 className="flex w-full max-w-10 flex-col-reverse overflow-hidden rounded-t-md"
                 style={{ height: `${height}%` }}
-                title={`${month.label}: ${total} reviews`}
               >
                 {total > 0 ? (
                   <>
@@ -140,10 +206,23 @@ export function MonthVolumeChart({
                 )}
               </div>
             );
+            const tip = (
+              <ChartTip
+                title={`${month.label} · ${total.toLocaleString("en-US")}`}
+                lines={[
+                  `${month.positive.toLocaleString("en-US")} positive · ${month.neutral.toLocaleString("en-US")} neutral · ${month.negative.toLocaleString("en-US")} negative`,
+                  month.avgRating === null ? "No average" : `Average ${month.avgRating.toFixed(2)}`,
+                ]}
+                stars={month.stars}
+                className={tipAlign}
+                style={{ bottom: `calc(${height}% + 6px)` }}
+              />
+            );
             return (
-              <div key={month.key} className="flex h-full min-w-0 flex-1 flex-col items-center justify-end">
+              <div key={month.key} className="group relative z-0 flex h-full min-w-0 flex-1 flex-col items-center justify-end hover:z-20 focus-within:z-20">
+                {tip}
                 {month.href ? (
-                  <a href={month.href} className="flex h-full w-full flex-col items-center justify-end">
+                  <a href={month.href} className="flex h-full w-full flex-col items-center justify-end" aria-label={`${month.label}: ${total} reviews`}>
                     {bar}
                   </a>
                 ) : (
@@ -200,10 +279,12 @@ export function SentimentDonut({
   positive,
   neutral,
   negative,
+  stars,
 }: {
   positive: number;
   neutral: number;
   negative: number;
+  stars?: StarCounts | null;
 }) {
   const total = positive + neutral + negative;
   const radius = 42;
@@ -215,8 +296,23 @@ export function SentimentDonut({
   ];
   let offset = 0;
 
+  const bandStars: Record<string, StarCounts> | null = stars
+    ? {
+        Positive: [0, 0, 0, stars[3], stars[4]],
+        Neutral: [0, 0, stars[2], 0, 0],
+        Negative: [stars[0], stars[1], 0, 0, 0],
+      }
+    : null;
+
   return (
     <div className="flex flex-col items-center gap-4 sm:flex-row sm:items-center sm:justify-between">
+      <div className="group relative">
+      <ChartTip
+        title={`${total.toLocaleString("en-US")} reviews`}
+        lines={["Positive is 4–5★. Neutral is 3★. Negative is 1–2★."]}
+        stars={stars}
+        className="bottom-full left-1/2 mb-1 -translate-x-1/2"
+      />
       <svg viewBox="0 0 120 120" className="size-36 shrink-0" role="img" aria-label="Sentiment mix">
         <circle cx="60" cy="60" r={radius} fill="none" stroke={CHART.track} strokeWidth="12" />
         {total === 0 ? null : (
@@ -249,9 +345,16 @@ export function SentimentDonut({
           reviews
         </text>
       </svg>
+      </div>
       <ul className="w-full space-y-2 text-sm">
         {segments.map((segment) => (
-          <li key={segment.label} className="flex items-center justify-between gap-3">
+          <li key={segment.label} className="group relative flex items-center justify-between gap-3 hover:z-20">
+            <ChartTip
+              title={`${segment.label} · ${segment.value.toLocaleString("en-US")}`}
+              lines={[total > 0 ? `${Math.round((segment.value / total) * 100)}% of reviews` : "No reviews"]}
+              stars={bandStars?.[segment.label]}
+              className="bottom-full left-0 mb-1"
+            />
             <span className="flex items-center gap-2 text-graphite">
               <span className="size-2.5 rounded-full" style={{ background: segment.color }} aria-hidden />
               {segment.label}
@@ -305,13 +408,14 @@ export function ScoreRing({ score, caption }: { score: number | null; caption: s
 export function VBarChart({
   rows,
 }: {
-  rows: Array<{ label: string; value: number; href?: string }>;
+  rows: Array<{ label: string; value: number; href?: string; lines?: string[]; stars?: StarCounts | null }>;
 }) {
   const max = Math.max(1, ...rows.map((row) => row.value));
   return (
-    <div className="flex h-44 items-end gap-2 sm:gap-4">
-      {rows.map((row) => {
+    <div className="flex h-52 items-end gap-2 sm:gap-4">
+      {rows.map((row, index) => {
         const height = row.value === 0 ? 4 : Math.max(12, Math.round((row.value / max) * 128));
+        const tipAlign = index === 0 ? "left-0" : index === rows.length - 1 ? "right-0" : "left-1/2 -translate-x-1/2";
         const bar = (
           <span className="flex w-full flex-col items-center justify-end">
             <span className="mb-1 text-xs tabular-nums text-slate">{row.value.toLocaleString("en-US")}</span>
@@ -319,7 +423,14 @@ export function VBarChart({
           </span>
         );
         return (
-          <div key={row.label} className="flex min-w-0 flex-1 flex-col items-center">
+          <div key={row.label} className="group relative z-0 flex h-full min-w-0 flex-1 flex-col items-center justify-end hover:z-20">
+            <ChartTip
+              title={`${row.label} · ${row.value.toLocaleString("en-US")}`}
+              lines={row.lines}
+              stars={row.stars}
+              className={tipAlign}
+              style={{ bottom: height + 28 }}
+            />
             {row.href ? (
               <Link href={row.href} className="flex w-full flex-col items-center text-navy" aria-label={`${row.label}: ${row.value}`}>
                 {bar}

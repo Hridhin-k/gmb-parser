@@ -1,5 +1,6 @@
 import { parseDateRange, type DateRange } from "@/lib/date-range";
-import { buildInsights, reviewWindow, type DashboardFacts } from "@/lib/metrics";
+import { buildInsights, reviewWindow, type DashboardFacts, type StarCounts } from "@/lib/metrics";
+import { sumStarCounts } from "@/lib/star-breakdown";
 import { themeLabel } from "@/lib/review-inbox";
 
 const DAY_MS = 86_400_000;
@@ -100,7 +101,6 @@ export function countDeltaLabel(current: number, previous: number | null): strin
 export function weekBrief(input: {
   facts: DashboardFacts;
   previous: DashboardFacts | null;
-  replyTarget: number | null;
   scopeLabel: string;
 }): string {
   return buildInsights({
@@ -108,16 +108,19 @@ export function weekBrief(input: {
     scopeLabel: input.scopeLabel,
     facts: input.facts,
     previous: input.previous,
-    replyTarget: input.replyTarget,
     lowestLocation: null,
   }).join(" ");
 }
 
-export function themeBars(facts: DashboardFacts): Array<{ id: string; label: string; count: number; width: number }> {
+export function themeBars(facts: DashboardFacts): Array<{ id: string; label: string; count: number; width: number; stars?: StarCounts }> {
   const totals = new Map<string, number>();
+  const starRows = new Map<string, Array<StarCounts | undefined>>();
   for (const row of facts.themeMonths) {
     if (!row.theme || row.count <= 0) continue;
     totals.set(row.theme, (totals.get(row.theme) ?? 0) + row.count);
+    const list = starRows.get(row.theme) ?? [];
+    list.push(row.stars);
+    starRows.set(row.theme, list);
   }
   const ranked = [...totals.entries()].sort((a, b) => b[1] - a[1]).slice(0, 4);
   const max = ranked[0]?.[1] ?? 0;
@@ -126,10 +129,11 @@ export function themeBars(facts: DashboardFacts): Array<{ id: string; label: str
     label: themeLabel(id) ?? id,
     count,
     width: max > 0 ? Math.max(8, Math.round((count / max) * 100)) : 0,
+    stars: sumStarCounts(starRows.get(id) ?? []),
   }));
 }
 
-export function replyRateLabel(facts: DashboardFacts, target: number | null): {
+export function replyRateLabel(facts: DashboardFacts): {
   rate: string;
   detail: string;
 } {
@@ -137,15 +141,9 @@ export function replyRateLabel(facts: DashboardFacts, target: number | null): {
   if (facts.reviews === 0 || current.replyRate === null) {
     return { rate: "—", detail: "No reviews in this period." };
   }
-  const rate = `${Math.round(current.replyRate * 100)}%`;
-  if (target === null) return { rate, detail: "No reply target is saved." };
-  const targetPct = Math.round(target * 100);
   return {
-    rate,
-    detail:
-      current.replyRate >= target
-        ? `Saved target ${targetPct}%. At or above it.`
-        : `Saved target ${targetPct}%. Below it.`,
+    rate: `${Math.round(current.replyRate * 100)}%`,
+    detail: `${facts.unreplied.toLocaleString("en-US")} without a reply`,
   };
 }
 

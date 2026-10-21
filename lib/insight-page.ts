@@ -1,4 +1,5 @@
-import type { DashboardFacts } from "@/lib/metrics";
+import { type DashboardFacts, type StarCounts } from "@/lib/metrics";
+import { sumStarCounts } from "@/lib/star-breakdown";
 import { themeLabel } from "@/lib/review-inbox";
 
 export interface ScoredOutlet {
@@ -11,14 +12,22 @@ export interface ScoredOutlet {
 
 /** Aggregate theme_groups rows into labeled totals for evidence charts. */
 export function themeRowsFromGroups(
-  themeGroups: Array<{ theme: string; count: number }>
-): Array<{ label: string; count: number }> {
+  themeGroups: Array<{ theme: string; count: number; stars?: StarCounts }>
+): Array<{ label: string; count: number; stars?: StarCounts }> {
   const totals = new Map<string, number>();
+  const starRows = new Map<string, Array<StarCounts | undefined>>();
   for (const row of themeGroups) {
     totals.set(row.theme, (totals.get(row.theme) ?? 0) + row.count);
+    const list = starRows.get(row.theme) ?? [];
+    list.push(row.stars);
+    starRows.set(row.theme, list);
   }
   return [...totals.entries()]
-    .map(([theme, count]) => ({ label: themeLabel(theme) ?? theme, count }))
+    .map(([theme, count]) => ({
+      label: themeLabel(theme) ?? theme,
+      count,
+      stars: sumStarCounts(starRows.get(theme) ?? []),
+    }))
     .sort((left, right) => right.count - left.count || left.label.localeCompare(right.label));
 }
 
@@ -49,6 +58,15 @@ export function outletComparison(
     return { strongest, weakest: null };
   }
   return { strongest, weakest };
+}
+
+/** A finding stays visible only when every location it cites is inside the selected scope. */
+export function findingsForScope<T extends { locationIds: readonly string[] }>(
+  findings: readonly T[],
+  locationIds: readonly string[]
+): T[] {
+  const allowed = new Set(locationIds);
+  return findings.filter((finding) => finding.locationIds.length === 0 || finding.locationIds.every((id) => allowed.has(id)));
 }
 
 /** Count sentences saved when the model did not return an interpretation. */

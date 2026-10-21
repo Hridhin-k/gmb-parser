@@ -299,6 +299,51 @@ export async function resolvedForLocation(
   return { tone: flattenTone(loaded.tone), automation: flattenAutomation(loaded.automation) };
 }
 
+/** Tone for one draft. Skips the full location and client lists the settings screen loads. */
+export async function resolvedVoiceForDraft(
+  workspaceId: string,
+  location: { id: string; clientId: string | null; groupId: string | null; title: string }
+): Promise<{ tone: ToneValue; automation: AutomationValue }> {
+  const admin = createAdminClient();
+  const [workspaceRow, scopeRows, groups] = await Promise.all([
+    admin.from("grm_reply_settings").select("tone, automation").eq("workspace_id", workspaceId).maybeSingle(),
+    admin
+      .from("grm_scope_settings")
+      .select("client_id, group_id, location_id, tone, automation")
+      .eq("workspace_id", workspaceId),
+    admin.from("grm_groups").select("id, parent_id").eq("workspace_id", workspaceId),
+  ]);
+  if (scopeRows.error) throw new AppError("Could not load settings.", "DB_ERROR", 500);
+
+  const rows = (scopeRows.data ?? []) as ScopeRow[];
+  const groupById = new Map((groups.data ?? []).map((group) => [group.id, group]));
+  const layers: Array<{ label: string; fields: ToneFields | null; automation: AutomationFields | null }> = [];
+  const push = (row: ScopeRow | undefined, label: string) => {
+    layers.push({ label, fields: row?.tone ?? null, automation: row?.automation ?? null });
+  };
+  push(rows.find((row) => row.location_id === location.id), location.title);
+  const group = location.groupId ? groupById.get(location.groupId) : null;
+  if (group) {
+    push(rows.find((row) => row.group_id === group.id), "Group");
+    const parent = group.parent_id ? groupById.get(group.parent_id) : null;
+    if (parent) push(rows.find((row) => row.group_id === parent.id), "Parent group");
+  }
+  if (location.clientId) {
+    push(rows.find((row) => row.client_id === location.clientId), "Brand");
+  }
+  layers.push({
+    label: "the organization",
+    fields: asTone(workspaceRow.data?.tone),
+    automation: asAutomation(workspaceRow.data?.automation),
+  });
+  return {
+    tone: flattenTone(resolveTone(layers.map((layer) => ({ label: layer.label, fields: layer.fields })))),
+    automation: flattenAutomation(
+      resolveAutomation(layers.map((layer) => ({ label: layer.label, fields: layer.automation })))
+    ),
+  };
+}
+
 export async function assertAutomationAllowsPublish(input: {
   workspaceId: string;
   locationId: string;

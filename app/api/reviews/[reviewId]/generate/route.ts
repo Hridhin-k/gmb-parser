@@ -1,14 +1,14 @@
-import { NextResponse } from "next/server";
+import { NextResponse, after } from "next/server";
 import { createClient } from "@/lib/supabase/server";
-import { createAdminClient } from "@/lib/supabase/admin";
 import { AIReviewService } from "@/lib/services/ai-review";
 import { AppError } from "@/lib/errors";
 import { logger } from "@/lib/logger";
 import { validateId } from "@/lib/validation";
 import { type DraftAdjustment, type ReplyLanguage } from "@/lib/reply-adjustments";
 import { z } from "zod";
-import { checkRateLimit, AI_GENERATE_LIMIT } from "@/lib/rate-limit";
+import { checkRateLimit, AI_GENERATE_LIMIT, WORKSPACE_AI_LIMIT } from "@/lib/rate-limit";
 import { ensurePersonalWorkspace } from "@/lib/services/workspace";
+import { persistAiGenerationJob } from "@/lib/services/ai-generation-persist";
 import { assertReviewAction } from "@/lib/services/access";
 
 interface RouteParams {
@@ -49,8 +49,14 @@ export async function POST(request: Request, { params }: RouteParams) {
     );
   }
 
-  const admin = createAdminClient();
   const membership = await ensurePersonalWorkspace(user);
+  const workspaceLimit = checkRateLimit(`workspace:${membership.workspace_id}`, "ai.generate", WORKSPACE_AI_LIMIT);
+  if (!workspaceLimit.allowed) {
+    return NextResponse.json(
+      { error: "This workspace has reached its AI draft limit. Please wait before generating again." },
+      { status: 429 }
+    );
+  }
   try {
     await assertReviewAction({
       userId: user.id,
@@ -64,14 +70,6 @@ export async function POST(request: Request, { params }: RouteParams) {
     }
     throw error;
   }
-
-  const { data: review } = await admin
-    .from("grm_reviews")
-    .select("id")
-    .eq("id", reviewId)
-    .eq("workspace_id", membership.workspace_id)
-    .single();
-  if (!review) return NextResponse.json({ error: "Review not found" }, { status: 404 });
 
   let adjustment: DraftAdjustment | undefined;
   let replaceEdited = false;
@@ -102,12 +100,21 @@ export async function POST(request: Request, { params }: RouteParams) {
       userId: user.id,
       adjustment,
       replaceEdited,
+      deferPersistence: true,
     });
+
+    if (result.jobId) {
+      after(async () => {
+        await persistAiGenerationJob(result.jobId!);
+      });
+    }
 
     return NextResponse.json({
       draftId: result.draftId,
       replyId: result.replyId,
       content: result.content,
+      jobId: result.jobId ?? null,
+      persistence: result.persistence ?? "saved",
     });
   } catch (error) {
     if (error instanceof AppError) {

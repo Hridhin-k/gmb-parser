@@ -54,13 +54,12 @@ describe("dashboard metric definitions", () => {
       scopeLabel: "All brands",
       facts,
       previous: { ...EMPTY_FACTS, reviews: 5, ratingSum: 15 },
-      replyTarget: null,
       lowestLocation: { name: "East Fort", rating: 3.2, reviews: 4 },
     });
     const text = lines.join(" ");
     expect(text).toContain("Last 12 months");
     expect(text).toContain("All brands");
-    expect(text).toContain("No reply target is saved");
+    expect(text).toContain("Reply rate is 80%.");
     expect(text).toContain("East Fort");
     expect(text.toLowerCase()).not.toContain("because");
     expect(text.toLowerCase()).not.toContain("competitor");

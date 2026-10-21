@@ -5,9 +5,15 @@ import { useState } from "react";
 import { SpeakButton } from "@/components/mobile-speech";
 import { Button } from "@/components/ui/button";
 import { RESOLUTION_ACTIONS, type ResolutionCode } from "@/lib/escalations";
+import {
+  insertResolutionContact,
+  resolutionContactSentence,
+  type ResolutionContactKind,
+} from "@/lib/resolution-contact";
 import { REPLY_LANGUAGES, type ReplyLanguage } from "@/lib/reply-adjustments";
 import { checkReplyGuardrails } from "@/lib/reply-guardrails";
 import type { MobileComplaint } from "@/lib/services/mobile-work";
+import { useServerRefresh } from "@/hooks/use-server-refresh";
 
 async function errorText(response: Response): Promise<string> {
   const payload = (await response.json().catch(() => ({}))) as { error?: string };
@@ -16,6 +22,7 @@ async function errorText(response: Response): Promise<string> {
 
 export function MobileComplaintView({ data }: { data: MobileComplaint }) {
   const router = useRouter();
+  const { refresh } = useServerRefresh();
   const card = data.card;
   const [note, setNote] = useState("");
   const [content, setContent] = useState(card?.replyContent ?? "");
@@ -64,8 +71,9 @@ export function MobileComplaintView({ data }: { data: MobileComplaint }) {
     const payload = (await response.json()) as { replyId?: string; content?: string };
     if (payload.content) setContent(payload.content);
     if (payload.replyId) setReplyId(payload.replyId);
+    setNotice("Draft is ready. Read it before you send it on.");
     setPending(null);
-    router.refresh();
+    refresh();
   }
 
   async function nextStep(code: ResolutionCode) {
@@ -244,6 +252,19 @@ export function MobileComplaintView({ data }: { data: MobileComplaint }) {
               rows={5}
               className="mt-2 w-full resize-y rounded-xl border border-silver px-3 py-3 text-base leading-6 text-ink"
             />
+            <ResolutionContactButtons
+              phone={data.resolutionPhone}
+              email={data.resolutionEmail}
+              disabled={!card.canDraft || pending !== null}
+              onAdd={(kind) => {
+                const sentence = resolutionContactSentence(kind, {
+                  phone: data.resolutionPhone,
+                  email: data.resolutionEmail,
+                });
+                if (!sentence) return;
+                setContent((current) => insertResolutionContact(current, sentence));
+              }}
+            />
             <p className="mt-2 text-sm text-slate">
               {content.trim().length === 0 ? "No reply yet." : violations.length === 0 ? "The reply checks passed." : violations[0]}
             </p>
@@ -323,6 +344,54 @@ export function MobileComplaintView({ data }: { data: MobileComplaint }) {
           </div>
         </article>
       )}
+    </div>
+  );
+}
+
+function ResolutionContactButtons({
+  phone,
+  email,
+  disabled,
+  onAdd,
+}: {
+  phone: string | null;
+  email: string | null;
+  disabled: boolean;
+  onAdd: (kind: ResolutionContactKind) => void;
+}) {
+  if (!phone && !email) {
+    return (
+      <p className="mt-2 text-sm text-slate">
+        No resolution phone or email is saved. An owner can set one in Settings, then add it to this reply.
+      </p>
+    );
+  }
+  return (
+    <div className="mt-2 flex flex-wrap gap-2">
+      <button
+        type="button"
+        disabled={disabled || !phone}
+        onClick={() => onAdd("phone")}
+        className="min-h-11 rounded-xl border border-silver px-3 text-sm text-ink disabled:opacity-50"
+      >
+        Add phone
+      </button>
+      <button
+        type="button"
+        disabled={disabled || !email}
+        onClick={() => onAdd("email")}
+        className="min-h-11 rounded-xl border border-silver px-3 text-sm text-ink disabled:opacity-50"
+      >
+        Add email
+      </button>
+      <button
+        type="button"
+        disabled={disabled || !phone || !email}
+        onClick={() => onAdd("both")}
+        className="min-h-11 rounded-xl border border-silver px-3 text-sm text-ink disabled:opacity-50"
+      >
+        Add both
+      </button>
     </div>
   );
 }

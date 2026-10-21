@@ -9,6 +9,7 @@ import { REPLY_LANGUAGES, type ReplyLanguage } from "@/lib/reply-adjustments";
 import { checkReplyGuardrails } from "@/lib/reply-guardrails";
 import type { MobileApproval } from "@/lib/services/mobile-work";
 import { mobileHref } from "@/lib/mobile-work";
+import { useServerRefresh } from "@/hooks/use-server-refresh";
 
 async function errorText(response: Response): Promise<string> {
   const payload = (await response.json().catch(() => ({}))) as { error?: string };
@@ -17,6 +18,7 @@ async function errorText(response: Response): Promise<string> {
 
 export function MobileApprovalView({ data }: { data: MobileApproval }) {
   const router = useRouter();
+  const { refresh } = useServerRefresh();
   const card = data.card;
   const [content, setContent] = useState(card?.content ?? "");
   const [replyId, setReplyId] = useState(card?.replyId ?? null);
@@ -49,8 +51,9 @@ export function MobileApprovalView({ data }: { data: MobileApproval }) {
     if (payload.content) setContent(payload.content);
     if (payload.replyId) setReplyId(payload.replyId);
     setReplyStatus("draft");
+    setNotice("Draft is ready. Read it before you approve.");
     setPending(null);
-    router.refresh();
+    refresh();
   }
 
   async function saveDraft(): Promise<string | null> {

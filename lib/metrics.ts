@@ -13,6 +13,15 @@ export function average(sum: number, count: number): number | null {
   return sum / count;
 }
 
+/** Counts of 1★, 2★, 3★, 4★, and 5★ reviews, in that order. */
+export type StarCounts = [number, number, number, number, number];
+
+export const EMPTY_STARS: StarCounts = [0, 0, 0, 0, 0];
+
+export function addStarCounts(left: StarCounts, right: StarCounts): StarCounts {
+  return [left[0] + right[0], left[1] + right[1], left[2] + right[2], left[3] + right[3], left[4] + right[4]];
+}
+
 export interface DashboardFacts {
   reviews: number;
   ratingSum: number;
@@ -40,6 +49,7 @@ export interface DashboardFacts {
     oneToThree: number;
     negative: number;
     replied: number;
+    stars?: StarCounts;
   }>;
   locations: Array<{
     locationId: string;
@@ -51,16 +61,18 @@ export interface DashboardFacts {
     drafts: number;
     responseHoursSum: number;
     responseCount: number;
+    stars?: StarCounts;
   }>;
-  themeMonths: Array<{ month: string; theme: string; count: number }>;
+  themeMonths: Array<{ month: string; theme: string; count: number; stars?: StarCounts }>;
   groups: Array<{
     groupId: string | null;
     reviews: number;
     ratingSum: number;
     oneToThree: number;
     replied: number;
+    stars?: StarCounts;
   }>;
-  themeGroups: Array<{ groupId: string | null; theme: string; count: number }>;
+  themeGroups: Array<{ groupId: string | null; theme: string; count: number; stars?: StarCounts }>;
   team: Array<{
     userId: string;
     assignedReviews: number;
@@ -103,6 +115,11 @@ function text(value: unknown): string {
   return typeof value === "string" ? value : "";
 }
 
+function starCounts(row: Record<string, unknown>): StarCounts | undefined {
+  if (!("r1" in row) && !("r2" in row) && !("r3" in row) && !("r4" in row) && !("r5" in row)) return undefined;
+  return [num(row.r1), num(row.r2), num(row.r3), num(row.r4), num(row.r5)];
+}
+
 export function parseDashboardFacts(value: unknown): DashboardFacts {
   if (!value || typeof value !== "object") return EMPTY_FACTS;
   const row = value as Record<string, unknown>;
@@ -139,6 +156,7 @@ export function parseDashboardFacts(value: unknown): DashboardFacts {
         oneToThree: num(month.one_to_three),
         negative: num(month.negative),
         replied: num(month.replied),
+        stars: starCounts(month),
       };
     }),
     locations: list("locations").map((item) => {
@@ -153,11 +171,17 @@ export function parseDashboardFacts(value: unknown): DashboardFacts {
         drafts: num(location.drafts),
         responseHoursSum: num(location.response_hours_sum),
         responseCount: num(location.response_count),
+        stars: starCounts(location),
       };
     }),
     themeMonths: list("theme_months").map((item) => {
       const theme = item as Record<string, unknown>;
-      return { month: text(theme.month).slice(0, 10), theme: text(theme.theme), count: num(theme.count) };
+      return {
+        month: text(theme.month).slice(0, 10),
+        theme: text(theme.theme),
+        count: num(theme.count),
+        stars: starCounts(theme),
+      };
     }),
     groups: list("groups").map((item) => {
       const group = item as Record<string, unknown>;
@@ -167,6 +191,7 @@ export function parseDashboardFacts(value: unknown): DashboardFacts {
         ratingSum: num(group.rating_sum),
         oneToThree: num(group.one_to_three),
         replied: num(group.replied),
+        stars: starCounts(group),
       };
     }),
     themeGroups: list("theme_groups").map((item) => {
@@ -175,6 +200,7 @@ export function parseDashboardFacts(value: unknown): DashboardFacts {
         groupId: typeof theme.group_id === "string" ? theme.group_id : null,
         theme: text(theme.theme),
         count: num(theme.count),
+        stars: starCounts(theme),
       };
     }),
     team: list("team").map((item) => {
@@ -208,7 +234,6 @@ export interface InsightInput {
   scopeLabel: string;
   facts: DashboardFacts;
   previous: DashboardFacts | null;
-  replyTarget: number | null;
   lowestLocation: { name: string; rating: number; reviews: number } | null;
 }
 
@@ -231,15 +256,7 @@ export function buildInsights(input: InsightInput): string[] {
     );
   }
   if (current.replyRate !== null) {
-    const rate = `${Math.round(current.replyRate * 100)}%`;
-    if (input.replyTarget === null) {
-      lines.push(`Reply rate is ${rate}. No reply target is saved.`);
-    } else {
-      const target = Math.round(input.replyTarget * 100);
-      lines.push(
-        `Reply rate is ${rate}. The saved target is ${target}%. ${current.replyRate >= input.replyTarget ? "The rate is at or above that target." : "The rate is below that target."}`
-      );
-    }
+    lines.push(`Reply rate is ${Math.round(current.replyRate * 100)}%.`);
   }
   if (input.previous && input.previous.reviews > 0 && current.avgRating !== null) {
     const before = reviewWindow(input.previous);

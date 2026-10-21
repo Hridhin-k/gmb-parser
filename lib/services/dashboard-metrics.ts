@@ -2,6 +2,8 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { previousDateRange, type DateRange } from "@/lib/date-range";
 import { ESCALATION_TIMEZONES } from "@/lib/escalations";
 import { parseDashboardFacts, type DashboardFacts } from "@/lib/metrics";
+import { applyStarBreakdown } from "@/lib/star-breakdown";
+import { loadStarBreakdown } from "@/lib/services/star-breakdown";
 import { UNASSIGNED_CLIENT_MARKER } from "@/lib/services/unassigned-client";
 import { locationDisplayName } from "@/lib/ui/location-place";
 
@@ -25,7 +27,6 @@ export interface DashboardLocation {
 
 export interface DashboardContext {
   timezone: string;
-  replyTarget: number | null;
   facts: DashboardFacts;
   previous: DashboardFacts | null;
   clients: Array<{ id: string; name: string }>;
@@ -83,7 +84,7 @@ export async function getDashboardContext(
   ] = await Promise.all([
     admin
       .from("grm_escalation_policies")
-      .select("timezone, reply_rate_target")
+      .select("timezone")
       .eq("workspace_id", workspaceId)
       .maybeSingle(),
     admin
@@ -127,12 +128,33 @@ export async function getDashboardContext(
   const timezone = ESCALATION_TIMEZONES.some((zone) => zone.id === policy.data?.timezone)
     ? policy.data!.timezone
     : defaultTimezone;
-  const target = policy.data?.reply_rate_target;
-  const replyTarget = target === null || target === undefined ? null : Number(target);
+  const clients = (clientsResult.data ?? [])
+    .filter((client) => client.notes !== UNASSIGNED_CLIENT_MARKER)
+    .map((client) => ({ id: client.id, name: client.name }));
+  const clientNames = new Map(clients.map((client) => [client.id, client.name]));
+  const parentByGroup = new Map((groupsResult.data ?? []).map((group) => [group.id, group.parent_id]));
+  const scopedLocations = (locationsResult.data ?? []).filter((location) => {
+    if (!location.client_id || !clientNames.has(location.client_id)) return false;
+    if (scope.locationId && location.id !== scope.locationId) return false;
+    if (scope.clientId && location.client_id !== scope.clientId) return false;
+    if (scope.groupId && location.group_id !== scope.groupId) {
+      const parent = location.group_id ? parentByGroup.get(location.group_id) ?? null : null;
+      if (parent !== scope.groupId) return false;
+    }
+    return true;
+  });
+  const starTask = loadStarBreakdown({
+    workspaceId,
+    locationIds: scopedLocations.map((location) => location.id),
+    groupByLocation: new Map(scopedLocations.map((location) => [location.id, location.group_id])),
+    start: startIso,
+    end: endIso,
+    timezone,
+  });
 
-  const [facts, previous] =
+  const [factsBase, previous, starMaps] =
     timezone === defaultTimezone
-      ? [factsDefault, previousDefault]
+      ? [factsDefault, previousDefault, await starTask]
       : await Promise.all([
           loadFacts(workspaceId, scope, startIso, endIso, timezone),
           previousWindow
@@ -144,13 +166,9 @@ export async function getDashboardContext(
                 timezone
               )
             : Promise.resolve(null),
+          starTask,
         ]);
-
-  const clients = (clientsResult.data ?? [])
-    .filter((client) => client.notes !== UNASSIGNED_CLIENT_MARKER)
-    .map((client) => ({ id: client.id, name: client.name }));
-  const clientNames = new Map(clients.map((client) => [client.id, client.name]));
-  const parentByGroup = new Map((groupsResult.data ?? []).map((group) => [group.id, group.parent_id]));
+  const facts = starMaps ? applyStarBreakdown(factsBase, starMaps) : factsBase;
   const locations: DashboardLocation[] = (locationsResult.data ?? [])
     .filter((location) => location.client_id && clientNames.has(location.client_id))
     .map((location) => ({
@@ -174,7 +192,6 @@ export async function getDashboardContext(
   const pauses = pausesResult.data ?? [];
   return {
     timezone,
-    replyTarget: Number.isFinite(replyTarget) ? replyTarget : null,
     facts,
     previous,
     clients,

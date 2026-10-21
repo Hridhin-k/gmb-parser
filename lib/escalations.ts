@@ -148,6 +148,53 @@ export function closesWhenReplyPublished(): boolean {
   return false;
 }
 
+export function ticketKey(ticketNo: number | null): string {
+  return ticketNo && ticketNo > 0 ? `ESC-${ticketNo}` : "ESC";
+}
+
+export function escalationStatusLabel(status: string): string {
+  if (status === "resolved") return "Resolved";
+  if (status === "in_progress") return "In progress";
+  return "Needs human";
+}
+
+export function escalationEventLabel(
+  action: string,
+  metadata: Record<string, unknown>,
+  name: (userId: string | null) => string
+): string {
+  if (action === "opened") {
+    const reasons = metadata.reasons;
+    if (Array.isArray(reasons) && reasons.includes("manager_requested")) {
+      return "Opened because someone asked a manager to handle it.";
+    }
+    return "Opened from the complaint rules.";
+  }
+  if (action === "reopened") return "Reopened because the review changed.";
+  if (action === "assigned") {
+    const reason = typeof metadata.reason === "string" ? metadata.reason : "";
+    const next = name(typeof metadata.assigneeId === "string" ? metadata.assigneeId : null);
+    const previous = name(typeof metadata.previousAssigneeId === "string" ? metadata.previousAssigneeId : null);
+    return reason
+      ? `Assignee changed from ${previous} to ${next}. Reason: ${reason}.`
+      : `Assignee changed from ${previous} to ${next}.`;
+  }
+  if (action === "fallback") return "No manager was available, so an admin owns this case until someone reassigns it.";
+  if (action === "notified") return "Notice recorded for the current owner.";
+  if (action === "overdue_noted") return "Still overdue at leadership. The level did not change again.";
+  if (action === "level_changed") return `Handed to ${String(metadata.level ?? "the next level")}.`;
+  if (action === "status_changed") return `Status set to ${escalationStatusLabel(String(metadata.status ?? ""))}.`;
+  if (action === "resolved") return "Resolution recorded. This does not confirm a callback, replacement, or visit.";
+  if (action === "next_step") {
+    return "Next step recorded. This does not mean the call, replacement, or visit happened.";
+  }
+  if (action === "reminder_recorded") {
+    return `Reminder at ${String(metadata.kind ?? "")} hours recorded in GRM. No email or message was sent.`;
+  }
+  if (action === "comment") return "Comment added.";
+  return action;
+}
+
 export interface AssignmentMember {
   userId: string;
   role: string;
@@ -165,20 +212,32 @@ export interface AssignmentLocation {
 
 export type AssignmentReason =
   | "location_manager"
+  | "group_manager"
+  | "organisation_manager"
   | "manager_missing"
   | "manager_inactive"
   | "manager_unauthorised"
   | "no_administrator";
 
 export interface AssignmentPlan {
-  /** Configured location manager, kept even when that person cannot take the case. */
+  /** Manager who should own the case, kept even when that person cannot take it. */
   responsibleUserId: string | null;
   assigneeId: string | null;
   ownership: "manager" | "fallback";
   reason: AssignmentReason;
 }
 
-const FALLBACK_ROLES = ["owner", "org_admin", "admin"];
+/** Automatic fallback reasons. A manual reassignment stores the person's own reason and is left alone. */
+export const AUTOMATIC_ASSIGNMENT_REASONS: AssignmentReason[] = [
+  "manager_missing",
+  "manager_inactive",
+  "manager_unauthorised",
+  "no_administrator",
+];
+
+const ADMIN_ROLES = ["org_admin", "admin"];
+const MANAGER_ROLES = ["store_manager", "group_manager", "brand_manager"];
+const RECEIVER_ROLES = ["owner", "org_admin", "admin", ...MANAGER_ROLES];
 
 function locationResource(location: AssignmentLocation) {
   return {
@@ -201,54 +260,129 @@ function canTakeCase(member: AssignmentMember, location: AssignmentLocation): bo
   });
 }
 
+function byUserId(left: AssignmentMember, right: AssignmentMember): number {
+  return left.userId.localeCompare(right.userId);
+}
+
+function firstAvailable(
+  members: AssignmentMember[],
+  location: AssignmentLocation,
+  match: (member: AssignmentMember) => boolean
+): AssignmentMember | null {
+  return members.filter((member) => match(member) && canTakeCase(member, location)).sort(byUserId)[0] ?? null;
+}
+
 /**
- * The location manager owns the case when they are an active member who can see that location.
- * Otherwise an active organisation admin in scope owns it, and the case is marked as a fallback.
+ * The manager for the location owns the case, then the group manager, then the organisation manager.
+ * When none of them can take it, any admin does. The owner is used only when the workspace has no admin.
  */
 export function planAssignment(input: {
   locationManagerId: string | null;
   members: AssignmentMember[];
   location: AssignmentLocation;
 }): AssignmentPlan {
-  const manager = input.locationManagerId
+  const designated = input.locationManagerId
     ? input.members.find((member) => member.userId === input.locationManagerId) ?? null
     : null;
-  if (manager && canTakeCase(manager, input.location)) {
+  const locationManager =
+    designated && canTakeCase(designated, input.location)
+      ? designated
+      : firstAvailable(
+          input.members,
+          input.location,
+          (member) => member.role === "store_manager" && member.scope.locationId === input.location.locationId
+        );
+  if (locationManager) {
     return {
-      responsibleUserId: manager.userId,
-      assigneeId: manager.userId,
+      responsibleUserId: locationManager.userId,
+      assigneeId: locationManager.userId,
       ownership: "manager",
       reason: "location_manager",
     };
   }
 
-  const reason: AssignmentReason = !input.locationManagerId
+  const groupManager = firstAvailable(
+    input.members,
+    input.location,
+    (member) =>
+      member.role === "group_manager" &&
+      Boolean(member.scope.groupId) &&
+      (member.scope.groupId === input.location.groupId || member.scope.groupId === input.location.parentGroupId)
+  );
+  if (groupManager) {
+    return {
+      responsibleUserId: groupManager.userId,
+      assigneeId: groupManager.userId,
+      ownership: "manager",
+      reason: "group_manager",
+    };
+  }
+
+  const organisationManager = firstAvailable(
+    input.members,
+    input.location,
+    (member) => member.role === "brand_manager" && member.scope.clientId === input.location.clientId
+  );
+  if (organisationManager) {
+    return {
+      responsibleUserId: organisationManager.userId,
+      assigneeId: organisationManager.userId,
+      ownership: "manager",
+      reason: "organisation_manager",
+    };
+  }
+
+  const held =
+    designated ??
+    input.members.find(
+      (member) => member.role === "store_manager" && member.scope.locationId === input.location.locationId
+    ) ??
+    input.members.find(
+      (member) =>
+        member.role === "group_manager" &&
+        (member.scope.groupId === input.location.groupId || member.scope.groupId === input.location.parentGroupId)
+    ) ??
+    input.members.find((member) => member.role === "brand_manager" && member.scope.clientId === input.location.clientId) ??
+    null;
+  const reason: AssignmentReason = !input.locationManagerId && !held
     ? "manager_missing"
-    : !manager
-      ? "manager_unauthorised"
-      : !manager.enabled
-        ? "manager_inactive"
-        : "manager_unauthorised";
-  const fallback = input.members
-    .filter((member) => FALLBACK_ROLES.includes(member.role) && canTakeCase(member, input.location))
+    : held && !held.enabled
+      ? "manager_inactive"
+      : input.locationManagerId || held
+        ? "manager_unauthorised"
+        : "manager_missing";
+  const admin = input.members
+    .filter((member) => ADMIN_ROLES.includes(member.role) && canTakeCase(member, input.location))
     .sort((left, right) => {
-      const rank = FALLBACK_ROLES.indexOf(left.role) - FALLBACK_ROLES.indexOf(right.role);
+      const rank = ADMIN_ROLES.indexOf(left.role) - ADMIN_ROLES.indexOf(right.role);
       return rank !== 0 ? rank : left.userId.localeCompare(right.userId);
     })[0];
+  const owner = input.members
+    .filter((member) => member.role === "owner" && canTakeCase(member, input.location))
+    .sort(byUserId)[0];
+  const fallback = admin ?? owner ?? null;
   if (!fallback) {
     return {
-      responsibleUserId: input.locationManagerId,
+      responsibleUserId: input.locationManagerId ?? held?.userId ?? null,
       assigneeId: null,
       ownership: "fallback",
       reason: "no_administrator",
     };
   }
   return {
-    responsibleUserId: input.locationManagerId,
+    responsibleUserId: input.locationManagerId ?? held?.userId ?? null,
     assigneeId: fallback.userId,
     ownership: "fallback",
     reason,
   };
+}
+
+export function canReassignEscalation(role: string | null | undefined): boolean {
+  return role === "owner" || role === "org_admin" || role === "admin";
+}
+
+export function canReceiveEscalation(member: AssignmentMember, location: AssignmentLocation): boolean {
+  return RECEIVER_ROLES.includes(member.role) && canTakeCase(member, location);
 }
 
 /** One automatic step. Leadership stays at leadership. */
@@ -307,6 +441,7 @@ export function reassignmentError(input: {
   if (input.reason.trim().length < 3) return "Enter a reason for the reassignment.";
   if (!input.target) return "That person is not in this workspace.";
   if (!input.target.enabled) return "That person is not active.";
+  if (!RECEIVER_ROLES.includes(input.target.role)) return "Assign the case to a manager or an admin.";
   if (!canTakeCase(input.target, input.location)) return "That person cannot take cases for this location.";
   return null;
 }

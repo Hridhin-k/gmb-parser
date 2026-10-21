@@ -4,8 +4,9 @@ import { AppError } from "@/lib/errors";
 import { logger } from "@/lib/logger";
 import { AuditService } from "./audit";
 import {
-  GEMINI_MODEL_ID,
+  GEMINI_FAST_MODEL_ID,
   GEMINI_THINKING_LOW,
+  GEMINI_THINKING_MINIMAL,
   extractGeminiText,
   geminiGenerateUrl,
 } from "@/lib/gemini";
@@ -13,11 +14,21 @@ import { readableReviewText } from "@/lib/review-text";
 import type { Json } from "@/lib/types/supabase";
 import { insightLensFingerprint, insightLensPromptBlock, orgContextPromptBlock } from "@/lib/ai-config";
 import { loadResolvedInsightLens, ensureActiveAiConfig } from "@/lib/services/ai-config";
+import {
+  claimAiGenerationJob,
+  completeAiGenerationJob,
+  createAiGenerationJob,
+  failAiGenerationJob,
+} from "@/lib/services/ai-generation-jobs";
+import { summaryBriefBlock, summaryEvidenceIds, tryAllTimeSummaryBrief } from "@/lib/services/summary-brief";
+import { usageFromResponse } from "@/lib/services/intelligence-extract";
+import { getAiBudget, recordAiUsage } from "@/lib/services/ai-usage-ledger";
 
-const MODEL_ID = GEMINI_MODEL_ID;
+const MODEL_ID = GEMINI_FAST_MODEL_ID;
 export const INSIGHT_PROMPT_VERSION = "insight-v3.0";
 const REQUEST_TIMEOUT_MS = 45_000;
 const MAX_REVIEW_SAMPLES = 50;
+const PREVIEW_REVIEW_SAMPLES = 16;
 
 export type SentimentLabel = "positive" | "mixed" | "negative" | "neutral";
 export type FeatureEffort = "quick" | "medium" | "project";
@@ -42,6 +53,8 @@ export interface ProfileAnalysis {
 
 export interface LocationInsight {
   locationId: string;
+  /** Set when saving runs in the background; the brief is already displayable. */
+  jobId?: string;
   summary: string;
   sentimentLabel: SentimentLabel;
   themes: string[];
@@ -453,7 +466,7 @@ export class LocationInsightService {
     workspaceId: string,
     locationId: string,
     userId: string,
-    options: { force?: boolean } = {}
+    options: { force?: boolean; preview?: boolean; deferPersistence?: boolean } = {}
   ): Promise<LocationInsight> {
     const apiKey = process.env.GEMINI_API_KEY;
     if (!apiKey) {
@@ -461,20 +474,21 @@ export class LocationInsightService {
     }
 
     const supabase = createAdminClient();
-    const statsMap = await this.buildLocationReviewStats(workspaceId, [
-      locationId,
+    const [statsMap, locationResult] = await Promise.all([
+      this.buildLocationReviewStats(workspaceId, [locationId]),
+      supabase
+        .from("grm_google_locations")
+        .select("location_title, client_id, grm_clients(name)")
+        .eq("id", locationId)
+        .eq("workspace_id", workspaceId)
+        .single(),
     ]);
     const stats = statsMap.get(locationId);
     if (!stats) {
       throw new AppError("Location not found", "NOT_FOUND", 404);
     }
 
-    const { data: location } = await supabase
-      .from("grm_google_locations")
-      .select("location_title, client_id, grm_clients(name)")
-      .eq("id", locationId)
-      .eq("workspace_id", workspaceId)
-      .single();
+    const { data: location } = locationResult;
 
     if (!location) {
       throw new AppError("Location not found", "NOT_FOUND", 404);
@@ -500,7 +514,7 @@ export class LocationInsightService {
       lensFp
     );
 
-    if (!options.force) {
+    if (!options.force && !options.preview) {
       const cached = await this.getCachedInsights(
         workspaceId,
         [locationId],
@@ -510,7 +524,13 @@ export class LocationInsightService {
       if (hit && !hit.stale) return hit;
     }
 
-    if (stats.reviews.length === 0) {
+    // Preferred source: the stored all-time summary for this location. The
+    // brief is then written from counted topics and stored evidence quotes,
+    // never from a fresh read of raw reviews.
+    const summaryDocument = await tryAllTimeSummaryBrief(supabase, workspaceId, "location", locationId, [locationId]);
+    const useSummary = summaryDocument !== null && summaryDocument.coverage.reviewCount > 0;
+
+    if (stats.reviews.length === 0 && !useSummary) {
       const empty = {
         ...stats.heuristic,
         locationId,
@@ -518,17 +538,22 @@ export class LocationInsightService {
         generatedAt: new Date().toISOString(),
         stale: false,
       };
-      await this.upsertInsight(workspaceId, locationId, userId, empty);
+      if (!options.preview) await this.upsertInsight(workspaceId, locationId, userId, empty);
       return empty;
     }
 
-    const reviewBlock = stats.reviews
-      .map(
-        (r, i) =>
-          `${i + 1}. id=${r.id} · ${r.star_rating}/5 — ${(readableReviewText(r.comment) ?? "(rating only)").slice(0, 400)}`
-      )
-      .join("\n");
-    const sampleIds = stats.reviews.map((r) => r.id);
+    const promptReviews = options.preview
+      ? stats.reviews.slice(0, PREVIEW_REVIEW_SAMPLES)
+      : stats.reviews;
+    const reviewBlock = useSummary
+      ? summaryBriefBlock(summaryDocument)
+      : promptReviews
+          .map(
+            (r, i) =>
+              `${i + 1}. id=${r.id} · ${r.star_rating}/5 — ${(readableReviewText(r.comment) ?? "(rating only)").slice(0, options.preview ? 180 : 400)}`
+          )
+          .join("\n");
+    const sampleIds = useSummary ? summaryEvidenceIds(summaryDocument) : promptReviews.map((r) => r.id);
     const lensBlock = insightLensPromptBlock(lens, notes);
     const orgBlock = orgContextPromptBlock(config.snapshot.org);
 
@@ -537,10 +562,10 @@ Write a self-explanatory brief an owner can act on. Prefer the operator's insigh
 ${orgBlock}${lensBlock}
 Business: "${businessName}"
 Location: "${location.location_title}"
-Reviews in this sample: ${stats.reviews.length}
-Average rating: ${stats.avgRating?.toFixed(2) ?? "n/a"}
+${useSummary ? `Reviews counted: ${summaryDocument.coverage.reviewCount} (all time, from the stored summary below)` : `Reviews in this sample: ${promptReviews.length}`}
+Average rating: ${(useSummary ? summaryDocument.metrics.averageRating : stats.avgRating)?.toFixed(2) ?? "n/a"}
 
-REVIEWS:
+${useSummary ? "STORED SUMMARY (base every claim on these counts and quotes; never recount or invent numbers):" : "REVIEWS:"}
 ${reviewBlock}
 
 Return ONLY valid JSON (no markdown) with this exact shape:
@@ -593,22 +618,36 @@ Rules:
 - Prefer 4-6 suggestedFeatures. Use effort "quick" for listing/content changes, "medium" for process changes, "project" for bigger investment.
 - Do not mention that you are an AI. The lens is saved instructions, not model training.`;
 
+    if ((await getAiBudget(supabase, workspaceId)).exceeded) {
+      const fallback = {
+        ...stats.heuristic,
+        locationId,
+        sourceHash: fingerprint,
+        generatedAt: new Date().toISOString(),
+        stale: false,
+      };
+      if (!options.preview) await this.upsertInsight(workspaceId, locationId, userId, fallback);
+      return fallback;
+    }
+
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
 
     let parsed: ReturnType<typeof parseLocationInsightPayload>;
     try {
-      const response = await fetch(geminiGenerateUrl(apiKey), {
+      const response = await fetch(
+        geminiGenerateUrl(apiKey, options.preview ? GEMINI_FAST_MODEL_ID : MODEL_ID),
+        {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           contents: [{ parts: [{ text: prompt }] }],
           generationConfig: {
             temperature: 0.4,
-            maxOutputTokens: 8192,
+            maxOutputTokens: options.preview ? 3072 : 8192,
             topP: 0.9,
             responseMimeType: "application/json",
-            thinkingConfig: GEMINI_THINKING_LOW,
+            thinkingConfig: options.preview ? GEMINI_THINKING_MINIMAL : GEMINI_THINKING_LOW,
           },
         }),
         signal: controller.signal,
@@ -621,6 +660,9 @@ Rules:
           status: response.status,
           body: body.slice(0, 200),
         });
+        if (options.preview) {
+          throw new AppError("Quick preview unavailable", "AI_UNAVAILABLE", 502);
+        }
         const fallback = {
           ...stats.heuristic,
           locationId,
@@ -636,6 +678,14 @@ Rules:
       }
 
       const data = await response.json();
+      const usage = usageFromResponse(data);
+      await recordAiUsage(supabase, {
+        workspaceId,
+        operation: "insight_brief",
+        model: MODEL_ID,
+        inputTokens: usage.inputTokens,
+        outputTokens: usage.outputTokens,
+      });
       const { text: rawText, finishReason } = extractGeminiText(data);
       if (finishReason === "MAX_TOKENS") {
         logger.warn("location_insight.truncated", {
@@ -664,6 +714,9 @@ Rules:
         locationId,
         message: error instanceof Error ? error.message : "Unknown",
       });
+      if (options.preview) {
+        throw new AppError("Quick preview unavailable", "AI_UNAVAILABLE", 502);
+      }
       const fallback = {
         ...stats.heuristic,
         locationId,
@@ -685,12 +738,26 @@ Rules:
       highlights: parsed.highlights,
       risks: parsed.risks,
       analysis: parsed.analysis,
-      reviewCount: stats.reviews.length,
-      avgRating: stats.avgRating,
+      reviewCount: useSummary ? summaryDocument.coverage.reviewCount : promptReviews.length,
+      avgRating: useSummary ? summaryDocument.metrics.averageRating : stats.avgRating,
       sourceHash: fingerprint,
       generatedAt: new Date().toISOString(),
       stale: false,
     };
+
+    if (options.preview) return insight;
+
+    if (options.deferPersistence) {
+      const jobId = await createAiGenerationJob({
+        workspaceId,
+        userId,
+        kind: "location_insight",
+        locationId,
+        model: MODEL_ID,
+        payload: insight as unknown as Record<string, unknown>,
+      });
+      if (jobId) return { ...insight, jobId };
+    }
 
     await this.upsertInsight(workspaceId, locationId, userId, insight);
 
@@ -708,6 +775,31 @@ Rules:
     });
 
     return insight;
+  }
+
+  /** Background persister for a deferred location insight job. Safe to retry. */
+  static async persistGenerationJob(jobId: string): Promise<void> {
+    const job = await claimAiGenerationJob(jobId);
+    if (!job || job.kind !== "location_insight" || !job.location_id) return;
+    try {
+      const insight = job.payload as unknown as LocationInsight;
+      await this.upsertInsight(job.workspace_id, job.location_id, job.user_id, insight);
+      await AuditService.log({
+        workspaceId: job.workspace_id,
+        userId: job.user_id,
+        action: "location_insight.generated",
+        entityType: "grm_location_insights",
+        entityId: job.location_id,
+        metadata: {
+          model: job.model,
+          promptVersion: INSIGHT_PROMPT_VERSION,
+          reviewCount: insight.reviewCount,
+        },
+      });
+      await completeAiGenerationJob(jobId, {});
+    } catch (error) {
+      await failAiGenerationJob(jobId, job.attempts + 1, error);
+    }
   }
 
   private static async upsertInsight(

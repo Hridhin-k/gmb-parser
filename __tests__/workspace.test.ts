@@ -87,9 +87,11 @@ describe("canApproveReplies", () => {
 });
 
 describe("canSyncWorkspace", () => {
-  it("allows only the owner", () => {
+  it("allows the owner and an admin", () => {
     expect(canSyncWorkspace("owner")).toBe(true);
-    expect(canSyncWorkspace("admin")).toBe(false);
+    expect(canSyncWorkspace("org_admin")).toBe(true);
+    expect(canSyncWorkspace("admin")).toBe(true);
+    expect(canSyncWorkspace("brand_manager")).toBe(false);
     expect(canSyncWorkspace("member")).toBe(false);
     expect(canSyncWorkspace(null)).toBe(false);
   });

@@ -5,11 +5,10 @@ import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { AlertTriangle } from "lucide-react";
 import { EmptyState } from "@/components/empty-state";
-import { roleLabel } from "@/lib/access";
 import {
-  ESCALATION_LEVELS,
   ESCALATION_TIMEZONES,
-  RESOLUTION_ACTIONS,
+  escalationStatusLabel,
+  ticketKey,
   type EscalationPolicy,
 } from "@/lib/escalations";
 import { themeLabel } from "@/lib/review-inbox";
@@ -43,37 +42,6 @@ const TABS = [
   { id: "past_sla", label: "Past SLA" },
   { id: "resolved", label: "Resolved" },
 ] as const;
-
-function eventLabel(action: string, metadata: Record<string, unknown>): string {
-  if (action === "opened") {
-    const reasons = metadata.reasons;
-    if (Array.isArray(reasons) && reasons.includes("manager_requested")) {
-      return "Opened because someone asked a manager to handle it.";
-    }
-    return "Opened from the complaint rules.";
-  }
-  if (action === "reopened") return "Reopened because the review changed.";
-  if (action === "assigned") {
-    const reason = typeof metadata.reason === "string" ? metadata.reason : "";
-    const next = typeof metadata.assigneeId === "string" ? metadata.assigneeId : "someone";
-    const previous = typeof metadata.previousAssigneeId === "string" ? metadata.previousAssigneeId : "nobody";
-    return reason
-      ? `Assignee changed from ${previous} to ${next}. Reason: ${reason}.`
-      : "Assigned from the location manager rules.";
-  }
-  if (action === "fallback") return "Fallback owner. The configured location manager could not take this case.";
-  if (action === "notified") return "Notice recorded for the current owner.";
-  if (action === "overdue_noted") return "Still overdue at leadership. The level did not change again.";
-  if (action === "level_changed") return `Handed to ${String(metadata.level ?? "the next level")}.`;
-  if (action === "resolved") return "Resolution recorded. This does not confirm a callback, replacement, or visit.";
-  if (action === "next_step") {
-    return "Next step recorded. This does not mean the call, replacement, or visit happened.";
-  }
-  if (action === "reminder_recorded") {
-    return `Reminder at ${String(metadata.kind ?? "")} hours recorded in GRM. No email or message was sent.`;
-  }
-  return action;
-}
 
 export function EscalationBoard(props: BoardProps) {
   const router = useRouter();
@@ -156,106 +124,46 @@ export function EscalationBoard(props: BoardProps) {
           description={emptyQueueCopy(props.bucket, props.counts, hrefFor)}
         />
       ) : (
-        <ul className="space-y-3">
-          {props.items.map((item) => (
-            <li key={item.id} id={`case-${item.id}`} className="scroll-mt-24 rounded-xl bg-white p-4 shadow-card">
-              <div className="flex flex-wrap items-start justify-between gap-3">
-                <div className="min-w-0">
-                  <p className="text-sm font-medium text-ink">
-                    {item.reviewerName} · {item.starRating}★
-                  </p>
-                  <p className="mt-1 text-sm text-slate">
-                    {item.locationName}
-                    {item.groupName ? ` · ${item.groupName}` : ""}
-                    {item.clientName ? ` · ${item.clientName}` : ""}
-                    {themeLabel(item.theme) ? ` · ${themeLabel(item.theme)}` : ""}
-                  </p>
-                  {item.comment ? <p className="mt-2 text-sm text-ink">{item.comment}</p> : null}
-                </div>
-                <div className="text-right text-sm text-slate">
-                  <p>{item.status === "resolved" ? "Resolved" : item.status === "in_progress" ? "In progress" : "Needs human"}</p>
-                  <p className="mt-1">{item.dueLabel}</p>
-                  {item.remaining ? <p className="mt-1">{item.remaining} remaining</p> : null}
-                  {item.overdue ? <p className="mt-1 text-red-700">{item.overdue} overdue</p> : null}
-                </div>
-              </div>
-
-              <p className="mt-3 text-xs text-slate">
-                Triggers: {item.triggerReasons.map((reason) => (reason === "recorded" ? "already open" : reason)).join(", ")}. These rules are keyword and star checks, not a model classification. Level: {item.level}. Reply status: {item.replyStatus}.
-                {" "}Owner: {memberLabel(props.members, item.assignedTo)}. Responsible manager: {memberLabel(props.members, item.responsibleUserId)}.
-                {item.ownership === "fallback" ? " Fallback: the location manager was missing, inactive, or not allowed to see this outlet." : ""}
-                {item.replyStatus === "published"
-                  ? " A public reply is on Google. This escalation stays open until someone records a resolution."
-                  : " A public reply still needs owner or admin approval before it is published."}
-              </p>
-
-              {item.status !== "resolved" ? (
-                <div className="mt-3 flex flex-wrap items-end gap-2">
-                  <ReassignForm
-                    members={props.members}
-                    assignedTo={item.assignedTo}
-                    disabled={pending}
-                    onAssign={(userId, reason) =>
-                      send(`/api/escalations/${item.id}`, {
-                        action: "assign",
-                        userId,
-                        reason,
-                        expectedUpdatedAt: item.updatedAt,
-                      })
-                    }
-                  />
-                  {props.canManage ? (
-                    <label className="text-xs text-slate">
-                      Level
-                      <select
-                        className="mt-1 block rounded-md border border-line bg-white px-2 py-1.5 text-sm text-ink"
-                        value={item.level}
-                        disabled={pending}
-                        onChange={(event) =>
-                          send(`/api/escalations/${item.id}`, { action: "level", level: event.target.value })
-                        }
-                      >
-                        {ESCALATION_LEVELS.map((level) => (
-                          <option key={level.id} value={level.id}>
-                            {level.label}
-                          </option>
-                        ))}
-                      </select>
-                    </label>
-                  ) : null}
-                  <ResolveForm
-                    disabled={pending}
-                    onResolve={(code, note) => send(`/api/escalations/${item.id}`, { action: "resolve", code, note })}
-                  />
-                  <NoteForm
-                    disabled={pending}
-                    onNote={(body) => send(`/api/reviews/${item.reviewId}/workflow`, { action: "note", body })}
-                  />
-                  <a className="text-sm text-ink underline" href={`/reviews?q=${encodeURIComponent(item.reviewerName)}`}>
-                    Open in inbox
-                  </a>
-                </div>
-              ) : (
-                <p className="mt-3 text-sm text-slate">
-                  {RESOLUTION_ACTIONS.find((action) => action.id === item.resolutionCode)?.detail ??
-                    "Resolved with a recorded next step."}
-                  {item.resolutionNote ? ` Note: ${item.resolutionNote}` : ""}
-                </p>
-              )}
-
-              {item.events.length > 0 ? (
-                <ul className="mt-3 space-y-1 text-xs text-slate">
-                  {item.events.map((event, index) => (
-                    <li key={`${event.createdAt}-${index}`}>
-                      {eventLabel(event.action, event.metadata as Record<string, unknown>)}
-                    </li>
-                  ))}
-                </ul>
-              ) : null}
-              <p className="mt-2 text-xs text-slate">File attachments are not available.</p>
-            </li>
-          ))}
-        </ul>
+        <div className="overflow-x-auto rounded-xl bg-white shadow-card">
+          <table className="w-full min-w-[40rem] text-left text-sm">
+            <thead>
+              <tr className="text-xs text-slate">
+                <th className="px-4 py-3 font-medium">Key</th>
+                <th className="px-4 py-3 font-medium">Case</th>
+                <th className="px-4 py-3 font-medium">Status</th>
+                <th className="px-4 py-3 font-medium">Assignee</th>
+                <th className="px-4 py-3 font-medium">Due</th>
+              </tr>
+            </thead>
+            <tbody>
+              {props.items.map((item) => (
+                <tr key={item.id} id={`case-${item.id}`} className="scroll-mt-24 border-t border-silver">
+                  <td className="px-4 py-3 font-medium text-ink">
+                    <a href={`/escalations/${item.id}`} className="hover:underline">
+                      {ticketKey(item.ticketNo)}
+                    </a>
+                  </td>
+                  <td className="px-4 py-3">
+                    <a href={`/escalations/${item.id}`} className="text-ink hover:underline">
+                      {item.reviewerName} · {item.starRating}★
+                    </a>
+                    <p className="mt-0.5 text-xs text-slate">
+                      {item.locationName}
+                      {themeLabel(item.theme) ? ` · ${themeLabel(item.theme)}` : ""}
+                    </p>
+                  </td>
+                  <td className="px-4 py-3 text-ink">{escalationStatusLabel(item.status)}</td>
+                  <td className="px-4 py-3 text-slate">{memberLabel(props.members, item.assignedTo)}</td>
+                  <td className="px-4 py-3 text-slate">
+                    {item.dueLabel}
+                    {item.overdue ? <span className="mt-0.5 block text-red-700">{item.overdue} overdue</span> : null}
+                    {item.remaining ? <span className="mt-0.5 block">{item.remaining} left</span> : null}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
       )}
 
       {props.totalPages > 1 ? (
@@ -295,162 +203,6 @@ function memberLabel(members: Member[], userId: string | null): string {
   if (!userId) return "nobody";
   const member = members.find((item) => item.userId === userId);
   return member ? member.email : "a former member";
-}
-
-function ReassignForm({
-  members,
-  assignedTo,
-  disabled,
-  onAssign,
-}: {
-  members: Member[];
-  assignedTo: string | null;
-  disabled: boolean;
-  onAssign: (userId: string, reason: string) => void;
-}) {
-  const [query, setQuery] = useState("");
-  const [userId, setUserId] = useState(assignedTo ?? "");
-  const [reason, setReason] = useState("");
-  const needle = query.trim().toLowerCase();
-  const choices = members.filter((member) => {
-    if (!needle) return true;
-    return (
-      member.email.toLowerCase().includes(needle) ||
-      roleLabel(member.role).toLowerCase().includes(needle) ||
-      member.scopeLabel.toLowerCase().includes(needle)
-    );
-  });
-  const selected = members.find((member) => member.userId === userId);
-  return (
-    <form
-      className="flex flex-wrap items-end gap-2"
-      onSubmit={(event) => {
-        event.preventDefault();
-        if (!userId || reason.trim().length < 3) return;
-        onAssign(userId, reason.trim());
-        setReason("");
-      }}
-    >
-      <label className="text-xs text-slate">
-        Find a person
-        <input
-          value={query}
-          onChange={(event) => setQuery(event.target.value)}
-          placeholder="Name, role, or scope"
-          className="mt-1 block rounded-md border border-line bg-white px-2 py-1.5 text-sm text-ink"
-        />
-      </label>
-      <label className="text-xs text-slate">
-        Assignee
-        <select
-          className="mt-1 block max-w-xs rounded-md border border-line bg-white px-2 py-1.5 text-sm text-ink"
-          value={choices.some((member) => member.userId === userId) ? userId : ""}
-          disabled={disabled}
-          onChange={(event) => setUserId(event.target.value)}
-        >
-          <option value="">Choose…</option>
-          {choices.map((member) => (
-            <option key={member.userId} value={member.userId}>
-              {member.email} · {roleLabel(member.role)} · {member.scopeLabel}
-            </option>
-          ))}
-        </select>
-      </label>
-      <label className="text-xs text-slate">
-        Reason
-        <input
-          required
-          minLength={3}
-          maxLength={500}
-          value={reason}
-          onChange={(event) => setReason(event.target.value)}
-          className="mt-1 block rounded-md border border-line bg-white px-2 py-1.5 text-sm text-ink"
-        />
-      </label>
-      <button type="submit" disabled={disabled || !userId || reason.trim().length < 3} className="rounded-md border border-line px-3 py-1.5 text-sm text-ink disabled:opacity-40">
-        Reassign
-      </button>
-      {selected ? (
-        <p className="basis-full text-xs text-slate">
-          {selected.email} is {roleLabel(selected.role)} for {selected.scopeLabel}. The responsible manager stays on the case.
-        </p>
-      ) : null}
-    </form>
-  );
-}
-
-function ResolveForm({
-  disabled,
-  onResolve,
-}: {
-  disabled: boolean;
-  onResolve: (code: string, note: string) => void;
-}) {
-  const [code, setCode] = useState(RESOLUTION_ACTIONS[0].id);
-  const [note, setNote] = useState("");
-  const detail = RESOLUTION_ACTIONS.find((action) => action.id === code)?.detail;
-  return (
-    <form
-      className="flex flex-wrap items-end gap-2"
-      onSubmit={(event) => {
-        event.preventDefault();
-        onResolve(code, note);
-        setNote("");
-      }}
-    >
-      <label className="text-xs text-slate">
-        Resolution
-        <select
-          className="mt-1 block rounded-md border border-line bg-white px-2 py-1.5 text-sm text-ink"
-          value={code}
-          onChange={(event) => setCode(event.target.value as typeof code)}
-        >
-          {RESOLUTION_ACTIONS.map((action) => (
-            <option key={action.id} value={action.id}>
-              {action.label}
-            </option>
-          ))}
-        </select>
-      </label>
-      <input
-        className="rounded-md border border-line px-2 py-1.5 text-sm"
-        placeholder="Internal note"
-        value={note}
-        maxLength={2000}
-        onChange={(event) => setNote(event.target.value)}
-      />
-      <button type="submit" disabled={disabled} className="rounded-md bg-ink px-3 py-1.5 text-sm text-white">
-        Record resolution
-      </button>
-      <span className="max-w-xs text-xs text-slate">{detail}</span>
-    </form>
-  );
-}
-
-function NoteForm({ disabled, onNote }: { disabled: boolean; onNote: (body: string) => void }) {
-  const [body, setBody] = useState("");
-  return (
-    <form
-      className="flex items-end gap-2"
-      onSubmit={(event) => {
-        event.preventDefault();
-        if (!body.trim()) return;
-        onNote(body.trim());
-        setBody("");
-      }}
-    >
-      <input
-        className="rounded-md border border-line px-2 py-1.5 text-sm"
-        placeholder="Internal note"
-        value={body}
-        maxLength={2000}
-        onChange={(event) => setBody(event.target.value)}
-      />
-      <button type="submit" disabled={disabled || !body.trim()} className="rounded-md border border-line px-3 py-1.5 text-sm">
-        Save note
-      </button>
-    </form>
-  );
 }
 
 function PolicyForm({

@@ -26,23 +26,30 @@ export async function loadComplaintSamples(
 ): Promise<ComplaintSample[]> {
   if (!locationIds.length) return [];
   const admin = createAdminClient();
-  const collected: ComplaintSample[] = [];
-
+  const chunks: string[][] = [];
   for (let index = 0; index < locationIds.length; index += CHUNK) {
-    const chunk = locationIds.slice(index, index + CHUNK);
-    let query = admin
-      .from("grm_reviews")
-      .select("id, reviewer_display_name, star_rating, comment, review_create_time, location_id")
-      .eq("workspace_id", workspaceId)
-      .in("location_id", chunk)
-      .lte("star_rating", 3)
-      .order("review_create_time", { ascending: false })
-      .limit(8);
-    if (start) query = query.gte("review_create_time", start);
-    if (end) query = query.lt("review_create_time", end);
-    const { data, error } = await query;
-    if (error) throw new Error("Could not load supporting reviews");
-    for (const row of data ?? []) {
+    chunks.push(locationIds.slice(index, index + CHUNK));
+  }
+  const batches = await Promise.all(
+    chunks.map(async (chunk) => {
+      let query = admin
+        .from("grm_reviews")
+        .select("id, reviewer_display_name, star_rating, comment, review_create_time, location_id")
+        .eq("workspace_id", workspaceId)
+        .in("location_id", chunk)
+        .lte("star_rating", 3)
+        .order("review_create_time", { ascending: false })
+        .limit(8);
+      if (start) query = query.gte("review_create_time", start);
+      if (end) query = query.lt("review_create_time", end);
+      const { data, error } = await query;
+      if (error) throw new Error("Could not load supporting reviews");
+      return data ?? [];
+    })
+  );
+  const collected: ComplaintSample[] = [];
+  for (const rows of batches) {
+    for (const row of rows) {
       const comment = readableReviewText(row.comment);
       if (!comment || !row.location_id) continue;
       collected.push({

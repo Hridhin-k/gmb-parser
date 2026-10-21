@@ -1,7 +1,6 @@
 "use client";
 
-import { useState } from "react";
-import { useRouter } from "next/navigation";
+import { useEffect, useState } from "react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
@@ -23,6 +22,9 @@ import { Input } from "@/components/ui/input";
 import { languageLabel, themeLabel, workflowState } from "@/lib/review-inbox";
 import { splitGoogleTranslation } from "@/lib/review-text";
 import { REPLY_LANGUAGES, REPLY_TEMPLATES } from "@/lib/reply-adjustments";
+import { useServerRefresh, useSettleWhenUpdated } from "@/hooks/use-server-refresh";
+import { pollAiGeneration, retryAiGeneration } from "@/lib/ai-generation-client";
+import { ACTION_STATUS } from "@/lib/ui-status";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -68,6 +70,10 @@ interface ReviewDetailPanelProps {
   canApprove: boolean;
   members?: Array<{ id: string; email: string }>;
   onClose: () => void;
+  /** Paint the new draft on the inbox card without waiting for a page refresh. */
+  onDraft?: (reviewId: string, reply: ReplyForPanel) => void;
+  /** Changes only when the server inbox payload changes, not when a draft is painted locally. */
+  inboxRevision?: number;
 }
 
 // ---------------------------------------------------------------------------
@@ -126,13 +132,26 @@ const REPLY_STATUS_MAP: Record<
 
 export function ReviewDetailPanel({
   review,
-  reply,
+  reply: serverReply,
   canApprove,
   members = [],
   onClose,
+  onDraft,
+  inboxRevision = 0,
 }: ReviewDetailPanelProps) {
-  const router = useRouter();
-  const [draftContent, setDraftContent] = useState(reply?.content ?? "");
+  const { pending: refreshing, refresh, settle } = useServerRefresh();
+  useSettleWhenUpdated(refreshing, settle, inboxRevision);
+  const [liveReply, setLiveReply] = useState<ReplyForPanel | null | undefined>(undefined);
+  const [liveStatus, setLiveStatus] = useState<string | null>(null);
+  const [saveJob, setSaveJob] = useState<{
+    jobId: string;
+    status: "saving" | "failed";
+    content: string;
+  } | null>(null);
+  const draftSaving = saveJob?.status === "saving";
+  const reply = liveReply === undefined ? serverReply : liveReply;
+  const replyStatus = liveStatus ?? review.reply_status;
+  const [draftContent, setDraftContent] = useState(serverReply?.content ?? "");
   const [isEditing, setIsEditing] = useState(false);
   const [isCreating, setIsCreating] = useState(false);
   const [loading, setLoading] = useState<string | null>(null);
@@ -142,8 +161,37 @@ export function ReviewDetailPanel({
   const [replyLanguage, setReplyLanguage] = useState("");
   const [templateId, setTemplateId] = useState("");
   const reviewText = review.comment ? splitGoogleTranslation(review.comment) : null;
+
+  useEffect(() => {
+    setLiveReply(undefined);
+    setSaveJob(null);
+    setLiveStatus(null);
+    setDraftContent(serverReply?.content ?? "");
+    setIsEditing(false);
+    setIsCreating(false);
+    // Only when the open review changes. A later server payload must not wipe a newer draft.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [review.id]);
+
+  useEffect(() => {
+    setLiveReply((current) => {
+      if (current === undefined) return current;
+      if (current === null) return serverReply ? current : undefined;
+      if (
+        serverReply &&
+        serverReply.id === current.id &&
+        serverReply.content === current.content &&
+        serverReply.status === current.status
+      ) {
+        return undefined;
+      }
+      return current;
+    });
+    setLiveStatus((current) => (current && review.reply_status === current ? null : current));
+  }, [serverReply, review.reply_status]);
+
   const workflow = workflowState({
-    replyStatus: review.reply_status,
+    replyStatus,
     starRating: review.star_rating,
     reopenedAt: review.reopened_at ?? null,
     hasGoogleReply: Boolean(review.google_reply_comment),
@@ -153,7 +201,7 @@ export function ReviewDetailPanel({
     ? "Anonymous"
     : (review.reviewer_display_name || "Unknown reviewer");
 
-  const statusConfig = REPLY_STATUS_MAP[review.reply_status] ?? REPLY_STATUS_MAP.none;
+  const statusConfig = REPLY_STATUS_MAP[replyStatus] ?? REPLY_STATUS_MAP.none;
 
   // ── Handlers ─────────────────────────────────────────────────────────────
 
@@ -180,7 +228,7 @@ export function ReviewDetailPanel({
       });
       setIsCreating(false);
       toast.success("Draft saved");
-      router.refresh();
+      refresh();
     } catch (e) {
       setError(e instanceof Error ? e.message : "Failed to create reply");
     } finally {
@@ -190,6 +238,7 @@ export function ReviewDetailPanel({
 
   async function handleSaveEdit() {
     if (!reply || !draftContent.trim()) return;
+    if (blockWhileSaving()) return;
     setError(null);
     setLoading("edit");
     try {
@@ -199,7 +248,7 @@ export function ReviewDetailPanel({
       });
       setIsEditing(false);
       toast.success("Changes saved");
-      router.refresh();
+      refresh();
     } catch (e) {
       setError(e instanceof Error ? e.message : "Failed to save edit");
     } finally {
@@ -209,6 +258,7 @@ export function ReviewDetailPanel({
 
   async function handleApprove() {
     if (!reply) return;
+    if (blockWhileSaving()) return;
     setError(null);
     setLoading("approve");
     try {
@@ -216,7 +266,7 @@ export function ReviewDetailPanel({
         replyId: reply.id,
       });
       toast.success("Reply approved", { description: "It is ready to publish." });
-      router.refresh();
+      refresh();
     } catch (e) {
       setError(e instanceof Error ? e.message : "Failed to approve reply");
     } finally {
@@ -226,6 +276,7 @@ export function ReviewDetailPanel({
 
   async function handlePublish() {
     if (!reply) return;
+    if (blockWhileSaving()) return;
     setError(null);
     setLoading("publish");
     try {
@@ -233,7 +284,7 @@ export function ReviewDetailPanel({
         replyId: reply.id,
       });
       toast.success("Published to Google");
-      router.refresh();
+      refresh();
     } catch (e) {
       setError(e instanceof Error ? e.message : "Failed to publish reply");
     } finally {
@@ -244,6 +295,7 @@ export function ReviewDetailPanel({
   /** Approve (if needed) then publish — one click for the common path. */
   async function handleApproveAndPublish() {
     if (!reply) return;
+    if (blockWhileSaving()) return;
     setError(null);
     setLoading("publish");
     try {
@@ -256,7 +308,7 @@ export function ReviewDetailPanel({
         replyId: reply.id,
       });
       toast.success("Published to Google");
-      router.refresh();
+      refresh();
     } catch (e) {
       setError(
         e instanceof Error ? e.message : "Failed to approve and publish reply"
@@ -274,18 +326,91 @@ export function ReviewDetailPanel({
     return false;
   }
 
+  function blockWhileSaving(): boolean {
+    if (draftSaving) {
+      setError("Your new draft is still saving. Give it a second, then try again.");
+      return true;
+    }
+    return false;
+  }
+
+  /** Watches the background save; swaps the provisional reply id for the real one. */
+  function watchSave(jobId: string, content: string) {
+    void pollAiGeneration(jobId).then((result) => {
+      if (result.status === "saved") {
+        setSaveJob(null);
+        if (result.replyId) {
+          const real: ReplyForPanel = {
+            id: result.replyId,
+            content,
+            source: "ai",
+            status: "draft",
+            created_at: new Date().toISOString(),
+            approved_at: null,
+            published_at: null,
+            last_error: null,
+            failure_count: 0,
+          };
+          setLiveReply(real);
+          onDraft?.(review.id, real);
+        }
+        refresh();
+      } else {
+        setSaveJob({ jobId, status: "failed", content });
+      }
+    });
+  }
+
+  async function handleRetrySave() {
+    if (!saveJob) return;
+    const { jobId, content } = saveJob;
+    setSaveJob({ jobId, status: "saving", content });
+    const started = await retryAiGeneration(jobId);
+    if (!started) {
+      setSaveJob({ jobId, status: "failed", content });
+      return;
+    }
+    watchSave(jobId, content);
+  }
+
   async function handleGenerateAI(body?: object) {
+    if (blockWhileSaving()) return;
     if (reply && blockRewrite()) return;
+    const adjustment =
+      body && typeof body === "object" && !(body instanceof Event) ? body : undefined;
     setError(null);
     setLoading("generate");
     try {
-      await apiCall(
+      const data = (await apiCall(
         `/api/reviews/${review.id}/generate`,
         "POST",
-        body ?? (reply ? { adjustment: "regenerate", replaceEdited: true } : undefined)
-      );
+        adjustment ?? (reply ? { adjustment: "regenerate", replaceEdited: true } : undefined)
+      )) as { replyId?: string; content?: string; jobId?: string | null };
+      if (data.content && data.replyId) {
+        const next: ReplyForPanel = {
+          id: data.replyId,
+          content: data.content,
+          source: "ai",
+          status: "draft",
+          created_at: new Date().toISOString(),
+          approved_at: null,
+          published_at: null,
+          last_error: null,
+          failure_count: 0,
+        };
+        setLiveReply(next);
+        setLiveStatus("draft");
+        setDraftContent(data.content);
+        setIsEditing(false);
+        setIsCreating(false);
+        onDraft?.(review.id, next);
+        if (data.jobId) {
+          setSaveJob({ jobId: data.jobId, status: "saving", content: data.content });
+          watchSave(data.jobId, data.content);
+        }
+      }
       toast.success("AI draft ready", { description: "Read it and edit before approving." });
-      router.refresh();
+      if (!data.jobId) refresh();
     } catch (e) {
       setError(e instanceof Error ? e.message : "Failed to generate AI response");
     } finally {
@@ -295,6 +420,7 @@ export function ReviewDetailPanel({
 
   async function handleDelete() {
     if (!reply) return;
+    if (blockWhileSaving()) return;
     setError(null);
     setLoading("delete");
     try {
@@ -303,7 +429,7 @@ export function ReviewDetailPanel({
       });
       setDraftContent("");
       toast.success("Draft deleted");
-      router.refresh();
+      refresh();
     } catch (e) {
       setError(e instanceof Error ? e.message : "Failed to delete reply");
     } finally {
@@ -399,7 +525,7 @@ export function ReviewDetailPanel({
                   userId: assignee || null,
                 });
                 toast.success(assignee ? "Review assigned" : "Assignment cleared");
-                router.refresh();
+                refresh();
               } catch (caught) {
                 setError(caught instanceof Error ? caught.message : "Could not assign the review.");
               } finally {
@@ -442,7 +568,7 @@ export function ReviewDetailPanel({
                 });
                 setNote("");
                 toast.success("Note saved");
-                router.refresh();
+                refresh();
               } catch (caught) {
                 setError(caught instanceof Error ? caught.message : "Could not save the note.");
               } finally {
@@ -521,9 +647,34 @@ export function ReviewDetailPanel({
         {loading === "generate" ? (
           <ActivityStatus
             tone="gemini"
-            title="Generating your AI reply…"
-            detail="AI is drafting a reply using your organisation's saved guidelines. Nothing is posted to Google until you approve it."
+            title={ACTION_STATUS.aiDraft.title}
+            detail={ACTION_STATUS.aiDraft.detail}
           />
+        ) : refreshing ? (
+          <ActivityStatus
+            title={ACTION_STATUS.applying.title}
+            detail={
+              reply?.source === "ai"
+                ? "Your draft is already on screen. The review list is catching up."
+                : ACTION_STATUS.applying.detail
+            }
+          />
+        ) : null}
+        {saveJob?.status === "saving" ? (
+          <ActivityStatus
+            title="Saving your draft…"
+            detail="The draft above is ready to read. Approve and publish unlock as soon as it is saved."
+          />
+        ) : saveJob?.status === "failed" ? (
+          <div className="space-y-2">
+            <ActivityStatus
+              title="This draft could not be saved yet"
+              detail="The text above is safe. Retry the save — no new AI generation is needed."
+            />
+            <Button type="button" size="sm" variant="outline" onClick={() => void handleRetrySave()}>
+              Retry save
+            </Button>
+          </div>
         ) : null}
         {loading === "publish" ? (
           <ActivityStatus
@@ -580,12 +731,12 @@ export function ReviewDetailPanel({
         )}
 
         {/* ── No reply — show generate + manual options ────────────── */}
-        {!reply && !isCreating && review.reply_status === "none" && (
+        {!reply && !isCreating && replyStatus === "none" && (
           <div className="space-y-3 pt-1">
             <div className="flex flex-wrap gap-2">
               <Button
                 size="sm"
-                onClick={handleGenerateAI}
+                onClick={() => handleGenerateAI()}
                 loading={loading === "generate"}
                 className="gap-1.5"
               >
@@ -781,7 +932,7 @@ export function ReviewDetailPanel({
                             try {
                               await apiCall(`/api/reviews/${review.id}/reply/submit`, "POST", { replyId: reply.id });
                               toast.success("Submitted for approval");
-                              router.refresh();
+                              refresh();
                             } catch (caught) {
                               setError(caught instanceof Error ? caught.message : "Could not submit the draft.");
                             } finally {
@@ -812,7 +963,7 @@ export function ReviewDetailPanel({
                     <Button
                       size="sm"
                       variant="outline"
-                      onClick={handleGenerateAI}
+                      onClick={() => handleGenerateAI()}
                       disabled={loading !== null}
                       className="gap-1.5"
                     >
@@ -875,7 +1026,7 @@ export function ReviewDetailPanel({
                             replaceEdited: true,
                           });
                           toast.success("Template applied");
-                          router.refresh();
+                          refresh();
                         } catch (caught) {
                           setError(caught instanceof Error ? caught.message : "Could not apply the template.");
                         } finally {

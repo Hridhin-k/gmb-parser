@@ -12,6 +12,7 @@ import {
   Inbox,
   ListChecks,
   MapPin,
+  Store,
   RefreshCw,
   ShieldCheck,
   Sparkles,
@@ -79,8 +80,9 @@ const FEATURES: Array<{ icon: IconComponent; title: string; body: string }> = [
 ];
 
 const ROLES: Array<{ icon: IconComponent; role: string; detail: string }> = [
-  { icon: ShieldCheck, role: "Owner", detail: "Connects Google, invites people, approves replies." },
-  { icon: BadgeCheck, role: "Admin", detail: "Approves replies and can invite teammates." },
+  { icon: ShieldCheck, role: "Owner", detail: "Runs the organisation, connects Google, and invites people." },
+  { icon: BadgeCheck, role: "Admin", detail: "Manages people and approvals across the whole organisation." },
+  { icon: Store, role: "Manager", detail: "Covers one brand, one group, or one location." },
   { icon: Users, role: "Member", detail: "Drafts replies and publishes them after approval." },
 ];
 

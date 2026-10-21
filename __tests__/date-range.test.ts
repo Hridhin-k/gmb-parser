@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { dateRangeParams, parseDateRange, previousDateRange } from "@/lib/date-range";
+import { scopeFilterApply, timeFilterApply } from "@/lib/filter-apply";
 
 const now = new Date("2026-10-08T12:00:00Z");
 
@@ -64,5 +65,26 @@ describe("dateRangeParams", () => {
     expect(
       dateRangeParams(parseDateRange({ range: "custom", from: "2026-01-01" }, "all", now), "all")
     ).toEqual({ range: "custom", from: "2026-01-01" });
+  });
+});
+
+describe("filter apply copy", () => {
+  it("names the period that is loading", () => {
+    expect(timeFilterApply({ range: "6m", from: null, to: null }, "12m")).toEqual({
+      title: "Applying Last 6 months",
+      detail: "Loading Last 6 months. The numbers on this page stay on the previous period until this filter finishes.",
+    });
+    expect(timeFilterApply({ range: null, from: null, to: null }, "12m").title).toBe("Applying Last 12 months");
+    expect(timeFilterApply({ range: "custom", from: "2026-04-21", to: "2026-10-21" }, "12m").title).toBe(
+      "Applying custom dates"
+    );
+  });
+
+  it("names the organisation, group, or outlet that is loading", () => {
+    expect(scopeFilterApply({ kind: "Outlet", label: "Fazyo Alappuzha" })).toEqual({
+      title: "Applying Fazyo Alappuzha",
+      detail:
+        "The outlet filter is loading. The numbers on this page stay on the previous selection until this filter finishes.",
+    });
   });
 });

@@ -105,7 +105,7 @@ export default async function EscalationsPage({ searchParams }: EscalationsPageP
     <TransitionScope>
       <PageHeader
         title="Escalations"
-        description="Matching reviews are assigned to the location manager. A missing or inactive manager is handed to an administrator and marked as a fallback. A published reply does not close the case."
+        description="Each case opens on its own page. Assign it, comment, and record a resolution there. A published reply does not close the case."
       />
         <FreshMetrics
           rendered={overviewQueryKey((key) => (Array.isArray(params[key]) ? params[key][0] : params[key]))}

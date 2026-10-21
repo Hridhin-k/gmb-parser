@@ -90,6 +90,24 @@ export const AI_GENERATE_LIMIT: RateLimitConfig = {
   windowMs: 60_000,
 };
 
+/** One workspace, all of its members: max 40 draft calls per minute. */
+export const WORKSPACE_AI_LIMIT: RateLimitConfig = {
+  limit: 40,
+  windowMs: 60_000,
+};
+
+/** One workspace: max 12 insight generations per minute. */
+export const WORKSPACE_INSIGHT_LIMIT: RateLimitConfig = {
+  limit: 12,
+  windowMs: 60_000,
+};
+
+/** One workspace: max 40 embedding calls per hour. */
+export const WORKSPACE_EMBED_LIMIT: RateLimitConfig = {
+  limit: 40,
+  windowMs: 60 * 60_000,
+};
+
 /** Review sync (single location): max 10 per user per minute */
 export const SYNC_LOCATION_LIMIT: RateLimitConfig = {
   limit: 10,

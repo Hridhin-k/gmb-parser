@@ -260,10 +260,6 @@ export async function buildReportDocument(
     }
   }
 
-  if (input.sections.includes("competitors")) {
-    lines.push("", "Competitors", "Competitor ratings are not connected. This report does not estimate them.");
-  }
-
   return { name: input.name, scopeLabel: label, periodLabel, timezone: input.timezone, sections: input.sections, lines };
 }
 
@@ -308,7 +304,7 @@ function asChannels(value: string[]): DeliveryChannel[] {
 }
 
 function asSections(value: string[]): ReportSectionId[] {
-  const allowed: ReportSectionId[] = ["scorecard", "trends", "leaderboard", "themes", "competitors"];
+  const allowed: ReportSectionId[] = ["scorecard", "trends", "leaderboard", "themes"];
   return value.filter((item): item is ReportSectionId => allowed.includes(item as ReportSectionId));
 }
 

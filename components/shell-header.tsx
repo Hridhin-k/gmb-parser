@@ -6,6 +6,8 @@ import type { User } from "@supabase/supabase-js";
 import { Bell, ChevronDown, LogOut, Menu, Search } from "lucide-react";
 import { ActivityStatus } from "@/components/activity-status";
 import { DateRangeFilter } from "@/components/date-range-filter";
+import { useFilterNavigation } from "@/components/filter-navigation";
+import { timeFilterApply } from "@/lib/filter-apply";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import {
@@ -43,6 +45,7 @@ export function ShellHeader({ user, role, catalog, summary, onOpenMenu }: ShellH
     ...alert,
     href: scopedHref(alert.href, searchParams, pathname),
   }));
+  const { applying, begin } = useFilterNavigation();
   const rangeDefault = defaultRangeForPath(pathname);
   const range = parseDateRange(
     {
@@ -58,12 +61,17 @@ export function ShellHeader({ user, role, catalog, summary, onOpenMenu }: ShellH
     setSearch(next);
   }
 
-  function writeParams(mutate: (params: URLSearchParams) => void) {
+  function writeParams(mutate: (params: URLSearchParams) => void, apply?: { title: string; detail: string }) {
     const params = new URLSearchParams(searchParams.toString());
     mutate(params);
     params.delete("page");
     const qs = params.toString();
-    router.push(qs ? `${pathname}?${qs}` : pathname);
+    const href = qs ? `${pathname}?${qs}` : pathname;
+    if (apply) {
+      begin({ ...apply, href }, () => router.push(href));
+      return;
+    }
+    router.push(href);
   }
 
   useEffect(() => {
@@ -107,13 +115,17 @@ export function ShellHeader({ user, role, catalog, summary, onOpenMenu }: ShellH
         <DateRangeFilter
           value={{ key: range.key, from: range.from, to: range.to }}
           defaultKey={rangeDefault}
+          disabled={applying !== null}
           onChange={(change) =>
-            writeParams((params) => {
-              for (const [key, value] of Object.entries(change)) {
-                if (value) params.set(key, value);
-                else params.delete(key);
-              }
-            })
+            writeParams(
+              (params) => {
+                for (const [key, value] of Object.entries(change)) {
+                  if (value) params.set(key, value);
+                  else params.delete(key);
+                }
+              },
+              timeFilterApply(change, rangeDefault)
+            )
           }
           selectClassName="sm:w-44"
         />

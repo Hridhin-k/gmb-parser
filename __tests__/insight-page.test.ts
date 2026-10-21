@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { isCountedSummary, outletComparison, themeRowsFromGroups } from "@/lib/insight-page";
+import { isCountedSummary, findingsForScope, outletComparison, themeRowsFromGroups } from "@/lib/insight-page";
 import type { DashboardFacts } from "@/lib/metrics";
 
 function row(locationId: string, reviews: number, ratingSum: number, oneToThree = 0): DashboardFacts["locations"][number] {
@@ -35,6 +35,18 @@ describe("outletComparison", () => {
     const result = outletComparison([{ id: "a", name: "Alpha" }], [row("a", 10, 40, 2)]);
     expect(result.strongest?.rating).toBe(4);
     expect(result.weakest).toBeNull();
+  });
+
+  it("drops a finding that cites a location outside the selected scope", () => {
+    const kept = findingsForScope(
+      [
+        { key: "in", locationIds: ["a"] },
+        { key: "mixed", locationIds: ["a", "z"] },
+        { key: "wide", locationIds: [] },
+      ],
+      ["a", "b"]
+    );
+    expect(kept.map((item) => item.key)).toEqual(["in", "wide"]);
   });
 
   it("treats a counted fallback as something other than a model interpretation", () => {

@@ -1,5 +1,5 @@
 import { languageLabel } from "@/lib/review-inbox";
-import { average, share } from "@/lib/metrics";
+import { average, EMPTY_STARS, share, type StarCounts } from "@/lib/metrics";
 
 /**
  * Analytics definitions for the selected scope.
@@ -82,6 +82,8 @@ export interface SampleSummary {
   replyRate: number | null;
   medianHours: number | null;
   buckets: Record<ReplySpeedBucket, number>;
+  /** 1★–5★ counts inside each reply-time bucket. Reviews with no usable reply time are left out. */
+  bucketStars: Record<ReplySpeedBucket, StarCounts>;
   untimedReplies: number;
   languages: LanguageShare[];
   /** Share of GRM-published replies whose source is the model. Null when none were published here. */
@@ -90,6 +92,12 @@ export interface SampleSummary {
 
 export function summarizeSamples(rows: ReviewSample[]): SampleSummary {
   const buckets: Record<ReplySpeedBucket, number> = { under1h: 0, h1to6: 0, h6to24: 0, over24h: 0 };
+  const bucketStars: Record<ReplySpeedBucket, StarCounts> = {
+    under1h: [...EMPTY_STARS],
+    h1to6: [...EMPTY_STARS],
+    h6to24: [...EMPTY_STARS],
+    over24h: [...EMPTY_STARS],
+  };
   const hours: number[] = [];
   let untimedReplies = 0;
   let ratingSum = 0;
@@ -106,7 +114,10 @@ export function summarizeSamples(rows: ReviewSample[]): SampleSummary {
     } else {
       hours.push(elapsed);
       const bucket = replySpeedBucket(elapsed);
-      if (bucket) buckets[bucket] += 1;
+      if (bucket) {
+        buckets[bucket] += 1;
+        if (row.stars >= 1 && row.stars <= 5) bucketStars[bucket][row.stars - 1] += 1;
+      }
     }
     const language = row.language && languageLabel(row.language) ? row.language : "unset";
     languageCounts.set(language, (languageCounts.get(language) ?? 0) + 1);
@@ -129,6 +140,7 @@ export function summarizeSamples(rows: ReviewSample[]): SampleSummary {
     replyRate: share(replied, rows.length),
     medianHours: median(hours),
     buckets,
+    bucketStars,
     untimedReplies,
     languages,
     autoShare: share(auto, publishedHere),

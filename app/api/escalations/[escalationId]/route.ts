@@ -36,6 +36,13 @@ const schema = z.discriminatedUnion("action", [
       "store_visit_scheduled",
     ]),
   }),
+  z.object({
+    action: z.literal("start"),
+  }),
+  z.object({
+    action: z.literal("comment"),
+    body: z.string().trim().min(1).max(2000),
+  }),
 ]);
 
 export async function POST(
@@ -92,6 +99,19 @@ export async function POST(
         escalationId,
         actorId: user.id,
         code: body.code,
+      });
+    } else if (body.action === "start") {
+      await EscalationService.start({
+        workspaceId: membership.workspace_id,
+        escalationId,
+        actorId: user.id,
+      });
+    } else if (body.action === "comment") {
+      await EscalationService.comment({
+        workspaceId: membership.workspace_id,
+        escalationId,
+        actorId: user.id,
+        body: body.body,
       });
     } else {
       await EscalationService.resolve({

@@ -13,9 +13,11 @@ describe("canManageMember", () => {
     expect(canManageMember("owner", "member")).toBe(true);
   });
 
-  it("lets an admin manage members only", () => {
+  it("lets an admin manage managers and members, not the owner", () => {
     expect(canManageMember("admin", "member")).toBe(true);
-    expect(canManageMember("admin", "admin")).toBe(false);
+    expect(canManageMember("admin", "brand_manager")).toBe(true);
+    expect(canManageMember("admin", "admin")).toBe(true);
+    expect(canManageMember("admin", "owner")).toBe(false);
   });
 
   it("gives members and unknown roles no management rights", () => {
@@ -27,8 +29,8 @@ describe("canManageMember", () => {
 
 describe("roleLabel", () => {
   it("labels each role", () => {
-    expect(roleLabel("owner")).toBe("Organization admin");
-    expect(roleLabel("org_admin")).toBe("Organization admin");
+    expect(roleLabel("owner")).toBe("Owner");
+    expect(roleLabel("org_admin")).toBe("Admin");
     expect(roleLabel("brand_manager")).toBe("Brand manager");
     expect(roleLabel("admin")).toBe("Admin");
     expect(roleLabel("member")).toBe("Member");

@@ -1,9 +1,12 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
 import type { OverviewInsightCard } from "@/lib/overview-board";
+import { ActivityStatus } from "@/components/activity-status";
+import { useServerRefresh, useSettleWhenUpdated } from "@/hooks/use-server-refresh";
+import { pollAiGeneration } from "@/lib/ai-generation-client";
+import { ACTION_STATUS } from "@/lib/ui-status";
 
 const FILTERS = [
   { id: "all", label: "All" },
@@ -36,32 +39,64 @@ export function OverviewInsightFeed({
   savedSummary: string | null;
   generate: { scopeKind: "client" | "group"; scopeId: string } | null;
 }) {
-  const router = useRouter();
+  const { pending: refreshing, refresh: refreshPage, settle } = useServerRefresh();
+  useSettleWhenUpdated(refreshing, settle, savedSummary);
   const [filter, setFilter] = useState<(typeof FILTERS)[number]["id"]>("all");
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [localSummary, setLocalSummary] = useState<string | null>(null);
+  const summary = localSummary ?? savedSummary;
+
+  useEffect(() => {
+    setLocalSummary(null);
+  }, [generate?.scopeId, generate?.scopeKind]);
+
+  useEffect(() => {
+    if (localSummary && savedSummary === localSummary) setLocalSummary(null);
+  }, [savedSummary, localSummary]);
   const visible = filter === "all" ? cards : cards.filter((card) => card.tone === filter);
   const count = (id: (typeof FILTERS)[number]["id"]) =>
     id === "all" ? cards.length : cards.filter((card) => card.tone === id).length;
 
-  async function refresh() {
+  async function generateInsight() {
     if (!generate) return;
     setPending(true);
     setError(null);
-    try {
+    const post = async (preview: boolean) => {
       const response = await fetch("/api/insights/generate", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ scopeKind: generate.scopeKind, scopeId: generate.scopeId, force: true }),
+        body: JSON.stringify({
+          scopeKind: generate.scopeKind,
+          scopeId: generate.scopeId,
+          force: true,
+          preview,
+        }),
       });
-      const payload = (await response.json()) as { error?: string };
-      if (!response.ok) {
-        setError(payload.error ?? "Could not generate an insight.");
-        return;
+      const payload = (await response.json()) as { error?: string; insight?: { summary?: string } };
+      if (!response.ok) throw new Error(payload.error ?? "Could not generate an insight.");
+      return payload.insight;
+    };
+    try {
+      try {
+        const preview = await post(true);
+        if (preview?.summary) setLocalSummary(preview.summary);
+      } catch {
+        // Preview is optional; the full brief below is the saved result.
       }
-      router.refresh();
-    } catch {
-      setError("Could not generate an insight.");
+      const insight = await post(false);
+      if (insight?.summary) setLocalSummary(insight.summary);
+      const jobId = (insight as { jobId?: string } | undefined)?.jobId;
+      if (jobId) {
+        void pollAiGeneration(jobId).then((result) => {
+          if (result.status === "saved") refreshPage();
+          else setError("The summary above is on screen. Its background save has not finished yet.");
+        });
+      } else {
+        refreshPage();
+      }
+    } catch (caught: unknown) {
+      setError(caught instanceof Error ? caught.message : "Could not generate an insight.");
     } finally {
       setPending(false);
     }
@@ -82,10 +117,10 @@ export function OverviewInsightFeed({
           </button>
         ))}
       </div>
-      {savedSummary ? (
+      {summary ? (
         <div className="mt-4">
           <p className="text-[11px] font-semibold uppercase tracking-[0.08em] text-slate">Saved insight</p>
-          <p className="mt-1 text-sm leading-6 text-graphite">{savedSummary}</p>
+          <p className="mt-1 text-sm leading-6 text-graphite">{summary}</p>
           <p className="mt-1 text-xs text-slate">Generated for this organisation or group. It is not limited to the date range.</p>
         </div>
       ) : null}
@@ -117,7 +152,7 @@ export function OverviewInsightFeed({
         <div className="mt-3 space-y-2">
           <button
             type="button"
-            onClick={() => void refresh()}
+            onClick={() => void generateInsight()}
             disabled={pending}
             aria-busy={pending || undefined}
             className="text-xs font-medium text-[#163a7a] underline disabled:opacity-60"
@@ -125,9 +160,9 @@ export function OverviewInsightFeed({
             {pending ? "Analysing customer feedback…" : "Generate insight"}
           </button>
           {pending ? (
-            <p className="text-xs text-slate" role="status" aria-live="polite">
-              Preparing a model interpretation for this organisation or group. Counted cards above stay available.
-            </p>
+            <ActivityStatus tone="gemini" title={ACTION_STATUS.aiInsight.title} detail={ACTION_STATUS.aiInsight.detail} />
+          ) : refreshing ? (
+            <ActivityStatus title={ACTION_STATUS.applying.title} detail="The new summary is already on screen. Counted cards stay as they are." />
           ) : null}
           {error ? (
             <p className="text-xs text-rose-600" role="alert">
