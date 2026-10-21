@@ -332,6 +332,45 @@ export async function assertScopeTarget(input: {
   throw new AuthorizationError("That record covers the whole organization.");
 }
 
+/**
+ * Null means every location. An array is the only Google profiles this person covers:
+ * one outlet, a group's outlets, or every outlet of their brand.
+ */
+export const visibleLocationIds = cache(async function visibleLocationIds(
+  workspaceId: string,
+  scope: ScopeIds | null | undefined
+): Promise<string[] | null> {
+  const current = scope ?? { clientId: null, groupId: null, locationId: null };
+  if (isOrgScope(current)) return null;
+  const admin = createAdminClient();
+  if (current.locationId) return [current.locationId];
+  if (current.clientId) {
+    const { data, error } = await admin
+      .from("grm_google_locations")
+      .select("id")
+      .eq("workspace_id", workspaceId)
+      .eq("client_id", current.clientId);
+    if (error) throw new Error("Failed to load profile scope.");
+    return (data ?? []).map((location) => location.id);
+  }
+  const { data: groups, error: groupError } = await admin
+    .from("grm_groups")
+    .select("id, parent_id")
+    .eq("workspace_id", workspaceId);
+  if (groupError) throw new Error("Failed to load profile scope.");
+  const groupIds = (groups ?? [])
+    .filter((group) => group.id === current.groupId || group.parent_id === current.groupId)
+    .map((group) => group.id);
+  if (groupIds.length === 0) return [];
+  const { data, error } = await admin
+    .from("grm_google_locations")
+    .select("id")
+    .eq("workspace_id", workspaceId)
+    .in("group_id", groupIds);
+  if (error) throw new Error("Failed to load profile scope.");
+  return (data ?? []).map((location) => location.id);
+});
+
 /** Null means the whole organization. An array is the only client ids this person may see. */
 export async function visibleClientIds(workspaceId: string, scope: ScopeIds | null | undefined): Promise<string[] | null> {
   const current = scope ?? { clientId: null, groupId: null, locationId: null };

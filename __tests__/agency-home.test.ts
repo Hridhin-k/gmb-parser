@@ -101,4 +101,30 @@ describe("buildAgencyHome", () => {
     expect(home.rows[0]?.connection).toBe("attention");
     expect(home.usage[0]?.reviews).toBe(10);
   });
+
+  it("honours precomputed server pagination: page rows, workspace-wide totals", () => {
+    const home = buildAgencyHome({
+      clients: [clients[0]!],
+      locations: locations.filter((location) => location.clientId === "c1"),
+      stats: stats.filter((stat) => stat.location_id !== "l3"),
+      hasConnection: true,
+      rangeLabel: "All time",
+      clientId: "",
+      q: "",
+      page: 2,
+      pageSize: 1,
+      precomputed: {
+        totalClients: 2,
+        kpis: { clients: 2, locations: 3, unreplied: 2, waitingApproval: 1, openEscalations: 2, connectionProblems: 1 },
+        hasReviews: true,
+        hasPublished: true,
+        approvals: 1,
+      },
+    });
+
+    expect(home.rows.map((row) => row.id)).toEqual(["c1"]);
+    expect(home.totalClients).toBe(2);
+    expect(home.page).toBe(2);
+    expect(home.kpis).toEqual({ clients: 2, locations: 3, unreplied: 2, waitingApproval: 1, openEscalations: 2, connectionProblems: 1 });
+  });
 });

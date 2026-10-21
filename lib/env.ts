@@ -14,6 +14,9 @@ const serverEnvSchema = z.object({
     .string()
     .regex(/^[0-9a-f]{64}$/i, "TOKEN_ENCRYPTION_KEY must be exactly 64 hex characters (run: openssl rand -hex 32)"),
   CRON_SECRET: z.string().optional(),
+  /** Comma-separated platform super-admin emails. Invite-only gate + /admin access. */
+  SUPER_ADMIN_EMAILS: z.string().optional(),
+  PLATFORM_FROM_EMAIL: z.string().optional(),
 });
 
 const clientEnvSchema = z.object({

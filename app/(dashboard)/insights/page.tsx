@@ -1,11 +1,14 @@
+import { Suspense } from "react";
 import { FreshMetrics } from "@/components/fresh-metrics";
 import { InsightExperience, InsightToolbar } from "@/components/insight-experience";
 import { PageHeader } from "@/components/page-header";
+import { PeriodGeminiInsight, PeriodGeminiInsightFallback } from "@/components/period-gemini-insight";
 import { PendingRegion, TransitionScope } from "@/components/transition-scope";
 import { dateRangeParams, parseDateRange } from "@/lib/date-range";
 import { findingsForScope } from "@/lib/insight-page";
 import { reviewDrillHref } from "@/lib/metrics";
 import { overviewQueryKey } from "@/lib/overview-board";
+import { periodInsightScopeSelected } from "@/lib/period-gemini-insight";
 import { getDashboardContext } from "@/lib/services/dashboard-metrics";
 import { loadComplaintSamples } from "@/lib/services/insight-evidence";
 import { loadClusterBoard } from "@/lib/services/intelligence-cluster";
@@ -105,6 +108,10 @@ export default async function InsightsPage({ searchParams }: InsightsPageProps) 
     locationName: names.get(sample.locationId) ?? sample.locationName,
   }));
   const samplesUnavailable = rawSamples ? null : "Supporting reviews could not be loaded.";
+  const places = loaded.locations
+    .filter((location) => resolved.locationIds.includes(location.id))
+    .map((location) => ({ id: location.id, name: location.name }));
+  const readPeriod = periodInsightScopeSelected(resolved);
 
   const queryKey = overviewQueryKey((key) => {
     const value = params[key];
@@ -128,7 +135,7 @@ export default async function InsightsPage({ searchParams }: InsightsPageProps) 
     <TransitionScope>
       <PageHeader
         title="AI Insights"
-        description="Patterns from the reviews in this scope. Counts come from the stored summary. The brief is written from those counts."
+        description="When an organisation, group, or outlet is selected, Gemini reads the latest reviews in this date period. The cards below still use the stored report."
       >
         <a className="text-sm text-ink underline" href="/insights/clusters">
           Topic clusters
@@ -138,6 +145,17 @@ export default async function InsightsPage({ searchParams }: InsightsPageProps) 
       <PendingRegion label="Updating insights for the selected scope…">
         <FreshMetrics rendered={queryKey} surface="insights">
           {samplesUnavailable ? <p className="mb-4 text-sm text-slate">{samplesUnavailable}</p> : null}
+          {readPeriod ? (
+            <Suspense fallback={<PeriodGeminiInsightFallback />}>
+              <PeriodGeminiInsight
+                workspaceId={workspaceId}
+                locationIds={resolved.locationIds}
+                places={places}
+                range={range}
+                scopeTitle={summary.title}
+              />
+            </Suspense>
+          ) : null}
           <InsightExperience
             scopeTitle={summary.title}
             period={range.label}
@@ -150,9 +168,7 @@ export default async function InsightsPage({ searchParams }: InsightsPageProps) 
             }
             query={reportParams.toString()}
             facts={loaded.facts}
-            places={loaded.locations
-              .filter((location) => resolved.locationIds.includes(location.id))
-              .map((location) => ({ id: location.id, name: location.name }))}
+            places={places}
             locationIds={resolved.locationIds}
             board={board}
             clusters={clusters.items}

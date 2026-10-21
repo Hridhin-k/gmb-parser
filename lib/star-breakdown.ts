@@ -41,11 +41,11 @@ export function monthKeyInZone(iso: string, timeZone: string): string {
   return `${year}-${month}-01`;
 }
 
-function bump(map: Map<string, StarCounts>, key: string, stars: number) {
+function bump(map: Map<string, StarCounts>, key: string, stars: number, by = 1) {
   if (stars < 1 || stars > 5) return;
   const current = map.get(key) ?? EMPTY_STARS;
   const next = [...current] as StarCounts;
-  next[stars - 1] += 1;
+  next[stars - 1] += by;
   map.set(key, next);
 }
 
@@ -64,6 +64,37 @@ export function tallyStarReviews(rows: StarReview[], timeZone: string): StarMaps
       const theme = row.theme && row.theme.length > 0 ? row.theme : "unspecified";
       if (month) bump(maps.themes, `${month}\t${theme}`, row.stars);
       bump(maps.themeGroups, `${row.groupId ?? ""}\t${theme}`, row.stars);
+    }
+  }
+  return maps;
+}
+
+/** One pre-aggregated slice from `grm_star_breakdown`: reviews already counted in SQL. */
+export interface StarAggregate {
+  /** First day of the month in the workspace timezone, `yyyy-mm-dd`. */
+  month: string;
+  locationId: string;
+  groupId: string | null;
+  stars: number;
+  theme: string | null;
+  count: number;
+}
+
+/**
+ * Same result as `tallyStarReviews`, but from SQL-aggregated counts. This is
+ * what lets the dashboard avoid downloading every review row in the window.
+ */
+export function tallyStarAggregates(rows: StarAggregate[]): StarMaps {
+  const maps = emptyStarMaps();
+  for (const row of rows) {
+    if (row.count <= 0) continue;
+    if (row.month) bump(maps.months, row.month, row.stars, row.count);
+    bump(maps.locations, row.locationId, row.stars, row.count);
+    bump(maps.groups, row.groupId ?? "", row.stars, row.count);
+    if (row.stars >= 1 && row.stars <= 3) {
+      const theme = row.theme && row.theme.length > 0 ? row.theme : "unspecified";
+      if (row.month) bump(maps.themes, `${row.month}\t${theme}`, row.stars, row.count);
+      bump(maps.themeGroups, `${row.groupId ?? ""}\t${theme}`, row.stars, row.count);
     }
   }
   return maps;

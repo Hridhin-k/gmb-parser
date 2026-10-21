@@ -22,6 +22,12 @@ import { Input } from "@/components/ui/input";
 import { languageLabel, themeLabel, workflowState } from "@/lib/review-inbox";
 import { splitGoogleTranslation } from "@/lib/review-text";
 import { REPLY_LANGUAGES, REPLY_TEMPLATES } from "@/lib/reply-adjustments";
+import {
+  insertResolutionContact,
+  resolutionContactSentence,
+  type ResolutionContact,
+  type ResolutionContactKind,
+} from "@/lib/resolution-contact";
 import { useServerRefresh, useSettleWhenUpdated } from "@/hooks/use-server-refresh";
 import { pollAiGeneration, retryAiGeneration } from "@/lib/ai-generation-client";
 import { ACTION_STATUS } from "@/lib/ui-status";
@@ -68,6 +74,7 @@ interface ReviewDetailPanelProps {
   review: ReviewForPanel;
   reply: ReplyForPanel | null;
   canApprove: boolean;
+  contact?: ResolutionContact;
   members?: Array<{ id: string; email: string }>;
   onClose: () => void;
   /** Paint the new draft on the inbox card without waiting for a page refresh. */
@@ -134,6 +141,7 @@ export function ReviewDetailPanel({
   review,
   reply: serverReply,
   canApprove,
+  contact = { phone: null, email: null },
   members = [],
   onClose,
   onDraft,
@@ -161,6 +169,16 @@ export function ReviewDetailPanel({
   const [replyLanguage, setReplyLanguage] = useState("");
   const [templateId, setTemplateId] = useState("");
   const reviewText = review.comment ? splitGoogleTranslation(review.comment) : null;
+
+  function addContact(kind: ResolutionContactKind) {
+    const sentence = resolutionContactSentence(kind, contact);
+    if (!sentence) return;
+    const base = isEditing || isCreating ? draftContent : (reply?.content ?? "");
+    setDraftContent(insertResolutionContact(base, sentence));
+    if (reply) setIsEditing(true);
+    else setIsCreating(true);
+    setError(null);
+  }
 
   useEffect(() => {
     setLiveReply(undefined);
@@ -247,7 +265,11 @@ export function ReviewDetailPanel({
         content: draftContent.trim(),
       });
       setIsEditing(false);
-      toast.success("Changes saved");
+      toast.success(
+        reply.status === "published"
+          ? "Draft saved. The reply on Google stays as it is until you publish this version."
+          : "Changes saved"
+      );
       refresh();
     } catch (e) {
       setError(e instanceof Error ? e.message : "Failed to save edit");
@@ -733,6 +755,7 @@ export function ReviewDetailPanel({
         {/* ── No reply — show generate + manual options ────────────── */}
         {!reply && !isCreating && replyStatus === "none" && (
           <div className="space-y-3 pt-1">
+            <ResolutionContactActions contact={contact} disabled={loading !== null} onAdd={addContact} />
             <div className="flex flex-wrap gap-2">
               <Button
                 size="sm"
@@ -763,6 +786,7 @@ export function ReviewDetailPanel({
             <label htmlFor="draft-reply" className="block text-xs font-medium text-slate">
               Draft reply
             </label>
+            <ResolutionContactActions contact={contact} disabled={loading !== null} onAdd={addContact} />
             <Textarea
               id="draft-reply"
               value={draftContent}
@@ -807,6 +831,7 @@ export function ReviewDetailPanel({
                 <label htmlFor="edit-reply" className="block text-xs font-medium text-slate">
                   Edit reply
                 </label>
+                <ResolutionContactActions contact={contact} disabled={loading !== null} onAdd={addContact} />
                 <Textarea
                   id="edit-reply"
                   value={draftContent}
@@ -885,6 +910,9 @@ export function ReviewDetailPanel({
                 >
                   {reply.content}
                 </p>
+                <div className="mt-3">
+                  <ResolutionContactActions contact={contact} disabled={loading !== null} onAdd={addContact} />
+                </div>
                 {/* Keep primary actions next to the draft so they are not clipped */}
                 {reply.status === "draft" && (
                   <div className="mt-3 flex flex-wrap gap-2">
@@ -1134,6 +1162,49 @@ export function ReviewDetailPanel({
           </div>
         )}
       </div>
+    </div>
+  );
+}
+
+function ResolutionContactActions({
+  contact,
+  disabled,
+  onAdd,
+}: {
+  contact: ResolutionContact;
+  disabled: boolean;
+  onAdd: (kind: ResolutionContactKind) => void;
+}) {
+  if (!contact.phone && !contact.email) {
+    return (
+      <p className="text-xs text-slate">
+        <a href="/settings?section=sla" className="text-ink underline">
+          Set a resolution phone or email in Settings
+        </a>{" "}
+        before adding it to this reply.
+      </p>
+    );
+  }
+  return (
+    <div className="space-y-2">
+      <div className="flex flex-wrap gap-2">
+        <Button type="button" size="sm" variant="outline" disabled={disabled || !contact.phone} onClick={() => onAdd("phone")}>
+          Add phone
+        </Button>
+        <Button type="button" size="sm" variant="outline" disabled={disabled || !contact.email} onClick={() => onAdd("email")}>
+          Add email
+        </Button>
+        <Button
+          type="button"
+          size="sm"
+          variant="outline"
+          disabled={disabled || !contact.phone || !contact.email}
+          onClick={() => onAdd("both")}
+        >
+          Add both
+        </Button>
+      </div>
+      <p className="text-xs text-slate">Adds a contact line to the draft. Save it before publishing. Nothing is posted on its own.</p>
     </div>
   );
 }

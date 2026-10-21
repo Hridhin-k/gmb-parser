@@ -9,6 +9,7 @@ import type { GoogleReview } from "@/lib/types/google";
 import { detectComplaintTheme, detectReviewLanguage, shouldReopenReview } from "@/lib/review-inbox";
 import { absenceIsConfirmed, planReviewVersion } from "@/lib/intelligence/ingestion-plan";
 import { applyIngestionEffects, markConfirmedAbsences } from "@/lib/services/intelligence-ingest";
+import { isFreshReview } from "@/lib/services/notifications";
 import type { Database } from "@/lib/types/supabase";
 
 type ReviewInsert = Database["public"]["Tables"]["grm_reviews"]["Insert"];
@@ -202,6 +203,7 @@ export class ReviewSyncService {
     // --- 4. Paginate newest-first. Incremental stops once we hit known pages. ---
     let reviewsSynced = 0;
     let reviewsUpdated = 0;
+    let freshReviews = 0;
     let pagesProcessed = 0;
     let unchangedPages = 0;
     let truncated = false;
@@ -257,9 +259,10 @@ export class ReviewSyncService {
         workspaceId
       );
       reviewsSynced += pageReviews.length;
-      reviewsUpdated += pageUpdated;
+      reviewsUpdated += pageUpdated.written;
+      freshReviews += pageUpdated.fresh;
 
-      if (pageUpdated === 0 && pageReviews.length > 0) unchangedPages += 1;
+      if (pageUpdated.written === 0 && pageReviews.length > 0) unchangedPages += 1;
       else unchangedPages = 0;
 
       pageToken = pageResult.nextPageToken;
@@ -310,6 +313,19 @@ export class ReviewSyncService {
       .eq("id", locationId);
 
     // --- 6. Single audit record for the whole sync ---
+    if (freshReviews > 0 && finalStatus !== "failed") {
+      const { notifyProfileEvent } = await import("@/lib/services/notifications");
+      const day = now.slice(0, 10);
+      await notifyProfileEvent({
+        workspaceId,
+        locationId,
+        kind: "new_reviews",
+        detail: freshReviews === 1 ? "A new review arrived." : "New reviews arrived.",
+        href: `/reviews?location=${locationId}`,
+        dedupeKey: `new_reviews:${locationId}:${day}`,
+      });
+    }
+
     await AuditService.log({
       workspaceId,
       userId,
@@ -453,8 +469,8 @@ export class ReviewSyncService {
     reviews: GoogleReview[],
     locationId: string,
     workspaceId: string
-  ): Promise<number> {
-    if (reviews.length === 0) return 0;
+  ): Promise<{ written: number; fresh: number }> {
+    if (reviews.length === 0) return { written: 0, fresh: 0 };
 
     const { data: existingRows } = await supabase
       .from("grm_reviews")
@@ -488,6 +504,7 @@ export class ReviewSyncService {
     const now = new Date().toISOString();
     const payloads: ReviewInsert[] = [];
     const versionByName = new Map<string, ReturnType<typeof planReviewVersion>>();
+    let fresh = 0;
 
     for (const review of reviews) {
       const hash = reviewHash(review);
@@ -552,10 +569,11 @@ export class ReviewSyncService {
         payload.reopened_at = now;
       }
 
+      if (!prior && isFreshReview(review.createTime)) fresh += 1;
       payloads.push(payload);
     }
 
-    if (payloads.length === 0) return 0;
+    if (payloads.length === 0) return { written: 0, fresh: 0 };
 
     const { error } = await supabase.from("grm_reviews").upsert(payloads, {
       onConflict: "workspace_id,google_review_name",
@@ -567,7 +585,7 @@ export class ReviewSyncService {
         count: payloads.length,
         message: error.message,
       });
-      return 0;
+      return { written: 0, fresh: 0 };
     }
 
     try {
@@ -594,7 +612,7 @@ export class ReviewSyncService {
       });
     }
 
-    return payloads.length;
+    return { written: payloads.length, fresh };
   }
 
   // ---------------------------------------------------------------------------

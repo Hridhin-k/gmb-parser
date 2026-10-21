@@ -149,7 +149,7 @@ export function LoginForm({ methods, initialError }: LoginFormProps) {
             Sign in to RevuPilot
           </h1>
           <p className="mt-2 text-base font-light text-slate">
-            Then connect the Google account that manages your businesses.
+            RevuPilot is invite-only. Sign in with the Google email you were invited with — then connect the Google account that manages your businesses.
           </p>
         </div>
 

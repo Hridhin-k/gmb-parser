@@ -417,6 +417,8 @@ export async function runAutomation(workspaceId: string, now = new Date()): Prom
   held: number;
 }> {
   const admin = createAdminClient();
+  const { tenantFeatureEnabled } = await import("@/lib/services/platform");
+  if (!(await tenantFeatureEnabled(workspaceId, "automation"))) return { drafted: 0, published: 0, held: 0 };
   const owner = await admin
     .from("grm_workspace_members")
     .select("user_id")

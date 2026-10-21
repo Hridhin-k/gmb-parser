@@ -435,7 +435,9 @@ export async function getDashboardData(
         .filter((id): id is string => Boolean(id))
     ),
   ];
-  const [groupResult, noteResult] = await Promise.all([
+  // Groups, notes and replies all depend only on the review page just loaded,
+  // so they run together — previously replies waited for notes to finish.
+  const [groupResult, noteResult, repliesResult] = await Promise.all([
     groupIds.length
       ? admin.from("grm_groups").select("id, name").in("id", groupIds)
       : Promise.resolve({ data: [] as { id: string; name: string }[] }),
@@ -447,6 +449,22 @@ export async function getDashboardData(
           .in("review_id", reviewIdsForMeta)
           .order("created_at", { ascending: false })
       : Promise.resolve({ data: [] as Array<{ id: string; review_id: string; author_id: string; body: string; created_at: string }> }),
+    reviewIdsForMeta.length
+      ? admin
+          .from("grm_review_replies")
+          .select(
+            "id, review_id, content, source, status, created_at, approved_at, approved_by, published_at, last_error, failure_count"
+          )
+          .eq("workspace_id", workspaceId)
+          .in("review_id", reviewIdsForMeta)
+          .in("status", [
+            "draft",
+            "approved",
+            "pending_publish",
+            "published",
+            "failed",
+          ])
+      : Promise.resolve({ data: [] as Array<{ id: string; review_id: string; content: string; source: string; status: string; created_at: string; approved_at: string | null; approved_by: string | null; published_at: string | null; last_error: string | null; failure_count: number }> }),
   ]);
   const groupNames = new Map((groupResult.data ?? []).map((group) => [group.id, group.name]));
   const notesByReview = new Map<string, DashboardReviewRow["notes"]>();
@@ -490,22 +508,7 @@ export async function getDashboardData(
 
   const reviewIds = reviews.map((r) => r.id);
   if (reviewIds.length > 0) {
-    const { data: repliesData } = await admin
-      .from("grm_review_replies")
-      .select(
-        "id, review_id, content, source, status, created_at, approved_at, approved_by, published_at, last_error, failure_count"
-      )
-      .eq("workspace_id", workspaceId)
-      .in("review_id", reviewIds)
-      .in("status", [
-        "draft",
-        "approved",
-        "pending_publish",
-        "published",
-        "failed",
-      ]);
-
-    for (const row of repliesData ?? []) {
+    for (const row of repliesResult.data ?? []) {
       repliesMap[row.review_id] = {
         id: row.id,
         content: row.content,

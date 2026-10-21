@@ -387,6 +387,16 @@ export class ReplyPublishingService {
         },
       });
 
+      const { notifyProfileEvent } = await import("@/lib/services/notifications");
+      await notifyProfileEvent({
+        workspaceId,
+        locationId: locationData.id,
+        kind: "publish_failed",
+        detail: "A reply failed to publish.",
+        href: `/reviews?location=${locationData.id}&filter=failed`,
+        dedupeKey: `publish_failed:${replyId}:${reply.failure_count + 1}`,
+      });
+
       throw new AppError(classified.message, classified.code, 502);
     }
 

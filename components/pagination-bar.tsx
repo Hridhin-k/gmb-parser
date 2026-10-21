@@ -5,6 +5,8 @@ interface PaginationBarProps {
   currentPage: number;
   totalPages: number;
   searchParams: URLSearchParams;
+  /** Query param that carries the page number. Defaults to `page`. */
+  paramName?: string;
 }
 
 const LINK =
@@ -16,11 +18,12 @@ export function PaginationBar({
   currentPage,
   totalPages,
   searchParams,
+  paramName = "page",
 }: PaginationBarProps) {
   function hrefFor(page: number) {
     const p = new URLSearchParams(searchParams.toString());
-    if (page <= 1) p.delete("page");
-    else p.set("page", String(page));
+    if (page <= 1) p.delete(paramName);
+    else p.set(paramName, String(page));
     const qs = p.toString();
     return qs ? `${basePath}?${qs}` : basePath;
   }

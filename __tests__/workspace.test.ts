@@ -27,7 +27,7 @@ const SLUG = /^[a-z0-9][a-z0-9-]{0,61}[a-z0-9]$/;
 function chain(result: { data: unknown; error: unknown }) {
   const api: Record<string, unknown> = {};
   const self = () => api;
-  for (const method of ["select", "eq", "order", "limit", "insert", "update"]) {
+  for (const method of ["select", "eq", "in", "order", "limit", "insert", "update"]) {
     api[method] = vi.fn(self);
   }
   api.single = vi.fn().mockResolvedValue(result);
@@ -137,6 +137,13 @@ describe("ensurePersonalWorkspace", () => {
           error: null,
         });
       }
+      if (table === "grm_workspaces") {
+        return chain({ data: [{ id: "ws-existing", status: "active" }], error: null });
+      }
+      if (table === "grm_platform_invites") {
+        return chain({ data: null, error: null });
+      }
+      if (table === "grm_platform_blocked_users") return chain({ data: null, error: null });
       throw new Error(`unexpected table ${table}`);
     });
 
@@ -148,35 +155,38 @@ describe("ensurePersonalWorkspace", () => {
     ).resolves.toEqual({ workspace_id: "ws-existing" });
   });
 
-  it("creates a workspace and owner membership when the user has none", async () => {
-    let memberReads = 0;
-    let workspaceReads = 0;
+  it("refuses to auto-create a workspace for an uninvited user (invite-only)", async () => {
     fromMock.mockImplementation((table: string) => {
-      if (table === "grm_workspace_invites") {
-        return chain({ data: [], error: null });
-      }
-      if (table === "grm_workspace_members") {
-        memberReads += 1;
-        if (memberReads === 1) return chain({ data: [], error: null });
-        return chain({
-          data: {
-            workspace_id: "ws-new",
-            joined_at: "2026-01-01T00:00:00.000Z",
-            active: true,
-          },
-          error: null,
-        });
-      }
-      if (table === "grm_workspaces") {
-        workspaceReads += 1;
-        if (workspaceReads === 1) return chain({ data: null, error: null });
-        return chain({ data: { id: "ws-new" }, error: null });
-      }
+      if (table === "grm_workspace_invites") return chain({ data: [], error: null });
+      if (table === "grm_workspace_members") return chain({ data: [], error: null });
+      if (table === "grm_workspaces") return chain({ data: [], error: null });
+      if (table === "grm_platform_invites") return chain({ data: null, error: null });
+      if (table === "grm_platform_blocked_users") return chain({ data: null, error: null });
       throw new Error(`unexpected table ${table}`);
     });
 
     await expect(
       ensurePersonalWorkspace({ id: "user-2", email: "senior@explained.digital" })
-    ).resolves.toEqual({ workspace_id: "ws-new" });
+    ).rejects.toMatchObject({ code: "PLATFORM_NOT_INVITED" });
+  });
+
+  it("asks a platform-invited owner to name their tenant instead of auto-creating", async () => {
+    fromMock.mockImplementation((table: string) => {
+      if (table === "grm_workspace_invites") return chain({ data: [], error: null });
+      if (table === "grm_workspace_members") return chain({ data: [], error: null });
+      if (table === "grm_workspaces") return chain({ data: [], error: null });
+      if (table === "grm_platform_invites") {
+        return chain({
+          data: { id: "invite-1", email: "senior@explained.digital", expires_at: new Date(Date.now() + 60_000).toISOString(), status: "pending" },
+          error: null,
+        });
+      }
+      if (table === "grm_platform_blocked_users") return chain({ data: null, error: null });
+      throw new Error(`unexpected table ${table}`);
+    });
+
+    await expect(
+      ensurePersonalWorkspace({ id: "user-3", email: "Senior@Explained.Digital" })
+    ).rejects.toMatchObject({ code: "TENANT_SETUP_REQUIRED" });
   });
 });

@@ -1,5 +1,6 @@
 import { createAdminClient } from "@/lib/supabase/admin";
 import { rpcLocationReviewStats } from "@/lib/supabase/rpc";
+import { loadAuthProfiles } from "@/lib/services/auth-profiles";
 import { UNASSIGNED_CLIENT_MARKER } from "@/lib/services/unassigned-client";
 import type { DateRange } from "@/lib/date-range";
 export type AgencyConnection = "connected" | "attention" | "waiting";
@@ -107,6 +108,18 @@ export function buildAgencyHome(input: {
   q: string;
   page: number;
   pageSize?: number;
+  /**
+   * Set when the caller already paginated the client list on the server:
+   * `clients`/`locations`/`stats` then cover only the requested page, and
+   * these workspace-wide figures keep the KPIs and totals honest.
+   */
+  precomputed?: {
+    totalClients: number;
+    kpis: AgencyHome["kpis"];
+    hasReviews: boolean;
+    hasPublished: boolean;
+    approvals: number;
+  };
 }): AgencyHome {
   const pageSize = input.pageSize ?? PAGE_SIZE;
   const statsByLocation = new Map(input.stats.map((stat) => [stat.location_id, stat]));
@@ -187,10 +200,12 @@ export function buildAgencyHome(input: {
 
   matched.sort((a, b) => a.name.localeCompare(b.name));
 
-  const pageCount = Math.max(1, Math.ceil(matched.length / pageSize));
+  const totalClients = input.precomputed?.totalClients ?? matched.length;
+  const pageCount = Math.max(1, Math.ceil(totalClients / pageSize));
   const page = Math.min(Math.max(input.page, 1), pageCount);
-  const start = (page - 1) * pageSize;
-  const approvals = matched.reduce((sum, row) => sum + row.approved, 0);
+  // With a precomputed page the caller already sliced; `matched` is the page.
+  const start = input.precomputed ? 0 : (page - 1) * pageSize;
+  const approvals = input.precomputed?.approvals ?? matched.reduce((sum, row) => sum + row.approved, 0);
 
   const usage = matched
     .map((row) => {
@@ -214,9 +229,9 @@ export function buildAgencyHome(input: {
   return {
     hasConnection: input.hasConnection,
     connectionId: input.connectionId ?? null,
-    hasReviews: input.stats.some((stat) => stat.review_count > 0),
-    hasPublished: input.stats.some((stat) => stat.published > 0),
-    kpis: {
+    hasReviews: input.precomputed?.hasReviews ?? input.stats.some((stat) => stat.review_count > 0),
+    hasPublished: input.precomputed?.hasPublished ?? input.stats.some((stat) => stat.published > 0),
+    kpis: input.precomputed?.kpis ?? {
       clients: matched.length,
       locations: matched.reduce((sum, row) => sum + row.locations, 0),
       unreplied: matched.reduce((sum, row) => sum + row.unreplied, 0),
@@ -228,7 +243,7 @@ export function buildAgencyHome(input: {
       void _approved;
       return row;
     }),
-    totalClients: matched.length,
+    totalClients,
     page,
     pageSize,
     usage,
@@ -259,22 +274,61 @@ export async function listAgencyClients(
     .map((client) => ({ id: client.id, name: client.name }));
 }
 
-export async function getAgencyHome(
-  workspaceId: string,
-  filters: {
-    clientId: string;
-    range: DateRange;
-    q: string;
-    page: number;
-    allowedClientIds?: string[] | null;
-    locationIds?: string[] | null;
+interface AgencyCounts {
+  published: Map<string, number>;
+  approvals: Map<string, number>;
+  escalations: Map<string, number>;
+  events: Map<string, number>;
+}
+
+function isMissingAgencyCounts(error: { code?: string; message?: string } | null): boolean {
+  if (!error) return false;
+  const message = (error.message ?? "").toLowerCase();
+  return error.code === "PGRST202" || error.code === "42883" || message.includes("grm_agency_counts");
+}
+
+function countRows(rows: Array<{ location_id?: string; client_id?: string; n?: number | string }> | null | undefined, key: "location_id" | "client_id"): Map<string, number> {
+  const map = new Map<string, number>();
+  for (const row of rows ?? []) {
+    const id = row[key];
+    if (id) map.set(id, Number(row.n) || 0);
   }
-): Promise<AgencyHome> {
-  const admin = createAdminClient();
+  return map;
+}
 
-  const { range } = filters;
-  const bounded = Boolean(range.start || range.end);
+/**
+ * Per-location / per-client activity counts for the portfolio. Aggregated in
+ * Postgres (`grm_agency_counts`) so the page never downloads every reply,
+ * event, escalation and review id in the workspace. Until that migration is
+ * applied, falls back to the original row reads.
+ */
+async function loadAgencyCounts(
+  admin: ReturnType<typeof createAdminClient>,
+  workspaceId: string,
+  range: DateRange
+): Promise<AgencyCounts> {
+  const result = await admin.rpc("grm_agency_counts", {
+    p_workspace_id: workspaceId,
+    p_start: range.start?.toISOString() ?? null,
+    p_end: range.end?.toISOString() ?? null,
+  });
+  if (!result.error) {
+    const data = (result.data ?? {}) as {
+      published?: Array<{ location_id: string; n: number }>;
+      approvals?: Array<{ location_id: string; n: number }>;
+      escalations?: Array<{ location_id: string; n: number }>;
+      events?: Array<{ client_id: string; n: number }>;
+    };
+    return {
+      published: countRows(data.published, "location_id"),
+      approvals: countRows(data.approvals, "location_id"),
+      escalations: countRows(data.escalations, "location_id"),
+      events: countRows(data.events, "client_id"),
+    };
+  }
+  if (!isMissingAgencyCounts(result.error)) throw new Error("Failed to load client activity");
 
+  // Pre-migration fallback: the original row reads.
   let publishedQuery = admin
     .from("grm_review_replies")
     .select("review_id")
@@ -289,85 +343,16 @@ export async function getAgencyHome(
     publishedQuery = publishedQuery.lt("published_at", range.end.toISOString());
     eventQuery = eventQuery.lt("occurred_at", range.end.toISOString());
   }
-
-  const [
-    clientsResult,
-    locationsResult,
-    connectionsResult,
-    accountsResult,
-    escalationsResult,
-    approvalsResult,
-    eventsResult,
-    publishedResult,
-    reviewsResult,
-    statsResult,
-    countsResult,
-  ] = await Promise.all([
-    admin
-      .from("grm_clients")
-      .select("id, name, notes, account_manager_user_id")
-      .eq("workspace_id", workspaceId)
-      .eq("is_active", true)
-      .order("name"),
-    admin
-      .from("grm_google_locations")
-      .select("id, client_id, location_title, google_account_id")
-      .eq("workspace_id", workspaceId),
-    admin.from("grm_google_connections").select("id, status, client_id").eq("workspace_id", workspaceId),
-    admin.from("grm_google_accounts").select("id, connection_id").eq("workspace_id", workspaceId),
+  const [escalationsResult, approvalsResult, eventsResult, publishedResult, reviewsResult] = await Promise.all([
     admin.from("grm_escalations").select("location_id").eq("workspace_id", workspaceId).is("resolved_at", null),
     admin.from("grm_review_replies").select("review_id").eq("workspace_id", workspaceId).eq("client_approval", "requested"),
     eventQuery,
     publishedQuery,
     admin.from("grm_reviews").select("id, location_id").eq("workspace_id", workspaceId),
-    rpcLocationReviewStats(admin, workspaceId),
-    bounded
-      ? admin.rpc("grm_location_review_counts", {
-          p_workspace_id: workspaceId,
-          p_start: range.start?.toISOString() ?? null,
-          p_end: range.end?.toISOString() ?? null,
-        })
-      : Promise.resolve(null),
   ]);
-
-  if (clientsResult.error) throw new Error("Failed to load clients");
-  if (locationsResult.error) throw new Error("Failed to load locations");
-  if (connectionsResult.error) throw new Error("Failed to load Google connection");
-  if (accountsResult.error || escalationsResult.error || approvalsResult.error || eventsResult.error || publishedResult.error || reviewsResult.error) {
+  if (escalationsResult.error || approvalsResult.error || eventsResult.error || publishedResult.error || reviewsResult.error) {
     throw new Error("Failed to load client activity");
   }
-  if (statsResult.error) throw new Error("Failed to load review stats");
-  if (countsResult?.error) throw new Error("Failed to load review counts for this range");
-
-  const allowed = filters.allowedClientIds ?? null;
-  const managerIds = [...new Set((clientsResult.data ?? []).flatMap((client) => client.account_manager_user_id ? [client.account_manager_user_id] : []))];
-  const managerNames = new Map<string, string>();
-  await Promise.all(managerIds.map(async (userId) => {
-    const { data } = await admin.auth.admin.getUserById(userId);
-    if (data.user?.email) managerNames.set(userId, data.user.email);
-  }));
-
-  const clients = (clientsResult.data ?? [])
-    .filter((client) => client.notes !== UNASSIGNED_CLIENT_MARKER)
-    .filter((client) => allowed === null || allowed.includes(client.id))
-    .map((client) => {
-      const direct = (connectionsResult.data ?? []).filter((connection) => connection.client_id === client.id);
-      const directConnection = direct.length === 0
-        ? null
-        : direct.every((connection) => connection.status === "active")
-          ? "active"
-          : "problem";
-      return {
-        id: client.id,
-        name: client.name,
-        manager: client.account_manager_user_id ? managerNames.get(client.account_manager_user_id) ?? "Account manager" : null,
-        directConnection,
-      } as const;
-    });
-
-  const knownClients = new Set(clients.map((client) => client.id));
-  const connectionByAccount = new Map((accountsResult.data ?? []).map((account) => [account.id, account.connection_id]));
-  const connectionStatus = new Map((connectionsResult.data ?? []).map((connection) => [connection.id, connection.status]));
   const reviewLocation = new Map((reviewsResult.data ?? []).map((review) => [review.id, review.location_id]));
   const countByLocation = (ids: string[]) => {
     const counts = new Map<string, number>();
@@ -378,47 +363,220 @@ export async function getAgencyHome(
     }
     return counts;
   };
-  const escalationsByLocation = new Map<string, number>();
+  const escalations = new Map<string, number>();
   for (const row of escalationsResult.data ?? []) {
-    escalationsByLocation.set(row.location_id, (escalationsByLocation.get(row.location_id) ?? 0) + 1);
+    escalations.set(row.location_id, (escalations.get(row.location_id) ?? 0) + 1);
   }
-  const approvalsByLocation = countByLocation((approvalsResult.data ?? []).map((row) => row.review_id));
-  const publishedByLocation = countByLocation((publishedResult.data ?? []).map((row) => row.review_id));
-  const eventsByClient = new Map<string, number>();
+  const events = new Map<string, number>();
   for (const row of eventsResult.data ?? []) {
     if (!row.client_id) continue;
-    eventsByClient.set(row.client_id, (eventsByClient.get(row.client_id) ?? 0) + 1);
+    events.set(row.client_id, (events.get(row.client_id) ?? 0) + 1);
   }
+  return {
+    published: countByLocation((publishedResult.data ?? []).map((row) => row.review_id)),
+    approvals: countByLocation((approvalsResult.data ?? []).map((row) => row.review_id)),
+    escalations,
+    events,
+  };
+}
+
+/**
+ * Portfolio home. The client list is paginated here, on the server: only the
+ * requested page of clients is enriched with locations, stats and manager
+ * names, while KPIs are computed from workspace-wide DB aggregates. Passing
+ * `allPages` returns every matched client (used by the usage CSV export).
+ */
+export async function getAgencyHome(
+  workspaceId: string,
+  filters: {
+    clientId: string;
+    range: DateRange;
+    q: string;
+    page: number;
+    allowedClientIds?: string[] | null;
+    locationIds?: string[] | null;
+    allPages?: boolean;
+  }
+): Promise<AgencyHome> {
+  const admin = createAdminClient();
+  const { range } = filters;
+  const bounded = Boolean(range.start || range.end);
+
+  const [clientsResult, locationsResult, connectionsResult, accountsResult, statsResult, countsResult, counts] =
+    await Promise.all([
+      admin
+        .from("grm_clients")
+        .select("id, name, notes, account_manager_user_id")
+        .eq("workspace_id", workspaceId)
+        .eq("is_active", true)
+        .order("name"),
+      admin
+        .from("grm_google_locations")
+        .select("id, client_id, location_title, google_account_id")
+        .eq("workspace_id", workspaceId),
+      admin.from("grm_google_connections").select("id, status, client_id").eq("workspace_id", workspaceId),
+      admin.from("grm_google_accounts").select("id, connection_id").eq("workspace_id", workspaceId),
+      rpcLocationReviewStats(admin, workspaceId),
+      bounded
+        ? admin.rpc("grm_location_review_counts", {
+            p_workspace_id: workspaceId,
+            p_start: range.start?.toISOString() ?? null,
+            p_end: range.end?.toISOString() ?? null,
+          })
+        : Promise.resolve(null),
+      loadAgencyCounts(admin, workspaceId, range),
+    ]);
+
+  if (clientsResult.error) throw new Error("Failed to load clients");
+  if (locationsResult.error) throw new Error("Failed to load locations");
+  if (connectionsResult.error) throw new Error("Failed to load Google connection");
+  if (accountsResult.error) throw new Error("Failed to load client activity");
+  if (statsResult.error) throw new Error("Failed to load review stats");
+  if (countsResult?.error) throw new Error("Failed to load review counts for this range");
+
+  const allowed = filters.allowedClientIds ?? null;
+  const connectionByAccount = new Map((accountsResult.data ?? []).map((account) => [account.id, account.connection_id]));
+  const connectionStatus = new Map((connectionsResult.data ?? []).map((connection) => [connection.id, connection.status]));
+  const directConnectionFor = (clientId: string): "active" | "problem" | null => {
+    const direct = (connectionsResult.data ?? []).filter((connection) => connection.client_id === clientId);
+    if (direct.length === 0) return null;
+    return direct.every((connection) => connection.status === "active") ? "active" : "problem";
+  };
+  const toLocationRef = (location: { id: string; client_id: string | null; location_title: string; google_account_id: string }): LocationRef => {
+    const connectionId = connectionByAccount.get(location.google_account_id);
+    const status = connectionId ? connectionStatus.get(connectionId) : null;
+    return {
+      id: location.id,
+      clientId: location.client_id,
+      title: location.location_title,
+      connection: !status ? "missing" : status === "active" ? "active" : "problem",
+    };
+  };
+
+  const visibleClients = (clientsResult.data ?? [])
+    .filter((client) => client.notes !== UNASSIGNED_CLIENT_MARKER)
+    .filter((client) => allowed === null || allowed.includes(client.id));
+  const visibleClientIds = new Set(visibleClients.map((client) => client.id));
+  const scopedLocations = (locationsResult.data ?? [])
+    .filter((location) => location.client_id && visibleClientIds.has(location.client_id))
+    .filter((location) => filters.locationIds == null || filters.locationIds.includes(location.id));
+
+  // Match the pure builder's semantics: client-id filter (with the nil-UUID
+  // sentinel for an out-of-scope request), then name / location-title search.
+  const effectiveClientId =
+    allowed && filters.clientId && !allowed.includes(filters.clientId)
+      ? "00000000-0000-0000-0000-000000000000"
+      : filters.clientId;
+  const query = filters.q.trim().toLowerCase();
+  const titlesByClient = new Map<string, string[]>();
+  for (const location of scopedLocations) {
+    if (!location.client_id) continue;
+    const list = titlesByClient.get(location.client_id) ?? [];
+    list.push(location.location_title.toLowerCase());
+    titlesByClient.set(location.client_id, list);
+  }
+  const matched = visibleClients
+    .filter((client) => !effectiveClientId || client.id === effectiveClientId)
+    .filter(
+      (client) =>
+        !query ||
+        client.name.toLowerCase().includes(query) ||
+        (titlesByClient.get(client.id) ?? []).some((title) => title.includes(query))
+    )
+    .sort((a, b) => a.name.localeCompare(b.name));
+
+  const totalClients = matched.length;
+  const pageCount = Math.max(1, Math.ceil(totalClients / PAGE_SIZE));
+  const page = Math.min(Math.max(filters.page, 1), pageCount);
+  const pageClients = filters.allPages ? matched : matched.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
+  const pageClientIds = new Set(pageClients.map((client) => client.id));
+
+  const statsByLocation = new Map((statsResult.data ?? []).map((stat) => [stat.location_id, stat]));
+  const matchedLocations = scopedLocations.filter((location) => location.client_id && matched.some((c) => c.id === location.client_id));
+  const matchedClientOfLocation = new Map(matchedLocations.map((location) => [location.id, location.client_id!]));
+
+  // Workspace-wide KPI figures across every matched client, from aggregates.
+  let kpiLocations = 0;
+  let kpiUnreplied = 0;
+  let kpiEscalations = 0;
+  let kpiApprovals = 0;
+  let hasReviews = false;
+  let hasPublished = false;
+  for (const location of matchedLocations) {
+    kpiLocations += 1;
+    const stat = statsByLocation.get(location.id);
+    if (stat) {
+      kpiUnreplied += stat.unanswered;
+      if (stat.review_count > 0) hasReviews = true;
+      if (stat.published > 0) hasPublished = true;
+    }
+    kpiEscalations += counts.escalations.get(location.id) ?? 0;
+    kpiApprovals += counts.approvals.get(location.id) ?? 0;
+  }
+  const connectionProblems = matched.filter((client) => {
+    if (directConnectionFor(client.id) === "problem") return true;
+    return matchedLocations.some(
+      (location) => location.client_id === client.id && toLocationRef(location).connection !== "active"
+    );
+  }).length;
+
+  // Manager names only for the clients about to render.
+  const managerIds = [...new Set(pageClients.flatMap((client) => (client.account_manager_user_id ? [client.account_manager_user_id] : [])))];
+  const managerProfiles = await loadAuthProfiles(managerIds);
+  const managerName = (userId: string | null): string | null => {
+    if (!userId) return null;
+    const email = managerProfiles.get(userId)?.email;
+    return email && email !== "Unknown email" ? email : "Account manager";
+  };
+
+  const pageLocations = scopedLocations.filter((location) => location.client_id && pageClientIds.has(location.client_id));
   const activeConnection = (connectionsResult.data ?? []).find((connection) => connection.status === "active");
 
   return buildAgencyHome({
-    clients,
-    locations: (locationsResult.data ?? [])
-      .filter((location) => location.client_id && knownClients.has(location.client_id))
-      .filter((location) => filters.locationIds == null || filters.locationIds.includes(location.id))
-      .map((location) => {
-        const connectionId = connectionByAccount.get(location.google_account_id);
-        const status = connectionId ? connectionStatus.get(connectionId) : null;
-        return {
-          id: location.id,
-          clientId: location.client_id,
-          title: location.location_title,
-          connection: !status ? "missing" : status === "active" ? "active" : "problem",
-        } as const;
-      }),
-    stats: (statsResult.data ?? []).map((stat) => ({
-      ...stat,
-      open_escalations: escalationsByLocation.get(stat.location_id) ?? 0,
-      client_approvals: approvalsByLocation.get(stat.location_id) ?? 0,
+    clients: pageClients.map((client) => ({
+      id: client.id,
+      name: client.name,
+      manager: managerName(client.account_manager_user_id),
+      directConnection: directConnectionFor(client.id),
     })),
+    locations: pageLocations.map(toLocationRef),
+    stats: pageLocations.flatMap((location) => {
+      const stat = statsByLocation.get(location.id);
+      return stat
+        ? [
+            {
+              ...stat,
+              open_escalations: counts.escalations.get(location.id) ?? 0,
+              client_approvals: counts.approvals.get(location.id) ?? 0,
+            },
+          ]
+        : [];
+    }),
     hasConnection: Boolean(activeConnection),
     connectionId: activeConnection?.id ?? null,
     rangeCounts: countsResult?.data ?? null,
-    publishedCounts: [...publishedByLocation.entries()].map(([location_id, review_count]) => ({ location_id, review_count })),
-    eventsByClient: [...eventsByClient.entries()].map(([client_id, count]) => ({ client_id, count })),
+    publishedCounts: [...counts.published.entries()]
+      .filter(([locationId]) => matchedClientOfLocation.has(locationId))
+      .map(([location_id, review_count]) => ({ location_id, review_count })),
+    eventsByClient: [...counts.events.entries()].map(([client_id, count]) => ({ client_id, count })),
     rangeLabel: range.label,
-    clientId: filters.allowedClientIds && filters.clientId && !filters.allowedClientIds.includes(filters.clientId) ? "00000000-0000-0000-0000-000000000000" : filters.clientId,
+    clientId: effectiveClientId,
     q: filters.q,
-    page: filters.page,
+    page,
+    pageSize: filters.allPages ? Math.max(totalClients, 1) : PAGE_SIZE,
+    precomputed: {
+      totalClients,
+      kpis: {
+        clients: totalClients,
+        locations: kpiLocations,
+        unreplied: kpiUnreplied,
+        waitingApproval: kpiApprovals,
+        openEscalations: kpiEscalations,
+        connectionProblems,
+      },
+      hasReviews,
+      hasPublished,
+      approvals: kpiApprovals,
+    },
   });
 }

@@ -1,6 +1,12 @@
 import { describe, expect, it } from "vitest";
 import { EMPTY_FACTS } from "@/lib/metrics";
-import { applyStarBreakdown, monthKeyInZone, tallyStarReviews } from "@/lib/star-breakdown";
+import {
+  applyStarBreakdown,
+  monthKeyInZone,
+  tallyStarAggregates,
+  tallyStarReviews,
+  type StarReview,
+} from "@/lib/star-breakdown";
 
 describe("star breakdown", () => {
   it("puts a review in the workspace month, not the UTC month", () => {
@@ -42,5 +48,28 @@ describe("star breakdown", () => {
       maps
     );
     expect(facts.months[0]?.stars).toEqual([1, 0, 0, 0, 1]);
+  });
+
+  it("SQL aggregates tally exactly like the rows they replace", () => {
+    const rows: StarReview[] = [
+      { stars: 5, createdAt: "2026-04-30T20:00:00.000Z", locationId: "a", groupId: "g", theme: "wait" },
+      { stars: 1, createdAt: "2026-05-03T00:00:00.000Z", locationId: "a", groupId: "g", theme: null },
+      { stars: 2, createdAt: "2026-05-04T00:00:00.000Z", locationId: "b", groupId: null, theme: "wait" },
+      { stars: 3, createdAt: "2026-05-05T00:00:00.000Z", locationId: "b", groupId: null, theme: "" },
+      { stars: 0, createdAt: "2026-05-06T00:00:00.000Z", locationId: "b", groupId: null, theme: "wait" },
+      { stars: 5, createdAt: "2026-05-07T00:00:00.000Z", locationId: "a", groupId: "g", theme: "food" },
+    ];
+    // Aggregate the way `grm_star_breakdown` does: by tz month, location, stars, theme.
+    const grouped = new Map<string, { month: string; locationId: string; groupId: string | null; stars: number; theme: string | null; count: number }>();
+    for (const row of rows) {
+      const month = monthKeyInZone(row.createdAt, "Asia/Kolkata");
+      const key = [month, row.locationId, row.stars, row.theme ?? ""].join("\t");
+      const existing = grouped.get(key);
+      if (existing) existing.count += 1;
+      else grouped.set(key, { month, locationId: row.locationId, groupId: row.groupId, stars: row.stars, theme: row.theme, count: 1 });
+    }
+    const fromRows = tallyStarReviews(rows, "Asia/Kolkata");
+    const fromAggregates = tallyStarAggregates([...grouped.values()]);
+    expect(fromAggregates).toEqual(fromRows);
   });
 });

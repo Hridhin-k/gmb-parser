@@ -55,6 +55,7 @@ export async function GET(request: Request) {
       q: query,
       page: 1,
       allowedClientIds,
+      allPages: true,
     });
 
     const lines = usageExportLines(home.usage, home.usageHeading).map((row) => csvRow(row));

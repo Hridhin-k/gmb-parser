@@ -13,7 +13,10 @@ const calSans = Cal_Sans({
   variable: "--font-cal-sans",
   subsets: ["latin"],
   weight: "400",
+  // Cal Sans is missing from Next's capsize metrics, so automatic
+  // size-adjust fallback always warns. A manual stack skips that lookup.
   adjustFontFallback: false,
+  fallback: ["Poppins", "ui-sans-serif", "system-ui", "sans-serif"],
 });
 
 export const metadata: Metadata = {

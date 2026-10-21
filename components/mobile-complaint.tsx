@@ -268,28 +268,27 @@ export function MobileComplaintView({ data }: { data: MobileComplaint }) {
             <p className="mt-2 text-sm text-slate">
               {content.trim().length === 0 ? "No reply yet." : violations.length === 0 ? "The reply checks passed." : violations[0]}
             </p>
-            {card.canDraft ? (
-              <div className="mt-3 space-y-2">
-                <label htmlFor="complaint-language" className="block text-sm text-slate">
-                  Reply language
-                  <select
-                    id="complaint-language"
-                    value={language}
-                    onChange={(event) => setLanguage(event.target.value as ReplyLanguage)}
-                    className="mt-1 h-12 w-full rounded-lg border border-silver bg-white px-3 text-base text-ink"
-                  >
-                    {REPLY_LANGUAGES.map((item) => (
-                      <option key={item.id} value={item.id}>
-                        {item.label}
-                      </option>
-                    ))}
-                  </select>
-                </label>
-                <Button type="button" variant="outline" loading={pending === "generate"} onClick={generate}>
-                  Write reply for me
-                </Button>
-              </div>
-            ) : null}
+            <div className="mt-3 space-y-2">
+              <label htmlFor="complaint-language" className="block text-sm text-slate">
+                Reply language
+                <select
+                  id="complaint-language"
+                  value={language}
+                  onChange={(event) => setLanguage(event.target.value as ReplyLanguage)}
+                  disabled={pending !== null}
+                  className="mt-1 h-12 w-full rounded-lg border border-silver bg-white px-3 text-base text-ink"
+                >
+                  {REPLY_LANGUAGES.map((item) => (
+                    <option key={item.id} value={item.id}>
+                      {item.label}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <Button type="button" variant="outline" loading={pending === "generate"} onClick={generate}>
+                {content.trim() ? "Regenerate AI reply" : "Generate AI reply"}
+              </Button>
+            </div>
           </div>
 
           {card.canDraft ? (

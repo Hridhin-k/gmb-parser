@@ -10,7 +10,7 @@ import { AlertService, listReportScopes, ReportService } from "@/lib/services/re
 import { getActiveRole, getActiveWorkspace } from "@/lib/services/session";
 import { getShellSummary } from "@/lib/services/shell-summary";
 import { getWorkspaceRoster } from "@/lib/services/workspace";
-import { getMemberAccess, visibleClientIds } from "@/lib/services/access";
+import { getMemberAccess, visibleClientIds, visibleLocationIds } from "@/lib/services/access";
 import { readPageScope } from "@/lib/services/scope-catalog";
 import { workspaceGrant } from "@/lib/access";
 import { createAdminClient } from "@/lib/supabase/admin";
@@ -30,7 +30,10 @@ export default async function ReportsPage({ searchParams }: ReportsPageProps) {
     getActiveRole(),
   ]);
   const access = await getMemberAccess(user.id, workspaceId);
-  const allowedClientIds = await visibleClientIds(workspaceId, access?.scope);
+  const [allowedClientIds, locationIds] = await Promise.all([
+    visibleClientIds(workspaceId, access?.scope),
+    visibleLocationIds(workspaceId, access?.scope),
+  ]);
   const resolved = await readPageScope(user.id, workspaceId, params);
   const clientId = resolved.clientId ?? "";
   const groupId = resolved.groupId ?? "";
@@ -53,7 +56,7 @@ export default async function ReportsPage({ searchParams }: ReportsPageProps) {
     AlertService.list(workspaceId),
     listReportScopes(workspaceId),
     getWorkspaceRoster(workspaceId),
-    getShellSummary(workspaceId, allowedClientIds),
+    getShellSummary(workspaceId, allowedClientIds, locationIds, user.id),
     allowedClientIds
       ? admin
           .from("grm_google_locations")

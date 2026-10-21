@@ -31,6 +31,12 @@ function field(form: FormData, key: string): string {
  */
 export async function POST(request: Request) {
   const { user, workspaceId } = await getActiveWorkspace();
+  const { tenantFeatureEnabled } = await import("@/lib/services/platform");
+  if (!(await tenantFeatureEnabled(workspaceId, "intelligence"))) {
+    const disabledBack = new URL("/insights", request.url);
+    disabledBack.searchParams.set("notice", "Review intelligence is turned off for this workspace by the platform team.");
+    return NextResponse.redirect(disabledBack, 303);
+  }
   const form = await request.formData();
   const back = new URL("/insights", request.url);
   for (const key of ["range", "from", "to", "client", "group", "location"] as const) {

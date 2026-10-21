@@ -13,7 +13,6 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import type { AgencyClientRow, AgencyHome } from "@/lib/services/agency-home";
-import { AgencyClientForm } from "@/components/agency-client-form";
 
 interface AgencyHomeViewProps {
   workspaceId: string;
@@ -25,8 +24,6 @@ interface AgencyHomeViewProps {
   query: string;
   /** Usage totals are for people who manage the organization. */
   showUsage: boolean;
-  canAddClient: boolean;
-  managers: Array<{ id: string; email: string }>;
 }
 
 function formatRating(value: number | null) {
@@ -75,8 +72,6 @@ export function AgencyHomeView({
   rangeParams,
   query,
   showUsage,
-  canAddClient,
-  managers,
 }: AgencyHomeViewProps) {
   const { kpis, rows, totalClients, page, pageSize } = data;
   const from = totalClients === 0 ? 0 : (page - 1) * pageSize + 1;
@@ -130,14 +125,6 @@ export function AgencyHomeView({
         ))}
         <Button type="submit" variant="outline">Search</Button>
       </form>
-
-      {canAddClient ? (
-        <section className="rounded-xl border border-silver bg-white p-4">
-          <h2 className="text-sm font-semibold text-graphite">Add client</h2>
-          <p className="mt-1 mb-3 text-xs text-slate">A client can exist before their Google account is connected.</p>
-          <AgencyClientForm mode="create" canAssignManager managers={managers} />
-        </section>
-      ) : null}
 
       <section className="grid grid-cols-2 gap-3 lg:grid-cols-3 xl:grid-cols-6">
         {[

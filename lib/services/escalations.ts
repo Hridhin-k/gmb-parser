@@ -617,6 +617,26 @@ export class EscalationService {
       });
       emailStatus = result.status;
     }
+    if (member.alertInApp) {
+      const { data: escalation } = await admin
+        .from("grm_escalations")
+        .select("location_id")
+        .eq("id", escalationId)
+        .eq("workspace_id", workspaceId)
+        .maybeSingle();
+      if (escalation?.location_id) {
+        const { notifyProfileEvent } = await import("@/lib/services/notifications");
+        await notifyProfileEvent({
+          workspaceId,
+          locationId: escalation.location_id,
+          kind: "escalation_assigned",
+          detail: body,
+          href: `/escalations/${escalationId}`,
+          dedupeKey: `escalation_assigned:${escalationId}:${member.userId}`,
+          userIds: [member.userId],
+        });
+      }
+    }
     await admin.from("grm_escalation_events").insert({
       workspace_id: workspaceId,
       escalation_id: escalationId,
@@ -630,7 +650,7 @@ export class EscalationService {
 
   /**
    * Records a due reminder once. A second run sees sent_at and does nothing.
-   * sent_at means the reminder is stored in GRM. No email or message is sent.
+   * The assignee gets a bell notice when in-app alerts are on. No email is sent.
    */
   static async processReminders(workspaceId: string): Promise<{ recorded: number }> {
     const admin = createAdminClient();
@@ -645,13 +665,24 @@ export class EscalationService {
       .limit(100);
     if (error) throw new AppError("Could not read due reminders.", "DB_ERROR", 500);
 
-    const owner = await admin
-      .from("grm_workspace_members")
-      .select("user_id")
-      .eq("workspace_id", workspaceId)
-      .eq("role", "owner")
-      .limit(1)
-      .maybeSingle();
+    const escalationIds = [...new Set((due ?? []).map((reminder) => reminder.escalation_id))];
+    const [owner, cases] = await Promise.all([
+      admin
+        .from("grm_workspace_members")
+        .select("user_id")
+        .eq("workspace_id", workspaceId)
+        .eq("role", "owner")
+        .limit(1)
+        .maybeSingle(),
+      escalationIds.length
+        ? admin
+            .from("grm_escalations")
+            .select("id, assignee_user_id, location_id")
+            .eq("workspace_id", workspaceId)
+            .in("id", escalationIds)
+        : Promise.resolve({ data: [], error: null }),
+    ]);
+    const caseById = new Map((cases.data ?? []).map((row) => [row.id, row]));
 
     let recorded = 0;
     for (const reminder of due ?? []) {
@@ -671,7 +702,7 @@ export class EscalationService {
         workspace_id: workspaceId,
         escalation_id: reminder.escalation_id,
         kind: "reminder_recorded",
-        body: "Reminder recorded in GRM. No email or message was sent.",
+        body: "Reminder recorded. The assignee sees it in the bell when in-app alerts are on. No email was sent.",
         metadata: { kind: reminder.kind, channel: "in_app" },
       });
       if (event.error) {
@@ -685,6 +716,19 @@ export class EscalationService {
         continue;
       }
       recorded += 1;
+      const assigned = caseById.get(reminder.escalation_id);
+      if (assigned?.location_id) {
+        const { notifyProfileEvent } = await import("@/lib/services/notifications");
+        await notifyProfileEvent({
+          workspaceId,
+          locationId: assigned.location_id,
+          kind: "sla_reminder",
+          detail: "A complaint is due for a reminder.",
+          href: `/escalations/${assigned.id}`,
+          dedupeKey: `sla_reminder:${reminder.id}`,
+          ...(assigned.assignee_user_id ? { userIds: [assigned.assignee_user_id] } : {}),
+        });
+      }
       if (owner.data?.user_id) {
         await AuditService.log({
           workspaceId,
