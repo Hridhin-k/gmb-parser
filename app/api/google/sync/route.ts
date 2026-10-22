@@ -9,6 +9,9 @@ import { assertCanSyncWorkspace } from "@/lib/services/workspace";
 import { logger } from "@/lib/logger";
 import { parseBody } from "@/lib/validation";
 import { checkRateLimit, SYNC_ALL_LIMIT } from "@/lib/rate-limit";
+import { bustCatalogCache } from "@/lib/services/catalog-tables";
+
+export const maxDuration = 60;
 
 const syncSchema = z.object({
   connectionId: z.string().uuid("Invalid connectionId"),
@@ -102,6 +105,7 @@ export async function POST(request: Request) {
       metadata: result as Record<string, unknown>,
     });
 
+    bustCatalogCache();
     return NextResponse.json({
       success: true,
       ...result,

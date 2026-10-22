@@ -145,7 +145,6 @@ function SidebarNav({
                   <Link
                     key={id}
                     href={href}
-                    prefetch={false}
                     onClick={onNavigate}
                     className={linkClass(active)}
                     aria-current={active ? "page" : undefined}
@@ -376,7 +375,6 @@ export function AppShell({
                   <Link
                     key={client.id}
                     href={href}
-                    prefetch={false}
                     onClick={closeSidebar}
                     className={linkClass(active)}
                     aria-current={active ? "page" : undefined}

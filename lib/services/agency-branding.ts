@@ -1,4 +1,5 @@
 import { cache } from "react";
+import { revalidateTag, unstable_cache } from "next/cache";
 import { resolveTxt } from "node:dns/promises";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { contactEmailError, createDomainToken, domainError, httpsUrlError } from "@/lib/agency-portal";
@@ -16,8 +17,7 @@ export interface AgencyBranding {
   senderEmail: string | null;
 }
 
-/** Request-memoised: layout metadata and body both need branding in one render. */
-export const loadAgencyBranding = cache(async (workspaceId: string): Promise<AgencyBranding> => {
+async function fetchAgencyBranding(workspaceId: string): Promise<AgencyBranding> {
   const { data } = await createAdminClient()
     .from("grm_agency_branding")
     .select("logo_url, hide_product_name, custom_domain, domain_token, domain_verified_at, sender_email")
@@ -31,7 +31,27 @@ export const loadAgencyBranding = cache(async (workspaceId: string): Promise<Age
     domainVerifiedAt: data?.domain_verified_at ?? null,
     senderEmail: data?.sender_email ?? null,
   };
+}
+
+const getCachedAgencyBranding = unstable_cache(fetchAgencyBranding, ["agency-branding-v1"], {
+  revalidate: 60,
+  tags: ["branding"],
 });
+
+/**
+ * Branding for the shell. React `cache()` dedupes within one render;
+ * `unstable_cache` reuses it across requests for 60s (branding changes are
+ * rare and bust the `branding` tag on save).
+ */
+export const loadAgencyBranding = cache(async function loadAgencyBranding(
+  workspaceId: string
+): Promise<AgencyBranding> {
+  return getCachedAgencyBranding(workspaceId);
+});
+
+function bustBrandingCache(): void {
+  revalidateTag("branding", "max");
+}
 
 async function assertBrandEditor(userId: string, workspaceId: string): Promise<void> {
   const role = await getMemberRole(userId, workspaceId);
@@ -70,6 +90,7 @@ export async function saveAgencyBranding(input: {
     updated_at: new Date().toISOString(),
   });
   if (error) throw new AppError("Could not save branding.", "DB_ERROR", 500);
+  bustBrandingCache();
   await AuditService.log({
     workspaceId: input.workspaceId,
     userId: input.userId,
@@ -103,6 +124,7 @@ export async function verifyAgencyDomain(workspaceId: string, userId: string): P
       .from("grm_agency_branding")
       .update({ domain_verified_at: new Date().toISOString() })
       .eq("workspace_id", workspaceId);
+    bustBrandingCache();
   }
   return { matched };
 }
