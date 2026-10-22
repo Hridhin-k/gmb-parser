@@ -1,3 +1,4 @@
+import { formatHours } from "@/lib/analytics-metrics";
 import { insightTopicLabel } from "@/lib/insight-dashboard";
 import { average, reviewWindow, type DashboardFacts, type StarCounts } from "@/lib/metrics";
 
@@ -53,6 +54,9 @@ export interface OverviewKpis {
   previousNegativeShare: number | null;
   replyRate: number | null;
   previousReplyRate: number | null;
+  /** Mean hours among reviews that have a Google reply timestamp. Null when none do. */
+  avgResponseHours: number | null;
+  previousAvgResponseHours: number | null;
   unreplied: number;
   openEscalations: number;
   overdueEscalations: number;
@@ -111,6 +115,49 @@ export interface OverviewCoverage {
   ratingOnly: number;
 }
 
+/** Praise and complaint mentions for one topic, from analysed review text. */
+export interface OverviewThemeMix {
+  label: string;
+  positive: number;
+  negative: number;
+  total: number;
+  /** Share of every theme mention in the period, including topics not shown. */
+  share: number;
+}
+
+export interface OverviewSentiment {
+  positive: number;
+  negative: number;
+}
+
+export interface OverviewStaffMention {
+  name: string;
+  count: number;
+}
+
+export interface OverviewSevereGlance {
+  count: number;
+  excerpt: string | null;
+  stars: number | null;
+}
+
+export interface OverviewInsightGlance {
+  kind: "concern" | "strength" | "action";
+  label: string;
+  title: string;
+  detail: string;
+  supportingReviews: number;
+  excerpt: string | null;
+  severity: number | null;
+}
+
+/** Written cards from the saved AI report for this scope and period. */
+export interface OverviewReportGlance {
+  status: "completed" | "partial";
+  finishedAt: string | null;
+  cards: OverviewInsightGlance[];
+}
+
 export interface OverviewStarRow {
   stars: number;
   count: number;
@@ -119,6 +166,9 @@ export interface OverviewStarRow {
 
 export interface OverviewBoard {
   kpis: OverviewKpis;
+  /** Two or three sentences that restate this period. They do not invent a cause. */
+  brief: string[];
+  periodLabel: string;
   worst: OverviewStoreRow | null;
   months: OverviewMonthBar[];
   trendCaption: string | null;
@@ -126,6 +176,13 @@ export interface OverviewBoard {
   lowest: OverviewStoreRow[];
   rankedCount: number;
   themes: OverviewThemeBar[];
+  themeMix: OverviewThemeMix[];
+  sentiment: OverviewSentiment;
+  staff: OverviewStaffMention[];
+  severe: OverviewSevereGlance;
+  report: OverviewReportGlance | null;
+  /** Praise and complaint cards counted from analysed text, used when no written report is saved. */
+  analysis: OverviewInsightGlance[];
   coverage: OverviewCoverage;
   starMix: OverviewStarRow[];
   analyticsHref: string;
@@ -230,6 +287,198 @@ function rankedPlaces(
     );
 }
 
+function finite(value: unknown): number {
+  const parsed = typeof value === "number" ? value : Number(value);
+  return Number.isFinite(parsed) ? parsed : 0;
+}
+
+interface LooseInsight {
+  title: string;
+  detail: string;
+  sentiment: "positive" | "negative";
+  category: string;
+  suggestedAction: string | null;
+  supportingReviews: number;
+  excerpt: string | null;
+  severity: number | null;
+}
+
+function looseInsights(raw: unknown): LooseInsight[] {
+  if (!Array.isArray(raw)) return [];
+  return raw.flatMap((item) => {
+    if (!item || typeof item !== "object") return [];
+    const row = item as Record<string, unknown>;
+    if (typeof row.title !== "string" || row.title.trim().length === 0) return [];
+    if (row.sentiment !== "positive" && row.sentiment !== "negative") return [];
+    const excerpts = Array.isArray(row.evidenceExcerpts)
+      ? row.evidenceExcerpts.filter((entry): entry is string => typeof entry === "string" && entry.trim().length > 0)
+      : [];
+    const severity = typeof row.severity === "number" && Number.isFinite(row.severity) ? row.severity : null;
+    return [
+      {
+        title: row.title.trim(),
+        detail: typeof row.detail === "string" ? row.detail.trim() : "",
+        sentiment: row.sentiment,
+        category: typeof row.category === "string" ? row.category : "",
+        suggestedAction:
+          typeof row.suggestedAction === "string" && row.suggestedAction.trim().length > 0
+            ? row.suggestedAction.trim()
+            : null,
+        supportingReviews: finite(row.supportingReviews),
+        excerpt: excerpts[0]?.trim() ?? null,
+        severity,
+      },
+    ];
+  });
+}
+
+function glanceCard(
+  kind: OverviewInsightGlance["kind"],
+  label: string,
+  insight: LooseInsight,
+  detail: string
+): OverviewInsightGlance {
+  return {
+    kind,
+    label,
+    title: insight.title,
+    detail,
+    supportingReviews: insight.supportingReviews,
+    excerpt: insight.excerpt,
+    severity: insight.severity,
+  };
+}
+
+/** Up to three cards: a concern, a strength, and a suggested next step. */
+export function glanceInsights(raw: unknown): OverviewInsightGlance[] {
+  const records = looseInsights(raw);
+  const concern =
+    records.find((insight) => insight.sentiment === "negative" && insight.category !== "serious_incident") ??
+    records.find((insight) => insight.category === "serious_incident");
+  const strength = records.find((insight) => insight.sentiment === "positive");
+  const action =
+    records.find((insight) => insight.suggestedAction && insight.sentiment === "negative") ??
+    records.find((insight) => insight.suggestedAction);
+  const cards: OverviewInsightGlance[] = [];
+  if (concern && concern.detail.length > 0) cards.push(glanceCard("concern", "Main concern", concern, concern.detail));
+  if (strength && strength.detail.length > 0 && strength.title !== concern?.title) {
+    cards.push(glanceCard("strength", "What is working", strength, strength.detail));
+  }
+  if (action?.suggestedAction) {
+    const duplicate = cards.some((card) => card.title === action.title && card.detail === action.suggestedAction);
+    if (!duplicate) cards.push(glanceCard("action", "Suggested next step", action, action.suggestedAction));
+  }
+  return cards;
+}
+
+function themeMix(positive: BoardTopic[], negative: BoardTopic[]): OverviewThemeMix[] {
+  const byTopic = new Map<string, { label: string; positive: number; negative: number }>();
+  for (const topic of positive) {
+    if (topic.count <= 0 || topic.topic.length === 0) continue;
+    const row = byTopic.get(topic.topic) ?? { label: insightTopicLabel(topic.topic), positive: 0, negative: 0 };
+    row.positive += topic.count;
+    byTopic.set(topic.topic, row);
+  }
+  for (const topic of negative) {
+    if (topic.count <= 0 || topic.topic.length === 0) continue;
+    const row = byTopic.get(topic.topic) ?? { label: insightTopicLabel(topic.topic), positive: 0, negative: 0 };
+    row.negative += topic.count;
+    byTopic.set(topic.topic, row);
+  }
+  const rows = [...byTopic.values()].map((row) => ({ ...row, total: row.positive + row.negative }));
+  const mentions = rows.reduce((sum, row) => sum + row.total, 0);
+  return rows
+    .sort((a, b) => b.total - a.total || a.label.localeCompare(b.label))
+    .slice(0, 6)
+    .map((row) => ({
+      label: row.label,
+      positive: row.positive,
+      negative: row.negative,
+      total: row.total,
+      share: mentions > 0 ? row.total / mentions : 0,
+    }));
+}
+
+function sentence(parts: string[]): string | null {
+  const text = parts.filter((part) => part.length > 0).join(", ");
+  if (!text) return null;
+  return `${text.charAt(0).toUpperCase()}${text.slice(1)}.`;
+}
+
+function periodBrief(input: {
+  periodLabel: string;
+  facts: DashboardFacts;
+  previous: DashboardFacts | null;
+  topComplaint: { label: string; count: number } | null;
+  topPraise: { label: string; count: number } | null;
+}): string[] {
+  const current = reviewWindow(input.facts);
+  if (input.facts.reviews === 0) return [`${input.periodLabel}. No reviews in this period.`];
+  const lines: string[] = [];
+  let opening = `${input.periodLabel}. ${input.facts.reviews.toLocaleString("en-US")} reviews, average ${current.avgRating?.toFixed(2) ?? "—"}.`;
+  if (input.previous && input.previous.reviews > 0 && current.avgRating !== null) {
+    const before = reviewWindow(input.previous);
+    if (before.avgRating !== null) {
+      const diff = current.avgRating - before.avgRating;
+      opening +=
+        Math.abs(diff) < 0.005
+          ? ` Unchanged from the previous period (${input.previous.reviews.toLocaleString("en-US")} reviews).`
+          : ` ${diff > 0 ? "Up" : "Down"} ${Math.abs(diff).toFixed(2)} from the previous period (${input.previous.reviews.toLocaleString("en-US")} reviews, average ${before.avgRating.toFixed(2)}).`;
+    }
+  }
+  lines.push(opening);
+  const operations = sentence([
+    current.negativeShare === null ? "" : `${Math.round(current.negativeShare * 100)}% are 1–3 stars`,
+    current.replyRate === null ? "" : `the reply rate is ${Math.round(current.replyRate * 100)}%`,
+    current.avgResponseHours === null ? "" : `the average reply time is ${formatHours(current.avgResponseHours)}`,
+  ]);
+  if (operations) lines.push(operations);
+  const themes = sentence([
+    input.topComplaint
+      ? `the most mentioned complaint in analysed reviews is ${input.topComplaint.label} (${input.topComplaint.count.toLocaleString("en-US")} mentions)`
+      : "",
+    input.topPraise
+      ? `the most mentioned praise is ${input.topPraise.label} (${input.topPraise.count.toLocaleString("en-US")} mentions)`
+      : "",
+  ]);
+  if (themes) lines.push(themes);
+  return lines;
+}
+
+function analysisGlances(
+  complaint: BoardTopic | undefined,
+  praiseTopic: BoardTopic | undefined
+): OverviewInsightGlance[] {
+  const cards: OverviewInsightGlance[] = [];
+  if (complaint) {
+    const reviews =
+      complaint.reviews > 0 ? `, across ${complaint.reviews.toLocaleString("en-US")} reviews` : "";
+    cards.push({
+      kind: "concern",
+      label: "Main complaint",
+      title: insightTopicLabel(complaint.topic),
+      detail: `${complaint.count.toLocaleString("en-US")} complaint mentions in analysed reviews${reviews}.`,
+      supportingReviews: complaint.reviews,
+      excerpt: null,
+      severity: null,
+    });
+  }
+  if (praiseTopic) {
+    const reviews =
+      praiseTopic.reviews > 0 ? `, across ${praiseTopic.reviews.toLocaleString("en-US")} reviews` : "";
+    cards.push({
+      kind: "strength",
+      label: "Strongest praise",
+      title: insightTopicLabel(praiseTopic.topic),
+      detail: `${praiseTopic.count.toLocaleString("en-US")} praise mentions in analysed reviews${reviews}.`,
+      supportingReviews: praiseTopic.reviews,
+      excerpt: null,
+      severity: null,
+    });
+  }
+  return cards;
+}
+
 function trendCaption(months: DashboardFacts["months"]): string | null {
   const filled = months.filter((month) => month.reviews > 0);
   if (filled.length === 0) return null;
@@ -263,11 +512,30 @@ export function buildOverviewBoard(input: {
   coverage: OverviewCoverage;
   links: BoardLinks;
   attention: OverviewAttentionRow[];
+  praise?: BoardTopic[];
+  staff?: OverviewStaffMention[];
+  severeCount?: number;
+  severeExcerpt?: string | null;
+  severeStars?: number | null;
+  reportInsights?: unknown;
+  reportStatus?: string | null;
+  reportFinishedAt?: string | null;
+  periodLabel?: string;
 }): OverviewBoard {
   const current = reviewWindow(input.facts);
   const earlier = input.previous ? reviewWindow(input.previous) : null;
   const ranked = rankedPlaces(input.places, input.facts, input.previous, input.complaints, input.links);
   const multiple = ranked.length > 1;
+  const praise = (input.praise ?? []).filter((topic) => topic.count > 0 && topic.topic.length > 0);
+  const complaintsTopics = input.topics.filter((topic) => topic.count > 0 && topic.topic.length > 0);
+  const mixed = themeMix(praise, complaintsTopics);
+  const topComplaint = [...complaintsTopics].sort((a, b) => b.count - a.count || a.topic.localeCompare(b.topic))[0];
+  const topPraise = [...praise].sort((a, b) => b.count - a.count || a.topic.localeCompare(b.topic))[0];
+  const periodLabel = input.periodLabel?.trim() || "This period";
+  const reportStatus = input.reportStatus === "completed" || input.reportStatus === "partial" ? input.reportStatus : null;
+  const firstSevereExcerpt = typeof input.severeExcerpt === "string" && input.severeExcerpt.trim().length > 0
+    ? input.severeExcerpt.trim()
+    : null;
 
   return {
     kpis: {
@@ -279,10 +547,20 @@ export function buildOverviewBoard(input: {
       previousNegativeShare: earlier?.negativeShare ?? null,
       replyRate: current.replyRate,
       previousReplyRate: earlier?.replyRate ?? null,
+      avgResponseHours: current.avgResponseHours,
+      previousAvgResponseHours: earlier?.avgResponseHours ?? null,
       unreplied: input.facts.unreplied,
       openEscalations: input.facts.openEscalations,
       overdueEscalations: input.facts.overdueEscalations,
     },
+    brief: periodBrief({
+      periodLabel,
+      facts: input.facts,
+      previous: input.previous,
+      topComplaint: topComplaint ? { label: insightTopicLabel(topComplaint.topic), count: topComplaint.count } : null,
+      topPraise: topPraise ? { label: insightTopicLabel(topPraise.topic), count: topPraise.count } : null,
+    }),
+    periodLabel,
     worst: multiple ? ranked[0]! : null,
     months: input.facts.months.map((month) => {
       const bounds = monthBounds(month.month);
@@ -312,6 +590,28 @@ export function buildOverviewBoard(input: {
         reviews: topic.reviews,
         href: input.links.insights,
       })),
+    themeMix: mixed,
+    sentiment: {
+      positive: praise.reduce((sum, topic) => sum + topic.count, 0),
+      negative: complaintsTopics.reduce((sum, topic) => sum + topic.count, 0),
+    },
+    staff: (input.staff ?? [])
+      .filter((row) => row.name.trim().length > 0 && row.count > 0)
+      .sort((a, b) => b.count - a.count || a.name.localeCompare(b.name))
+      .slice(0, 4),
+    severe: {
+      count: Math.max(0, input.severeCount ?? 0),
+      excerpt: firstSevereExcerpt,
+      stars: typeof input.severeStars === "number" && Number.isFinite(input.severeStars) ? input.severeStars : null,
+    },
+    report: reportStatus
+      ? {
+          status: reportStatus,
+          finishedAt: typeof input.reportFinishedAt === "string" && input.reportFinishedAt.length > 0 ? input.reportFinishedAt : null,
+          cards: glanceInsights(input.reportInsights),
+        }
+      : null,
+    analysis: analysisGlances(topComplaint, topPraise),
     coverage: input.coverage,
     starMix: [5, 4, 3, 2, 1].map((stars) => ({
       stars,

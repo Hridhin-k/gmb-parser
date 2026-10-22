@@ -16,14 +16,23 @@ function topicLabel(topic: string): string {
   return topic.replace(/_/g, " ");
 }
 
-export function SentimentDonut({ positive, negative }: { positive: number; negative: number }) {
+export function SentimentDonut({
+  positive,
+  negative,
+  centerLabel = "positive",
+}: {
+  positive: number;
+  negative: number;
+  /** Word under the percent. Overview uses "praise" so it is not read as the 4–5★ share. */
+  centerLabel?: string;
+}) {
   const total = positive + negative;
   const pct = total > 0 ? Math.round((positive / total) * 100) : 0;
   const r = 52;
   const c = 2 * Math.PI * r;
   const filled = (pct / 100) * c;
   return (
-    <div className="relative h-36 w-36 shrink-0" role="img" aria-label={`${pct}% of praise and complaint mentions are positive`}>
+    <div className="relative h-36 w-36 shrink-0" role="img" aria-label={`${pct}% of praise and complaint mentions are ${centerLabel}`}>
       <svg viewBox="0 0 128 128" className="h-36 w-36 -rotate-90">
         <circle cx="64" cy="64" r={r} fill="none" stroke="#e2e8f0" strokeWidth="13" />
         <circle
@@ -39,7 +48,7 @@ export function SentimentDonut({ positive, negative }: { positive: number; negat
       </svg>
       <div className="absolute inset-0 flex flex-col items-center justify-center">
         <span className="text-3xl font-semibold text-graphite">{pct}%</span>
-        <span className="text-[11px] font-medium uppercase tracking-wide text-slate">positive</span>
+        <span className="text-[11px] font-medium uppercase tracking-wide text-slate">{centerLabel}</span>
       </div>
     </div>
   );

@@ -1,7 +1,10 @@
 import type { ReactNode } from "react";
 import Link from "next/link";
+import { formatHours } from "@/lib/analytics-metrics";
 import { HBarChart, MonthVolumeChart, STAR_COLORS } from "@/components/charts";
-import type { OverviewBoard, OverviewStoreRow } from "@/lib/overview-board";
+import { SentimentDonut } from "@/components/insights-dashboard";
+import { formatFriendlyDateTime } from "@/lib/format-date";
+import type { OverviewBoard, OverviewInsightGlance, OverviewStoreRow } from "@/lib/overview-board";
 import { cn } from "@/lib/utils";
 
 const HEADING = { fontFamily: "var(--font-heading), sans-serif" };
@@ -80,6 +83,19 @@ function Kpi({
   );
 }
 
+function HoursDelta({ current, previous }: { current: number; previous: number | null }) {
+  if (previous === null) return <span className="text-xs text-slate">No earlier period</span>;
+  const diff = current - previous;
+  if (Math.abs(diff) < 1) return <span className="text-xs text-slate">Under 1h vs previous period</span>;
+  const good = diff < 0;
+  return (
+    <span className={cn("text-xs font-medium", good ? "text-emerald-700" : "text-rose-600")}>
+      {diff > 0 ? "+" : "−"}
+      {formatHours(Math.abs(diff))} vs previous period
+    </span>
+  );
+}
+
 function changeLabel(value: number | null): string {
   if (value === null) return "—";
   if (Math.abs(value) < 0.005) return "0.00";
@@ -107,7 +123,18 @@ export function ClientOverviewView({
   const starMax = Math.max(1, ...board.starMix.map((row) => row.count));
   return (
     <div className="space-y-4">
-      <div className="grid grid-cols-2 items-stretch gap-3 xl:grid-cols-5">
+      <section className="rounded-xl border border-[#e6ebf2] bg-white px-4 py-4 shadow-[0_1px_2px_rgba(16,24,40,0.04)] sm:px-5">
+        <p className="text-xs font-semibold uppercase tracking-[0.08em] text-[#163a7a]">{board.periodLabel}</p>
+        <div className="mt-2 space-y-1.5">
+          {board.brief.map((line) => (
+            <p key={line} className="text-sm leading-6 text-graphite">
+              {line}
+            </p>
+          ))}
+        </div>
+      </section>
+
+      <div className="grid grid-cols-2 items-stretch gap-3 xl:grid-cols-6">
         <Kpi
           href={reviewsHref}
           label="Average rating"
@@ -158,7 +185,21 @@ export function ClientOverviewView({
             </span>
           }
         />
-        <div className="col-span-2 h-full xl:col-span-1">
+        <Kpi
+          href={unansweredHref}
+          label="Average reply time"
+          value={formatHours(kpis.avgResponseHours)}
+          detail={
+            kpis.avgResponseHours === null ? (
+              <span className="text-xs text-slate">No reply timestamps in this period</span>
+            ) : (
+              <span className="block text-xs text-slate">
+                <HoursDelta current={kpis.avgResponseHours} previous={kpis.previousAvgResponseHours} />
+                <span className="mt-0.5 block">Among replies with a timestamp</span>
+              </span>
+            )
+          }
+        />
         <Kpi
           href={escalationsHref}
           label="Open escalations"
@@ -169,7 +210,6 @@ export function ClientOverviewView({
             </span>
           }
         />
-        </div>
       </div>
 
       <div className="grid items-stretch gap-4 xl:grid-cols-12">
@@ -211,9 +251,9 @@ export function ClientOverviewView({
         </div>
       </div>
 
-      <div className="grid items-stretch gap-4 xl:grid-cols-12">
-        <div className="xl:col-span-7">
-          {board.lowest.length > 0 ? (
+      <AiInsight board={board} />
+
+      {board.lowest.length > 0 ? (
             <Panel title="Lowest rated outlets" action={<Link href={board.analyticsHref} className="text-xs font-medium text-[#2563eb] hover:underline">See all {board.rankedCount}</Link>}>
               <div className="mt-3 overflow-x-auto">
                 <table className="w-full min-w-[36rem] text-left text-sm">
@@ -257,32 +297,6 @@ export function ClientOverviewView({
               <p className="mt-3 text-sm text-slate">A ranking appears when this scope has two or more outlets with reviews.</p>
             </Panel>
           )}
-        </div>
-        <div className="xl:col-span-5">
-          <Panel title="What customers are saying" action={<Link href={board.insightsHref} className="text-xs font-medium text-[#2563eb] hover:underline">Open insights</Link>}>
-            {board.themes.length === 0 ? (
-              <p className="mt-4 text-sm text-slate">No negative topics in analysed reviews for this period.</p>
-            ) : (
-              <div className="mt-4">
-                <HBarChart
-                  max={Math.max(1, ...board.themes.map((theme) => theme.count))}
-                  rows={board.themes.map((theme) => ({
-                    label: theme.label,
-                    value: theme.count,
-                    color: "#1f2937",
-                    href: theme.href,
-                    suffix: theme.reviews > 0 ? `· ${theme.reviews.toLocaleString("en-US")} reviews` : undefined,
-                    lines: ["Negative mentions in analysed reviews"],
-                  }))}
-                />
-              </div>
-            )}
-            <p className="mt-auto pt-3 text-xs text-slate">
-              {`Negative topics from analysed review text. Counts are mentions, not 1–3 star reviews. ${board.coverage.analysed.toLocaleString("en-US")} analysed${board.coverage.ratingOnly > 0 ? `, ${board.coverage.ratingOnly.toLocaleString("en-US")} with no text` : ""}.`}
-            </p>
-          </Panel>
-        </div>
-      </div>
 
       <div className="grid items-stretch gap-4 xl:grid-cols-2">
         {board.worst ? (
@@ -314,6 +328,194 @@ export function ClientOverviewView({
         </Panel>
       </div>
     </div>
+  );
+}
+
+const GLANCE_TONE: Record<OverviewInsightGlance["kind"], string> = {
+  concern: "bg-rose-50 text-rose-700",
+  strength: "bg-emerald-50 text-emerald-700",
+  action: "bg-sky-50 text-sky-700",
+};
+
+function AiInsight({ board }: { board: OverviewBoard }) {
+  const mentions = board.sentiment.positive + board.sentiment.negative;
+  const generated = board.report?.finishedAt ? formatFriendlyDateTime(board.report.finishedAt) : "";
+  const coverage = `${board.coverage.analysed.toLocaleString("en-US")} reviews analysed${
+    board.coverage.ratingOnly > 0 ? `, ${board.coverage.ratingOnly.toLocaleString("en-US")} with no text` : ""
+  }`;
+  const maxTheme = Math.max(1, ...board.themeMix.map((theme) => theme.total));
+  const maxStaff = Math.max(1, ...board.staff.map((row) => row.count));
+  return (
+    <section className="rounded-xl border border-[#e6ebf2] bg-white p-4 shadow-[0_1px_2px_rgba(16,24,40,0.04)] sm:p-5">
+      <div className="flex items-start justify-between gap-3">
+        <div>
+          <p className="text-xs font-semibold uppercase tracking-[0.08em] text-[#163a7a]">AI insight</p>
+          <h2 className="mt-1 text-base text-graphite" style={HEADING}>
+            What customers are saying
+          </h2>
+          <p className="mt-1 text-xs text-slate">
+            {coverage}
+            {generated ? ` · saved report ${generated}` : ""}
+            {board.report?.status === "partial" ? " · partial coverage" : ""}
+          </p>
+        </div>
+        <Link href={board.insightsHref} className="shrink-0 text-xs font-medium text-[#2563eb] hover:underline">
+          Open insights
+        </Link>
+      </div>
+
+      {mentions === 0 && !board.report && board.severe.count === 0 ? (
+        <p className="mt-4 text-sm text-slate">
+          No analysed review text for this period. Open insights to run analysis.
+        </p>
+      ) : (
+        <div className="mt-4 grid items-start gap-5 xl:grid-cols-12">
+          <div className="xl:col-span-4">
+            {mentions > 0 ? (
+              <div className="flex items-center gap-4">
+                <SentimentDonut positive={board.sentiment.positive} negative={board.sentiment.negative} centerLabel="praise" />
+                <ul className="min-w-0 flex-1 space-y-2 text-sm">
+                  <li className="flex items-center justify-between gap-3">
+                    <span className="flex items-center gap-2 text-slate">
+                      <span className="h-2 w-2 rounded-full bg-emerald-500" /> Praise
+                    </span>
+                    <span className="tabular-nums text-graphite">{board.sentiment.positive.toLocaleString("en-US")}</span>
+                  </li>
+                  <li className="flex items-center justify-between gap-3">
+                    <span className="flex items-center gap-2 text-slate">
+                      <span className="h-2 w-2 rounded-full bg-rose-500" /> Complaints
+                    </span>
+                    <span className="tabular-nums text-graphite">{board.sentiment.negative.toLocaleString("en-US")}</span>
+                  </li>
+                </ul>
+              </div>
+            ) : (
+              <p className="text-sm text-slate">No praise or complaint mentions in analysed reviews for this period.</p>
+            )}
+            {mentions > 0 ? (
+              <p className="mt-3 text-xs text-slate">
+                Share of praise among praise and complaint mentions in analysed text. Positive (4–5★) in the chart counts reviews.
+              </p>
+            ) : null}
+            {board.severe.count > 0 ? (
+              <div className="mt-4 rounded-lg border border-red-200 bg-red-50 p-3">
+                <p className="text-xs font-semibold uppercase tracking-wide text-red-700">
+                  {`${board.severe.count.toLocaleString("en-US")} serious ${board.severe.count === 1 ? "incident" : "incidents"}`}
+                </p>
+                {board.severe.excerpt ? (
+                  <p className="mt-1 line-clamp-4 text-sm italic text-graphite">“{board.severe.excerpt}”</p>
+                ) : null}
+                {board.severe.stars !== null ? (
+                  <p className="mt-1 text-xs text-slate">{board.severe.stars}★ review · customer allegation, verify before acting</p>
+                ) : (
+                  <p className="mt-1 text-xs text-slate">Customer allegation, verify before acting.</p>
+                )}
+              </div>
+            ) : null}
+            {board.staff.length > 0 ? (
+              <div className="mt-4">
+                <p className="text-xs font-medium uppercase tracking-wide text-slate">Staff named in praise</p>
+                <ul className="mt-2 space-y-2">
+                  {board.staff.map((row) => (
+                    <li key={row.name}>
+                      <div className="flex items-baseline justify-between gap-2 text-sm">
+                        <span className="text-graphite">{row.name}</span>
+                        <span className="text-xs text-slate">{row.count.toLocaleString("en-US")}</span>
+                      </div>
+                      <div className="mt-1 h-1.5 overflow-hidden rounded-full bg-[#eef2f7]" aria-hidden="true">
+                        <div className="h-full bg-emerald-500" style={{ width: `${(row.count / maxStaff) * 100}%` }} />
+                      </div>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            ) : null}
+          </div>
+          <div className="xl:col-span-8">
+            {board.report && board.report.cards.length > 0 ? (
+              <ul className="space-y-3">
+                {board.report.cards.map((card) => (
+                  <InsightGlance key={card.kind} card={card} />
+                ))}
+              </ul>
+            ) : board.analysis.length > 0 ? (
+              <div>
+                <p className="text-sm text-slate">
+                  Counted from analysed review text. A written AI report has not been saved for this period.
+                </p>
+                <ul className="mt-3 space-y-3">
+                  {board.analysis.map((card) => (
+                    <InsightGlance key={card.kind} card={card} />
+                  ))}
+                </ul>
+              </div>
+            ) : (
+              <p className="text-sm text-slate">
+                {board.report
+                  ? "The saved report for this period has no written insight cards yet."
+                  : "No saved AI report for this period. Open insights to write one from the analysed reviews."}
+              </p>
+            )}
+            {board.report?.status === "partial" ? (
+              <p className="mt-3 text-xs text-amber-800">
+                This saved report does not cover every written review in the period.
+              </p>
+            ) : null}
+          </div>
+        </div>
+      )}
+
+      {board.themeMix.length > 0 ? (
+        <div className="mt-5 border-t border-[#eef2f7] pt-4">
+          <h3 className="text-sm text-graphite" style={HEADING}>
+            Themes in analysed reviews
+          </h3>
+          <ul className="mt-3 space-y-3">
+            {board.themeMix.map((theme) => (
+              <li key={theme.label}>
+                <div className="flex items-baseline justify-between gap-2 text-sm">
+                  <span className="text-graphite">{theme.label}</span>
+                  <span className="text-xs text-slate">
+                    {theme.total.toLocaleString("en-US")} · {Math.round(theme.share * 100)}% of all mentions
+                  </span>
+                </div>
+                <div className="mt-1 flex h-2 overflow-hidden rounded-full bg-[#eef2f7]" aria-hidden="true">
+                  <div className="bg-emerald-500" style={{ width: `${(theme.positive / maxTheme) * 100}%` }} />
+                  <div className="bg-rose-400" style={{ width: `${(theme.negative / maxTheme) * 100}%` }} />
+                </div>
+                <p className="mt-0.5 text-[11px] text-slate">
+                  {theme.positive.toLocaleString("en-US")} praise · {theme.negative.toLocaleString("en-US")} complaints
+                </p>
+              </li>
+            ))}
+          </ul>
+          <p className="mt-3 text-xs text-slate">
+            Green is praise and red is complaints. Counts are mentions in analysed text, not star ratings. Shares include topics that are not in this list.
+          </p>
+        </div>
+      ) : null}
+    </section>
+  );
+}
+
+function InsightGlance({ card }: { card: OverviewInsightGlance }) {
+  return (
+    <li className="rounded-lg border border-[#eef2f7] p-3">
+      <div className="flex flex-wrap items-center gap-2">
+        <span className={cn("rounded-full px-2 py-0.5 text-[11px] font-semibold uppercase tracking-wide", GLANCE_TONE[card.kind])}>
+          {card.label}
+        </span>
+        {card.severity ? <span className="text-[11px] text-slate">Severity {card.severity}/5</span> : null}
+      </div>
+      <p className="mt-2 text-sm font-medium text-graphite">{card.title}</p>
+      <p className="mt-1 text-sm leading-6 text-slate">{card.detail}</p>
+      {card.excerpt ? <p className="mt-2 line-clamp-3 text-xs italic text-slate">“{card.excerpt}”</p> : null}
+      {card.supportingReviews > 0 ? (
+        <p className="mt-2 text-xs text-slate">
+          {card.supportingReviews.toLocaleString("en-US")} supporting review{card.supportingReviews === 1 ? "" : "s"}
+        </p>
+      ) : null}
+    </li>
   );
 }
 

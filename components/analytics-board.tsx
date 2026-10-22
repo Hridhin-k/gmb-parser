@@ -636,6 +636,20 @@ function Leaderboard({
   );
 }
 
+function complaintHeat(ratio: number): { background: string; color: string } {
+  const clamped = Math.min(1, Math.max(0, ratio));
+  const green = [187, 247, 208];
+  const yellow = [250, 204, 21];
+  const red = [239, 68, 68];
+  const [from, to, blend] = clamped < 0.5 ? [green, yellow, clamped * 2] : [yellow, red, (clamped - 0.5) * 2];
+  const rgb = from.map((channel, index) => Math.round(channel + (to[index] - channel) * blend));
+  const luminance = (0.2126 * rgb[0] + 0.7152 * rgb[1] + 0.0722 * rgb[2]) / 255;
+  return {
+    background: `rgb(${rgb[0]}, ${rgb[1]}, ${rgb[2]})`,
+    color: luminance < 0.55 ? "#ffffff" : "#1e293b",
+  };
+}
+
 function ThemeMatrix({
   facts,
   groupNames,
@@ -662,7 +676,7 @@ function ThemeMatrix({
   const groups = [...new Set([...counts.keys()].map((key) => key.split("::")[0]))];
   const max = Math.max(1, ...counts.values());
   return (
-    <ChartCard title="Complaints by theme and group" hint="Darker cells are more 1–3 star reviews with that theme. A cell opens those reviews.">
+    <ChartCard title="Complaints by theme and group" hint="Cell color runs from green for fewer 1–3 star reviews with that theme, through yellow, to red for more. A cell opens those reviews.">
       {themes.length === 0 ? (
         <p className="text-sm text-slate">No 1–3 star reviews in this period.</p>
       ) : (
@@ -685,14 +699,14 @@ function ThemeMatrix({
                   {groups.map((groupId) => {
                     const key = `${groupId}::${theme}`;
                     const count = counts.get(key) ?? 0;
-                    const intensity = count === 0 ? 0.06 : 0.15 + (count / max) * 0.75;
+                    const heat = complaintHeat(count / max);
                     const groupName = groupId ? groupNames.get(groupId) ?? "Removed group" : "No group";
                     return (
                       <td key={groupId || "none"} className="group relative py-2 pr-3 hover:z-20">
                         <Link
                           href={drill({ ...(groupId ? { group: groupId, location: "" } : { location: "" }), theme, stars: "low" })}
-                          className="inline-flex min-w-9 justify-center rounded-md px-1.5 py-0.5 tabular-nums text-graphite"
-                          style={{ background: `rgba(15, 23, 42, ${intensity})` }}
+                          className="inline-flex min-w-9 justify-center rounded-md px-1.5 py-0.5 tabular-nums"
+                          style={{ background: heat.background, color: heat.color }}
                         >
                           {count}
                         </Link>
