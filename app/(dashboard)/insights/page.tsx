@@ -19,6 +19,7 @@ import { SEVERITY_LABELS, severityLabel } from "@/lib/review-intelligence";
 import { InsightAnalyzer, type AnalysisRunStatus } from "@/components/insight-analyzer";
 import { InsightReportPanel } from "@/components/insight-report-panel";
 import {
+  getLatestReportForScope,
   getReportByCacheKey,
   reportCacheKey,
 } from "@/lib/services/insight-report";
@@ -228,12 +229,26 @@ export default async function InsightsPage({ searchParams }: InsightsPageProps) 
     start,
     end,
   });
-  const [dashboard, latestRun, report, catalog] = await Promise.all([
+  const [dashboard, latestRun, exactReport, catalog] = await Promise.all([
     loadInsightDashboard(workspaceId, { locationIds: scope.locationIds, start, end }),
     getLatestAnalysisRun(workspaceId),
     getReportByCacheKey(workspaceId, cacheKey),
     loadScopeCatalog(user.id, workspaceId),
   ]);
+  // Rolling preset windows drift daily, so from tomorrow the exact cache
+  // key misses. Fall back to the most recent saved report for this scope
+  // and preset (shown with its own generated date) rather than an empty
+  // page demanding regeneration.
+  const report =
+    exactReport ??
+    (await getLatestReportForScope(workspaceId, {
+      clientId: scope.clientId,
+      groupId: scope.groupId,
+      locationId: scope.locationId,
+      locationIds: scope.locationIds,
+      rangeStart: start,
+      rangeEnd: end,
+    }));
   const { counts, aggregates } = dashboard;
   const outletNames = new Map((catalog?.locations ?? []).map((l) => [l.id, l.name]));
   const positiveMentions = aggregates.positive.reduce((sum, e) => sum + e.count, 0);

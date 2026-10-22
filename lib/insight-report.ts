@@ -121,6 +121,34 @@ export function computeReportCacheKey(input: {
 }
 
 /**
+ * How far a stored preset window's start may drift from the requested one
+ * and still count as "the same range" for display fallback. Presets are
+ * rolling windows pinned to the day, so a report generated three weeks ago
+ * for "last 6 months" starts three weeks earlier than today's window —
+ * showing that saved report (labelled with its generated date) is better
+ * than showing nothing and demanding a regeneration. Adjacent presets
+ * differ by 60+ days, so 45 days can never confuse 1m/3m/6m/12m.
+ */
+export const REPORT_RANGE_TOLERANCE_DAYS = 45;
+
+export function reportRangeMatches(
+  stored: { rangeStart: string | null; rangeEnd: string | null },
+  expected: { rangeStart: string | null; rangeEnd: string | null }
+): boolean {
+  const storedStart = dayBound(stored.rangeStart);
+  const expectedStart = dayBound(expected.rangeStart);
+  const storedEnd = dayBound(stored.rangeEnd);
+  const expectedEnd = dayBound(expected.rangeEnd);
+  if ((storedStart === null) !== (expectedStart === null)) return false;
+  if ((storedEnd === null) !== (expectedEnd === null)) return false;
+  if (storedEnd !== expectedEnd) return false;
+  if (storedStart === null || expectedStart === null) return true;
+  const driftDays =
+    Math.abs(Date.parse(storedStart) - Date.parse(expectedStart)) / 86_400_000;
+  return driftDays <= REPORT_RANGE_TOLERANCE_DAYS;
+}
+
+/**
  * Fingerprint of the exact source data a report was built from: every
  * eligible review's id and content fingerprint. A new, removed, or edited
  * review changes it — including when a six-month window overlaps a

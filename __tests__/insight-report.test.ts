@@ -7,6 +7,7 @@ import {
   decideReportAction,
   normaliseLocationIds,
   parseSynthesisResponse,
+  reportRangeMatches,
   type SampleObservation,
 } from "@/lib/insight-report";
 import type { ObservationAggregates, ObservationRow } from "@/lib/review-intelligence";
@@ -62,6 +63,31 @@ describe("report cache identity", () => {
       rangeStart: "2026-04-01T00:00:00Z",
     });
     expect(sixMonth).not.toBe(threeMonth);
+  });
+});
+
+describe("reportRangeMatches (preset drift fallback)", () => {
+  it("matches a rolling preset window that drifted by days or weeks", () => {
+    const stored = { rangeStart: "2026-04-22T09:22:42Z", rangeEnd: null };
+    expect(reportRangeMatches(stored, { rangeStart: "2026-04-22T21:05:00Z", rangeEnd: null })).toBe(true);
+    expect(reportRangeMatches(stored, { rangeStart: "2026-05-10T00:00:00Z", rangeEnd: null })).toBe(true);
+  });
+
+  it("never confuses adjacent presets", () => {
+    const sixMonth = { rangeStart: "2026-04-22T00:00:00Z", rangeEnd: null };
+    // 3 months later is the 3m window, not a drifted 6m one.
+    expect(reportRangeMatches(sixMonth, { rangeStart: "2026-07-22T00:00:00Z", rangeEnd: null })).toBe(false);
+  });
+
+  it("keeps all-time and custom windows strict", () => {
+    expect(reportRangeMatches({ rangeStart: null, rangeEnd: null }, { rangeStart: null, rangeEnd: null })).toBe(true);
+    expect(reportRangeMatches({ rangeStart: null, rangeEnd: null }, { rangeStart: "2026-04-22T00:00:00Z", rangeEnd: null })).toBe(false);
+    expect(
+      reportRangeMatches(
+        { rangeStart: "2026-01-01T00:00:00Z", rangeEnd: "2026-04-01T00:00:00Z" },
+        { rangeStart: "2026-01-05T00:00:00Z", rangeEnd: "2026-04-02T00:00:00Z" }
+      )
+    ).toBe(false);
   });
 });
 
