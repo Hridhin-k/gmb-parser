@@ -384,7 +384,7 @@ export function ClientOverviewView({
               </table>
             </div>
             <p className="mt-2 text-xs text-slate">
-              Sorted by average rating, lowest first. Change is against the previous period of the same length.
+              Sorted by average rating, lowest first. Change is against the previous period of the same length. Main complaint is the most common theme on that outlet's 1–3 star reviews.
               {board.themesTruncated ? " Complaint totals were too large to finish, so that column is blank." : ""}
             </p>
           </Panel>
