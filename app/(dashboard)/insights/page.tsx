@@ -3,11 +3,8 @@ import { PageHeader } from "@/components/page-header";
 import { getActiveWorkspace } from "@/lib/services/session";
 import { readPageScope } from "@/lib/services/scope-catalog";
 import { parseDateRange } from "@/lib/date-range";
-import {
-  getLatestAnalysisRun,
-  loadScopeAnalysisCounts,
-} from "@/lib/services/insight-pipeline";
-import { loadObservationAggregates } from "@/lib/services/review-observations";
+import { getLatestAnalysisRun } from "@/lib/services/insight-pipeline";
+import { loadInsightDashboard } from "@/lib/services/insight-dashboard";
 import { loadScopeCatalog } from "@/lib/services/scope-catalog";
 import {
   KeyInsights,
@@ -211,6 +208,8 @@ function dayLabel(d: Date): string {
   return d.toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" });
 }
 
+export const maxDuration = 60;
+
 export default async function InsightsPage({ searchParams }: InsightsPageProps) {
   const [params, { user, workspaceId }] = await Promise.all([
     searchParams,
@@ -229,13 +228,13 @@ export default async function InsightsPage({ searchParams }: InsightsPageProps) 
     start,
     end,
   });
-  const [counts, aggregates, latestRun, report, catalog] = await Promise.all([
-    loadScopeAnalysisCounts(workspaceId, { locationIds: scope.locationIds, start, end }),
-    loadObservationAggregates(workspaceId, { locationIds: scope.locationIds, start, end }),
+  const [dashboard, latestRun, report, catalog] = await Promise.all([
+    loadInsightDashboard(workspaceId, { locationIds: scope.locationIds, start, end }),
     getLatestAnalysisRun(workspaceId),
     getReportByCacheKey(workspaceId, cacheKey),
     loadScopeCatalog(user.id, workspaceId),
   ]);
+  const { counts, aggregates } = dashboard;
   const outletNames = new Map((catalog?.locations ?? []).map((l) => [l.id, l.name]));
   const positiveMentions = aggregates.positive.reduce((sum, e) => sum + e.count, 0);
   const negativeMentions = aggregates.negative.reduce((sum, e) => sum + e.count, 0);
@@ -405,7 +404,7 @@ export default async function InsightsPage({ searchParams }: InsightsPageProps) 
                 <li className="flex items-center gap-2">
                   <span className="h-2.5 w-2.5 rounded-full bg-red-500" />
                   <span className="text-slate">Serious incidents</span>
-                  <span className="font-semibold text-graphite">{aggregates.severeIncidents.length}</span>
+                  <span className="font-semibold text-graphite">{dashboard.severeCount.toLocaleString()}</span>
                 </li>
               </ul>
             </div>
@@ -684,7 +683,7 @@ export default async function InsightsPage({ searchParams }: InsightsPageProps) 
             </div>
           </div>
 
-          {!hasReport && aggregates.severeIncidents.length > 0 ? (
+          {!hasReport && dashboard.severeIncidents.length > 0 ? (
             <div className="mt-4 rounded-xl border border-red-200 bg-red-50 p-4">
               <h2 className="text-base font-medium text-graphite">
                 Serious incidents needing investigation
@@ -695,7 +694,7 @@ export default async function InsightsPage({ searchParams }: InsightsPageProps) 
                 allegations to verify — not proven facts.
               </p>
               <ul className="mt-3 space-y-3">
-                {aggregates.severeIncidents.slice(0, 10).map((incident, index) => (
+                {dashboard.severeIncidents.map((incident, index) => (
                   <li key={`${incident.reviewId}-${index}`} className="rounded-lg bg-white p-3">
                     <p className="text-sm font-medium text-graphite">
                       {severityLabel(incident.severity)} severity

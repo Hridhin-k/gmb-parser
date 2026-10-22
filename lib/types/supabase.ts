@@ -2541,6 +2541,16 @@ export type Database = {
         }
         Returns: Json
       }
+      grm_insight_dashboard: {
+        Args: {
+          p_workspace_id: string
+          p_location_ids: string[]
+          p_start?: string | null
+          p_end?: string | null
+          p_analysis_version?: string
+        }
+        Returns: Json
+      }
       grm_star_breakdown: {
         Args: {
           p_workspace_id: string
