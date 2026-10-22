@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
 import { createServerClient } from "@supabase/ssr";
+import { serverTimingHeader } from "@/lib/timing";
 
 const PUBLIC_PATHS = [
   "/login",
@@ -61,14 +62,26 @@ export async function proxy(request: NextRequest) {
     }
   );
 
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  // Local JWT verification against the project's JWKS (ES256 asymmetric
+  // keys, cached globally) instead of an Auth-server round trip per request.
+  // getClaims falls back to server verification automatically if needed.
+  const authStart = performance.now();
+  const { data: claimsData } = await supabase.auth.getClaims();
+  const authMs = performance.now() - authStart;
+  const claims = claimsData?.claims ?? null;
+  const user = claims ? { id: claims.sub, email: claims.email ?? null } : null;
+  const timing = serverTimingHeader([
+    ["proxy-auth", authMs],
+    ["proxy", performance.now() - authStart],
+  ]);
+  response.headers.set("Server-Timing", timing);
 
   if (!user && !pathname.startsWith("/login")) {
     const loginUrl = new URL("/login", request.url);
     loginUrl.searchParams.set("redirect", pathname);
-    return NextResponse.redirect(loginUrl);
+    const redirectResponse = NextResponse.redirect(loginUrl);
+    redirectResponse.headers.set("Server-Timing", timing);
+    return redirectResponse;
   }
 
   if (user && pathname === "/login") {
@@ -77,7 +90,9 @@ export async function proxy(request: NextRequest) {
       .map((part) => part.trim().toLowerCase())
       .filter(Boolean);
     const isSuperAdmin = Boolean(user.email && superAdmins.includes(user.email.toLowerCase()));
-    return NextResponse.redirect(new URL(isSuperAdmin ? "/admin" : "/overview", request.url));
+    const redirectResponse = NextResponse.redirect(new URL(isSuperAdmin ? "/admin" : "/overview", request.url));
+    redirectResponse.headers.set("Server-Timing", timing);
+    return redirectResponse;
   }
 
   return response;

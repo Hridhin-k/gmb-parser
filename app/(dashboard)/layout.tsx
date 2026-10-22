@@ -8,6 +8,7 @@ import { loadAgencyBranding } from "@/lib/services/agency-branding";
 import { getActiveRole, getActiveWorkspace, getCurrentUser, tenantGateRedirect } from "@/lib/services/session";
 import { listAccessibleWorkspaces } from "@/lib/services/workspace";
 import { isSuperAdmin } from "@/lib/services/platform";
+import { timed } from "@/lib/timing";
 import { redirect } from "next/navigation";
 import type { Metadata } from "next";
 
@@ -25,10 +26,12 @@ async function activeWorkspaceOrGate() {
 
 export async function generateMetadata(): Promise<Metadata> {
   const { user, workspaceId } = await activeWorkspaceOrGate();
-  const [branding, workspaces] = await Promise.all([
-    loadAgencyBranding(workspaceId),
-    listAccessibleWorkspaces(user.id),
-  ]);
+  const [branding, workspaces] = await timed("layout.metadata", () =>
+    Promise.all([
+      loadAgencyBranding(workspaceId),
+      listAccessibleWorkspaces(user.id),
+    ])
+  );
   const name = workspaces.find((workspace) => workspace.id === workspaceId)?.name ?? "Workspace";
   if (branding.hideProductName) return { title: name };
   return { title: "RevuPilot — Google review management" };
@@ -39,14 +42,23 @@ export default async function DashboardLayout({
 }: {
   children: React.ReactNode;
 }) {
-  const { user, workspaceId } = await activeWorkspaceOrGate();
+  const { user, workspaceId } = await timed("layout.workspace", () => activeWorkspaceOrGate());
   const { getMaintenance, getActiveAnnouncement } = await import("@/lib/services/platform");
   const { getSupportTenantId } = await import("@/lib/services/session");
-  const [maintenance, announcement, supportTenantId] = await Promise.all([
-    getMaintenance().catch(() => ({ enabled: false, message: null as string | null })),
-    getActiveAnnouncement().catch(() => null),
-    getSupportTenantId().catch(() => null),
-  ]);
+  // One parallel wave for everything that only needs the user/workspace:
+  // platform state (cross-request cached), access, role, workspaces, branding.
+  const [maintenance, announcement, supportTenantId, access, role, workspaces, branding] =
+    await timed("layout.context", () =>
+      Promise.all([
+        getMaintenance().catch(() => ({ enabled: false, message: null as string | null })),
+        getActiveAnnouncement().catch(() => null),
+        getSupportTenantId().catch(() => null),
+        getMemberAccess(user.id, workspaceId),
+        getActiveRole(),
+        listAccessibleWorkspaces(user.id),
+        loadAgencyBranding(workspaceId),
+      ])
+    );
   if (maintenance.enabled && !isSuperAdmin(user)) {
     return (
       <main className="mx-auto max-w-lg px-6 py-16">
@@ -55,11 +67,6 @@ export default async function DashboardLayout({
       </main>
     );
   }
-  // Membership is request-cached; role/catalog reuse the same row.
-  const [access, role] = await Promise.all([
-    getMemberAccess(user.id, workspaceId),
-    getActiveRole(),
-  ]);
   if (access && !access.enabled) {
     return (
       <main className="mx-auto max-w-lg px-6 py-16">
@@ -70,16 +77,18 @@ export default async function DashboardLayout({
       </main>
     );
   }
-  const [allowedClientIds, locationIds] = await Promise.all([
-    visibleClientIds(workspaceId, access?.scope),
-    visibleLocationIds(workspaceId, access?.scope),
-  ]);
-  const [workspaces, summary, branding, catalog] = await Promise.all([
-    listAccessibleWorkspaces(user.id),
-    getShellSummary(workspaceId, allowedClientIds, locationIds, user.id),
-    loadAgencyBranding(workspaceId),
-    loadScopeCatalog(user.id, workspaceId),
-  ]);
+  const [allowedClientIds, locationIds] = await timed("layout.scope", () =>
+    Promise.all([
+      visibleClientIds(workspaceId, access?.scope),
+      visibleLocationIds(workspaceId, access?.scope),
+    ])
+  );
+  const [summary, catalog] = await timed("layout.shell", () =>
+    Promise.all([
+      getShellSummary(workspaceId, allowedClientIds, locationIds, user.id),
+      loadScopeCatalog(user.id, workspaceId),
+    ])
+  );
   // The scope catalog already loaded (and scope-filtered) the client list in
   // this same request — reuse it instead of a second `grm_clients` round-trip.
   const clients = catalog
