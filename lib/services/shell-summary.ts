@@ -78,7 +78,7 @@ export const getShellSummary = cache(async function getShellSummary(
   userId: string | null = null
 ): Promise<ShellSummary> {
   const admin = createAdminClient();
-  const notices = userId ? await listUnreadNotices(workspaceId, userId) : [];
+  const noticesPromise = userId ? listUnreadNotices(workspaceId, userId) : Promise.resolve([] as ProfileNotice[]);
   const connections = admin
     .from("grm_google_connections")
     .select("id", { count: "exact", head: true })
@@ -87,11 +87,12 @@ export const getShellSummary = cache(async function getShellSummary(
 
   if (locationIds) {
     if (locationIds.length === 0) {
-      return { ...EMPTY, notices };
+      return { ...EMPTY, notices: await noticesPromise };
     }
-    const [profiles, expiredConnections] = await Promise.all([
+    const [profiles, expiredConnections, notices] = await Promise.all([
       profileAttention(workspaceId, locationIds),
       count(allowedClientIds ? connections.in("client_id", allowedClientIds) : connections),
+      noticesPromise,
     ]);
     return {
       unreplied: profiles.reduce((sum, profile) => sum + profile.unreplied, 0),
@@ -106,7 +107,7 @@ export const getShellSummary = cache(async function getShellSummary(
 
   let scopedLocationIds: string[] | null = null;
   if (allowedClientIds) {
-    if (allowedClientIds.length === 0) return { ...EMPTY, notices };
+    if (allowedClientIds.length === 0) return { ...EMPTY, notices: await noticesPromise };
     const { data, error } = await admin
       .from("grm_google_locations")
       .select("id")
@@ -114,7 +115,7 @@ export const getShellSummary = cache(async function getShellSummary(
       .in("client_id", allowedClientIds);
     if (error) throw new Error(`Failed to load navigation counts: ${error.message}`);
     scopedLocationIds = (data ?? []).map((location) => location.id);
-    if (scopedLocationIds.length === 0) return { ...EMPTY, notices };
+    if (scopedLocationIds.length === 0) return { ...EMPTY, notices: await noticesPromise };
   }
 
   const reviews = admin.from("grm_reviews").select("id", { count: "exact", head: true }).eq("workspace_id", workspaceId).is("missing_on_google_at", null);
@@ -135,7 +136,7 @@ export const getShellSummary = cache(async function getShellSummary(
     .eq("workspace_id", workspaceId)
     .is("missing_on_google_at", null)
     .eq("reply_status", "failed");
-  const [unreplied, escalations, drafts, failed, expiredConnections] = await Promise.all([
+  const [unreplied, escalations, drafts, failed, expiredConnections, notices] = await Promise.all([
     count(
       scopedLocationIds
         ? reviews.eq("reply_status", "none").in("location_id", scopedLocationIds)
@@ -145,6 +146,7 @@ export const getShellSummary = cache(async function getShellSummary(
     count(scopedLocationIds ? draftQuery.in("location_id", scopedLocationIds) : draftQuery),
     count(scopedLocationIds ? failedQuery.in("location_id", scopedLocationIds) : failedQuery),
     count(allowedClientIds ? connections.in("client_id", allowedClientIds) : connections),
+    noticesPromise,
   ]);
 
   return { unreplied, escalations, drafts, failed, expiredConnections, profiles: [], notices };

@@ -1,3 +1,4 @@
+import { revalidateTag, unstable_cache } from "next/cache";
 import { createAdminClient } from "@/lib/supabase/admin";
 import type { Database } from "@/lib/types/supabase";
 import { AppError, AuthorizationError, ValidationError } from "@/lib/errors";
@@ -646,6 +647,7 @@ export async function createAnnouncement(input: { actor: { id: string; email?: s
   const admin = createAdminClient();
   const { error } = await admin.from("grm_platform_announcements").insert({ title: input.title.trim().slice(0, 200), body: input.body.trim().slice(0, 2000), tone: input.tone === "warning" ? "warning" : "info", created_by: input.actor.id });
   if (error) throw new AppError("Could not publish the announcement.", "DB_ERROR", 500, { dbError: error.message });
+  bustPlatformCache();
 }
 
 export async function setAnnouncementActive(input: { actor: { id: string; email?: string | null }; id: string; active: boolean }): Promise<void> {
@@ -653,9 +655,10 @@ export async function setAnnouncementActive(input: { actor: { id: string; email?
   const admin = createAdminClient();
   const { error } = await admin.from("grm_platform_announcements").update({ active: input.active }).eq("id", input.id);
   if (error) throw new AppError("Could not update the announcement.", "DB_ERROR", 500, { dbError: error.message });
+  bustPlatformCache();
 }
 
-export async function getMaintenance(): Promise<{ enabled: boolean; message: string | null }> {
+async function fetchMaintenance(): Promise<{ enabled: boolean; message: string | null }> {
   const admin = createAdminClient();
   const { data, error } = await admin.from("grm_platform_settings").select("value").eq("key", "maintenance").maybeSingle();
   if (error || !data) return { enabled: false, message: null };
@@ -663,19 +666,43 @@ export async function getMaintenance(): Promise<{ enabled: boolean; message: str
   return { enabled: value.enabled === true, message: typeof value.message === "string" ? value.message : null };
 }
 
+const getCachedMaintenance = unstable_cache(fetchMaintenance, ["platform-maintenance-v1"], {
+  revalidate: 60,
+  tags: ["platform"],
+});
+
+/** Maintenance state is global and rarely changes: cached across requests for 60s. */
+export async function getMaintenance(): Promise<{ enabled: boolean; message: string | null }> {
+  return getCachedMaintenance();
+}
+
+function bustPlatformCache(): void {
+  revalidateTag("platform", "max");
+}
+
 export async function setMaintenance(input: { actor: { id: string; email?: string | null }; enabled: boolean; message?: string | null }): Promise<void> {
   await requireSuperAdmin(input.actor);
   const admin = createAdminClient();
   const { error } = await admin.from("grm_platform_settings").upsert({ key: "maintenance", value: { enabled: input.enabled, message: input.message?.trim().slice(0, 500) || null }, updated_by: input.actor.id, updated_at: new Date().toISOString() }, { onConflict: "key" });
   if (error) throw new AppError("Could not update maintenance mode.", "DB_ERROR", 500, { dbError: error.message });
+  bustPlatformCache();
 }
 
 export async function getActiveAnnouncement(): Promise<PlatformAnnouncementRow | null> {
+  return getCachedAnnouncement();
+}
+
+async function fetchActiveAnnouncement(): Promise<PlatformAnnouncementRow | null> {
   const admin = createAdminClient();
   const { data, error } = await admin.from("grm_platform_announcements").select("*").eq("active", true).order("created_at", { ascending: false }).limit(1).maybeSingle();
   if (error || !data) return null;
   return { id: data.id, title: data.title, body: data.body, tone: data.tone, active: data.active, createdAt: data.created_at };
 }
+
+const getCachedAnnouncement = unstable_cache(fetchActiveAnnouncement, ["platform-announcement-v1"], {
+  revalidate: 60,
+  tags: ["platform"],
+});
 
 export interface AccessRequestRow { id: string; email: string; company: string | null; message: string | null; status: string; createdAt: string }
 

@@ -1,5 +1,6 @@
 import { cache } from "react";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { loadCatalogTables } from "@/lib/services/catalog-tables";
 import { UNASSIGNED_CLIENT_MARKER } from "@/lib/services/unassigned-client";
 import { getMemberAccess } from "@/lib/services/access";
 import { locationDisplayName } from "@/lib/ui/location-place";
@@ -17,26 +18,15 @@ export const loadScopeCatalog = cache(async (userId: string, workspaceId: string
   const access = await getMemberAccess(userId, workspaceId);
   if (!access?.enabled) return null;
   const admin = createAdminClient();
-  const [workspace, clientsResult, groupsResult, locationsResult] = await Promise.all([
+  // Catalog tables come from the shared (cross-request cached) loader; only
+  // the workspace name needs its own query.
+  const [workspace, tables] = await Promise.all([
     admin.from("grm_workspaces").select("name").eq("id", workspaceId).maybeSingle(),
-    admin
-      .from("grm_clients")
-      .select("id, name, notes")
-      .eq("workspace_id", workspaceId)
-      .eq("is_active", true)
-      .order("name"),
-    admin.from("grm_groups").select("id, name, client_id, parent_id").eq("workspace_id", workspaceId).order("name"),
-    admin
-      .from("grm_google_locations")
-      .select("id, client_id, group_id, location_title, store_code, address_formatted")
-      .eq("workspace_id", workspaceId),
+    loadCatalogTables(workspaceId),
   ]);
   if (workspace.error) throw new Error(`Failed to load the organisation: ${workspace.error.message}`);
-  if (clientsResult.error) throw new Error(`Failed to load organisations: ${clientsResult.error.message}`);
-  if (groupsResult.error) throw new Error(`Failed to load groups: ${groupsResult.error.message}`);
-  if (locationsResult.error) throw new Error(`Failed to load outlets: ${locationsResult.error.message}`);
 
-  const clients = (clientsResult.data ?? [])
+  const clients = tables.clients
     .filter((client) => client.notes !== UNASSIGNED_CLIENT_MARKER)
     .map((client) => ({ id: client.id, name: client.name }));
   const names = new Map(clients.map((client) => [client.id, client.name]));
@@ -44,13 +34,13 @@ export const loadScopeCatalog = cache(async (userId: string, workspaceId: string
     workspaceId,
     workspaceName: workspace.data?.name?.trim() || "Organisation",
     clients,
-    groups: (groupsResult.data ?? []).map((group) => ({
+    groups: tables.groups.map((group) => ({
       id: group.id,
       name: group.name,
       clientId: group.client_id,
       parentId: group.parent_id,
     })),
-    locations: (locationsResult.data ?? [])
+    locations: tables.locations
       .filter((location) => location.client_id && names.has(location.client_id))
       .map((location) => ({
         id: location.id,
