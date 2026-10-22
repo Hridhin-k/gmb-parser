@@ -295,11 +295,14 @@ export async function executeAnalysisRun(
   runId: string,
   workspaceId: string,
   input: AnalysisRunScope,
-  hooks?: { onProgress?: () => void | Promise<void> }
+  hooks?: { onProgress?: () => void | Promise<void> },
+  options?: { sliceMs?: number }
 ): Promise<void> {
   const admin = createAdminClient();
   try {
-    const processor = makeRunProcessor(runId, workspaceId, hooks);
+    const processor = makeRunProcessor(runId, workspaceId, hooks, {
+      deadlineAt: options?.sliceMs ? Date.now() + options.sliceMs : undefined,
+    });
     let discovered = 0;
     let eligible = 0;
     let alreadyAnalysed = 0;
@@ -315,7 +318,11 @@ export async function executeAnalysisRun(
       failedCount += page.failedCount;
       await markRatingOnlyBulk(admin, workspaceId, page.ratingOnlyToMark).catch(() => undefined);
       processor.state.pendingTotal += page.pendingReviews.length;
-      await processor.process(page.pendingReviews);
+      // Once the slice is spent, keep counting (cheap) but stop analysing;
+      // the next slice re-discovers and resumes the remainder.
+      if (!processor.state.exhausted) {
+        await processor.process(page.pendingReviews);
+      }
       await admin
         .from("grm_analysis_runs")
         .update({
@@ -330,6 +337,13 @@ export async function executeAnalysisRun(
         .then(undefined, () => undefined);
     });
 
+    if (processor.state.exhausted) {
+      // Not finished — leave status "running" with progress saved. The
+      // status poll sees the worker go quiet and kicks the next slice.
+      logger.info("insight_pipeline.slice_paused", { runId, batchesCompleted: processor.state.batchesCompleted });
+      return;
+    }
+
     await processor.finish();
   } catch (error) {
     const message = error instanceof Error ? error.message : "Analysis run failed";
@@ -342,12 +356,6 @@ export async function executeAnalysisRun(
   }
 }
 
-/**
- * Processes every pending review in bounded batches. Results are stored
- * immediately per batch; failed batches mark their reviews failed so a
- * later run retries exactly those. The run only reports "completed"
- * when every eligible review holds a current analysis.
- */
 /**
  * Marks analysis runs whose owner died (server restart, crashed job) as
  * failed so the UI never shows a phantom "running" job forever. A healthy
@@ -379,7 +387,17 @@ interface RunProcessorState {
   inputTokens: number;
   outputTokens: number;
   pendingTotal: number;
+  /** Set when the slice deadline stopped work early: the run stays "running" and a later slice resumes it. */
+  exhausted: boolean;
 }
+
+/**
+ * How long one function invocation may spend analysing before it must stop
+ * and leave the rest for the next slice. Vercel kills the invocation at
+ * maxDuration (60s); stopping at ~45s lets the worker save progress and exit
+ * cleanly instead of dying mid-batch. The status poll re-kicks stale runs.
+ */
+export const ANALYSIS_RUN_SLICE_MS = 45_000;
 
 /**
  * Batch processor with shared, mutable progress state. `process` can be fed
@@ -389,7 +407,8 @@ interface RunProcessorState {
 function makeRunProcessor(
   runId: string,
   workspaceId: string,
-  hooks?: { onProgress?: () => void | Promise<void> }
+  hooks?: { onProgress?: () => void | Promise<void> },
+  options?: { deadlineAt?: number }
 ) {
   const admin = createAdminClient();
   const state: RunProcessorState = {
@@ -401,6 +420,7 @@ function makeRunProcessor(
     inputTokens: 0,
     outputTokens: 0,
     pendingTotal: 0,
+    exhausted: false,
   };
 
   async function updateProgress(finalStatus?: string) {
@@ -500,6 +520,13 @@ function makeRunProcessor(
       const batches = buildBatches(toBatchReviews(pendingReviews));
       state.batchesTotal += batches.length;
       for (let i = 0; i < batches.length; i += BATCH_CONCURRENCY) {
+        // Slice deadline: stop starting new batches so this invocation can
+        // exit before the platform kills it. Remaining reviews stay pending
+        // and are picked up by the next slice (already-analysed are skipped).
+        if (options?.deadlineAt && Date.now() >= options.deadlineAt) {
+          state.exhausted = true;
+          return;
+        }
         await Promise.all(batches.slice(i, i + BATCH_CONCURRENCY).map((b) => processBatch(b)));
       }
     },
@@ -514,6 +541,31 @@ function makeRunProcessor(
       });
     },
   };
+}
+
+/**
+ * Processes every pending review in bounded batches. Results are stored
+ * immediately per batch; failed batches mark their reviews failed so a
+ * later run retries exactly those. The run only reports "completed"
+ * when every eligible review holds a current analysis.
+ */
+/**
+ * Atomically claims a running run whose worker has gone quiet, so exactly
+ * one re-kick resumes it. Touching updated_at acts as the lease: concurrent
+ * pollers lose the race and stand down.
+ */
+export async function claimStaleAnalysisRun(runId: string, staleMs = 20_000): Promise<boolean> {
+  const admin = createAdminClient();
+  const cutoff = new Date(Date.now() - staleMs).toISOString();
+  const { data } = await admin
+    .from("grm_analysis_runs")
+    .update({ updated_at: new Date().toISOString() })
+    .eq("id", runId)
+    .eq("status", "running")
+    .lt("updated_at", cutoff)
+    .select("id")
+    .maybeSingle();
+  return Boolean(data);
 }
 
 /**

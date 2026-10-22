@@ -5,6 +5,7 @@ import { ensurePersonalWorkspace } from "@/lib/services/workspace";
 import { readPageScope } from "@/lib/services/scope-catalog";
 import { parseDateRange } from "@/lib/date-range";
 import {
+  ANALYSIS_RUN_SLICE_MS,
   createAnalysisRun,
   executeAnalysisRun,
   failStaleAnalysisRuns,
@@ -92,7 +93,11 @@ export async function POST(request: Request) {
     await failStaleAnalysisRuns(workspaceId);
     const runId = await createAnalysisRun(workspaceId, user.id, runScope);
     after(async () => {
-      await executeAnalysisRun(runId, workspaceId, runScope);
+      // Bounded slice: the worker stops before maxDuration kills it, and
+      // the status poll resumes the run slice by slice until it completes.
+      await executeAnalysisRun(runId, workspaceId, runScope, undefined, {
+        sliceMs: ANALYSIS_RUN_SLICE_MS,
+      });
     });
     return NextResponse.json({ runId, status: "running" });
   } catch (error) {

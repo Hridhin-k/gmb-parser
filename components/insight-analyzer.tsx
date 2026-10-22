@@ -100,7 +100,11 @@ export function InsightAnalyzer({ scopeParams, initialRun, pendingCount }: Insig
         error: null,
       });
     } catch {
-      setMessage("Failed to start analysis. Please try again.");
+      // A network failure here does not mean the run failed to start — the
+      // server may have created it. Say so instead of blaming the start.
+      setMessage(
+        "Could not reach the server. Check your connection — if a run appears below, it is still processing."
+      );
     } finally {
       setStarting(false);
     }
