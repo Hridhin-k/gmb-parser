@@ -10,8 +10,10 @@ import { PendingRegion, TransitionScope } from "@/components/transition-scope";
 import { ClipboardList } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { parseDateRange } from "@/lib/date-range";
+import { PaginationBar } from "@/components/pagination-bar";
+import { validatePage } from "@/lib/validation";
 
-const AUDIT_LIMIT = 200;
+const AUDIT_PAGE_SIZE = 50;
 
 function formatDate(iso: string): string {
   return new Date(iso).toLocaleString("en-US", {
@@ -163,13 +165,15 @@ export default async function AuditPage({ searchParams }: AuditPageProps) {
   const userFilter = typeof params.user === "string" ? params.user : "";
   const range = parseDateRange(params, "all");
   const entityFilter = typeof params.entity === "string" ? params.entity : "";
+  const currentPage = validatePage(params.page);
 
+  // Server-side pagination: exact count + one ranged page from Postgres.
   let query = admin
     .from("grm_audit_logs")
-    .select("id, action, entity_type, entity_id, metadata, user_id, created_at")
+    .select("id, action, entity_type, entity_id, metadata, user_id, created_at", { count: "exact" })
     .eq("workspace_id", workspaceId)
     .order("created_at", { ascending: false })
-    .limit(AUDIT_LIMIT);
+    .range((currentPage - 1) * AUDIT_PAGE_SIZE, currentPage * AUDIT_PAGE_SIZE - 1);
 
   if (actionFilter) query = query.eq("action", actionFilter);
   if (userFilter && /^[0-9a-f-]{36}$/i.test(userFilter)) {
@@ -179,13 +183,21 @@ export default async function AuditPage({ searchParams }: AuditPageProps) {
   if (range.start) query = query.gte("created_at", range.start.toISOString());
   if (range.end) query = query.lt("created_at", range.end.toISOString());
 
-  const [{ data: logs }, roster] = await Promise.all([
+  const [{ data: logs, count: totalCount }, roster] = await Promise.all([
     query,
     getWorkspaceRoster(workspaceId),
   ]);
 
   const emailById = new Map(roster.members.map((m) => [m.userId, m.email]));
   const rows = logs ?? [];
+  const totalEntries = totalCount ?? rows.length;
+  const totalPages = Math.max(1, Math.ceil(totalEntries / AUDIT_PAGE_SIZE));
+  const paginationParams = new URLSearchParams();
+  for (const [key, value] of Object.entries(params)) {
+    if (typeof value === "string" && key !== "page") paginationParams.set(key, value);
+  }
+  const fromEntry = totalEntries === 0 ? 0 : (currentPage - 1) * AUDIT_PAGE_SIZE + 1;
+  const toEntry = Math.min(currentPage * AUDIT_PAGE_SIZE, totalEntries);
   const hasFilters = !!(
     actionFilter ||
     userFilter ||
@@ -282,10 +294,16 @@ export default async function AuditPage({ searchParams }: AuditPageProps) {
                 })}
               </ul>
               <div className="border-t border-silver px-5 py-2.5 text-xs text-slate">
-                Showing {rows.length} most recent entries
-                {rows.length === AUDIT_LIMIT &&
-                  ". Use the filters to narrow the list."}
+                Showing {fromEntry}–{toEntry} of {totalEntries} entries
               </div>
+              {totalPages > 1 ? (
+                <PaginationBar
+                  basePath="/audit"
+                  currentPage={currentPage}
+                  totalPages={totalPages}
+                  searchParams={paginationParams}
+                />
+              ) : null}
             </div>
           )}
         </PendingRegion>

@@ -65,7 +65,14 @@ export async function recordAiUsage(
 }
 
 export async function getAiBudget(admin: Admin, workspaceId: string): Promise<AiBudgetStatus> {
-  const budgetUsd = monthlyBudgetUsd();
+  // A super-admin per-tenant cap (grm_workspaces.ai_monthly_budget_usd) wins over the platform default.
+  let budgetUsd = monthlyBudgetUsd();
+  try {
+    const { data: ws } = await admin.from("grm_workspaces").select("ai_monthly_budget_usd").eq("id", workspaceId).maybeSingle();
+    if (ws?.ai_monthly_budget_usd != null && Number(ws.ai_monthly_budget_usd) >= 0) budgetUsd = Number(ws.ai_monthly_budget_usd);
+  } catch {
+    // Pre-migration database — keep the platform default.
+  }
   try {
     const { data, error } = await admin
       .from("grm_ai_usage_monthly")

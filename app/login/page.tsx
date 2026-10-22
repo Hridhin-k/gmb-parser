@@ -6,6 +6,8 @@ import { loginErrorMessage, shouldEnterWizard } from "@/lib/onboarding";
 import { hasUserConsent } from "@/lib/services/consent";
 import { getOnboardingGate } from "@/lib/services/onboarding";
 import { ensurePersonalWorkspace, getMemberRole } from "@/lib/services/workspace";
+import { tenantGateRedirect } from "@/lib/services/session";
+import { isSuperAdmin } from "@/lib/services/platform";
 import { isManager } from "@/lib/shell";
 
 interface LoginPageProps {
@@ -19,8 +21,16 @@ export default async function LoginPage({ searchParams }: LoginPageProps) {
   } = await supabase.auth.getUser();
 
   if (user) {
+    if (isSuperAdmin(user)) redirect("/admin");
     if (!(await hasUserConsent(user.id))) redirect("/consent");
-    const membership = await ensurePersonalWorkspace(user);
+    let membership: Awaited<ReturnType<typeof ensurePersonalWorkspace>>;
+    try {
+      membership = await ensurePersonalWorkspace(user);
+    } catch (error) {
+      const target = tenantGateRedirect(error);
+      if (target) redirect(target);
+      throw error;
+    }
     const [role, gate] = await Promise.all([
       getMemberRole(user.id, membership.workspace_id),
       getOnboardingGate(membership.workspace_id),

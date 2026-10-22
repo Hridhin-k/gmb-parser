@@ -99,6 +99,8 @@ export interface MobileApproval {
   skippedIds: string[];
   clearSkipHref: string;
   clientHrefs: Array<{ id: string; name: string; href: string }>;
+  resolutionPhone: string | null;
+  resolutionEmail: string | null;
 }
 
 export interface MobileNote {
@@ -498,6 +500,8 @@ export async function loadMobileApproval(input: {
       skippedIds: [...skip],
       clearSkipHref: "/m/approve",
       clientHrefs: [],
+      resolutionPhone: null,
+      resolutionEmail: null,
     };
   }
   const admin = createAdminClient();
@@ -516,7 +520,7 @@ export async function loadMobileApproval(input: {
     return rank(a.reply_status) - rank(b.reply_status) || Date.parse(b.review_create_time) - Date.parse(a.review_create_time);
   });
   const reviewIds = reviews.map((review) => review.id);
-  const [replies, escalations] = await Promise.all([
+  const [replies, escalations, contact] = await Promise.all([
     reviewIds.length
       ? admin
           .from("grm_review_replies")
@@ -533,6 +537,7 @@ export async function loadMobileApproval(input: {
           .in("review_id", reviewIds)
           .neq("status", "resolved")
       : Promise.resolve({ data: [], error: null }),
+    EscalationContactStore.read(input.workspaceId),
   ]);
   if (replies.error || escalations.error) throw new Error("Could not load the approval queue.");
   const replyByReview = new Map<string, ReplyRow>();
@@ -602,6 +607,8 @@ export async function loadMobileApproval(input: {
         href: mobileHref("/m/approve", { client: client.id }),
       })),
     ],
+    resolutionPhone: contact.phone,
+    resolutionEmail: contact.email,
   };
 }
 

@@ -7,6 +7,11 @@ import { SpeakButton } from "@/components/mobile-speech";
 import { Button } from "@/components/ui/button";
 import { REPLY_LANGUAGES, type ReplyLanguage } from "@/lib/reply-adjustments";
 import { checkReplyGuardrails } from "@/lib/reply-guardrails";
+import {
+  insertResolutionContact,
+  resolutionContactSentence,
+  type ResolutionContactKind,
+} from "@/lib/resolution-contact";
 import type { MobileApproval } from "@/lib/services/mobile-work";
 import { mobileHref } from "@/lib/mobile-work";
 import { useServerRefresh } from "@/hooks/use-server-refresh";
@@ -286,6 +291,19 @@ export function MobileApprovalView({ data }: { data: MobileApproval }) {
               rows={5}
               className="mt-2 w-full resize-y rounded-xl border border-silver bg-white px-3 py-3 text-base leading-6 text-ink"
             />
+            <ResolutionContactButtons
+              phone={data.resolutionPhone}
+              email={data.resolutionEmail}
+              disabled={!card.canDraft || pending !== null}
+              onAdd={(kind) => {
+                const sentence = resolutionContactSentence(kind, {
+                  phone: data.resolutionPhone,
+                  email: data.resolutionEmail,
+                });
+                if (!sentence) return;
+                setContent((current) => insertResolutionContact(current, sentence));
+              }}
+            />
             <p className="mt-2 text-sm text-slate">
               {content.trim().length === 0
                 ? "No reply yet."
@@ -368,6 +386,54 @@ export function MobileApprovalView({ data }: { data: MobileApproval }) {
           </div>
         </article>
       )}
+    </div>
+  );
+}
+
+function ResolutionContactButtons({
+  phone,
+  email,
+  disabled,
+  onAdd,
+}: {
+  phone: string | null;
+  email: string | null;
+  disabled: boolean;
+  onAdd: (kind: ResolutionContactKind) => void;
+}) {
+  if (!phone && !email) {
+    return (
+      <p className="mt-2 text-sm text-slate">
+        No resolution phone or email is saved. An owner can set one in Settings, then add it to this reply.
+      </p>
+    );
+  }
+  return (
+    <div className="mt-2 flex flex-wrap gap-2">
+      <button
+        type="button"
+        disabled={disabled || !phone}
+        onClick={() => onAdd("phone")}
+        className="min-h-11 rounded-xl border border-silver px-3 text-sm text-ink disabled:opacity-50"
+      >
+        Add phone
+      </button>
+      <button
+        type="button"
+        disabled={disabled || !email}
+        onClick={() => onAdd("email")}
+        className="min-h-11 rounded-xl border border-silver px-3 text-sm text-ink disabled:opacity-50"
+      >
+        Add email
+      </button>
+      <button
+        type="button"
+        disabled={disabled || !phone || !email}
+        onClick={() => onAdd("both")}
+        className="min-h-11 rounded-xl border border-silver px-3 text-sm text-ink disabled:opacity-50"
+      >
+        Add both
+      </button>
     </div>
   );
 }

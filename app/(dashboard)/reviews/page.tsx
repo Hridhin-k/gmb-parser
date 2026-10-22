@@ -1,6 +1,7 @@
 import { getDashboardData } from "@/lib/services/dashboard";
 import { COMPLAINT_THEMES, REVIEW_LANGUAGES, type InboxSort } from "@/lib/review-inbox";
 import { readPageScope } from "@/lib/services/scope-catalog";
+import { EscalationContactStore } from "@/lib/services/escalations";
 import { canApproveReplies, canSyncWorkspace, getWorkspaceRoster } from "@/lib/services/workspace";
 import { getActiveRole, getActiveWorkspace } from "@/lib/services/session";
 import { PageHeader } from "@/components/page-header";
@@ -69,7 +70,7 @@ export default async function ReviewsPage({ searchParams }: ReviewsPageProps) {
     params.sort === "oldest" || params.sort === "highest" || params.sort === "lowest" ? params.sort : "newest";
   const currentPage = validatePage(params.page);
 
-  const [role, data, roster] = await Promise.all([
+  const [role, data, roster, contact] = await Promise.all([
     getActiveRole(),
     getDashboardData(workspaceId, {
       filter: filterParam,
@@ -93,6 +94,7 @@ export default async function ReviewsPage({ searchParams }: ReviewsPageProps) {
       profilePage: 1,
     }),
     getWorkspaceRoster(workspaceId),
+    EscalationContactStore.read(workspaceId),
   ]);
   const canApprove = canApproveReplies(role);
 
@@ -232,6 +234,7 @@ export default async function ReviewsPage({ searchParams }: ReviewsPageProps) {
                 reviews={data.reviews}
                 replies={data.replies}
                 canApprove={canApprove}
+                contact={contact}
                 members={roster.members.map((member) => ({ id: member.userId, email: member.email }))}
               />
               {totalPages > 1 && (

@@ -12,7 +12,6 @@ import { AuditService } from "@/lib/services/audit";
 import { assertReviewAction, assertScoped, getMemberAccess, visibleClientIds } from "@/lib/services/access";
 import { isOrgScope, workspaceGrant } from "@/lib/access";
 import { getMemberRole } from "@/lib/services/workspace";
-import { recordUsageEvent } from "@/lib/services/usage-events";
 import { UNASSIGNED_CLIENT_MARKER } from "@/lib/services/unassigned-client";
 
 export interface ClientInput {
@@ -50,53 +49,6 @@ function cleanClient(input: ClientInput, allowManager: boolean): {
     logo_url: input.logoUrl.trim() || null,
     ...(allowManager ? { account_manager_user_id: input.accountManagerUserId } : {}),
   };
-}
-
-async function assertCanCreate(userId: string, workspaceId: string): Promise<void> {
-  const access = await getMemberAccess(userId, workspaceId);
-  if (!access?.enabled || !isOrgScope(access.scope) || !workspaceGrant(access.role, "manage_locations")) {
-    throw new AuthorizationError("You cannot add a client for the whole organization.");
-  }
-}
-
-export async function createAgencyClient(input: {
-  workspaceId: string;
-  userId: string;
-  client: ClientInput;
-}): Promise<{ id: string }> {
-  await assertCanCreate(input.userId, input.workspaceId);
-  const admin = createAdminClient();
-  if (input.client.accountManagerUserId) {
-    const member = await admin
-      .from("grm_workspace_members")
-      .select("user_id")
-      .eq("workspace_id", input.workspaceId)
-      .eq("user_id", input.client.accountManagerUserId)
-      .maybeSingle();
-    if (!member.data) throw new ValidationError("Choose an account manager from this organization.");
-  }
-  const payload = cleanClient(input.client, true);
-  const { data, error } = await admin
-    .from("grm_clients")
-    .insert({ ...payload, workspace_id: input.workspaceId, created_by: input.userId })
-    .select("id")
-    .single();
-  if (error || !data) throw new AppError("Could not add the client.", "DB_ERROR", 500);
-  await recordUsageEvent({
-    workspaceId: input.workspaceId,
-    clientId: data.id,
-    kind: "client_created",
-    sourceId: data.id,
-  });
-  await AuditService.log({
-    workspaceId: input.workspaceId,
-    userId: input.userId,
-    action: "client.created",
-    entityType: "grm_clients",
-    entityId: data.id,
-    metadata: { name: payload.name },
-  });
-  return { id: data.id };
 }
 
 export async function updateAgencyClient(input: {

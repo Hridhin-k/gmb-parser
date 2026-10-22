@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
-import { classifyGeminiError, draftModelRoute } from "@/lib/services/ai-review";
+import { alternateDraftModel, classifyGeminiError, draftModelRoute } from "@/lib/services/ai-review";
+import { GEMINI_FAST_MODEL_ID, GEMINI_MODEL_ID } from "@/lib/gemini";
 
 // ---------------------------------------------------------------------------
 // Mock Supabase admin
@@ -186,6 +187,17 @@ describe("draftModelRoute", () => {
   });
 });
 
+describe("alternateDraftModel", () => {
+  it("switches to the other model when the first is overloaded", () => {
+    expect(alternateDraftModel(GEMINI_FAST_MODEL_ID, false)).toBe(GEMINI_MODEL_ID);
+    expect(alternateDraftModel(GEMINI_MODEL_ID, false)).toBe(GEMINI_FAST_MODEL_ID);
+  });
+
+  it("stays off the full model once the monthly budget is used", () => {
+    expect(alternateDraftModel(GEMINI_FAST_MODEL_ID, true)).toBeNull();
+  });
+});
+
 describe("AIReviewService.generateDraft", () => {
   const originalEnv = process.env;
 
@@ -265,11 +277,8 @@ describe("AIReviewService.generateDraft", () => {
     const draftInsertSelect = vi.fn().mockReturnValue({ single: draftInsertSingle });
     mockInsert.mockReturnValueOnce({ select: draftInsertSelect });
 
-    // Mock delete (clearing old drafts)
-    const deleteIn = vi.fn().mockReturnValue({ error: null });
-    const deleteEq2 = vi.fn().mockReturnValue({ in: deleteIn });
-    const deleteEq1 = vi.fn().mockReturnValue({ eq: deleteEq2 });
-    mockDelete.mockReturnValueOnce({ eq: deleteEq1 });
+    // No reply is stored yet, so generation inserts one.
+    mockInFn.mockReturnValueOnce({ data: [], error: null });
 
     // Mock reply insert
     const replyInsertSingle = vi.fn().mockReturnValue({ data: { id: "reply-1" }, error: null });

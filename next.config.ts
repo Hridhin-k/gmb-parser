@@ -20,6 +20,11 @@ const securityHeaders = [
 
 const nextConfig: NextConfig = {
   poweredByHeader: false,
+  experimental: {
+    // Only load the icons/utilities actually imported — smaller client
+    // bundles, faster first paint and route transitions.
+    optimizePackageImports: ["lucide-react", "date-fns", "@base-ui/react"],
+  },
   async headers() {
     return [{ source: "/:path*", headers: securityHeaders }];
   },

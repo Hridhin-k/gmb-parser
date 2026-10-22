@@ -109,17 +109,16 @@ export function EscalationTicket({
             </p>
           </section>
 
-          {open ? (
-            <section className="rounded-xl bg-white p-4 shadow-card">
-              <ResolutionReply
-                reviewId={item.reviewId}
-                replyId={item.replyId}
-                replyStatus={item.replyStatus}
-                initialContent={item.replyContent}
-                contact={contact}
-              />
-            </section>
-          ) : (
+          <section className="rounded-xl bg-white p-4 shadow-card">
+            <ResolutionReply
+              reviewId={item.reviewId}
+              replyId={item.replyId}
+              replyStatus={item.replyStatus}
+              initialContent={item.replyContent}
+              contact={contact}
+            />
+          </section>
+          {!open && (
             <section className="rounded-xl bg-white p-4 shadow-card">
               <h2 className="text-sm font-medium text-ink">Resolution</h2>
               <p className="mt-2 text-sm text-slate">
@@ -391,8 +390,9 @@ function ResolutionReply({
   const [content, setContent] = useState(initialContent);
   const [savedId, setSavedId] = useState(replyId);
   const [saving, setSaving] = useState(false);
+  const [generating, setGenerating] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const locked = replyStatus === "published" || replyStatus === "pending_publish";
+  const busy = saving || generating;
 
   function add(kind: ResolutionContactKind) {
     const sentence = resolutionContactSentence(kind, contact);
@@ -425,27 +425,49 @@ function ResolutionReply({
     router.refresh();
   }
 
-  if (locked) {
-    return (
-      <p className="text-sm text-slate">
-        {replyStatus === "published"
-          ? "A public reply is already on Google."
-          : "This reply is being published."}
-      </p>
-    );
+  async function generate() {
+    setGenerating(true);
+    setError(null);
+    const response = await fetch(`/api/reviews/${reviewId}/generate`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ replaceEdited: true }),
+    });
+    const payload = (await response.json().catch(() => ({}))) as {
+      error?: string;
+      content?: string;
+      replyId?: string;
+    };
+    setGenerating(false);
+    if (!response.ok) {
+      setError(payload.error ?? "The reply could not be generated.");
+      return;
+    }
+    if (payload.content) setContent(payload.content);
+    if (payload.replyId) setSavedId(payload.replyId);
+    toast.success("AI reply is ready. It is not on Google yet.");
+    router.refresh();
   }
 
   return (
     <div className="space-y-2">
       <h2 className="text-sm font-medium text-ink">Public reply</h2>
+      {replyStatus === "published" ? (
+        <p className="text-xs text-slate">A reply is already on Google. A new draft stays in GRM until you publish it.</p>
+      ) : replyStatus === "pending_publish" ? (
+        <p className="text-xs text-slate">This reply is being published.</p>
+      ) : null}
       <div className="flex flex-wrap gap-2">
-        <button type="button" disabled={!contact.phone || saving} onClick={() => add("phone")} className="rounded-md border border-line px-3 py-1.5 text-sm disabled:opacity-50">
+        <button type="button" disabled={busy} onClick={() => void generate()} className="rounded-md border border-line px-3 py-1.5 text-sm disabled:opacity-50">
+          {generating ? "Writing…" : content.trim() ? "Regenerate AI reply" : "Generate AI reply"}
+        </button>
+        <button type="button" disabled={!contact.phone || busy} onClick={() => add("phone")} className="rounded-md border border-line px-3 py-1.5 text-sm disabled:opacity-50">
           Add phone
         </button>
-        <button type="button" disabled={!contact.email || saving} onClick={() => add("email")} className="rounded-md border border-line px-3 py-1.5 text-sm disabled:opacity-50">
+        <button type="button" disabled={!contact.email || busy} onClick={() => add("email")} className="rounded-md border border-line px-3 py-1.5 text-sm disabled:opacity-50">
           Add email
         </button>
-        <button type="button" disabled={!contact.phone || !contact.email || saving} onClick={() => add("both")} className="rounded-md border border-line px-3 py-1.5 text-sm disabled:opacity-50">
+        <button type="button" disabled={!contact.phone || !contact.email || busy} onClick={() => add("both")} className="rounded-md border border-line px-3 py-1.5 text-sm disabled:opacity-50">
           Add both
         </button>
       </div>
@@ -462,12 +484,12 @@ function ResolutionReply({
         onChange={(event) => setContent(event.target.value)}
         rows={4}
         maxLength={4000}
-        disabled={saving}
+        disabled={busy}
         aria-label="Public reply"
         className="block w-full resize-y rounded-md border border-line px-2 py-1.5 text-sm text-ink"
       />
       {error ? <p className="text-sm text-red-700">{error}</p> : null}
-      <button type="button" disabled={saving || !content.trim()} onClick={() => void save()} className="rounded-md bg-ink px-3 py-1.5 text-sm text-white disabled:opacity-50">
+      <button type="button" disabled={busy || !content.trim()} onClick={() => void save()} className="rounded-md bg-ink px-3 py-1.5 text-sm text-white disabled:opacity-50">
         {saving ? "Saving…" : "Save reply"}
       </button>
     </div>

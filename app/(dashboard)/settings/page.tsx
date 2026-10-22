@@ -218,8 +218,9 @@ export default async function SettingsPage({
 
       {section === "notifications" ? (
         <section className="space-y-2 rounded-xl border border-silver bg-white p-4 text-sm text-slate">
-          <p>In-app alerts are on for people in this workspace.</p>
-          <p>{emailDelivery ? "Email delivery is configured." : "Email preferences can be saved on Team and roles. Mail is not delivered until a mail provider is configured."}</p>
+          <p>The bell lists each profile you cover: reviews with no reply, drafts, failed publishes, and open escalations.</p>
+          <p>You also get a notice when a new review arrives on one of those profiles, a complaint is assigned to you, a reminder is due, or a reply fails to publish.</p>
+          <p>{emailDelivery ? "Email is sent for an assignment when that person turned email on." : "Email preferences can be saved on Team and roles. Mail is not delivered until a mail provider is configured."}</p>
           <p>WhatsApp and Slack are not configured.</p>
           {canOpenPath("/team", role) ? (
             <Link href="/team" className="font-medium text-ink underline underline-offset-4">Notification preferences</Link>

@@ -148,7 +148,6 @@ export default async function ClientDetailPage({
         </p>
         {workspaceGrant(role, "manage_locations") || access?.scope.clientId === clientId ? (
           <AgencyClientForm
-            mode="edit"
             clientId={clientId}
             canAssignManager={canAssignManager}
             managers={canAssignManager

@@ -87,6 +87,12 @@ export function draftModelRoute(input: {
   return "fast";
 }
 
+/** The other draft model when the first is overloaded. A budget cap stays on the fast model. */
+export function alternateDraftModel(modelId: string, budgetExceeded: boolean): string | null {
+  if (modelId === GEMINI_FAST_MODEL_ID) return budgetExceeded ? null : GEMINI_MODEL_ID;
+  return GEMINI_FAST_MODEL_ID;
+}
+
 const BLOCKED_FINISH_REASONS = new Set([
   "SAFETY",
   "PROHIBITED_CONTENT",
@@ -287,6 +293,7 @@ export class AIReviewService {
     if (!apiKey) {
       throw new AppError("Gemini API key not configured", "CONFIG_ERROR", 500);
     }
+    const geminiKey = apiKey;
 
     const admin = createAdminClient();
 
@@ -439,37 +446,68 @@ export class AIReviewService {
     let modelId = route === "fast" ? GEMINI_FAST_MODEL_ID : MODEL_ID;
     // At the monthly budget, drafts stay available on the cheap model and the
     // full model is skipped. Deterministic features are unaffected.
+    let budgetExceeded = false;
     if (modelId !== GEMINI_FAST_MODEL_ID) {
       const budget = await getAiBudget(admin, params.workspaceId);
-      if (budget.exceeded) modelId = GEMINI_FAST_MODEL_ID;
+      if (budget.exceeded) {
+        modelId = GEMINI_FAST_MODEL_ID;
+        budgetExceeded = true;
+      }
     }
-    const generationConfig =
-      modelId === GEMINI_FAST_MODEL_ID
-        ? { ...GENERATION_CONFIG, thinkingConfig: GEMINI_THINKING_MINIMAL }
-        : GENERATION_CONFIG;
     const startedAt = Date.now();
 
-    // Call Gemini
-    const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
+    async function callModel(id: string): Promise<Response> {
+      const generationConfig =
+        id === GEMINI_FAST_MODEL_ID
+          ? { ...GENERATION_CONFIG, thinkingConfig: GEMINI_THINKING_MINIMAL }
+          : GENERATION_CONFIG;
+      const controller = new AbortController();
+      const timeout = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
+      try {
+        return await fetch(geminiGenerateUrl(geminiKey, id), {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            contents: [{ parts: [{ text: systemPrompt }] }],
+            generationConfig,
+          }),
+          signal: controller.signal,
+          cache: "no-store",
+        });
+      } finally {
+        clearTimeout(timeout);
+      }
+    }
 
     let responseText: string;
     try {
-      const response = await fetch(geminiGenerateUrl(apiKey, modelId), {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          contents: [{ parts: [{ text: systemPrompt }] }],
-          generationConfig,
-        }),
-        signal: controller.signal,
-        cache: "no-store",
-      });
+      let response = await callModel(modelId);
+      if (!response.ok && (response.status === 503 || response.status === 502)) {
+        const failedBody = await response.text();
+        logGeminiFailure("ai_review.gemini_failed", response.status, failedBody, {
+          reviewId: params.reviewId,
+          model: modelId,
+        });
+        const alternate = alternateDraftModel(modelId, budgetExceeded);
+        if (!alternate) {
+          const classified = classifyGeminiError(response.status, failedBody);
+          throw new AppError(classified.message, `AI_${classified.type.toUpperCase()}`, 502);
+        }
+        logger.warn("ai_review.model_fallback", {
+          reviewId: params.reviewId,
+          from: modelId,
+          to: alternate,
+          status: response.status,
+        });
+        modelId = alternate;
+        response = await callModel(modelId);
+      }
 
       if (!response.ok) {
         const body = await response.text();
         logGeminiFailure("ai_review.gemini_failed", response.status, body, {
           reviewId: params.reviewId,
+          model: modelId,
         });
         logger.error("ai_review.generate_failed", {
           workspaceId: params.workspaceId,
@@ -576,9 +614,12 @@ export class AIReviewService {
         "AI_UNAVAILABLE",
         502
       );
-    } finally {
-      clearTimeout(timeout);
     }
+
+    const generationConfig =
+      modelId === GEMINI_FAST_MODEL_ID
+        ? { ...GENERATION_CONFIG, thinkingConfig: GEMINI_THINKING_MINIMAL }
+        : GENERATION_CONFIG;
 
     if (params.deferPersistence) {
       const jobId = await createAiGenerationJob({
@@ -695,36 +736,80 @@ export class AIReviewService {
     replyId = existingReply?.id ?? null;
 
     if (!replyId) {
-      // Delete any existing non-published reply to avoid conflicts, then create new one
-      await admin
+      const { data: existingRows, error: existingErr } = await admin
         .from("grm_review_replies")
-        .delete()
+        .select("id, status, created_at")
         .eq("review_id", input.reviewId)
         .eq("workspace_id", input.workspaceId)
-        .in("status", ["draft", "failed"]);
-
-      const { data: reply, error: replyErr } = await admin
-        .from("grm_review_replies")
-        .insert({
-          workspace_id: input.workspaceId,
-          review_id: input.reviewId,
-          content: input.content,
-          source: "ai" as const,
-          status: "draft" as const,
-          created_by: input.userId,
-          ai_draft_id: draftId,
-        })
-        .select("id")
-        .single();
-
-      if (replyErr || !reply) {
-        logger.error("ai_review.create_reply_failed", {
-          message: replyErr instanceof Error ? replyErr.message : "Unknown",
-        });
+        .in("status", ["draft", "approved", "pending_publish", "published", "failed"]);
+      if (existingErr) {
         throw new AppError("Failed to create reply from AI draft", "DB_ERROR", 500);
       }
-      replyId = reply.id as string;
-      replyCreated = true;
+      const rank: Record<string, number> = {
+        published: 0,
+        pending_publish: 1,
+        approved: 2,
+        draft: 3,
+        failed: 4,
+      };
+      const current = (existingRows ?? [])
+        .slice()
+        .sort(
+          (a, b) =>
+            (rank[a.status] ?? 9) - (rank[b.status] ?? 9) ||
+            Date.parse(b.created_at) - Date.parse(a.created_at)
+        )[0];
+
+      if (current && current.status !== "pending_publish") {
+        const { error: updateErr } = await admin
+          .from("grm_review_replies")
+          .update({
+            content: input.content,
+            source: "ai" as const,
+            status: "draft" as const,
+            ai_draft_id: draftId,
+            approved_at: null,
+            approved_by: null,
+          })
+          .eq("id", current.id);
+        if (updateErr) {
+          logger.error("ai_review.create_reply_failed", {
+            message: updateErr.message,
+          });
+          throw new AppError("Failed to create reply from AI draft", "DB_ERROR", 500);
+        }
+        replyId = current.id;
+        replyCreated = true;
+      } else if (!current) {
+        const { data: reply, error: replyErr } = await admin
+          .from("grm_review_replies")
+          .insert({
+            workspace_id: input.workspaceId,
+            review_id: input.reviewId,
+            content: input.content,
+            source: "ai" as const,
+            status: "draft" as const,
+            created_by: input.userId,
+            ai_draft_id: draftId,
+          })
+          .select("id")
+          .single();
+
+        if (replyErr || !reply) {
+          logger.error("ai_review.create_reply_failed", {
+            message: replyErr instanceof Error ? replyErr.message : "Unknown",
+          });
+          throw new AppError("Failed to create reply from AI draft", "DB_ERROR", 500);
+        }
+        replyId = reply.id as string;
+        replyCreated = true;
+      } else {
+        throw new AppError(
+          "This reply is being published. Wait until that finishes, then generate again.",
+          "CONFLICT",
+          409
+        );
+      }
     }
 
     await admin

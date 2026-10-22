@@ -1,3 +1,4 @@
+import { cache } from "react";
 import { resolveTxt } from "node:dns/promises";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { contactEmailError, createDomainToken, domainError, httpsUrlError } from "@/lib/agency-portal";
@@ -15,7 +16,8 @@ export interface AgencyBranding {
   senderEmail: string | null;
 }
 
-export async function loadAgencyBranding(workspaceId: string): Promise<AgencyBranding> {
+/** Request-memoised: layout metadata and body both need branding in one render. */
+export const loadAgencyBranding = cache(async (workspaceId: string): Promise<AgencyBranding> => {
   const { data } = await createAdminClient()
     .from("grm_agency_branding")
     .select("logo_url, hide_product_name, custom_domain, domain_token, domain_verified_at, sender_email")
@@ -29,7 +31,7 @@ export async function loadAgencyBranding(workspaceId: string): Promise<AgencyBra
     domainVerifiedAt: data?.domain_verified_at ?? null,
     senderEmail: data?.sender_email ?? null,
   };
-}
+});
 
 async function assertBrandEditor(userId: string, workspaceId: string): Promise<void> {
   const role = await getMemberRole(userId, workspaceId);

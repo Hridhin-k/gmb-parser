@@ -1503,25 +1503,121 @@ export type Database = {
       }
       grm_workspaces: {
         Row: {
+          admin_note: string | null
+          ai_monthly_budget_usd: number | null
           created_at: string
+          deleted_at: string | null
+          feature_flags: Json
           id: string
+          max_locations: number | null
+          max_members: number | null
           name: string
+          plan: string
+          plan_expires_at: string | null
           slug: string
+          status: string
+          suspended_at: string | null
           updated_at: string
         }
         Insert: {
+          admin_note?: string | null
+          ai_monthly_budget_usd?: number | null
           created_at?: string
+          deleted_at?: string | null
+          feature_flags?: Json
           id?: string
+          max_locations?: number | null
+          max_members?: number | null
           name: string
+          plan?: string
+          plan_expires_at?: string | null
           slug: string
+          status?: string
+          suspended_at?: string | null
           updated_at?: string
         }
         Update: {
+          admin_note?: string | null
+          ai_monthly_budget_usd?: number | null
           created_at?: string
+          deleted_at?: string | null
+          feature_flags?: Json
           id?: string
+          max_locations?: number | null
+          max_members?: number | null
           name?: string
+          plan?: string
+          plan_expires_at?: string | null
           slug?: string
+          status?: string
+          suspended_at?: string | null
           updated_at?: string
+        }
+        Relationships: []
+      }
+      grm_platform_blocked_users: {
+        Row: { blocked_by: string | null; created_at: string; email: string; reason: string | null; user_id: string | null }
+        Insert: { blocked_by?: string | null; created_at?: string; email: string; reason?: string | null; user_id?: string | null }
+        Update: { blocked_by?: string | null; created_at?: string; email?: string; reason?: string | null; user_id?: string | null }
+        Relationships: []
+      }
+      grm_platform_settings: {
+        Row: { key: string; updated_at: string; updated_by: string | null; value: Json }
+        Insert: { key: string; updated_at?: string; updated_by?: string | null; value?: Json }
+        Update: { key?: string; updated_at?: string; updated_by?: string | null; value?: Json }
+        Relationships: []
+      }
+      grm_platform_announcements: {
+        Row: { active: boolean; body: string; created_at: string; created_by: string | null; id: string; title: string; tone: string }
+        Insert: { active?: boolean; body: string; created_at?: string; created_by?: string | null; id?: string; title: string; tone?: string }
+        Update: { active?: boolean; body?: string; created_at?: string; created_by?: string | null; id?: string; title?: string; tone?: string }
+        Relationships: []
+      }
+      grm_access_requests: {
+        Row: { company: string | null; created_at: string; decided_at: string | null; decided_by: string | null; email: string; id: string; message: string | null; status: string; user_id: string | null }
+        Insert: { company?: string | null; created_at?: string; decided_at?: string | null; decided_by?: string | null; email: string; id?: string; message?: string | null; status?: string; user_id?: string | null }
+        Update: { company?: string | null; created_at?: string; decided_at?: string | null; decided_by?: string | null; email?: string; id?: string; message?: string | null; status?: string; user_id?: string | null }
+        Relationships: []
+      }
+      grm_platform_invites: {
+        Row: {
+          accepted_at: string | null
+          accepted_user_id: string | null
+          created_at: string
+          email: string
+          expires_at: string
+          id: string
+          invited_by: string | null
+          note: string | null
+          status: string
+          updated_at: string
+          workspace_id: string | null
+        }
+        Insert: {
+          accepted_at?: string | null
+          accepted_user_id?: string | null
+          created_at?: string
+          email: string
+          expires_at: string
+          id?: string
+          invited_by?: string | null
+          note?: string | null
+          status?: string
+          updated_at?: string
+          workspace_id?: string | null
+        }
+        Update: {
+          accepted_at?: string | null
+          accepted_user_id?: string | null
+          created_at?: string
+          email?: string
+          expires_at?: string
+          id?: string
+          invited_by?: string | null
+          note?: string | null
+          status?: string
+          updated_at?: string
+          workspace_id?: string | null
         }
         Relationships: []
       }
@@ -1639,6 +1735,38 @@ export type Database = {
           trigger_key?: string
           ticket_no?: number
           updated_at?: string
+        }
+        Relationships: []
+      }
+      grm_notifications: {
+        Row: {
+          id: string
+          workspace_id: string
+          user_id: string
+          location_id: string | null
+          kind: string
+          title: string
+          href: string
+          dedupe_key: string
+          read_at: string | null
+          created_at: string
+        }
+        Insert: {
+          id?: string
+          workspace_id: string
+          user_id: string
+          location_id?: string | null
+          kind: string
+          title: string
+          href: string
+          dedupe_key: string
+          read_at?: string | null
+          created_at?: string
+        }
+        Update: {
+          title?: string
+          href?: string
+          read_at?: string | null
         }
         Relationships: []
       }
@@ -3188,6 +3316,30 @@ export type Database = {
           p_end: string
         }
         Returns: Json
+      }
+      grm_agency_counts: {
+        Args: {
+          p_workspace_id: string
+          p_start?: string | null
+          p_end?: string | null
+        }
+        Returns: Json
+      }
+      grm_star_breakdown: {
+        Args: {
+          p_workspace_id: string
+          p_location_ids: string[]
+          p_start?: string | null
+          p_end?: string | null
+          p_timezone?: string
+        }
+        Returns: {
+          month: string
+          location_id: string
+          star_rating: number | null
+          complaint_theme: string | null
+          review_count: number
+        }[]
       }
       grm_request_board: { Args: { p_workspace: string }; Returns: Json }
       grm_alert_keyword_reviews: {

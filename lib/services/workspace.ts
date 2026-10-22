@@ -1,3 +1,4 @@
+import { cache } from "react";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { inviteExpiresAt, isInviteExpired } from "@/lib/onboarding";
 import { AppError, AuthorizationError, ValidationError } from "@/lib/errors";
@@ -8,6 +9,17 @@ import { allows, canAssignRole, roleScopeError, type ScopeIds } from "@/lib/acce
 import { canManageMember } from "@/lib/roles";
 import { assertScopeAssignment, getMemberAccess } from "@/lib/services/access";
 import { loadAuthProfiles } from "@/lib/services/auth-profiles";
+import {
+  isPlatformInviteExpired,
+  normalizeEmail,
+  tenantGate,
+  type TenantGateKind,
+} from "@/lib/platform-admin";
+
+export const TENANT_SETUP_REQUIRED = "TENANT_SETUP_REQUIRED";
+export const PLATFORM_NOT_INVITED = "PLATFORM_NOT_INVITED";
+export const WORKSPACE_SUSPENDED = "WORKSPACE_SUSPENDED";
+export const WORKSPACE_DELETED = "WORKSPACE_DELETED";
 
 const WORKSPACE_SLUG = /^[a-z0-9][a-z0-9-]{0,61}[a-z0-9]$/;
 
@@ -102,7 +114,12 @@ function isSchemaNotReady(error: { code?: string; message?: string }): boolean {
   );
 }
 
-async function listMemberships(userId: string): Promise<MembershipRow[]> {
+/**
+ * Request-memoised: the layout, gate and page all ask for memberships in one
+ * render. React `cache` is per-request only, so this never serves stale data
+ * across navigations — it just removes duplicate round-trips within a request.
+ */
+const listMemberships = cache(async (userId: string): Promise<MembershipRow[]> => {
   const admin = createAdminClient();
   const withActive = await admin
     .from("grm_workspace_members")
@@ -133,7 +150,7 @@ async function listMemberships(userId: string): Promise<MembershipRow[]> {
   }
 
   return (plain.data ?? []).map((row) => ({ ...row, active: false }));
-}
+});
 
 async function acceptPendingInvites(user: {
   id: string;
@@ -283,12 +300,171 @@ async function addOwnerMembership(workspaceId: string, userId: string): Promise<
   }
 }
 
-async function createPersonalWorkspace(user: {
+export interface LivePlatformInvite {
+  id: string;
+  email: string;
+  expires_at: string;
+}
+
+/** A pending, unexpired platform (super-admin) invite for this exact email, or null. Expired rows are marked expired. */
+export async function livePlatformInvite(
+  email: string | null | undefined
+): Promise<LivePlatformInvite | null> {
+  const normalized = normalizeEmail(email);
+  if (!normalized) return null;
+  const admin = createAdminClient();
+  const { data, error } = await admin
+    .from("grm_platform_invites")
+    .select("id, email, expires_at, status")
+    .eq("email", normalized)
+    .eq("status", "pending")
+    .maybeSingle();
+  if (error) {
+    if (isSchemaNotReady(error)) return null;
+    throw new AppError("Could not check your invite.", "DB_ERROR", 500, { dbError: error.message });
+  }
+  if (!data) return null;
+  if (isPlatformInviteExpired(data.expires_at)) {
+    await admin.from("grm_platform_invites").update({ status: "expired" }).eq("id", data.id).eq("status", "pending");
+    return null;
+  }
+  return { id: data.id, email: data.email, expires_at: data.expires_at };
+}
+
+interface WorkspaceGateRow { status: string; planExpiresAt: string | null }
+
+export interface WorkspaceRow {
+  id: string;
+  name: string;
+  status: string;
+  planExpiresAt: string | null;
+}
+
+/**
+ * One request-memoised read of the workspace rows for a set of ids. The gate,
+ * the workspace switcher and the layout all need these rows; previously each
+ * issued its own `grm_workspaces` round-trip per request.
+ */
+export const loadWorkspaceRows = cache(async (idsCsv: string): Promise<WorkspaceRow[]> => {
+  const ids = idsCsv ? idsCsv.split(",").filter(Boolean) : [];
+  if (ids.length === 0) return [];
+  const admin = createAdminClient();
+  const withStatus = await admin
+    .from("grm_workspaces")
+    .select("id, name, status, plan_expires_at")
+    .in("id", ids);
+  if (!withStatus.error) {
+    return (withStatus.data ?? []).map((row) => ({
+      id: row.id,
+      name: row.name,
+      status: row.status ?? "active",
+      planExpiresAt: row.plan_expires_at ?? null,
+    }));
+  }
+  // Pre-migration database: no status/plan columns yet — treat every tenant as active.
+  if (!isSchemaNotReady(withStatus.error)) {
+    throw new AppError("Could not load your workspace.", "DB_ERROR", 500, { dbError: withStatus.error.message });
+  }
+  const plain = await admin.from("grm_workspaces").select("id, name").in("id", ids);
+  if (plain.error) throw new AppError("Could not load your workspace.", "DB_ERROR", 500, { dbError: plain.error.message });
+  return (plain.data ?? []).map((row) => ({ id: row.id, name: row.name, status: "active", planExpiresAt: null }));
+});
+
+async function workspaceStatusById(workspaceIds: string[]): Promise<Map<string, WorkspaceGateRow>> {
+  const rows = await loadWorkspaceRows([...new Set(workspaceIds)].sort().join(","));
+  return new Map(rows.map((row) => [row.id, { status: row.status, planExpiresAt: row.planExpiresAt }]));
+}
+
+async function isPlatformBlocked(email: string | null | undefined): Promise<boolean> {
+  const normalized = normalizeEmail(email);
+  if (!normalized) return false;
+  const admin = createAdminClient();
+  const { data, error } = await admin.from("grm_platform_blocked_users").select("email").eq("email", normalized).maybeSingle();
+  if (error) {
+    if (isSchemaNotReady(error)) return false;
+    throw new AppError("Could not check your access.", "DB_ERROR", 500, { dbError: error.message });
+  }
+  return Boolean(data);
+}
+
+export interface TenantAccess {
+  kind: TenantGateKind;
+  workspaceId: string | null;
+  platformInvite: LivePlatformInvite | null;
+}
+
+/**
+ * Invite-only gate, without creating anything.
+ * Existing memberships (grandfathered owners + accepted team invites) are
+ * allowed. A brand-new user is allowed only with a live platform invite,
+ * and then only to name & create their tenant — never auto-created here.
+ */
+export async function inspectTenantAccess(user: {
   id: string;
   email?: string | null;
-}): Promise<string> {
+}): Promise<TenantAccess> {
+  // Independent checks run together: one round-trip of latency, not two.
+  const [blocked] = await Promise.all([isPlatformBlocked(user.email), acceptPendingInvites(user)]);
+  if (blocked) {
+    return { kind: "blocked", workspaceId: null, platformInvite: null };
+  }
+  const memberships = await listMemberships(user.id);
+  const statuses = await workspaceStatusById(memberships.map((m) => m.workspace_id));
+  const gateOf = (m: { workspace_id: string }) => statuses.get(m.workspace_id) ?? { status: "active", planExpiresAt: null };
+  const now = Date.now();
+  const usable = memberships.filter((m) => {
+    const row = gateOf(m);
+    return row.status === "active" && (!row.planExpiresAt || Date.parse(row.planExpiresAt) > now);
+  });
+  if (usable.length > 0) {
+    const chosen = pickActiveWorkspace(usable) ?? usable[0]!;
+    return { kind: "allowed", workspaceId: chosen.workspace_id, platformInvite: null };
+  }
+  if (memberships.length > 0 && memberships.every((m) => gateOf(m).status === "active")) {
+    return { kind: "plan_expired", workspaceId: null, platformInvite: null };
+  }
+  const kind = tenantGate({
+    workspaceStatuses: memberships.map((m) => gateOf(m).status),
+    hasLivePlatformInvite: false,
+  });
+  if (kind === "suspended" || kind === "deleted") {
+    return { kind, workspaceId: null, platformInvite: null };
+  }
+  const invite = await livePlatformInvite(user.email);
+  return {
+    kind: invite ? "setup" : "not_invited",
+    workspaceId: null,
+    platformInvite: invite,
+  };
+}
+
+function gateError(kind: Exclude<TenantGateKind, "allowed">): AppError {
+  switch (kind) {
+    case "setup":
+      return new AppError("Name your organization to finish setting up your tenant.", TENANT_SETUP_REQUIRED, 409);
+    case "suspended":
+      return new AppError("This workspace has been suspended. Contact support.", WORKSPACE_SUSPENDED, 403);
+    case "deleted":
+      return new AppError("This workspace is no longer available. Contact support.", WORKSPACE_DELETED, 403);
+    case "blocked":
+      return new AppError("This account has been blocked from the platform. Contact support.", "PLATFORM_BLOCKED", 403);
+    case "plan_expired":
+      return new AppError("Your plan has expired. Contact support to renew.", "PLAN_EXPIRED", 403);
+    default:
+      return new AppError(
+        "RevuPilot is invite-only. Ask the platform team for an invite for this email.",
+        PLATFORM_NOT_INVITED,
+        403
+      );
+  }
+}
+
+async function createPersonalWorkspace(
+  user: { id: string; email?: string | null },
+  nameOverride?: string
+): Promise<string> {
   const admin = createAdminClient();
-  const name = personalWorkspaceName(user.email);
+  const name = nameOverride?.trim().slice(0, 255) || personalWorkspaceName(user.email);
   const preferredSlug = personalWorkspaceSlug(user.email, user.id);
 
   let workspaceId: string | null = null;
@@ -355,44 +531,82 @@ async function createPersonalWorkspace(user: {
 }
 
 /**
- * Returns the workspace this login should open.
- * A pending invite is accepted first, and that workspace is the one they see.
- * Someone with no invite gets a personal workspace on first use.
+ * Returns the workspace this login should open. Invite-only:
+ * a pending team invite is accepted first; existing (grandfathered) members
+ * open their active workspace; a platform-invited owner must first name the
+ * tenant via createTenantWorkspace; everyone else is refused. Suspended and
+ * soft-deleted tenants never open. Nothing is auto-created here.
  */
 export async function ensurePersonalWorkspace(user: {
   id: string;
   email?: string | null;
 }): Promise<PersonalWorkspace> {
-  // Invite check and membership list are independent until an invite is accepted.
-  const [accepted, memberships] = await Promise.all([
-    acceptPendingInvites(user),
-    listMemberships(user.id),
-  ]);
-
-  if (accepted.length > 0) {
-    const workspaceId = accepted[accepted.length - 1]!;
-    await setActiveWorkspace(user.id, workspaceId);
-    return { workspace_id: workspaceId };
+  const access = await inspectTenantAccess(user);
+  if (access.kind !== "allowed" || !access.workspaceId) {
+    throw gateError(access.kind === "allowed" ? "not_invited" : access.kind);
   }
-
-  if (memberships.length === 0) {
-    const workspaceId = await createPersonalWorkspace(user);
-    return { workspace_id: workspaceId };
+  // Memberships are request-memoised, so this check is free. Only persist
+  // when the active workspace actually changes (a real switch), not on
+  // every page load.
+  const memberships = await listMemberships(user.id);
+  const alreadyActive = memberships.some((m) => m.workspace_id === access.workspaceId && m.active);
+  if (!alreadyActive) {
+    await setActiveWorkspace(user.id, access.workspaceId).catch((error: unknown) => {
+      if (!(error instanceof AuthorizationError)) throw error;
+    });
   }
+  return { workspace_id: access.workspaceId };
+}
 
-  const chosen = pickActiveWorkspace(memberships);
-  if (!chosen) {
-    const workspaceId = await createPersonalWorkspace(user);
-    return { workspace_id: workspaceId };
+/**
+ * Create the one tenant for a platform-invited owner. The owner names it.
+ * Marks the invite accepted so the same email cannot create a second tenant.
+ */
+export async function createTenantWorkspace(user: {
+  id: string;
+  email?: string | null;
+}, tenantName: string): Promise<PersonalWorkspace> {
+  const name = tenantName.trim();
+  if (name.length < 1 || name.length > 255) {
+    throw new ValidationError("Enter an organization name (1–255 characters).");
   }
-  return { workspace_id: chosen.workspace_id };
+  const existing = await inspectTenantAccess(user);
+  if (existing.kind === "allowed") {
+    throw new ValidationError("You already have a workspace. Open it instead of creating another tenant.");
+  }
+  const invite = existing.platformInvite ?? (await livePlatformInvite(user.email));
+  if (!invite) throw gateError("not_invited");
+  const workspaceId = await createPersonalWorkspace(user, name);
+  const admin = createAdminClient();
+  const { error } = await admin
+    .from("grm_platform_invites")
+    .update({
+      status: "accepted",
+      workspace_id: workspaceId,
+      accepted_user_id: user.id,
+      accepted_at: new Date().toISOString(),
+    })
+    .eq("id", invite.id)
+    .eq("status", "pending");
+  if (error && !isSchemaNotReady(error)) {
+    throw new AppError("Your workspace was created, but the invite could not be marked accepted. Contact support.", "DB_ERROR", 500, { dbError: error.message });
+  }
+  await AuditService.log({
+    workspaceId,
+    userId: user.id,
+    action: "platform.tenant_created",
+    entityType: "grm_platform_invites",
+    entityId: invite.id,
+    metadata: { email: normalizeEmail(user.email), name } as Record<string, unknown>,
+  });
+  return { workspace_id: workspaceId };
 }
 
 export async function setActiveWorkspace(userId: string, workspaceId: string): Promise<void> {
   const admin = createAdminClient();
   const { data: member, error: lookupError } = await admin
     .from("grm_workspace_members")
-    .select("workspace_id")
+    .select("workspace_id, active")
     .eq("user_id", userId)
     .eq("workspace_id", workspaceId)
     .maybeSingle();
@@ -406,6 +620,10 @@ export async function setActiveWorkspace(userId: string, workspaceId: string): P
   if (!member?.workspace_id) {
     throw new AuthorizationError("You are not a member of that workspace.");
   }
+  // Fast path: this runs on every request via ensurePersonalWorkspace. When
+  // the workspace is already the active one there is nothing to persist —
+  // previously every page load paid two UPDATE round-trips here.
+  if (member.active) return;
 
   const cleared = await admin
     .from("grm_workspace_members")
@@ -432,31 +650,18 @@ export async function setActiveWorkspace(userId: string, workspaceId: string): P
   }
 }
 
-export async function listAccessibleWorkspaces(userId: string): Promise<AccessibleWorkspace[]> {
+export const listAccessibleWorkspaces = cache(async (userId: string): Promise<AccessibleWorkspace[]> => {
   const memberships = await listMemberships(userId);
   if (memberships.length === 0) return [];
 
-  const admin = createAdminClient();
-  const { data, error } = await admin
-    .from("grm_workspaces")
-    .select("id, name")
-    .in(
-      "id",
-      memberships.map((row) => row.workspace_id)
-    );
-
-  if (error) {
-    throw new AppError("Could not load your workspace.", "DB_ERROR", 500, {
-      dbError: error.message,
-    });
-  }
-
-  const names = new Map((data ?? []).map((row) => [row.id, row.name]));
-  return memberships.map((row) => ({
-    id: row.workspace_id,
-    name: names.get(row.workspace_id) ?? "Workspace",
-  }));
-}
+  const rows = await loadWorkspaceRows([...new Set(memberships.map((row) => row.workspace_id))].sort().join(","));
+  // Suspended / soft-deleted tenants are not switchable into.
+  const visible = new Set(rows.filter((r) => r.status === "active").map((r) => r.id));
+  const names = new Map(rows.map((row) => [row.id, row.name]));
+  return memberships
+    .filter((row) => visible.has(row.workspace_id))
+    .map((row) => ({ id: row.workspace_id, name: names.get(row.workspace_id) ?? "Workspace" }));
+});
 
 async function findUserIdByEmail(email: string): Promise<string | null> {
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
@@ -664,6 +869,21 @@ export async function inviteToWorkspace(input: {
   const actor = await getMemberAccess(input.inviterId, input.workspaceId);
   if (!actor) throw new AuthorizationError("You do not have access to this organization.");
   await assertScopeAssignment({ actor, scope });
+
+  // Super-admin per-tenant member cap, when set.
+  {
+    const adminCap = createAdminClient();
+    const { data: wsCap } = await adminCap.from("grm_workspaces").select("max_members").eq("id", input.workspaceId).maybeSingle();
+    if (wsCap?.max_members) {
+      const [{ count: memberCount }, { count: inviteCount }] = await Promise.all([
+        adminCap.from("grm_workspace_members").select("user_id", { count: "exact", head: true }).eq("workspace_id", input.workspaceId),
+        adminCap.from("grm_workspace_invites").select("id", { count: "exact", head: true }).eq("workspace_id", input.workspaceId).eq("status", "pending"),
+      ]);
+      if ((memberCount ?? 0) + (inviteCount ?? 0) >= wsCap.max_members) {
+        throw new ValidationError(`This workspace is at its member limit (${wsCap.max_members}). Ask the platform team to raise it.`);
+      }
+    }
+  }
 
   const admin = createAdminClient();
   const { data: inviter } = await admin.auth.admin.getUserById(input.inviterId);

@@ -7,8 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 
 interface AgencyClientFormProps {
-  mode: "create" | "edit";
-  clientId?: string;
+  clientId: string;
   canAssignManager: boolean;
   managers: Array<{ id: string; email: string }>;
   initial?: {
@@ -32,7 +31,7 @@ async function post(url: string, body: object) {
   return data;
 }
 
-export function AgencyClientForm({ mode, clientId, canAssignManager, managers, initial }: AgencyClientFormProps) {
+export function AgencyClientForm({ clientId, canAssignManager, managers, initial }: AgencyClientFormProps) {
   const router = useRouter();
   const [error, setError] = useState<string | null>(null);
   const [link, setLink] = useState<string | null>(null);
@@ -56,10 +55,9 @@ export function AgencyClientForm({ mode, clientId, canAssignManager, managers, i
           logoUrl: String(form.get("logoUrl") ?? ""),
           accountManagerUserId: manager || null,
         };
-        const url = mode === "create" ? "/api/clients" : `/api/clients/${clientId}`;
-        void post(url, mode === "create" ? { ...body, action: undefined } : body)
+        void post(`/api/clients/${clientId}`, body)
           .then(() => {
-            toast.success(mode === "create" ? "Client added" : "Client saved");
+            toast.success("Client saved");
             router.refresh();
           })
           .catch((caught: unknown) => setError(caught instanceof Error ? caught.message : "Could not save the client."))
@@ -95,9 +93,8 @@ export function AgencyClientForm({ mode, clientId, canAssignManager, managers, i
       </div>
       {error ? <p className="text-sm text-red-700">{error}</p> : null}
       <div className="flex flex-wrap gap-2">
-        <Button type="submit" disabled={pending}>{pending ? "Saving…" : mode === "create" ? "Add client" : "Save client"}</Button>
-        {mode === "edit" && clientId ? (
-          <Button
+        <Button type="submit" disabled={pending}>{pending ? "Saving…" : "Save client"}</Button>
+        <Button
             type="button"
             variant="outline"
             onClick={() => {
@@ -112,7 +109,6 @@ export function AgencyClientForm({ mode, clientId, canAssignManager, managers, i
           >
             Create connection link
           </Button>
-        ) : null}
       </div>
       {link ? (
         <p className="break-all text-sm text-graphite">

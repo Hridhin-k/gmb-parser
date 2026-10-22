@@ -19,6 +19,22 @@ const PUBLIC_PATHS = [
 export async function proxy(request: NextRequest) {
   const { pathname } = request.nextUrl;
 
+  // Read-only support view: a super admin viewing a tenant cannot mutate anything in it.
+  const supportTenant = request.cookies.get("grm_support_tenant")?.value;
+  if (
+    supportTenant &&
+    request.method !== "GET" &&
+    request.method !== "HEAD" &&
+    pathname.startsWith("/api/") &&
+    !pathname.includes("/impersonate") &&
+    !pathname.startsWith("/api/auth")
+  ) {
+    return NextResponse.json(
+      { error: "Support view is read-only. Exit support view to make changes in your own account." },
+      { status: 403 }
+    );
+  }
+
   if (pathname === "/" || PUBLIC_PATHS.some((p) => pathname.startsWith(p))) {
     return NextResponse.next();
   }
@@ -56,7 +72,12 @@ export async function proxy(request: NextRequest) {
   }
 
   if (user && pathname === "/login") {
-    return NextResponse.redirect(new URL("/overview", request.url));
+    const superAdmins = (process.env.SUPER_ADMIN_EMAILS ?? "")
+      .split(",")
+      .map((part) => part.trim().toLowerCase())
+      .filter(Boolean);
+    const isSuperAdmin = Boolean(user.email && superAdmins.includes(user.email.toLowerCase()));
+    return NextResponse.redirect(new URL(isSuperAdmin ? "/admin" : "/overview", request.url));
   }
 
   return response;

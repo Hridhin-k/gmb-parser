@@ -43,7 +43,7 @@ export function ShellHeader({ user, role, catalog, summary, onOpenMenu }: ShellH
   const mode = scopeMode(pathname);
   const alerts = shellAlerts(summary, role).map((alert) => ({
     ...alert,
-    href: scopedHref(alert.href, searchParams, pathname),
+    href: alert.id === "more-profiles" ? alert.href : scopedHref(alert.href, searchParams, pathname),
   }));
   const { applying, begin } = useFilterNavigation();
   const rangeDefault = defaultRangeForPath(pathname);
@@ -222,7 +222,15 @@ export function ShellHeader({ user, role, catalog, summary, onOpenMenu }: ShellH
                   <DropdownMenuItem
                     key={alert.id}
                     className="cursor-pointer whitespace-normal text-sm"
-                    onClick={() => router.push(alert.href)}
+                    onClick={() => {
+                      void (async () => {
+                        if (alert.id.startsWith("notice:")) {
+                          const noticeId = alert.id.slice("notice:".length);
+                          await fetch(`/api/notifications/${noticeId}/read`, { method: "POST" }).catch(() => null);
+                        }
+                        router.push(alert.href);
+                      })();
+                    }}
                   >
                     {alert.title}
                   </DropdownMenuItem>

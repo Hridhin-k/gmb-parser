@@ -1,0 +1,3258 @@
+{
+  "client": "Fazyo",
+  "from": "2026-09-21T19:29:52.707Z",
+  "to": "2026-10-21T19:29:53.552Z",
+  "count": 325,
+  "reviews": [
+    {
+      "id": "7873db46-2512-4268-8719-6ab50b4fb9c1",
+      "createdAt": "2026-10-08T05:08:28.830493+00:00",
+      "stars": 5,
+      "outlet": "Kerala",
+      "storeCode": "11181964837793805771",
+      "reviewer": "fasalul cp",
+      "language": "en",
+      "comment": "Staff were very hostile and have good collection of dresses"
+    },
+    {
+      "id": "11219df9-46c5-4694-a14a-2e4b1dc36ad6",
+      "createdAt": "2026-10-07T15:39:04.243748+00:00",
+      "stars": 5,
+      "outlet": "Kerala",
+      "storeCode": "FAZ-TCR",
+      "reviewer": "Angel T R",
+      "language": null,
+      "comment": null
+    },
+    {
+      "id": "2fd9b61e-ecc9-4205-8d44-a95bcd08a073",
+      "createdAt": "2026-10-07T14:12:56.643975+00:00",
+      "stars": 5,
+      "outlet": "Kerala",
+      "storeCode": "11181964837793805771",
+      "reviewer": "Harikrishna madhu",
+      "language": "none",
+      "comment": null
+    },
+    {
+      "id": "526f7f37-92ac-4099-9d34-cc3b5f35a1fb",
+      "createdAt": "2026-10-07T12:42:47.729437+00:00",
+      "stars": 5,
+      "outlet": "Kerala",
+      "storeCode": "13785723634558556879",
+      "reviewer": "venkat iyer",
+      "language": null,
+      "comment": "It was short and sweet shopping and really enjoyed my time at Fazyo."
+    },
+    {
+      "id": "66e6f648-f4ef-4667-8a61-a004773755de",
+      "createdAt": "2026-10-07T12:28:33.146448+00:00",
+      "stars": 4,
+      "outlet": "Kerala",
+      "storeCode": "11181964837793805771",
+      "reviewer": "Anandhanarayanan R",
+      "language": null,
+      "comment": null
+    },
+    {
+      "id": "5783d1cb-2dfd-498d-8a27-50ab95867196",
+      "createdAt": "2026-10-07T11:10:34.659276+00:00",
+      "stars": 5,
+      "outlet": "Kerala",
+      "storeCode": "11181964837793805771",
+      "reviewer": "Mridhula",
+      "language": "en",
+      "comment": "Friendly customer service 🤍🫶🏾"
+    },
+    {
+      "id": "e159c654-6990-45d5-ac67-fae9e12bd0ac",
+      "createdAt": "2026-10-07T07:07:22.602197+00:00",
+      "stars": 5,
+      "outlet": "Kerala",
+      "storeCode": "11181964837793805771",
+      "reviewer": "RANJIN KRISHNA",
+      "language": "none",
+      "comment": null
+    },
+    {
+      "id": "1eaf10be-5721-4e41-b521-98fc3b96e1e2",
+      "createdAt": "2026-10-07T07:02:54.596272+00:00",
+      "stars": 4,
+      "outlet": "Kerala",
+      "storeCode": "07842553729236549202",
+      "reviewer": "ANGEL SIJO",
+      "language": "none",
+      "comment": null
+    },
+    {
+      "id": "17cbd972-52bb-471e-a912-8ad184d5f970",
+      "createdAt": "2026-10-07T05:26:46.326435+00:00",
+      "stars": 3,
+      "outlet": "Kerala",
+      "storeCode": "11181964837793805771",
+      "reviewer": "Akhil S",
+      "language": "none",
+      "comment": null
+    },
+    {
+      "id": "9ad24fb0-73aa-4120-90b7-1703f7c059c0",
+      "createdAt": "2026-10-06T14:53:37.774585+00:00",
+      "stars": 5,
+      "outlet": "Kerala",
+      "storeCode": "10168253048224919230",
+      "reviewer": "Aiswarya A",
+      "language": "none",
+      "comment": null
+    },
+    {
+      "id": "a2f94b48-617b-4f59-8dbe-2ed77f5d41bf",
+      "createdAt": "2026-10-06T14:39:48.635395+00:00",
+      "stars": 5,
+      "outlet": "Kerala",
+      "storeCode": "13785723634558556879",
+      "reviewer": "Anjali BNair",
+      "language": "none",
+      "comment": null
+    },
+    {
+      "id": "4857c962-dfd6-401a-9bf7-688ddd0860de",
+      "createdAt": "2026-10-06T14:17:50.388626+00:00",
+      "stars": 5,
+      "outlet": "Kerala",
+      "storeCode": "13785723634558556879",
+      "reviewer": "reshma sumesh",
+      "language": "en",
+      "comment": "Sanjana  ur partner was very nice . Super coperative"
+    },
+    {
+      "id": "6ea07745-e631-4729-bc24-2b164db7593d",
+      "createdAt": "2026-10-06T14:03:29.908535+00:00",
+      "stars": 5,
+      "outlet": "Kerala",
+      "storeCode": "11181964837793805771",
+      "reviewer": "MIDHUN M",
+      "language": "none",
+      "comment": null
+    },
+    {
+      "id": "fd4161c8-1393-4c1c-b3f7-44556f462ecb",
+      "createdAt": "2026-10-06T13:10:46.039606+00:00",
+      "stars": 5,
+      "outlet": "Kerala",
+      "storeCode": "FAZ-KTYM",
+      "reviewer": "Rahul KR",
+      "language": "en",
+      "comment": "Good staff service ,  staff name Arogiya"
+    },
+    {
+      "id": "a872e8ad-4ac8-4403-9b0c-9ccb8ea75c2c",
+      "createdAt": "2026-10-06T12:32:31.774709+00:00",
+      "stars": 5,
+      "outlet": "Kerala",
+      "storeCode": "11181964837793805771",
+      "reviewer": "AlbinChristo",
+      "language": "en",
+      "comment": "Had a really good experience at Fazyo. Good collection and great service."
+    },
+    {
+      "id": "81ac9859-e741-44ab-bd4d-6840710ec295",
+      "createdAt": "2026-10-06T12:09:47.374423+00:00",
+      "stars": 5,
+      "outlet": "Kerala",
+      "storeCode": "11181964837793805771",
+      "reviewer": "Manoj Manu",
+      "language": "none",
+      "comment": null
+    },
+    {
+      "id": "e4157a2b-9922-466f-bfaf-fdb020bbd768",
+      "createdAt": "2026-10-06T10:19:10.577514+00:00",
+      "stars": 4,
+      "outlet": "Kerala",
+      "storeCode": "07842553729236549202",
+      "reviewer": "JASMINE GEORGE",
+      "language": "none",
+      "comment": null
+    },
+    {
+      "id": "e8e0256c-29ad-4544-b830-b48e82f6f0ba",
+      "createdAt": "2026-10-06T09:38:54.987526+00:00",
+      "stars": 5,
+      "outlet": "Kerala",
+      "storeCode": "11181964837793805771",
+      "reviewer": "Dhanan Jayan",
+      "language": "none",
+      "comment": null
+    },
+    {
+      "id": "b34ac033-1e30-492f-bf74-a35f3c6b0027",
+      "createdAt": "2026-10-06T09:33:40.670515+00:00",
+      "stars": 5,
+      "outlet": "Kerala",
+      "storeCode": "08895733448577965052",
+      "reviewer": "Sanu Sanoop",
+      "language": "en",
+      "comment": "Good collection"
+    },
+    {
+      "id": "a3b01001-5598-464d-a06b-444a31f7cf35",
+      "createdAt": "2026-10-06T08:21:18.470051+00:00",
+      "stars": 5,
+      "outlet": "Kerala",
+      "storeCode": "07842553729236549202",
+      "reviewer": "NITHIN LAL",
+      "language": "en",
+      "comment": "Good service"
+    },
+    {
+      "id": "c15ff1fc-627a-4c19-948f-0b2f5bad7ac1",
+      "createdAt": "2026-10-06T06:57:32.826457+00:00",
+      "stars": 5,
+      "outlet": "Kerala",
+      "storeCode": "FAZ-KTYM",
+      "reviewer": "Midlaj",
+      "language": "en",
+      "comment": "Iam satisfied thank you bibin Kottayam very nice collection"
+    },
+    {
+      "id": "010ea026-c50b-49ec-ac45-ed1e498e833d",
+      "createdAt": "2026-10-06T06:45:19.628365+00:00",
+      "stars": 5,
+      "outlet": "Kerala",
+      "storeCode": "13785723634558556879",
+      "reviewer": "Anju Kuttan",
+      "language": "en",
+      "comment": "Good service"
+    },
+    {
+      "id": "a0f8ae24-19a7-40b4-9099-854036a62366",
+      "createdAt": "2026-10-06T06:16:04.003256+00:00",
+      "stars": 5,
+      "outlet": "Kerala",
+      "storeCode": "13785723634558556879",
+      "reviewer": "Anjana",
+      "language": "en",
+      "comment": "Athulaya :-good customer  service"
+    },
+    {
+      "id": "f1d17a54-1ac8-431e-a83b-126a4725a441",
+      "createdAt": "2026-10-06T05:48:45.873784+00:00",
+      "stars": 5,
+      "outlet": "Kerala",
+      "storeCode": "FAZ-KTYM",
+      "reviewer": "Stalin Bright",
+      "language": "none",
+      "comment": null
+    },
+    {
+      "id": "df1929e7-5b88-4331-bad4-902dff2eb084",
+      "createdAt": "2026-10-05T15:07:32.118891+00:00",
+      "stars": 4,
+      "outlet": "Kerala",
+      "storeCode": "07842553729236549202",
+      "reviewer": "Reesho Jose",
+      "language": "none",
+      "comment": null
+    },
+    {
+      "id": "fe10dc52-3a12-4687-93b1-305708b9f482",
+      "createdAt": "2026-10-05T14:55:16.290372+00:00",
+      "stars": 4,
+      "outlet": "Kerala",
+      "storeCode": "13785723634558556879",
+      "reviewer": "Liorah",
+      "language": "en",
+      "comment": "(Translated by Google) Shareef\n\n(Original)\nShareefa"
+    },
+    {
+      "id": "e5629b5b-474a-462c-b594-2bcb60a2726c",
+      "createdAt": "2026-10-05T14:29:52.417117+00:00",
+      "stars": 5,
+      "outlet": "Kerala",
+      "storeCode": "13785723634558556879",
+      "reviewer": "Rajan V.K",
+      "language": "en",
+      "comment": "Good experience , staffs are corporate , good communication and helping to select cloths  , especially gents section"
+    },
+    {
+      "id": "0112a623-be37-4cf8-adb6-945aa3583762",
+      "createdAt": "2026-10-05T14:23:28.984189+00:00",
+      "stars": 5,
+      "outlet": "Kerala",
+      "storeCode": "11181964837793805771",
+      "reviewer": "DINESH K",
+      "language": "none",
+      "comment": null
+    },
+    {
+      "id": "483d8346-ff3c-4884-a8ab-6d8d5419180b",
+      "createdAt": "2026-10-05T14:17:12.188229+00:00",
+      "stars": 5,
+      "outlet": "Kerala",
+      "storeCode": "11181964837793805771",
+      "reviewer": "Shana Noushad",
+      "language": "en",
+      "comment": "it's great"
+    },
+    {
+      "id": "a556abf7-d1b8-4b45-b5b4-c56fb8d9809e",
+      "createdAt": "2026-10-05T13:26:39.018432+00:00",
+      "stars": 4,
+      "outlet": "Kerala",
+      "storeCode": "13785723634558556879",
+      "reviewer": "resmi ramesan",
+      "language": "none",
+      "comment": null
+    },
+    {
+      "id": "a18451ca-04b4-443b-9209-224fbc7c6c73",
+      "createdAt": "2026-10-05T12:33:12.283154+00:00",
+      "stars": 5,
+      "outlet": "Kerala",
+      "storeCode": "11181964837793805771",
+      "reviewer": "PV kumaran",
+      "language": "none",
+      "comment": null
+    },
+    {
+      "id": "5bcfeb71-f737-402a-8a50-2d04e3a3cf56",
+      "createdAt": "2026-10-05T11:46:51.833856+00:00",
+      "stars": 5,
+      "outlet": "Kerala",
+      "storeCode": "13785723634558556879",
+      "reviewer": "Anjali M",
+      "language": "en",
+      "comment": "Good service"
+    },
+    {
+      "id": "0dea9179-fa46-4044-9992-9fb9b7564763",
+      "createdAt": "2026-10-05T11:46:23.523266+00:00",
+      "stars": 5,
+      "outlet": "Kerala",
+      "storeCode": "13785723634558556879",
+      "reviewer": "NIRMALA P B",
+      "language": "en",
+      "comment": "Nice collections\nEmployyes very nice"
+    },
+    {
+      "id": "20d9884f-f0f2-454a-af25-4a8b17fc885c",
+      "createdAt": "2026-10-05T08:31:41.925327+00:00",
+      "stars": 5,
+      "outlet": "Kerala",
+      "storeCode": "11181964837793805771",
+      "reviewer": "JYOTHILAKSHMI M",
+      "language": "en",
+      "comment": "Good customer service"
+    },
+    {
+      "id": "57f3e5ab-6775-42f9-90ac-7a5c1938be94",
+      "createdAt": "2026-10-05T08:19:42.900985+00:00",
+      "stars": 5,
+      "outlet": "Kerala",
+      "storeCode": "11181964837793805771",
+      "reviewer": "rinujith r",
+      "language": "none",
+      "comment": null
+    },
+    {
+      "id": "a022eb31-2b4c-4c99-8fa8-a44500814966",
+      "createdAt": "2026-10-05T06:22:43.506671+00:00",
+      "stars": 5,
+      "outlet": "Kerala",
+      "storeCode": "11181964837793805771",
+      "reviewer": "SIVA KUMAR",
+      "language": "en",
+      "comment": "collections r quite good"
+    },
+    {
+      "id": "530a603c-4348-4421-9c97-4b1ded961d1b",
+      "createdAt": "2026-10-04T15:59:19.55742+00:00",
+      "stars": 5,
+      "outlet": "Kerala",
+      "storeCode": "10168253048224919230",
+      "reviewer": "Keerthana A",
+      "language": "none",
+      "comment": null
+    },
+    {
+      "id": "0b829f70-566f-4fac-b948-3dcd797fbfcb",
+      "createdAt": "2026-10-04T15:59:06.850434+00:00",
+      "stars": 4,
+      "outlet": "Kerala",
+      "storeCode": "11181964837793805771",
+      "reviewer": "Heyzel",
+      "language": "en",
+      "comment": "They have best service and lots of good collection"
+    },
+    {
+      "id": "27cf2697-0df7-4433-874f-e545b6adf25d",
+      "createdAt": "2026-10-04T15:56:14.837394+00:00",
+      "stars": 4,
+      "outlet": "Kerala",
+      "storeCode": "11181964837793805771",
+      "reviewer": "Anushka A",
+      "language": "en",
+      "comment": "They have lots of good collection . Very modesty"
+    },
+    {
+      "id": "91a93d1a-f22b-489a-a1f4-1a191f4faa93",
+      "createdAt": "2026-10-04T15:54:38.766137+00:00",
+      "stars": 5,
+      "outlet": "Kerala",
+      "storeCode": "11181964837793805771",
+      "reviewer": "Anushka Anu",
+      "language": "en",
+      "comment": "They have best staff service"
+    },
+    {
+      "id": "3ef718e2-7e82-41ba-8352-f04cecb97ba7",
+      "createdAt": "2026-10-04T15:10:40.117667+00:00",
+      "stars": 5,
+      "outlet": "Kerala",
+      "storeCode": "11181964837793805771",
+      "reviewer": "Prince Francis",
+      "language": "en",
+      "comment": "Nice comstomer service"
+    },
+    {
+      "id": "60c48472-19b0-4cb4-9b12-7c4e13a92e78",
+      "createdAt": "2026-10-04T14:57:27.353384+00:00",
+      "stars": 5,
+      "outlet": "Kerala",
+      "storeCode": "11181964837793805771",
+      "reviewer": "Jumaila Anwer",
+      "language": "none",
+      "comment": null
+    },
+    {
+      "id": "56a27f22-0457-4238-a383-6c4f8e4e9fa1",
+      "createdAt": "2026-10-04T12:32:21.458367+00:00",
+      "stars": 5,
+      "outlet": "Kerala",
+      "storeCode": "07842553729236549202",
+      "reviewer": "Alen",
+      "language": "en",
+      "comment": "Selection has improved by far from last time. Enjoyed shopping"
+    },
+    {
+      "id": "de231a49-7323-4f59-bc87-e5916750f57b",
+      "createdAt": "2026-10-04T12:05:21.227266+00:00",
+      "stars": 5,
+      "outlet": "Kerala",
+      "storeCode": "13785723634558556879",
+      "reviewer": "Pournami Haridas",
+      "language": "en",
+      "comment": "First time visiting this store. All the staffs were very helpful and so calm. Loved the collection."
+    },
+    {
+      "id": "8803f0c6-7905-4f2e-a2b9-16e55be1503a",
+      "createdAt": "2026-10-04T10:54:56.229734+00:00",
+      "stars": 5,
+      "outlet": "Kerala",
+      "storeCode": "10168253048224919230",
+      "reviewer": "Eby Philip",
+      "language": "none",
+      "comment": null
+    },
+    {
+      "id": "acb8e218-4fb2-43d7-9cfa-61077ee9e224",
+      "createdAt": "2026-10-04T10:17:57.908888+00:00",
+      "stars": 1,
+      "outlet": "Kerala",
+      "storeCode": "FAZ-TCR",
+      "reviewer": "Akhil Cs",
+      "language": "en",
+      "comment": "I purchased 3 tshirts each 899 is the price all are complaint and very poor quality after 1st wash... Very disappointed"
+    },
+    {
+      "id": "68297dba-011c-4864-93b5-d567261453bd",
+      "createdAt": "2026-10-04T08:35:32.114468+00:00",
+      "stars": 4,
+      "outlet": "Kerala",
+      "storeCode": "FAZ-KTYM",
+      "reviewer": "Arya Raveendran",
+      "language": "en",
+      "comment": "Great customer service"
+    },
+    {
+      "id": "731c54b5-d614-424e-84a2-aab0426849e9",
+      "createdAt": "2026-10-04T07:38:43.09861+00:00",
+      "stars": 5,
+      "outlet": "Kerala",
+      "storeCode": "10168253048224919230",
+      "reviewer": "Ann Mary Roche",
+      "language": "none",
+      "comment": null
+    },
+    {
+      "id": "aaeacabc-bf75-4957-831e-0dd226771a3e",
+      "createdAt": "2026-10-04T07:16:48.341486+00:00",
+      "stars": 5,
+      "outlet": "Kerala",
+      "storeCode": "13785723634558556879",
+      "reviewer": "Manju Shaji",
+      "language": "en",
+      "comment": "Customer service is really nice especially staff athulya. She was so friendly and good service"
+    },
+    {
+      "id": "b151b680-1b88-4345-bc1a-451db897cd3d",
+      "createdAt": "2026-10-04T07:07:02.978064+00:00",
+      "stars": 5,
+      "outlet": "Kerala",
+      "storeCode": "13785723634558556879",
+      "reviewer": "ANEETA BIJU",
+      "language": "en",
+      "comment": "She was so good ,Very helpful Athulya"
+    },
+    {
+      "id": "b6232253-0885-45f6-b2a1-a53082544b37",
+      "createdAt": "2026-10-04T06:59:45.299673+00:00",
+      "stars": 5,
+      "outlet": "Kerala",
+      "storeCode": "13785723634558556879",
+      "reviewer": "Kavitha Muraleedharan",
+      "language": "en",
+      "comment": "Athulya helped me to choose the correct cloth"
+    },
+    {
+      "id": "fd462cea-66e7-4811-a4f5-9cf4b7c8e302",
+      "createdAt": "2026-10-04T05:45:44.316207+00:00",
+      "stars": 5,
+      "outlet": "Kerala",
+      "storeCode": "13785723634558556879",
+      "reviewer": "Sreekala Unni",
+      "language": "en",
+      "comment": "Very good  very helpful Athulya"
+    },
+    {
+      "id": "28bfbb90-bf40-4fdb-93cb-b5c2efa94efd",
+      "createdAt": "2026-10-04T05:27:09.938616+00:00",
+      "stars": 5,
+      "outlet": "Kerala",
+      "storeCode": "11181964837793805771",
+      "reviewer": "Neethu",
+      "language": "none",
+      "comment": null
+    },
+    {
+      "id": "ec14b97d-f734-45c4-abde-1a7f0501ec67",
+      "createdAt": "2026-10-03T16:14:56.577791+00:00",
+      "stars": 5,
+      "outlet": "Kerala",
+      "storeCode": "13785723634558556879",
+      "reviewer": "Sujitha S",
+      "language": "none",
+      "comment": null
+    },
+    {
+      "id": "be489ced-5962-4947-a43b-006c561ed478",
+      "createdAt": "2026-10-03T15:20:05.379068+00:00",
+      "stars": 4,
+      "outlet": "Kerala",
+      "storeCode": "10168253048224919230",
+      "reviewer": "muhammed hussain",
+      "language": "none",
+      "comment": null
+    },
+    {
+      "id": "2666bfdd-ff72-495e-aea2-77bb03a4ba83",
+      "createdAt": "2026-10-03T14:41:44.234959+00:00",
+      "stars": 5,
+      "outlet": "Kerala",
+      "storeCode": "13785723634558556879",
+      "reviewer": "Ashita Mohan",
+      "language": "none",
+      "comment": null
+    },
+    {
+      "id": "72208926-163a-4e20-a508-811308a8598e",
+      "createdAt": "2026-10-03T14:28:10.572493+00:00",
+      "stars": 3,
+      "outlet": "Kerala",
+      "storeCode": "11181964837793805771",
+      "reviewer": "rekha n",
+      "language": "en",
+      "comment": "High price"
+    },
+    {
+      "id": "ec7e2be4-a4e1-4271-9867-ea860ab38bb3",
+      "createdAt": "2026-10-03T14:21:48.236431+00:00",
+      "stars": 5,
+      "outlet": "Kerala",
+      "storeCode": "FAZ-KTYM",
+      "reviewer": "Bhagat Sreenivas",
+      "language": "en",
+      "comment": "Good service especially Mathew ⭐⭐"
+    },
+    {
+      "id": "4ec4f677-39ca-45ec-b139-a43053a384e4",
+      "createdAt": "2026-10-03T14:01:55.935799+00:00",
+      "stars": 4,
+      "outlet": "Kerala",
+      "storeCode": "11181964837793805771",
+      "reviewer": "vivek RB",
+      "language": "en",
+      "comment": "all together good experience.friendly staff.nice collection.reasonable rates from low to medium"
+    },
+    {
+      "id": "bfebcdc1-3683-4568-bfa4-af63a3d5ab6a",
+      "createdAt": "2026-10-03T13:49:10.246008+00:00",
+      "stars": 5,
+      "outlet": "Kerala",
+      "storeCode": "10168253048224919230",
+      "reviewer": "SURYA SASIDHARAN",
+      "language": "en",
+      "comment": "Nyc service"
+    },
+    {
+      "id": "b02cfebe-5dc5-4edd-8c09-6593e45494b8",
+      "createdAt": "2026-10-03T13:44:55.471758+00:00",
+      "stars": 4,
+      "outlet": "Kerala",
+      "storeCode": "13785723634558556879",
+      "reviewer": "tanu tony",
+      "language": "none",
+      "comment": null
+    },
+    {
+      "id": "6fe070e4-7f49-41be-bc3c-8841bbebc05f",
+      "createdAt": "2026-10-03T12:50:34.216372+00:00",
+      "stars": 5,
+      "outlet": "Kerala",
+      "storeCode": "13785723634558556879",
+      "reviewer": "Fysal K A",
+      "language": "none",
+      "comment": null
+    },
+    {
+      "id": "b972473a-345e-4063-94ab-cb453f89fb87",
+      "createdAt": "2026-10-03T12:43:02.866029+00:00",
+      "stars": 5,
+      "outlet": "Kerala",
+      "storeCode": "10168253048224919230",
+      "reviewer": "Jayamon R",
+      "language": "none",
+      "comment": null
+    },
+    {
+      "id": "dcc7d273-986a-4950-8ab4-c22385f2440d",
+      "createdAt": "2026-10-03T12:42:45.224874+00:00",
+      "stars": 5,
+      "outlet": "Kerala",
+      "storeCode": "10168253048224919230",
+      "reviewer": "Sidharth.",
+      "language": "none",
+      "comment": null
+    },
+    {
+      "id": "adb309b0-87d1-4912-b788-5f22c7d750a6",
+      "createdAt": "2026-10-03T12:03:27.702312+00:00",
+      "stars": 5,
+      "outlet": "Kerala",
+      "storeCode": "10168253048224919230",
+      "reviewer": "Amritha S Sekhar",
+      "language": "none",
+      "comment": null
+    },
+    {
+      "id": "82f19413-e788-4277-99e0-8fd57b763f30",
+      "createdAt": "2026-10-03T12:01:02.447142+00:00",
+      "stars": 5,
+      "outlet": "Kerala",
+      "storeCode": "11181964837793805771",
+      "reviewer": "Deepak K",
+      "language": "en",
+      "comment": "Good service"
+    },
+    {
+      "id": "cac19bc3-038d-4c96-bbd2-bd5939009d9c",
+      "createdAt": "2026-10-03T11:39:58.652924+00:00",
+      "stars": 5,
+      "outlet": "Kerala",
+      "storeCode": "07842553729236549202",
+      "reviewer": "Rinto anto",
+      "language": "en",
+      "comment": "Nice staffs,. Especially yadhu"
+    },
+    {
+      "id": "602a5985-e4bf-4b38-958b-68622685e461",
+      "createdAt": "2026-10-03T11:36:25.625746+00:00",
+      "stars": 4,
+      "outlet": "Kerala",
+      "storeCode": "07842553729236549202",
+      "reviewer": "Roy Thomas",
+      "language": "none",
+      "comment": null
+    },
+    {
+      "id": "97022729-923f-4297-a83a-de9e1948fd82",
+      "createdAt": "2026-10-03T11:24:18.752249+00:00",
+      "stars": 5,
+      "outlet": "Kerala",
+      "storeCode": "10168253048224919230",
+      "reviewer": "Devakumar Appu",
+      "language": "none",
+      "comment": null
+    },
+    {
+      "id": "e7938ba1-6c21-4db2-b73b-80c50a3b4a82",
+      "createdAt": "2026-10-03T11:09:28.279939+00:00",
+      "stars": 5,
+      "outlet": "Kerala",
+      "storeCode": "13785723634558556879",
+      "reviewer": "Arya Ullas",
+      "language": "none",
+      "comment": null
+    },
+    {
+      "id": "ff715852-48fe-48f4-9dda-57f3e2b690be",
+      "createdAt": "2026-10-03T11:00:39.771664+00:00",
+      "stars": 5,
+      "outlet": "Kerala",
+      "storeCode": "11181964837793805771",
+      "reviewer": "Jannath Kabeer",
+      "language": "none",
+      "comment": null
+    },
+    {
+      "id": "5b9802b2-c5da-4604-ac7b-fee2a94bfbfb",
+      "createdAt": "2026-10-03T10:56:06.876006+00:00",
+      "stars": 5,
+      "outlet": "Kerala",
+      "storeCode": "13785723634558556879",
+      "reviewer": "P chandran",
+      "language": "en",
+      "comment": "Good collection.  Good service."
+    },
+    {
+      "id": "7c221d0f-73af-4686-8d23-ec0f5409615e",
+      "createdAt": "2026-10-03T10:43:04.297573+00:00",
+      "stars": 5,
+      "outlet": "Kerala",
+      "storeCode": "13785723634558556879",
+      "reviewer": "Silpa Gireesh",
+      "language": "en",
+      "comment": "I had happy shopping today. Thanks ramla for your service..."
+    },
+    {
+      "id": "9adad88a-11a2-4c1b-bacf-e94f558451e2",
+      "createdAt": "2026-10-03T10:02:10.29294+00:00",
+      "stars": 5,
+      "outlet": "Kerala",
+      "storeCode": "10168253048224919230",
+      "reviewer": "Vaishnavi Abhi",
+      "language": "none",
+      "comment": null
+    },
+    {
+      "id": "cd79b237-9a28-4789-839e-566225984410",
+      "createdAt": "2026-10-03T09:58:17.009899+00:00",
+      "stars": 5,
+      "outlet": "Kerala",
+      "storeCode": "11181964837793805771",
+      "reviewer": "Viswanath P S",
+      "language": "en",
+      "comment": "Good"
+    },
+    {
+      "id": "de58f211-41a5-4fbd-880f-41f24a5b36ee",
+      "createdAt": "2026-10-03T09:48:45.878024+00:00",
+      "stars": 5,
+      "outlet": "Kerala",
+      "storeCode": "13785723634558556879",
+      "reviewer": "Sheeja T",
+      "language": "none",
+      "comment": null
+    },
+    {
+      "id": "e6f502b7-03fe-4d7e-92bf-adfbf779c46e",
+      "createdAt": "2026-10-03T09:47:43.981831+00:00",
+      "stars": 5,
+      "outlet": "Kerala",
+      "storeCode": "11181964837793805771",
+      "reviewer": "Ruknudheen",
+      "language": "en",
+      "comment": "Good experience, helpfull staffs good looking ambience well maintained..."
+    },
+    {
+      "id": "60935841-d837-4b16-92c1-6606d59b2660",
+      "createdAt": "2026-10-03T09:43:23.829231+00:00",
+      "stars": 5,
+      "outlet": "Kerala",
+      "storeCode": "11181964837793805771",
+      "reviewer": "Pooja Parameshwaran",
+      "language": "en",
+      "comment": "had a great experience shopping from fazyo\nwill definitely purchase again"
+    },
+    {
+      "id": "f466268b-d6ed-4609-bafe-939b6d61df11",
+      "createdAt": "2026-10-03T09:11:04.340273+00:00",
+      "stars": 5,
+      "outlet": "Kerala",
+      "storeCode": "13785723634558556879",
+      "reviewer": "Nikhila Narayanan",
+      "language": "en",
+      "comment": "(Translated by Google) good service 👍👍👍\n\n(Original)\nathulya good service 👍👍👍"
+    },
+    {
+      "id": "1ac689e0-2716-44c1-be2a-f4632b90834d",
+      "createdAt": "2026-10-03T08:30:34.613889+00:00",
+      "stars": 5,
+      "outlet": "Kerala",
+      "storeCode": "10168253048224919230",
+      "reviewer": "Nanditha",
+      "language": "none",
+      "comment": null
+    },
+    {
+      "id": "6bad1093-f234-49e8-a469-eb0e8e5568b2",
+      "createdAt": "2026-10-03T08:30:27.760337+00:00",
+      "stars": 5,
+      "outlet": "Kerala",
+      "storeCode": "10168253048224919230",
+      "reviewer": "Visudh Jayakumar",
+      "language": "none",
+      "comment": null
+    },
+    {
+      "id": "eb72caeb-80cc-4128-9f5f-1c9c112a4ae2",
+      "createdAt": "2026-10-03T08:20:12.329721+00:00",
+      "stars": 5,
+      "outlet": "Kerala",
+      "storeCode": "10168253048224919230",
+      "reviewer": "Hafsa Nishad",
+      "language": null,
+      "comment": "The staff wass too good and kind\nSo happy ❤️"
+    },
+    {
+      "id": "c16ad6d9-b807-495f-b0a0-031a988eb761",
+      "createdAt": "2026-10-03T08:15:45.586627+00:00",
+      "stars": 4,
+      "outlet": "Kerala",
+      "storeCode": "11181964837793805771",
+      "reviewer": "Aadhya S",
+      "language": "en",
+      "comment": "Customer service was good. But not so many collections."
+    },
+    {
+      "id": "8c28fa47-5db4-457d-94ae-5eb534fcb569",
+      "createdAt": "2026-10-03T07:27:46.076261+00:00",
+      "stars": 5,
+      "outlet": "Kerala",
+      "storeCode": "10168253048224919230",
+      "reviewer": "Sree Vinayakam",
+      "language": "none",
+      "comment": null
+    },
+    {
+      "id": "c40c5dcb-ad3e-4fed-90d7-60ed98a77e90",
+      "createdAt": "2026-10-03T06:14:42.93457+00:00",
+      "stars": 5,
+      "outlet": "Kerala",
+      "storeCode": "FAZ-KTYM",
+      "reviewer": "Sanu Suhail",
+      "language": null,
+      "comment": "I visited fazyo today and they have a wide range of collection. The customer service was great and the staff were very friendly .Especially Bibin he helped us to pick pur favourite items. Excellent service! thankyou🩷"
+    },
+    {
+      "id": "2becd973-b8e3-48ac-8330-81d16ab3d140",
+      "createdAt": "2026-10-03T06:07:45.863896+00:00",
+      "stars": 4,
+      "outlet": "Kerala",
+      "storeCode": "FAZ-KTYM",
+      "reviewer": "Sabith Sawad",
+      "language": "en",
+      "comment": "Good collection and staffs are very friendly and helpful especially bibin. Thank you fazyo"
+    },
+    {
+      "id": "b52a2b5f-0c88-42ca-b1b2-d4bb0872a754",
+      "createdAt": "2026-10-03T05:14:55.47414+00:00",
+      "stars": 5,
+      "outlet": "Kerala",
+      "storeCode": "13785723634558556879",
+      "reviewer": "RAHUL K S",
+      "language": "none",
+      "comment": null
+    },
+    {
+      "id": "82ae5002-0ec7-451b-a793-b4c89f053c40",
+      "createdAt": "2026-10-02T15:56:06.993407+00:00",
+      "stars": 5,
+      "outlet": "Kerala",
+      "storeCode": "11181964837793805771",
+      "reviewer": "MEENA RAJEEV P M",
+      "language": "en",
+      "comment": "Superb"
+    },
+    {
+      "id": "c82b2d77-f0be-4dcb-a3d5-5facacd09625",
+      "createdAt": "2026-10-02T15:09:22.426402+00:00",
+      "stars": 4,
+      "outlet": "Kerala",
+      "storeCode": "10168253048224919230",
+      "reviewer": "Akash Babu",
+      "language": null,
+      "comment": "Had a great experience at Fazyo! The staff were very friendly, helpful, and professional. The quality of the products is really good, and the overall service was excellent. Definitely recommended! 👍"
+    },
+    {
+      "id": "2a0b91a9-06c1-47e7-8157-24fb22c7f29e",
+      "createdAt": "2026-10-02T14:32:34.18961+00:00",
+      "stars": 5,
+      "outlet": "Kerala",
+      "storeCode": "07842553729236549202",
+      "reviewer": "Anjana Vinod",
+      "language": "en",
+      "comment": "Extremely good collection at such budget-friendly prices! 😍✨ Really loved it. So happy with my purchase! ❤️"
+    },
+    {
+      "id": "2d7a59f1-f81c-4321-9702-425420c4b6ca",
+      "createdAt": "2026-10-02T14:31:05.740935+00:00",
+      "stars": 5,
+      "outlet": "Kerala",
+      "storeCode": "13785723634558556879",
+      "reviewer": "jyothy shibu",
+      "language": "en",
+      "comment": "\"Had a wonderful shopping experience at Fazyo, Tripunithura! A special thanks to Shareefa for her excellent assistance and patience in helping us find the best outfits. Excellent customer service!\" Highly recommended!"
+    },
+    {
+      "id": "018696d1-6a90-46c3-8b50-fbd43f80c8db",
+      "createdAt": "2026-10-02T14:25:14.631631+00:00",
+      "stars": 5,
+      "outlet": "Kerala",
+      "storeCode": "13785723634558556879",
+      "reviewer": "Anjali T",
+      "language": "en",
+      "comment": "(Translated by Google) Fall\n\n(Original)\nRamla"
+    },
+    {
+      "id": "e4f7a54e-e20d-408a-8ecb-67ff8be3f064",
+      "createdAt": "2026-10-02T13:01:07.216031+00:00",
+      "stars": 5,
+      "outlet": "Kerala",
+      "storeCode": "13785723634558556879",
+      "reviewer": "chessy poulose",
+      "language": "none",
+      "comment": null
+    },
+    {
+      "id": "eb23ae8f-2a0d-4610-a2a4-706d54aa8bf6",
+      "createdAt": "2026-10-02T12:54:25.774138+00:00",
+      "stars": 4,
+      "outlet": "Kerala",
+      "storeCode": "13785723634558556879",
+      "reviewer": "Dr. Vidya Gopal",
+      "language": "en",
+      "comment": "Selection is really good. Price is reasonable.  And service also good. Sanjana was assisted  me. It was a nice experience."
+    },
+    {
+      "id": "5ec548d8-72d1-424d-87e2-283f7f2cd80f",
+      "createdAt": "2026-10-02T12:46:03.16956+00:00",
+      "stars": 5,
+      "outlet": "Kerala",
+      "storeCode": "13785723634558556879",
+      "reviewer": "Gouri Prasad",
+      "language": "en",
+      "comment": "Habeeb"
+    },
+    {
+      "id": "0352273c-5044-4406-92c8-a05a8f67ec29",
+      "createdAt": "2026-10-02T12:34:08.491183+00:00",
+      "stars": 5,
+      "outlet": "Kerala",
+      "storeCode": "13785723634558556879",
+      "reviewer": "Ashwini",
+      "language": "en",
+      "comment": "Great customer service by Athulya"
+    },
+    {
+      "id": "38551639-3fce-4d64-a1df-3732432e3b62",
+      "createdAt": "2026-10-02T12:11:06.536644+00:00",
+      "stars": 5,
+      "outlet": "Kerala",
+      "storeCode": "12266160996918245031",
+      "reviewer": "Eldho Paulose",
+      "language": null,
+      "comment": null
+    },
+    {
+      "id": "ef401948-f38e-41b5-9aa6-6fba19841143",
+      "createdAt": "2026-10-02T11:55:45.473701+00:00",
+      "stars": 5,
+      "outlet": "Kerala",
+      "storeCode": "13785723634558556879",
+      "reviewer": "santhosh kumar Manaloor Thekke Madom",
+      "language": "en",
+      "comment": "(Translated by Google) Fall\n\n(Original)\nRamla"
+    },
+    {
+      "id": "20d4948f-fbc0-43de-93c2-3dd7ac67ef6c",
+      "createdAt": "2026-10-02T11:49:33.292627+00:00",
+      "stars": 4,
+      "outlet": "Kerala",
+      "storeCode": "11181964837793805771",
+      "reviewer": "Ajeesh 123",
+      "language": "en",
+      "comment": "Good experience with these shope..\nThank you Bro.Afsal for taking us to everyone sections and giving good guide overall good 👍"
+    },
+    {
+      "id": "8b6513f6-6683-4195-a531-c220180b3a52",
+      "createdAt": "2026-10-02T11:21:33.668026+00:00",
+      "stars": 5,
+      "outlet": "Kerala",
+      "storeCode": "13785723634558556879",
+      "reviewer": "sini Dhanesh",
+      "language": "none",
+      "comment": null
+    },
+    {
+      "id": "ba5e86aa-d305-43f8-9935-8d35e4334ffc",
+      "createdAt": "2026-10-02T11:09:08.160255+00:00",
+      "stars": 5,
+      "outlet": "Kerala",
+      "storeCode": "13785723634558556879",
+      "reviewer": "Nishi Rajkumar",
+      "language": "en",
+      "comment": "Very good customer service from Fahad"
+    },
+    {
+      "id": "83287db3-fdd3-4b50-9d57-d75cf0a42a7a",
+      "createdAt": "2026-10-02T10:14:06.361853+00:00",
+      "stars": 5,
+      "outlet": "Kerala",
+      "storeCode": "13785723634558556879",
+      "reviewer": "Sany p m",
+      "language": "en",
+      "comment": "Athulya is very great support and helpful for selecting the items and very customer friendly"
+    },
+    {
+      "id": "b635c098-103c-4c19-8b56-c4ed0ec20690",
+      "createdAt": "2026-10-02T09:59:58.138707+00:00",
+      "stars": 5,
+      "outlet": "Kerala",
+      "storeCode": "10168253048224919230",
+      "reviewer": "LayaLiyo LayaLiyo",
+      "language": "en",
+      "comment": "Had the best experience..had a comfortable time with Staff Alia..Thank you"
+    },
+    {
+      "id": "e1183b5d-c24d-4aa7-9b49-9a22d0d52ea7",
+      "createdAt": "2026-10-02T09:54:39.480639+00:00",
+      "stars": 5,
+      "outlet": "Kerala",
+      "storeCode": "13785723634558556879",
+      "reviewer": "Bindhu Ashokan",
+      "language": "en",
+      "comment": "Sanjana  good excellent service"
+    },
+    {
+      "id": "df7a5221-8cd0-4d3e-8843-1a4a318e8625",
+      "createdAt": "2026-10-02T09:48:53.485288+00:00",
+      "stars": 5,
+      "outlet": "Kerala",
+      "storeCode": "12266160996918245031",
+      "reviewer": "RAMBO GAMING YT",
+      "language": "none",
+      "comment": null
+    },
+    {
+      "id": "906e5ac6-ef34-4d76-b1a3-d9d60a618fc5",
+      "createdAt": "2026-10-02T09:44:14.245663+00:00",
+      "stars": 4,
+      "outlet": "Kerala",
+      "storeCode": "11181964837793805771",
+      "reviewer": "Nandhini M",
+      "language": "none",
+      "comment": null
+    },
+    {
+      "id": "335225fd-5389-4410-a37b-1500b25526b1",
+      "createdAt": "2026-10-02T08:56:55.541575+00:00",
+      "stars": 5,
+      "outlet": "Kerala",
+      "storeCode": "13785723634558556879",
+      "reviewer": "Jyothish S Kumar",
+      "language": "en",
+      "comment": "positive comments about staff behavior, grouped by the specific type of service or attitude they display shareefa"
+    },
+    {
+      "id": "0a649900-53a6-4749-908c-895b219b77fb",
+      "createdAt": "2026-10-02T08:46:01.85542+00:00",
+      "stars": 5,
+      "outlet": "Kerala",
+      "storeCode": "07842553729236549202",
+      "reviewer": "Sari K S",
+      "language": "en",
+      "comment": "Very good"
+    },
+    {
+      "id": "23b33cfc-cf4e-4cc8-9974-2554ed69e0e8",
+      "createdAt": "2026-10-02T08:38:57.367418+00:00",
+      "stars": 5,
+      "outlet": "Kerala",
+      "storeCode": "11181964837793805771",
+      "reviewer": "Anusuya Ramjee",
+      "language": "en",
+      "comment": "Collection is good. Staffs are really helpful"
+    },
+    {
+      "id": "de8c7306-f022-41e1-9ada-a4555fa507c9",
+      "createdAt": "2026-10-02T08:19:15.746302+00:00",
+      "stars": 5,
+      "outlet": "Kerala",
+      "storeCode": "13785723634558556879",
+      "reviewer": "Annmaria Antony",
+      "language": "en",
+      "comment": "Ramla patiently selected to choose dresses. Thankyou."
+    },
+    {
+      "id": "1a68ff23-c216-469c-8e2a-5837cbe8d32f",
+      "createdAt": "2026-10-02T08:14:09.236182+00:00",
+      "stars": 4,
+      "outlet": "Kerala",
+      "storeCode": "13785723634558556879",
+      "reviewer": "Gayatri Manilal",
+      "language": "en",
+      "comment": "Had a great shopping experience at Fazyo! Special thanks to Sherifa for her friendly and excellent service. She was very helpful and made the shopping experience really comfortable."
+    },
+    {
+      "id": "d8618ebf-0160-4ef9-aec7-cfefd7394e4a",
+      "createdAt": "2026-10-02T06:27:09.677232+00:00",
+      "stars": 5,
+      "outlet": "Kerala",
+      "storeCode": "FAZ-KTYM",
+      "reviewer": "Rajesh Remanan",
+      "language": "en",
+      "comment": "Nice shopping experience.  Good and vast collection. Thanks for the support of staff Smt. Aswani."
+    },
+    {
+      "id": "608dafc1-e3ee-4140-8a43-4453339bafaa",
+      "createdAt": "2026-10-02T06:16:17.632008+00:00",
+      "stars": 5,
+      "outlet": "Kerala",
+      "storeCode": "13785723634558556879",
+      "reviewer": "Saljith Sethumadhavan",
+      "language": "en",
+      "comment": "It was an nice experience. There was so many good collections and it was an excellent service by Miss Sanjana"
+    },
+    {
+      "id": "3ad5c12c-f5f2-4083-bea5-ef17b9835d4d",
+      "createdAt": "2026-10-02T05:52:14.45555+00:00",
+      "stars": 5,
+      "outlet": "Kerala",
+      "storeCode": "13785723634558556879",
+      "reviewer": "Deepak Nair",
+      "language": "none",
+      "comment": null
+    },
+    {
+      "id": "c3b2b678-6f41-4de2-99b1-af3fb7eb4241",
+      "createdAt": "2026-10-02T05:11:17.844207+00:00",
+      "stars": 2,
+      "outlet": "Kerala",
+      "storeCode": "10168253048224919230",
+      "reviewer": "Arathi Raju Arathi Raju",
+      "language": "en",
+      "comment": "Very nice"
+    },
+    {
+      "id": "eaa24a2e-5d1c-4a06-9e20-8051e70ee62a",
+      "createdAt": "2026-10-01T15:16:47.529945+00:00",
+      "stars": 5,
+      "outlet": "Kerala",
+      "storeCode": "13785723634558556879",
+      "reviewer": "Muhammed Fahad",
+      "language": "other",
+      "comment": "💜"
+    },
+    {
+      "id": "8d2c7464-b84b-4b78-8e35-091c914622f5",
+      "createdAt": "2026-10-01T14:39:15.807856+00:00",
+      "stars": 5,
+      "outlet": "Kerala",
+      "storeCode": "07842553729236549202",
+      "reviewer": "Jayasree K U",
+      "language": "none",
+      "comment": null
+    },
+    {
+      "id": "151a0d16-ce1c-4dc4-8386-2e72d97b87c1",
+      "createdAt": "2026-10-01T14:37:14.960878+00:00",
+      "stars": 5,
+      "outlet": "Kerala",
+      "storeCode": "13785723634558556879",
+      "reviewer": "Athira Ravi",
+      "language": "none",
+      "comment": null
+    },
+    {
+      "id": "054c74b3-c51d-4239-845f-15fb84fe2dc8",
+      "createdAt": "2026-10-01T12:52:01.479329+00:00",
+      "stars": 5,
+      "outlet": "Kerala",
+      "storeCode": "13785723634558556879",
+      "reviewer": "Remo Antony Francis",
+      "language": "en",
+      "comment": "Good staff behaviour from shahana"
+    },
+    {
+      "id": "6927aeba-02f1-4a72-8d85-5ef9197339a8",
+      "createdAt": "2026-10-01T12:45:45.905502+00:00",
+      "stars": 5,
+      "outlet": "Kerala",
+      "storeCode": "13785723634558556879",
+      "reviewer": "ANAKHA K BABU",
+      "language": "en",
+      "comment": "Nice experience with Ramla."
+    },
+    {
+      "id": "eef23707-6045-4d03-b586-6f160acc5980",
+      "createdAt": "2026-10-01T12:41:40.10093+00:00",
+      "stars": 5,
+      "outlet": "Kerala",
+      "storeCode": "13785723634558556879",
+      "reviewer": "Viji Joy",
+      "language": "en",
+      "comment": "Excellent"
+    },
+    {
+      "id": "a8fee894-71f2-43f7-99b8-05fd32959df6",
+      "createdAt": "2026-10-01T11:53:18.650722+00:00",
+      "stars": 3,
+      "outlet": "Kerala",
+      "storeCode": "FAZ-KTYM",
+      "reviewer": "Gautham G",
+      "language": "en",
+      "comment": "Decent clothes, wonderful service( especially that one guy named Vipin/Bipin)"
+    },
+    {
+      "id": "c3b9418e-9062-4a37-871c-856968b0dd3f",
+      "createdAt": "2026-10-01T11:32:17.090908+00:00",
+      "stars": 5,
+      "outlet": "Kerala",
+      "storeCode": "13785723634558556879",
+      "reviewer": "Vijayalakshmi Pm",
+      "language": "en",
+      "comment": "Sanjana is a good staff good collection"
+    },
+    {
+      "id": "2e3b3ad8-0a15-4de4-bd58-7ac1dc18b97d",
+      "createdAt": "2026-10-01T11:28:53.545202+00:00",
+      "stars": 2,
+      "outlet": "Kerala",
+      "storeCode": "13785723634558556879",
+      "reviewer": "Jyothy Krishnan",
+      "language": "none",
+      "comment": null
+    },
+    {
+      "id": "706c7aca-702e-4693-9339-9e1ffe4e8a72",
+      "createdAt": "2026-10-01T11:26:36.232024+00:00",
+      "stars": 5,
+      "outlet": "Kerala",
+      "storeCode": "13785723634558556879",
+      "reviewer": "Anjaly Raghavan",
+      "language": "en",
+      "comment": "Good selection of dresses.... Staffs were so friendly... Ms.Shahana was very helpful... Thank u for a wonderful experience"
+    },
+    {
+      "id": "7d8d2510-bce2-4b08-ae1b-1df8d7a6e8c6",
+      "createdAt": "2026-10-01T11:21:13.308233+00:00",
+      "stars": 4,
+      "outlet": "Kerala",
+      "storeCode": "13785723634558556879",
+      "reviewer": "Sudheesh s pillai",
+      "language": "en",
+      "comment": "Great service"
+    },
+    {
+      "id": "d3458f85-501b-49b2-99bc-44a952ab6580",
+      "createdAt": "2026-10-01T10:56:57.400114+00:00",
+      "stars": 5,
+      "outlet": "Kerala",
+      "storeCode": "13785723634558556879",
+      "reviewer": "Greeshma John",
+      "language": "none",
+      "comment": null
+    },
+    {
+      "id": "1943e3ea-18a6-4970-b78b-bc6db8d7d0a3",
+      "createdAt": "2026-10-01T10:38:02.672875+00:00",
+      "stars": 5,
+      "outlet": "Kerala",
+      "storeCode": "13785723634558556879",
+      "reviewer": "Safna Sajeev",
+      "language": "en",
+      "comment": "Nice dress collections and good service"
+    },
+    {
+      "id": "f5a63528-7cb2-4185-af7d-fe5b698686ee",
+      "createdAt": "2026-10-01T09:20:44.50992+00:00",
+      "stars": 5,
+      "outlet": "Kerala",
+      "storeCode": "11181964837793805771",
+      "reviewer": "Sreekutty",
+      "language": "none",
+      "comment": null
+    },
+    {
+      "id": "e04073b5-32a7-4bdd-a643-a6677d5fcadb",
+      "createdAt": "2026-10-01T09:10:44.485442+00:00",
+      "stars": 5,
+      "outlet": "Kerala",
+      "storeCode": "FAZ-KTYM",
+      "reviewer": "Alen Issac",
+      "language": "en",
+      "comment": "Good service. especially staff Swathi is very supportive."
+    },
+    {
+      "id": "41d5e3d7-84bb-4432-a8a5-54c95ed7169e",
+      "createdAt": "2026-10-01T07:22:44.563921+00:00",
+      "stars": 5,
+      "outlet": "Kerala",
+      "storeCode": "10168253048224919230",
+      "reviewer": "Rony Varghees",
+      "language": "none",
+      "comment": null
+    },
+    {
+      "id": "971c0851-6a83-4bcb-b440-598a87b0a446",
+      "createdAt": "2026-10-01T06:11:03.760486+00:00",
+      "stars": 4,
+      "outlet": "Kerala",
+      "storeCode": "06936392301318726207",
+      "reviewer": "ghaby mathew",
+      "language": "en",
+      "comment": "Clothing experience"
+    },
+    {
+      "id": "742de81c-c5ec-44c2-b92c-76de72a4a317",
+      "createdAt": "2026-10-01T05:43:22.197807+00:00",
+      "stars": 5,
+      "outlet": "Kerala",
+      "storeCode": "07842553729236549202",
+      "reviewer": "Suzanne Jasmine Grace Joseph",
+      "language": "en",
+      "comment": "Love the sales people. Friendly and helpful"
+    },
+    {
+      "id": "b8e35d91-d865-4a85-a44c-1ed425a880ac",
+      "createdAt": "2026-10-01T05:24:39.712447+00:00",
+      "stars": 5,
+      "outlet": "Kerala",
+      "storeCode": "07842553729236549202",
+      "reviewer": "anjali unni",
+      "language": "none",
+      "comment": null
+    },
+    {
+      "id": "b7a7ed98-9047-4f1b-b89d-3b00466991a8",
+      "createdAt": "2026-09-30T18:30:00.430457+00:00",
+      "stars": 5,
+      "outlet": "Kerala",
+      "storeCode": "13785723634558556879",
+      "reviewer": "Sabeera Pp",
+      "language": "en",
+      "comment": "Shareefa I had a wonderful experience at Fazyo. Shareefa was very friendly, polite, and attentive throughout. She made me feel comfortable and was very helpful. Excellent service and a lovely experience overall. Thank you, Shareefa! ⭐⭐⭐⭐⭐"
+    },
+    {
+      "id": "16e7ee6f-b0d3-42cc-a910-28817afd26ea",
+      "createdAt": "2026-09-30T15:43:32.517578+00:00",
+      "stars": 5,
+      "outlet": "Kerala",
+      "storeCode": "13785723634558556879",
+      "reviewer": "salma a k",
+      "language": "en",
+      "comment": "I had a good shopping experience. The staff shareefa were friendly and helpful. The shop was neat and clean, and the service was good. Thank you for the wonderful experience!”"
+    },
+    {
+      "id": "5a523670-e3be-4787-86ec-cdbed914867d",
+      "createdAt": "2026-09-30T15:18:10.573532+00:00",
+      "stars": 5,
+      "outlet": "Kerala",
+      "storeCode": "13785723634558556879",
+      "reviewer": "Shafna KO",
+      "language": "en",
+      "comment": "Shareef treated us very well—with great respect and courtesy."
+    },
+    {
+      "id": "3dd4581d-57e9-4e7a-866a-9c85ab595aa1",
+      "createdAt": "2026-09-30T14:43:43.054017+00:00",
+      "stars": 5,
+      "outlet": "Kerala",
+      "storeCode": "FAZ-KTYM",
+      "reviewer": "Asha Joseph",
+      "language": "en",
+      "comment": "Excellent service reshma&rakhi"
+    },
+    {
+      "id": "317b6f30-4436-487a-af67-0525d9818469",
+      "createdAt": "2026-09-30T14:40:21.406245+00:00",
+      "stars": 5,
+      "outlet": "Kerala",
+      "storeCode": "10168253048224919230",
+      "reviewer": "MUHAMMED SHANEER SHAJAHAN",
+      "language": "none",
+      "comment": null
+    },
+    {
+      "id": "dfdfb2e7-5248-4afc-9fc8-292c53d9fd71",
+      "createdAt": "2026-09-30T14:26:57.309047+00:00",
+      "stars": 5,
+      "outlet": "Kerala",
+      "storeCode": "FAZ-KTYM",
+      "reviewer": "Adithya Krishna P A",
+      "language": "en",
+      "comment": "Nice customer dealing. And good collection. And a good atmosphere."
+    },
+    {
+      "id": "0dacce57-31cc-4605-9f4b-c83807528424",
+      "createdAt": "2026-09-30T13:58:12.460416+00:00",
+      "stars": 5,
+      "outlet": "Kerala",
+      "storeCode": "13785723634558556879",
+      "reviewer": "Girija Balachandran",
+      "language": "en",
+      "comment": "Ramla Nice"
+    },
+    {
+      "id": "7f4bac92-57df-45a8-b6ff-85df2f3a0120",
+      "createdAt": "2026-09-30T12:48:44.103301+00:00",
+      "stars": 5,
+      "outlet": "Kerala",
+      "storeCode": "12266160996918245031",
+      "reviewer": "Jomol Pj",
+      "language": "none",
+      "comment": null
+    },
+    {
+      "id": "0469738e-7d6e-45ee-a815-4b271ca290f2",
+      "createdAt": "2026-09-30T12:32:13.789463+00:00",
+      "stars": 4,
+      "outlet": "Kerala",
+      "storeCode": "11181964837793805771",
+      "reviewer": "Sreelakshmi Arun",
+      "language": "none",
+      "comment": null
+    },
+    {
+      "id": "eb7e0124-a484-46bf-9613-30a2053bc1b4",
+      "createdAt": "2026-09-30T12:26:35.36733+00:00",
+      "stars": 5,
+      "outlet": "Kerala",
+      "storeCode": "13785723634558556879",
+      "reviewer": "Arathy Chandran",
+      "language": "none",
+      "comment": null
+    },
+    {
+      "id": "1aa2fca9-ead3-466a-910f-b69dd2818a42",
+      "createdAt": "2026-09-30T12:05:50.101954+00:00",
+      "stars": 3,
+      "outlet": "Kerala",
+      "storeCode": "13785723634558556879",
+      "reviewer": "Sree lakshmi Sivadas",
+      "language": "en",
+      "comment": "Good🥰"
+    },
+    {
+      "id": "917a6808-1985-4be6-bbdb-cd8014a1d272",
+      "createdAt": "2026-09-30T11:09:08.978815+00:00",
+      "stars": 5,
+      "outlet": "Kerala",
+      "storeCode": "11181964837793805771",
+      "reviewer": "Soja Soja",
+      "language": "en",
+      "comment": "Good service"
+    },
+    {
+      "id": "36f2c219-0d18-4fb9-98dd-28990e857586",
+      "createdAt": "2026-09-30T10:02:34.314927+00:00",
+      "stars": 5,
+      "outlet": "Kerala",
+      "storeCode": "13785723634558556879",
+      "reviewer": "Deepthy Saji",
+      "language": "en",
+      "comment": "Sanjanas Performance was very good"
+    },
+    {
+      "id": "36eb3b4e-2920-4890-ab62-1cfa90f6a844",
+      "createdAt": "2026-09-30T08:06:04.805407+00:00",
+      "stars": 5,
+      "outlet": "Kerala",
+      "storeCode": "13785723634558556879",
+      "reviewer": "Athulya Anamika",
+      "language": "en",
+      "comment": "Nice staff attending"
+    },
+    {
+      "id": "52ee932a-e71a-4fe4-81ab-eda89173e0d1",
+      "createdAt": "2026-09-30T07:55:03.870285+00:00",
+      "stars": 5,
+      "outlet": "Kerala",
+      "storeCode": "13785723634558556879",
+      "reviewer": "Ashmi Shaji",
+      "language": "en",
+      "comment": "Customer service was excellent expecially Ramla♥️"
+    },
+    {
+      "id": "dae97fde-e16f-4660-b03f-af211acadfed",
+      "createdAt": "2026-09-30T07:02:24.35712+00:00",
+      "stars": 5,
+      "outlet": "Kerala",
+      "storeCode": "07842553729236549202",
+      "reviewer": "Anjana Surendran",
+      "language": "en",
+      "comment": "Very nice staff. Good store affordable everyday wear"
+    },
+    {
+      "id": "cf45acd5-d0d3-42e8-8cbc-9cc2d969e57b",
+      "createdAt": "2026-09-30T06:15:48.017371+00:00",
+      "stars": 5,
+      "outlet": "Kerala",
+      "storeCode": "11181964837793805771",
+      "reviewer": "Parameswaran Tr",
+      "language": "none",
+      "comment": null
+    },
+    {
+      "id": "37784286-e542-44f5-bd0d-36ec29e232a2",
+      "createdAt": "2026-09-30T05:21:33.057927+00:00",
+      "stars": 5,
+      "outlet": "Kerala",
+      "storeCode": "13785723634558556879",
+      "reviewer": "remya krishnan",
+      "language": "none",
+      "comment": null
+    },
+    {
+      "id": "98149949-a552-455d-8fc5-e0365a4a9ded",
+      "createdAt": "2026-09-30T05:06:02.131641+00:00",
+      "stars": 5,
+      "outlet": "Kerala",
+      "storeCode": "11181964837793805771",
+      "reviewer": "Avesh Appu",
+      "language": "none",
+      "comment": null
+    },
+    {
+      "id": "656d92c9-23af-4de8-bf3f-65acf75444c3",
+      "createdAt": "2026-09-29T15:41:30.19571+00:00",
+      "stars": 5,
+      "outlet": "Kerala",
+      "storeCode": "07842553729236549202",
+      "reviewer": "Malavika Praveen",
+      "language": "en",
+      "comment": "Good experience"
+    },
+    {
+      "id": "0b86f54e-4eca-4f86-a6ec-d9c8c8506e97",
+      "createdAt": "2026-09-29T15:22:55.948766+00:00",
+      "stars": 5,
+      "outlet": "Kerala",
+      "storeCode": "12266160996918245031",
+      "reviewer": "Lovely Thomas",
+      "language": "en",
+      "comment": "Albert is very professional and helping staff.  Keep this staff always"
+    },
+    {
+      "id": "3c0d82dc-8d11-4c1a-9011-98fb5357a42c",
+      "createdAt": "2026-09-29T13:50:37.033179+00:00",
+      "stars": 4,
+      "outlet": "Kerala",
+      "storeCode": "11181964837793805771",
+      "reviewer": "DM",
+      "language": "en",
+      "comment": "Very good customer service. Collection can be stocked more, but since the staffs are helpful, able to choose the right clothes"
+    },
+    {
+      "id": "b29b24d6-97b9-483b-b6ee-703428a54019",
+      "createdAt": "2026-09-29T13:01:39.327059+00:00",
+      "stars": 4,
+      "outlet": "Kerala",
+      "storeCode": "13785723634558556879",
+      "reviewer": "MGC CREATIONS",
+      "language": "none",
+      "comment": null
+    },
+    {
+      "id": "4f1932ff-2c1b-45d1-a90c-067ec232b6fe",
+      "createdAt": "2026-09-29T12:55:55.866692+00:00",
+      "stars": 5,
+      "outlet": "Kerala",
+      "storeCode": "11181964837793805771",
+      "reviewer": "MG Appu",
+      "language": "en",
+      "comment": "Customer service and friendly type♥️"
+    },
+    {
+      "id": "c06204f3-c78d-4803-8186-de42c54009c0",
+      "createdAt": "2026-09-29T11:00:32.61371+00:00",
+      "stars": 5,
+      "outlet": "Kerala",
+      "storeCode": "10168253048224919230",
+      "reviewer": "Sskumar S",
+      "language": "en",
+      "comment": "(Translated by Google) Mens round neck t shirt kurachu koodi collection unde nallathayirunnu, mothathil adipoli\n\n(Original)\nMens round nek t shirt kurachu koodi collection unde nallathayirunnu, mothathil adipoli"
+    },
+    {
+      "id": "ea4c3b80-b6e2-421f-97c4-02eb1926231a",
+      "createdAt": "2026-09-29T10:31:09.423612+00:00",
+      "stars": 5,
+      "outlet": "Kerala",
+      "storeCode": "13785723634558556879",
+      "reviewer": "Athira Pr",
+      "language": "en",
+      "comment": "Nice customer service and fahad special thanks ♥️ and nice collection ♥️🤗"
+    },
+    {
+      "id": "cb71789b-edbc-4e8e-87f1-1eacab59fab5",
+      "createdAt": "2026-09-29T06:45:05.358868+00:00",
+      "stars": 5,
+      "outlet": "Kerala",
+      "storeCode": "11181964837793805771",
+      "reviewer": "Ranjith Gopakumar",
+      "language": "none",
+      "comment": null
+    },
+    {
+      "id": "7b184c97-eed2-4727-82d1-c41fb31047dd",
+      "createdAt": "2026-09-29T05:42:16.751506+00:00",
+      "stars": 5,
+      "outlet": "Kerala",
+      "storeCode": "13785723634558556879",
+      "reviewer": "Nisha Muraleedharan",
+      "language": "en",
+      "comment": "Very nice collection .staffs are very efficient at their work"
+    },
+    {
+      "id": "2f869231-67af-4633-a581-9b5b39427285",
+      "createdAt": "2026-09-29T02:09:55.115707+00:00",
+      "stars": 1,
+      "outlet": "Kerala",
+      "storeCode": "10168253048224919230",
+      "reviewer": "SANGEETHA KRISHNAN",
+      "language": "en",
+      "comment": "I visited the Fazyo Kollam outlet last week and had an extremely disappointing experience. The customer service was exceptionally poor. The staff ladies seemed completely unaware of the current collections or available stock, and they could not even guide me to where specific products were arranged. Instead of assisting customers, they were busy chatting, joking, and laughing among themselves right in front of us. It felt highly unprofessional and unwelcoming. I hope management takes immediate steps to train their staff on basic retail etiquette and product knowledge. Worst experience."
+    },
+    {
+      "id": "a6ddb899-410b-417f-a28c-d1a7040fb63d",
+      "createdAt": "2026-09-28T15:03:58.453461+00:00",
+      "stars": 3,
+      "outlet": "Kerala",
+      "storeCode": "11181964837793805771",
+      "reviewer": "Sarath Appu",
+      "language": "en",
+      "comment": "Good"
+    },
+    {
+      "id": "39e983ee-0307-435b-90ae-a3b4d5460996",
+      "createdAt": "2026-09-28T14:18:19.426663+00:00",
+      "stars": 3,
+      "outlet": "Kerala",
+      "storeCode": "11181964837793805771",
+      "reviewer": "Anu m sasi",
+      "language": "none",
+      "comment": null
+    },
+    {
+      "id": "c45e473a-afa0-4001-8e62-4eb12b6c315b",
+      "createdAt": "2026-09-28T13:13:49.294427+00:00",
+      "stars": 3,
+      "outlet": "Kerala",
+      "storeCode": "11181964837793805771",
+      "reviewer": "VIVEK S",
+      "language": "none",
+      "comment": null
+    },
+    {
+      "id": "c229c011-d654-4f0c-957c-d1c8781506f6",
+      "createdAt": "2026-09-28T11:02:43.31605+00:00",
+      "stars": 5,
+      "outlet": "Kerala",
+      "storeCode": "13785723634558556879",
+      "reviewer": "asha raju",
+      "language": "en",
+      "comment": "Visited thripunithura fazyo. Ms. Sherifa was very helpful and kind."
+    },
+    {
+      "id": "33230165-4812-47c3-8346-249d706b0aa7",
+      "createdAt": "2026-09-28T10:49:52.468711+00:00",
+      "stars": 5,
+      "outlet": "Kerala",
+      "storeCode": "13785723634558556879",
+      "reviewer": "Jisha Rahish",
+      "language": "none",
+      "comment": null
+    },
+    {
+      "id": "914fa040-95a2-4e23-a51b-6c4af065e254",
+      "createdAt": "2026-09-28T08:42:54.831174+00:00",
+      "stars": 4,
+      "outlet": "Kerala",
+      "storeCode": "13785723634558556879",
+      "reviewer": "Shalini Joby",
+      "language": "none",
+      "comment": null
+    },
+    {
+      "id": "9f120b99-486a-4ec6-a2f7-3d4f3d7c2b49",
+      "createdAt": "2026-09-28T06:17:49.714647+00:00",
+      "stars": 5,
+      "outlet": "Kerala",
+      "storeCode": "FAZ-KTYM",
+      "reviewer": "junu Sujith",
+      "language": "ml",
+      "comment": "(Translated by Google) Good service Rakhi\n\n(Original)\nGood സർവീസ് Rakhi"
+    },
+    {
+      "id": "d0bd9e89-a5bb-4c00-85c1-e996c1f83e90",
+      "createdAt": "2026-09-28T06:08:30.71266+00:00",
+      "stars": 5,
+      "outlet": "Kerala",
+      "storeCode": "13785723634558556879",
+      "reviewer": "Lakshmi Suresh",
+      "language": "en",
+      "comment": "I visited the store and had a great experience with the staff. Thanks to Ramla for being helpful and friendly."
+    },
+    {
+      "id": "d2f11f86-e18a-455c-99fb-42767b93de26",
+      "createdAt": "2026-09-28T05:58:03.247128+00:00",
+      "stars": 5,
+      "outlet": "Kerala",
+      "storeCode": "FAZ-KTYM",
+      "reviewer": "Anju Anish",
+      "language": "en",
+      "comment": "Very nice experience good service and good collection"
+    },
+    {
+      "id": "9aa55450-140f-4576-9bfc-86d8ca7de68b",
+      "createdAt": "2026-09-27T15:02:54.371777+00:00",
+      "stars": 5,
+      "outlet": "Kerala",
+      "storeCode": "10168253048224919230",
+      "reviewer": "Haris Pjharis",
+      "language": "none",
+      "comment": null
+    },
+    {
+      "id": "131bafba-89d1-408c-8a51-66fe22215d18",
+      "createdAt": "2026-09-27T14:42:22.474258+00:00",
+      "stars": 5,
+      "outlet": "Kerala",
+      "storeCode": "13785723634558556879",
+      "reviewer": "Divyamol P.S",
+      "language": "en",
+      "comment": "Great experience with fahad"
+    },
+    {
+      "id": "01fe768a-a550-4223-a515-0a0d0c5dfd20",
+      "createdAt": "2026-09-27T14:38:36.192181+00:00",
+      "stars": 5,
+      "outlet": "Kerala",
+      "storeCode": "13785723634558556879",
+      "reviewer": "Harish Pm",
+      "language": "en",
+      "comment": "Affordable prices and Good Collection.. Jibin and Sanjana helped a lot in selecting the right dress.."
+    },
+    {
+      "id": "b4469b48-ad1b-44a9-96c8-9bbdbde7e89f",
+      "createdAt": "2026-09-27T14:28:39.820133+00:00",
+      "stars": 4,
+      "outlet": "Kerala",
+      "storeCode": "13785723634558556879",
+      "reviewer": "Jiju James",
+      "language": "en",
+      "comment": "The selection is satisfactory, and staff Shana provided excellent cooperation."
+    },
+    {
+      "id": "3ef25fa3-8dbc-46e5-8b73-92dae51bb8ff",
+      "createdAt": "2026-09-27T14:17:57.718377+00:00",
+      "stars": 5,
+      "outlet": "Kerala",
+      "storeCode": "07842553729236549202",
+      "reviewer": "Sharath Krishnan S V",
+      "language": "en",
+      "comment": "Good collection"
+    },
+    {
+      "id": "c4851810-c052-481e-956c-4f29add6a91a",
+      "createdAt": "2026-09-27T14:14:37.286521+00:00",
+      "stars": 5,
+      "outlet": "Kerala",
+      "storeCode": "10168253048224919230",
+      "reviewer": "Susan Maria",
+      "language": "none",
+      "comment": null
+    },
+    {
+      "id": "5bf284af-1a9d-4029-9364-328d2e1570ba",
+      "createdAt": "2026-09-27T14:13:40.303194+00:00",
+      "stars": 5,
+      "outlet": "Kerala",
+      "storeCode": "13785723634558556879",
+      "reviewer": "Rahul K",
+      "language": "en",
+      "comment": "Fahad was very helpful"
+    },
+    {
+      "id": "55339f9c-52c5-4a21-bf22-dc18fbd07324",
+      "createdAt": "2026-09-27T13:49:08.560409+00:00",
+      "stars": 5,
+      "outlet": "Kerala",
+      "storeCode": "FAZ-KTYM",
+      "reviewer": "ABHISHEK KURUVILLA",
+      "language": null,
+      "comment": "Such a good collections in kottayam region and the staff Swathi who assisted us to select the dresses was so helpful"
+    },
+    {
+      "id": "70418ab6-3f57-4c29-bf18-e98165f356e3",
+      "createdAt": "2026-09-27T12:12:14.651823+00:00",
+      "stars": 5,
+      "outlet": "Kerala",
+      "storeCode": "FAZ-TCR",
+      "reviewer": "Hepsibha",
+      "language": "none",
+      "comment": null
+    },
+    {
+      "id": "26257b7e-2233-4140-a5df-6b7a70c0fe41",
+      "createdAt": "2026-09-27T12:12:07.579787+00:00",
+      "stars": 5,
+      "outlet": "Kerala",
+      "storeCode": "12266160996918245031",
+      "reviewer": "Nidhila Unnikrishna2000",
+      "language": "none",
+      "comment": null
+    },
+    {
+      "id": "2b18b8a5-a528-46e1-83d7-f4b15b6bcf04",
+      "createdAt": "2026-09-27T10:33:33.557775+00:00",
+      "stars": 5,
+      "outlet": "Kerala",
+      "storeCode": "13785723634558556879",
+      "reviewer": "Jinu Nb",
+      "language": "en",
+      "comment": "Good customer service\nsanjana helped me to find the product"
+    },
+    {
+      "id": "37b8bc93-fe14-4f7c-b36c-b9cbc919c6f9",
+      "createdAt": "2026-09-27T10:27:43.741694+00:00",
+      "stars": 5,
+      "outlet": "Kerala",
+      "storeCode": "11181964837793805771",
+      "reviewer": "Vibhu Krishna",
+      "language": "en",
+      "comment": "Good"
+    },
+    {
+      "id": "44cf37c2-6ef2-4e33-a8e1-7158a1ebf2a9",
+      "createdAt": "2026-09-27T10:23:01.714559+00:00",
+      "stars": 5,
+      "outlet": "Kerala",
+      "storeCode": "FAZ-KTYM",
+      "reviewer": "john jacob",
+      "language": "en",
+      "comment": "Good service and good collections in this store and also have good customer service in their staffs are very polite especially swathy she was very helpful for me"
+    },
+    {
+      "id": "bb1dc4af-41b5-4b74-82dc-19cf4d00c654",
+      "createdAt": "2026-09-27T10:21:00.451021+00:00",
+      "stars": 5,
+      "outlet": "Kerala",
+      "storeCode": "FAZ-KTYM",
+      "reviewer": "Jose Jacob",
+      "language": "en",
+      "comment": "Good service from swathy and thanks for great support"
+    },
+    {
+      "id": "1287d595-5ce9-499f-8a1b-77744eafe78d",
+      "createdAt": "2026-09-27T10:19:05.896725+00:00",
+      "stars": 5,
+      "outlet": "Kerala",
+      "storeCode": "FAZ-KTYM",
+      "reviewer": "Kavya Krishnan",
+      "language": "en",
+      "comment": "Excellent"
+    },
+    {
+      "id": "acf5c024-902e-42e9-923a-b8f54ed998ca",
+      "createdAt": "2026-09-27T10:18:35.600539+00:00",
+      "stars": 3,
+      "outlet": "Kerala",
+      "storeCode": "11181964837793805771",
+      "reviewer": "Anuragシ",
+      "language": "none",
+      "comment": null
+    },
+    {
+      "id": "e30a55ad-6d31-4f0a-bf1b-f143f66074c7",
+      "createdAt": "2026-09-27T10:13:13.425936+00:00",
+      "stars": 5,
+      "outlet": "Kerala",
+      "storeCode": "13785723634558556879",
+      "reviewer": "ATHIRA TS",
+      "language": "none",
+      "comment": null
+    },
+    {
+      "id": "497d979d-c27e-4c59-a546-462916fc7b85",
+      "createdAt": "2026-09-27T10:12:13.817688+00:00",
+      "stars": 5,
+      "outlet": "Kerala",
+      "storeCode": "11181964837793805771",
+      "reviewer": "saraswathi nathan",
+      "language": "en",
+      "comment": "Nice collection, good service."
+    },
+    {
+      "id": "cd4b73f5-a349-4e2a-bc9c-0b0f76b437ec",
+      "createdAt": "2026-09-27T10:00:24.202045+00:00",
+      "stars": 5,
+      "outlet": "Kerala",
+      "storeCode": "11181964837793805771",
+      "reviewer": "sivakumar balasubramaniyam",
+      "language": "none",
+      "comment": null
+    },
+    {
+      "id": "0b203add-5342-44c2-8aa6-ee2b16cf8c24",
+      "createdAt": "2026-09-27T09:31:57.872801+00:00",
+      "stars": 5,
+      "outlet": "Kerala",
+      "storeCode": "11181964837793805771",
+      "reviewer": "Sakthi Kailash s",
+      "language": "en",
+      "comment": "Satisfied with collections and well supported staffs"
+    },
+    {
+      "id": "d28a55c0-c2fe-46c2-9e5a-f48dc975c15d",
+      "createdAt": "2026-09-27T08:41:52.51982+00:00",
+      "stars": 4,
+      "outlet": "Kerala",
+      "storeCode": "11181964837793805771",
+      "reviewer": "Revathy Sudharsan",
+      "language": "en",
+      "comment": "Nice"
+    },
+    {
+      "id": "5222f629-8b4c-48ef-9596-b99379791dec",
+      "createdAt": "2026-09-27T08:22:57.664395+00:00",
+      "stars": 5,
+      "outlet": "Kerala",
+      "storeCode": "10168253048224919230",
+      "reviewer": "Abhi R",
+      "language": "en",
+      "comment": "Nice experience at fazyo kollam prince was greatly helpful"
+    },
+    {
+      "id": "675c9528-91f5-4592-b945-ac9808c2c7f8",
+      "createdAt": "2026-09-27T08:02:18.826422+00:00",
+      "stars": 5,
+      "outlet": "Kerala",
+      "storeCode": "11181964837793805771",
+      "reviewer": "Aswani SasiKumar",
+      "language": "en",
+      "comment": "Reshmi good staff experience"
+    },
+    {
+      "id": "c6c3a9cb-ff84-40b7-af1a-def05cc65399",
+      "createdAt": "2026-09-27T07:29:50.466784+00:00",
+      "stars": 5,
+      "outlet": "Kerala",
+      "storeCode": "12266160996918245031",
+      "reviewer": "Dhanya Kumar",
+      "language": "en",
+      "comment": "It was amazing. Christeena was great in customer support. Can have little more plus size. Else excellent service ❤️"
+    },
+    {
+      "id": "8cfef102-763f-40c6-a970-9a60a9b451c7",
+      "createdAt": "2026-09-27T07:16:22.355138+00:00",
+      "stars": 5,
+      "outlet": "Kerala",
+      "storeCode": "07842553729236549202",
+      "reviewer": "Aneesh AK",
+      "language": "en",
+      "comment": "Good selection of clothes for all ages, but especially youngsters. Staff were also very helpful."
+    },
+    {
+      "id": "3947da35-4074-441e-afcf-ba682cc0174a",
+      "createdAt": "2026-09-27T07:03:17.018547+00:00",
+      "stars": 5,
+      "outlet": "Kerala",
+      "storeCode": "FAZ-TCR",
+      "reviewer": "rahul kv",
+      "language": "en",
+      "comment": "Good quality  and good service"
+    },
+    {
+      "id": "86a89522-75bd-486a-9bc3-00b484b9ebfb",
+      "createdAt": "2026-09-27T06:52:47.155934+00:00",
+      "stars": 5,
+      "outlet": "Kerala",
+      "storeCode": "11181964837793805771",
+      "reviewer": "Varun",
+      "language": "en",
+      "comment": "Nice"
+    },
+    {
+      "id": "42316418-e906-45f2-a021-6c51401778e6",
+      "createdAt": "2026-09-27T06:52:32.080589+00:00",
+      "stars": 5,
+      "outlet": "Kerala",
+      "storeCode": "FAZ-TCR",
+      "reviewer": "vipini pv",
+      "language": "none",
+      "comment": null
+    },
+    {
+      "id": "1a9f739e-1b6b-4700-bc1e-b3d5b0d70889",
+      "createdAt": "2026-09-27T06:35:34.385281+00:00",
+      "stars": 5,
+      "outlet": "Kerala",
+      "storeCode": "07842553729236549202",
+      "reviewer": "Anjima N C",
+      "language": "none",
+      "comment": null
+    },
+    {
+      "id": "6caf486b-6c89-41d7-953a-c09dd10ee7d5",
+      "createdAt": "2026-09-27T06:34:03.28737+00:00",
+      "stars": 5,
+      "outlet": "Kerala",
+      "storeCode": "11181964837793805771",
+      "reviewer": "sree2302",
+      "language": "en",
+      "comment": "Value for money 💰😁"
+    },
+    {
+      "id": "06d85280-9d79-4564-8bce-d878c556f6e6",
+      "createdAt": "2026-09-27T06:21:48.564497+00:00",
+      "stars": 4,
+      "outlet": "Kerala",
+      "storeCode": "11181964837793805771",
+      "reviewer": "midhun pk",
+      "language": "none",
+      "comment": null
+    },
+    {
+      "id": "0845622e-2894-4920-b4a7-fc06570c3d04",
+      "createdAt": "2026-09-27T05:48:47.78462+00:00",
+      "stars": 5,
+      "outlet": "Kerala",
+      "storeCode": "11181964837793805771",
+      "reviewer": "Anila S",
+      "language": "en",
+      "comment": "Nice collection worth shopping experience... Loved it"
+    },
+    {
+      "id": "f4faf7cc-c0fd-4e27-8204-952147861e5a",
+      "createdAt": "2026-09-27T05:33:01.314184+00:00",
+      "stars": 5,
+      "outlet": "Kerala",
+      "storeCode": "FAZ-KTYM",
+      "reviewer": "Georgie Jacob",
+      "language": "en",
+      "comment": "Best Service at Fazyo Kottayam thankyou Bibin & Chippy👍🤩"
+    },
+    {
+      "id": "b685b840-4dc3-4635-b888-ef068383fc17",
+      "createdAt": "2026-09-27T05:25:23.57379+00:00",
+      "stars": 5,
+      "outlet": "Kerala",
+      "storeCode": "FAZ-KTYM",
+      "reviewer": "Deepak Mp",
+      "language": "en",
+      "comment": "Very good experience at fazyo shopping...!👍🏻 nice Collection♥️"
+    },
+    {
+      "id": "6aa44f49-326d-40dc-a33e-b71593cd458a",
+      "createdAt": "2026-09-26T18:53:50.947856+00:00",
+      "stars": 3,
+      "outlet": "Kerala",
+      "storeCode": "06936392301318726207",
+      "reviewer": "febin sebastian",
+      "language": "none",
+      "comment": null
+    },
+    {
+      "id": "bfc2ec7b-9eeb-4d72-b22d-945d0e87c2aa",
+      "createdAt": "2026-09-26T15:39:59.191068+00:00",
+      "stars": 5,
+      "outlet": "Kerala",
+      "storeCode": "FAZ-KTYM",
+      "reviewer": "Neethu T",
+      "language": "en",
+      "comment": "I had a wonderful experience at Fazyo.\nBig shoutout to Swathy for her excellent service and friendly nature. Super satisfied!"
+    },
+    {
+      "id": "94268b51-1a5d-4c28-9bbf-bdb9bd82577f",
+      "createdAt": "2026-09-26T15:07:58.855836+00:00",
+      "stars": 5,
+      "outlet": "Kerala",
+      "storeCode": "11181964837793805771",
+      "reviewer": "Fazeeh",
+      "language": "none",
+      "comment": null
+    },
+    {
+      "id": "b62b51f7-7f4c-46df-bce7-9ca9b457cb60",
+      "createdAt": "2026-09-26T14:00:39.293968+00:00",
+      "stars": 5,
+      "outlet": "Kerala",
+      "storeCode": "07842553729236549202",
+      "reviewer": "Mahitha Johns",
+      "language": "en",
+      "comment": "Excellent variety of collections and great service! We had a wonderful experience, especially thanks to Mr. Joby, who was very helpful, friendly, and attentive throughout."
+    },
+    {
+      "id": "2c46fb18-08b0-438a-8f76-a56aa33cdf25",
+      "createdAt": "2026-09-26T13:48:12.351723+00:00",
+      "stars": 5,
+      "outlet": "Kerala",
+      "storeCode": "07842553729236549202",
+      "reviewer": "Aswathy Mohan",
+      "language": "none",
+      "comment": null
+    },
+    {
+      "id": "e167a8b1-1df4-47fc-9588-80e765db149e",
+      "createdAt": "2026-09-26T13:39:23.384512+00:00",
+      "stars": 4,
+      "outlet": "Kerala",
+      "storeCode": "07842553729236549202",
+      "reviewer": "BLAZE ANTONY",
+      "language": "en",
+      "comment": "Nice hospitality"
+    },
+    {
+      "id": "e54d9d0a-9041-47eb-a981-9ddcc23e07d7",
+      "createdAt": "2026-09-26T13:28:32.312217+00:00",
+      "stars": 5,
+      "outlet": "Kerala",
+      "storeCode": "11181964837793805771",
+      "reviewer": "athira ka",
+      "language": "none",
+      "comment": null
+    },
+    {
+      "id": "63688dac-3f8f-4347-89d2-8f24c3e3a929",
+      "createdAt": "2026-09-26T13:17:04.822881+00:00",
+      "stars": 5,
+      "outlet": "Kerala",
+      "storeCode": "12266160996918245031",
+      "reviewer": "Jency Shiju",
+      "language": "none",
+      "comment": null
+    },
+    {
+      "id": "ab3b2e91-05d5-45c7-9fcf-c611f7a4b137",
+      "createdAt": "2026-09-26T13:02:32.980017+00:00",
+      "stars": 4,
+      "outlet": "Kerala",
+      "storeCode": "11181964837793805771",
+      "reviewer": "Debsung Basumatary",
+      "language": "none",
+      "comment": null
+    },
+    {
+      "id": "ccc7d526-1fcf-4c7c-9959-a83107a7b1c5",
+      "createdAt": "2026-09-26T12:46:06.680351+00:00",
+      "stars": 5,
+      "outlet": "Kerala",
+      "storeCode": "07842553729236549202",
+      "reviewer": "Jison Jose",
+      "language": "none",
+      "comment": null
+    },
+    {
+      "id": "15a6e2fb-b738-42e6-8b43-e446d8c0a13c",
+      "createdAt": "2026-09-26T12:23:44.392863+00:00",
+      "stars": 5,
+      "outlet": "Kerala",
+      "storeCode": "07842553729236549202",
+      "reviewer": "Remya Divakaran",
+      "language": "none",
+      "comment": null
+    },
+    {
+      "id": "4128e691-5dec-407a-86d8-209f41a490aa",
+      "createdAt": "2026-09-26T12:14:03.773154+00:00",
+      "stars": 5,
+      "outlet": "Kerala",
+      "storeCode": "13785723634558556879",
+      "reviewer": "Raghu Nath",
+      "language": "none",
+      "comment": null
+    },
+    {
+      "id": "9ad93bb6-6789-40a1-a570-ee507bd53316",
+      "createdAt": "2026-09-26T11:00:46.842318+00:00",
+      "stars": 5,
+      "outlet": "Kerala",
+      "storeCode": "11181964837793805771",
+      "reviewer": "Hari Muthu",
+      "language": "en",
+      "comment": "Good collection"
+    },
+    {
+      "id": "b7fbabbd-7de9-4e56-8d94-9e3633035ca4",
+      "createdAt": "2026-09-26T11:00:28.433717+00:00",
+      "stars": 5,
+      "outlet": "Kerala",
+      "storeCode": "10168253048224919230",
+      "reviewer": "B",
+      "language": "en",
+      "comment": "Good collections"
+    },
+    {
+      "id": "92a7e31b-8170-46ae-b766-38955923a911",
+      "createdAt": "2026-09-26T10:57:24.005616+00:00",
+      "stars": 1,
+      "outlet": "Kerala",
+      "storeCode": "12266160996918245031",
+      "reviewer": "Sandra Chippu",
+      "language": "en",
+      "comment": "I recently did some shopping at Fazyo, Angamaly, and purchased a few dresses from there. However, I was quite disappointed with the behaviour of the female staff members.\n\nWhile we were looking around the store, they kept watching us and following us wherever we went, which made us feel extremely uncomfortable. It felt as though we were being treated with suspicion, almost as if we were there to steal something.\n\nI understand that staff need to be attentive, but customers should also be treated with basic respect and trust. Although I did purchase a few dresses that day, the experience left a very negative impression on me, and I have decided not to shop there again in the future.\n\nI hope the management takes this feedback seriously and works on creating a more comfortable and welcoming environment for customers."
+    },
+    {
+      "id": "cb114668-c73a-455c-b07c-0cff8b83b493",
+      "createdAt": "2026-09-26T10:53:45.10072+00:00",
+      "stars": 5,
+      "outlet": "Kerala",
+      "storeCode": "10168253048224919230",
+      "reviewer": "Muhammed Sahil",
+      "language": "none",
+      "comment": null
+    },
+    {
+      "id": "0f46401c-7928-4a9a-a5f8-ad956f7904d7",
+      "createdAt": "2026-09-26T10:47:04.02614+00:00",
+      "stars": 4,
+      "outlet": "Kerala",
+      "storeCode": "10168253048224919230",
+      "reviewer": "Issa Mariyam",
+      "language": "none",
+      "comment": null
+    },
+    {
+      "id": "08b0a9c1-c4da-4bb5-83dd-34ad392070be",
+      "createdAt": "2026-09-26T10:41:47.083078+00:00",
+      "stars": 5,
+      "outlet": "Kerala",
+      "storeCode": "11181964837793805771",
+      "reviewer": "Abhiroopa R",
+      "language": "en",
+      "comment": "Good but collections are not better"
+    },
+    {
+      "id": "86f7e85f-d0ec-43b0-b7c1-fa9b97621528",
+      "createdAt": "2026-09-26T10:41:45.516252+00:00",
+      "stars": 5,
+      "outlet": "Kerala",
+      "storeCode": "11181964837793805771",
+      "reviewer": "Akshara Subash",
+      "language": "en",
+      "comment": "Good"
+    },
+    {
+      "id": "297714a2-c5a1-4265-8ca6-3fadbde887b5",
+      "createdAt": "2026-09-26T10:16:31.077707+00:00",
+      "stars": 5,
+      "outlet": "Kerala",
+      "storeCode": "06936392301318726207",
+      "reviewer": "Ananya Santhosh",
+      "language": "en",
+      "comment": "Had a really good experience with Fazyo.The service was excellent, the staff were friendly and helpful special mention to Aryan and Safvan they guided as very well. Overall the experience was Good."
+    },
+    {
+      "id": "9f7c91cd-20c2-4038-a899-c2a5fae6e8db",
+      "createdAt": "2026-09-26T09:52:14.77852+00:00",
+      "stars": 5,
+      "outlet": "Kerala",
+      "storeCode": "13785723634558556879",
+      "reviewer": "Latha Soman",
+      "language": "en",
+      "comment": "(Translated by Google) Ramla.I am so happy.\n\n(Original)\nRamla .Iam so happy"
+    },
+    {
+      "id": "57cde90c-884d-47fc-bcf9-fcb6c9967363",
+      "createdAt": "2026-09-26T09:32:55.668583+00:00",
+      "stars": 4,
+      "outlet": "Kerala",
+      "storeCode": "11181964837793805771",
+      "reviewer": "Safa Ameer",
+      "language": "none",
+      "comment": null
+    },
+    {
+      "id": "af9dd63a-9516-41d5-ab91-4596f9def189",
+      "createdAt": "2026-09-26T09:05:57.856223+00:00",
+      "stars": 5,
+      "outlet": "Kerala",
+      "storeCode": "10168253048224919230",
+      "reviewer": "Gopu krishna G",
+      "language": "none",
+      "comment": null
+    },
+    {
+      "id": "35b15e7c-397b-48e8-a39c-de51d670a674",
+      "createdAt": "2026-09-26T09:02:37.362106+00:00",
+      "stars": 5,
+      "outlet": "Kerala",
+      "storeCode": "11181964837793805771",
+      "reviewer": "Prasanna Sreenivas",
+      "language": "en",
+      "comment": "Good collection.  Nice and courteous staff.will visit again"
+    },
+    {
+      "id": "650372fa-a86d-436c-80aa-b08359ecda56",
+      "createdAt": "2026-09-26T08:55:31.037952+00:00",
+      "stars": 4,
+      "outlet": "Kerala",
+      "storeCode": "11181964837793805771",
+      "reviewer": "ajith krishna",
+      "language": "none",
+      "comment": null
+    },
+    {
+      "id": "7cceb262-08eb-4cc9-9f3c-bdf76d08b280",
+      "createdAt": "2026-09-26T08:35:48.39195+00:00",
+      "stars": 5,
+      "outlet": "Kerala",
+      "storeCode": "10168253048224919230",
+      "reviewer": "Albin S J",
+      "language": "en",
+      "comment": "Good service"
+    },
+    {
+      "id": "6ae202e9-8192-4146-b439-07052decf90b",
+      "createdAt": "2026-09-26T08:20:10.168627+00:00",
+      "stars": 5,
+      "outlet": "Kerala",
+      "storeCode": "11181964837793805771",
+      "reviewer": "Dha Saji",
+      "language": "en",
+      "comment": "Friendly staff good collection"
+    },
+    {
+      "id": "3046be5f-f87f-46ba-9fef-df2c2b7df4ff",
+      "createdAt": "2026-09-26T07:18:35.30033+00:00",
+      "stars": 5,
+      "outlet": "Kerala",
+      "storeCode": "11181964837793805771",
+      "reviewer": "Boopathi",
+      "language": "none",
+      "comment": null
+    },
+    {
+      "id": "a7b9177b-42c0-4953-b1ea-c18020e7e411",
+      "createdAt": "2026-09-26T07:18:10.50488+00:00",
+      "stars": 5,
+      "outlet": "Kerala",
+      "storeCode": "11181964837793805771",
+      "reviewer": "dharsana dharsu",
+      "language": "none",
+      "comment": null
+    },
+    {
+      "id": "eaedb5dd-460e-4fed-92b2-93619db9ce14",
+      "createdAt": "2026-09-26T07:07:03.783242+00:00",
+      "stars": 5,
+      "outlet": "Kerala",
+      "storeCode": "FAZ-KTYM",
+      "reviewer": "Jith Joseph",
+      "language": "en",
+      "comment": "Very good experience and staff Ashwini was very cooperative"
+    },
+    {
+      "id": "1e1b9812-72ab-4a90-8072-c7bde83b7cb2",
+      "createdAt": "2026-09-26T06:58:32.245387+00:00",
+      "stars": 5,
+      "outlet": "Kerala",
+      "storeCode": "10168253048224919230",
+      "reviewer": "Devika A",
+      "language": null,
+      "comment": "Great collection and nice customer service"
+    },
+    {
+      "id": "498c58c4-c72f-4a80-98c0-a25f3afc024c",
+      "createdAt": "2026-09-26T06:55:25.48647+00:00",
+      "stars": 5,
+      "outlet": "Kerala",
+      "storeCode": "13785723634558556879",
+      "reviewer": "ANU K S",
+      "language": "en",
+      "comment": "Very nice customer service and very supportive staff shahana 😊😊"
+    },
+    {
+      "id": "74d436c0-0642-4603-bd4f-20614799bd27",
+      "createdAt": "2026-09-26T06:51:16.30838+00:00",
+      "stars": 5,
+      "outlet": "Kerala",
+      "storeCode": "FAZ-KTYM",
+      "reviewer": "Sarah Mathew",
+      "language": "en",
+      "comment": "Customer care service is good. chippy chechi is is so friendly."
+    },
+    {
+      "id": "dc476cd5-658f-49c2-a157-43aa6c339eb3",
+      "createdAt": "2026-09-26T06:26:30.370174+00:00",
+      "stars": 5,
+      "outlet": "Kerala",
+      "storeCode": "13785723634558556879",
+      "reviewer": "S Shyam",
+      "language": "en",
+      "comment": "Excellent service by Ms.Sanjana"
+    },
+    {
+      "id": "59aad3f1-519e-491a-bb16-5375034bdd53",
+      "createdAt": "2026-09-26T05:16:06.68772+00:00",
+      "stars": 1,
+      "outlet": "Kerala",
+      "storeCode": "FAZ-KTYM",
+      "reviewer": "SREENADH S NAIR",
+      "language": "en",
+      "comment": "Superb collection & good service especially swapna"
+    },
+    {
+      "id": "4c8c0f84-d681-4f33-a881-1e6374ffef99",
+      "createdAt": "2026-09-25T15:02:29.081842+00:00",
+      "stars": 5,
+      "outlet": "Kerala",
+      "storeCode": "07842553729236549202",
+      "reviewer": "Aslam Aslu",
+      "language": "en",
+      "comment": "Good experience"
+    },
+    {
+      "id": "9963e1b8-ecef-4a95-8d17-ca726c53f09c",
+      "createdAt": "2026-09-25T14:46:39.212798+00:00",
+      "stars": 5,
+      "outlet": "Kerala",
+      "storeCode": "13785723634558556879",
+      "reviewer": "SMITHA ANIL LAL",
+      "language": "en",
+      "comment": "Great service and good staffs"
+    },
+    {
+      "id": "ae2c18ad-f981-4e4f-9e85-9505d9f6ed49",
+      "createdAt": "2026-09-25T14:12:35.40864+00:00",
+      "stars": 5,
+      "outlet": "Kerala",
+      "storeCode": "11181964837793805771",
+      "reviewer": "Dilshad Muhammed",
+      "language": "none",
+      "comment": null
+    },
+    {
+      "id": "68da6f80-5b29-4e81-8677-e4cbe525d259",
+      "createdAt": "2026-09-25T13:42:35.694066+00:00",
+      "stars": 5,
+      "outlet": "Kerala",
+      "storeCode": "11181964837793805771",
+      "reviewer": "Mlp",
+      "language": "none",
+      "comment": null
+    },
+    {
+      "id": "2fc84dc5-a8e2-4c38-b0b2-75a770e1406f",
+      "createdAt": "2026-09-25T13:19:17.255945+00:00",
+      "stars": 5,
+      "outlet": "Kerala",
+      "storeCode": "07842553729236549202",
+      "reviewer": "Maneesh Unnikuttan",
+      "language": "en",
+      "comment": "Good"
+    },
+    {
+      "id": "6dfb9fd5-6979-4b9e-92cb-80d3f1c72dad",
+      "createdAt": "2026-09-25T12:43:30.594358+00:00",
+      "stars": 5,
+      "outlet": "Kerala",
+      "storeCode": "11181964837793805771",
+      "reviewer": "saji tk",
+      "language": "none",
+      "comment": null
+    },
+    {
+      "id": "9fd3fe61-58fd-4de9-9eda-3922930e6811",
+      "createdAt": "2026-09-25T12:42:53.729665+00:00",
+      "stars": 5,
+      "outlet": "Kerala",
+      "storeCode": "07842553729236549202",
+      "reviewer": "Samson Joseph Joseph",
+      "language": "en",
+      "comment": "White range of selection and I got the baggy  jeans I wanted"
+    },
+    {
+      "id": "40b27282-31b3-4f38-9245-71edfcd004e0",
+      "createdAt": "2026-09-25T12:08:40.527002+00:00",
+      "stars": 5,
+      "outlet": "Kerala",
+      "storeCode": "FAZ-KTYM",
+      "reviewer": "Sam Mathew AD",
+      "language": "en",
+      "comment": "Good collection, really helped. Especially the staff Arjun Babu. Thank u"
+    },
+    {
+      "id": "ade9a7e2-9aed-4528-8132-616bb2bae336",
+      "createdAt": "2026-09-25T11:30:01.966832+00:00",
+      "stars": 5,
+      "outlet": "Kerala",
+      "storeCode": "07842553729236549202",
+      "reviewer": "Serin Thomas",
+      "language": "en",
+      "comment": "Good customer service"
+    },
+    {
+      "id": "769cf5ef-f2c7-48ab-9a74-bf22f5065371",
+      "createdAt": "2026-09-25T11:21:28.074366+00:00",
+      "stars": 5,
+      "outlet": "Kerala",
+      "storeCode": "10168253048224919230",
+      "reviewer": "AAROHI ROHI",
+      "language": "other",
+      "comment": "👍"
+    },
+    {
+      "id": "f55db77b-5d25-462e-89a1-d55dc9712571",
+      "createdAt": "2026-09-25T10:24:12.66206+00:00",
+      "stars": 5,
+      "outlet": "Kerala",
+      "storeCode": "11181964837793805771",
+      "reviewer": "Athira",
+      "language": "en",
+      "comment": "Good collections & affordable price also good customer service (dhanya)"
+    },
+    {
+      "id": "159f9f5f-5bb2-4156-aef7-08455b6f911c",
+      "createdAt": "2026-09-25T10:22:09.662701+00:00",
+      "stars": 5,
+      "outlet": "Kerala",
+      "storeCode": "11181964837793805771",
+      "reviewer": "Dhanya Advik",
+      "language": "en",
+      "comment": "Good customer service (Athira)"
+    },
+    {
+      "id": "69111975-3016-47dc-b898-eedebb2d1a39",
+      "createdAt": "2026-09-25T09:45:40.648283+00:00",
+      "stars": 5,
+      "outlet": "Kerala",
+      "storeCode": "10168253048224919230",
+      "reviewer": "Rajasree Rajasree",
+      "language": "none",
+      "comment": null
+    },
+    {
+      "id": "68a39234-645c-41f0-bdb6-4718c99d8a0d",
+      "createdAt": "2026-09-25T09:44:18.902682+00:00",
+      "stars": 5,
+      "outlet": "Kerala",
+      "storeCode": "10168253048224919230",
+      "reviewer": "Lini Anu",
+      "language": "en",
+      "comment": "Nice costomer service"
+    },
+    {
+      "id": "a18f3eb0-7eeb-4eed-8b67-e5455350381d",
+      "createdAt": "2026-09-25T08:58:56.285215+00:00",
+      "stars": 5,
+      "outlet": "Kerala",
+      "storeCode": "13785723634558556879",
+      "reviewer": "DEEPA NARAYANAN",
+      "language": "en",
+      "comment": "(Translated by Google) Shareef\n\n(Original)\nShareefa"
+    },
+    {
+      "id": "7ebd6da9-1197-426d-ad26-5247ad251b19",
+      "createdAt": "2026-09-25T08:37:34.776905+00:00",
+      "stars": 4,
+      "outlet": "Kerala",
+      "storeCode": "11181964837793805771",
+      "reviewer": "Anaswara L",
+      "language": "en",
+      "comment": "Good service by the staff\nSatisfied shopping"
+    },
+    {
+      "id": "e856cc19-27ca-4b76-846c-c038a08e2a9f",
+      "createdAt": "2026-09-25T07:17:21.806397+00:00",
+      "stars": 5,
+      "outlet": "Kerala",
+      "storeCode": "13785723634558556879",
+      "reviewer": "karthikmkishore",
+      "language": "en",
+      "comment": "Good"
+    },
+    {
+      "id": "eefeab2d-bfd4-49f2-828c-16883133a2bc",
+      "createdAt": "2026-09-25T06:11:04.686937+00:00",
+      "stars": 5,
+      "outlet": "Kerala",
+      "storeCode": "13785723634558556879",
+      "reviewer": "Rakendu R",
+      "language": "en",
+      "comment": "The staff sanjana service was good and satisfied shopping experience."
+    },
+    {
+      "id": "3373c224-c338-4344-903b-c4f511eae8e7",
+      "createdAt": "2026-09-24T16:25:29.608288+00:00",
+      "stars": 5,
+      "outlet": "Kerala",
+      "storeCode": "07842553729236549202",
+      "reviewer": "Suvinkv Kv",
+      "language": "none",
+      "comment": null
+    },
+    {
+      "id": "aff48012-f9c0-4ef2-858b-78c38d92df89",
+      "createdAt": "2026-09-24T15:42:14.616447+00:00",
+      "stars": 4,
+      "outlet": "Kerala",
+      "storeCode": "11181964837793805771",
+      "reviewer": "Anju Joseph",
+      "language": "en",
+      "comment": "Good collection, enjoyed the time here"
+    },
+    {
+      "id": "fced542f-1d18-4300-80d5-012c55299f9a",
+      "createdAt": "2026-09-24T15:23:47.431535+00:00",
+      "stars": 5,
+      "outlet": "Kerala",
+      "storeCode": "11181964837793805771",
+      "reviewer": "Sreerag S",
+      "language": "none",
+      "comment": null
+    },
+    {
+      "id": "0b673d4a-26cd-4c35-9486-6517652dc4aa",
+      "createdAt": "2026-09-24T14:55:56.822246+00:00",
+      "stars": 5,
+      "outlet": "Kerala",
+      "storeCode": "10168253048224919230",
+      "reviewer": "roopesh s",
+      "language": "en",
+      "comment": "Good service 👍"
+    },
+    {
+      "id": "377a5993-11a1-40ea-a88f-4e612fb700e3",
+      "createdAt": "2026-09-24T14:55:07.060815+00:00",
+      "stars": 5,
+      "outlet": "Kerala",
+      "storeCode": "FAZ-TCR",
+      "reviewer": "Riju Mani",
+      "language": "none",
+      "comment": null
+    },
+    {
+      "id": "2758c1ee-1c63-4617-9ba9-7445cf3e3efb",
+      "createdAt": "2026-09-24T14:52:04.217132+00:00",
+      "stars": 5,
+      "outlet": "Kerala",
+      "storeCode": "FAZ-KTYM",
+      "reviewer": "Sethu Muraleedharan",
+      "language": "en",
+      "comment": "Good Collection and excellent customer service.. Special thanks to Arjun Babu for his wonderful service 👍"
+    },
+    {
+      "id": "83ee7550-731e-496f-8b4b-8b5a1acce862",
+      "createdAt": "2026-09-24T14:39:08.164469+00:00",
+      "stars": 4,
+      "outlet": "Kerala",
+      "storeCode": "07842553729236549202",
+      "reviewer": "Monir 786",
+      "language": "en",
+      "comment": "Quality good"
+    },
+    {
+      "id": "f2289200-6d5c-4bb3-89db-0f993ece59c4",
+      "createdAt": "2026-09-24T14:34:47.075937+00:00",
+      "stars": 5,
+      "outlet": "Kerala",
+      "storeCode": "11181964837793805771",
+      "reviewer": "Abhilash Jacob",
+      "language": "en",
+      "comment": "Excellent service"
+    },
+    {
+      "id": "9bb8fd78-5929-45b3-bd16-59a569a2f814",
+      "createdAt": "2026-09-24T14:11:24.548116+00:00",
+      "stars": 5,
+      "outlet": "Kerala",
+      "storeCode": "FAZ-KTYM",
+      "reviewer": "RAHUL A R",
+      "language": "en",
+      "comment": "very helpful staff. And good friendly atmosphere"
+    },
+    {
+      "id": "f7367d85-8c3a-47da-b0cf-4546e73d0cf9",
+      "createdAt": "2026-09-24T13:33:49.110991+00:00",
+      "stars": 5,
+      "outlet": "Kerala",
+      "storeCode": "13785723634558556879",
+      "reviewer": "Gouripriya Balachandran",
+      "language": "en",
+      "comment": "Shafeena  helped sincerely and enthusiastically\nTreated us with respect and love"
+    },
+    {
+      "id": "c7e0c275-aafd-4663-81e3-84eaad86e945",
+      "createdAt": "2026-09-24T11:51:47.167786+00:00",
+      "stars": 5,
+      "outlet": "Kerala",
+      "storeCode": "11181964837793805771",
+      "reviewer": "Vaisakh N",
+      "language": "none",
+      "comment": null
+    },
+    {
+      "id": "8be39be4-4270-41b6-9478-86f3b4a617b9",
+      "createdAt": "2026-09-24T11:29:46.919742+00:00",
+      "stars": 5,
+      "outlet": "Kerala",
+      "storeCode": "11181964837793805771",
+      "reviewer": "Dwarakanathan M",
+      "language": "en",
+      "comment": "Good collection and reasonable price. The staff were friendly.Overall, a good shopping experience..."
+    },
+    {
+      "id": "3067f464-9503-4179-ab81-01f603a5d623",
+      "createdAt": "2026-09-24T11:26:50.050423+00:00",
+      "stars": 5,
+      "outlet": "Kerala",
+      "storeCode": "13785723634558556879",
+      "reviewer": "RESHMA CHANDRABABU 2026",
+      "language": "none",
+      "comment": null
+    },
+    {
+      "id": "c5d85bb8-b7b8-4b98-83c5-52d8e7dbaa53",
+      "createdAt": "2026-09-24T10:08:27.643333+00:00",
+      "stars": 4,
+      "outlet": "Kerala",
+      "storeCode": "10168253048224919230",
+      "reviewer": "Rajna Ramdas",
+      "language": "none",
+      "comment": null
+    },
+    {
+      "id": "776671a5-fd40-404c-849a-4ff8490bc932",
+      "createdAt": "2026-09-24T09:40:37.223695+00:00",
+      "stars": 5,
+      "outlet": "Kerala",
+      "storeCode": "06936392301318726207",
+      "reviewer": "Treesa niya Simmethy",
+      "language": "en",
+      "comment": "Nice collection,friendly staff"
+    },
+    {
+      "id": "d6b4955a-12cf-481d-b2b8-575d8e0bc513",
+      "createdAt": "2026-09-24T08:57:52.978874+00:00",
+      "stars": 5,
+      "outlet": "Kerala",
+      "storeCode": "11181964837793805771",
+      "reviewer": "Girish Girish",
+      "language": "none",
+      "comment": null
+    },
+    {
+      "id": "6b294470-084c-414f-99b4-a46c8be3541e",
+      "createdAt": "2026-09-24T08:52:56.434795+00:00",
+      "stars": 5,
+      "outlet": "Kerala",
+      "storeCode": "12266160996918245031",
+      "reviewer": "ANU JAMES",
+      "language": "en",
+      "comment": "Excellent"
+    },
+    {
+      "id": "e2c97fca-9b35-4ea1-ab04-1b700e5eb1f4",
+      "createdAt": "2026-09-24T08:44:37.305954+00:00",
+      "stars": 5,
+      "outlet": "Kerala",
+      "storeCode": "13785723634558556879",
+      "reviewer": "Sneha Sajeev",
+      "language": "en",
+      "comment": "They have a wide variety of collections.We are a regular customer .The staffs are all so friendly especially Sanjana who took so much effort to select clothes for my baby when we went recently.It is definitely one of the best store in Thripunithura for fashionable clothes."
+    },
+    {
+      "id": "92791194-6dde-45f7-a00c-0fe0d93f530d",
+      "createdAt": "2026-09-24T04:30:59.965892+00:00",
+      "stars": 4,
+      "outlet": "Kerala",
+      "storeCode": "11181964837793805771",
+      "reviewer": "Gouthami",
+      "language": "none",
+      "comment": null
+    },
+    {
+      "id": "bf0cff56-445b-42ae-b5eb-964d1c08b2c0",
+      "createdAt": "2026-09-23T15:38:11.473829+00:00",
+      "stars": 5,
+      "outlet": "Kerala",
+      "storeCode": "10168253048224919230",
+      "reviewer": "MUHAMMED SADIK",
+      "language": "en",
+      "comment": "Nice collections and good customer service by aliya"
+    },
+    {
+      "id": "90c8ecbc-cd49-4ff4-a06b-506936f0072a",
+      "createdAt": "2026-09-23T15:30:52.75654+00:00",
+      "stars": 5,
+      "outlet": "Kerala",
+      "storeCode": "11181964837793805771",
+      "reviewer": "sujeesh s",
+      "language": "none",
+      "comment": null
+    },
+    {
+      "id": "19dde8b5-13cc-4e8e-9431-ad6c1a280c64",
+      "createdAt": "2026-09-23T14:31:46.098995+00:00",
+      "stars": 5,
+      "outlet": "Kerala",
+      "storeCode": "07842553729236549202",
+      "reviewer": "Bijo Joshy",
+      "language": "none",
+      "comment": null
+    },
+    {
+      "id": "38f9048c-512e-4f0b-8273-615f0f771692",
+      "createdAt": "2026-09-23T14:17:38.007097+00:00",
+      "stars": 5,
+      "outlet": "Kerala",
+      "storeCode": "13785723634558556879",
+      "reviewer": "Neethu Rajesh",
+      "language": "en",
+      "comment": "Excellent customer service! Very friendly, professional and helpful staff. Really loved the experience at Fazyo. ❤️👏"
+    },
+    {
+      "id": "e55b7e94-3b08-4202-a138-0b34cd376546",
+      "createdAt": "2026-09-23T13:59:50.281517+00:00",
+      "stars": 4,
+      "outlet": "Kerala",
+      "storeCode": "07842553729236549202",
+      "reviewer": "Farhan M Jeejo",
+      "language": "none",
+      "comment": null
+    },
+    {
+      "id": "ac02b342-3309-489e-89b5-c67a63c7b6a4",
+      "createdAt": "2026-09-23T13:38:12.260891+00:00",
+      "stars": 5,
+      "outlet": "Kerala",
+      "storeCode": "11181964837793805771",
+      "reviewer": "Monisha Girish",
+      "language": "none",
+      "comment": null
+    },
+    {
+      "id": "802947f2-28e0-4835-b3d3-974827840cad",
+      "createdAt": "2026-09-23T13:32:00.458826+00:00",
+      "stars": 4,
+      "outlet": "Kerala",
+      "storeCode": "11181964837793805771",
+      "reviewer": "Sathya Priya",
+      "language": "en",
+      "comment": "Good collections"
+    },
+    {
+      "id": "51a62b8d-9148-4ad1-9a87-72f5c2e117d3",
+      "createdAt": "2026-09-23T13:20:46.747482+00:00",
+      "stars": 5,
+      "outlet": "Kerala",
+      "storeCode": "10168253048224919230",
+      "reviewer": "Silka Tent event management",
+      "language": "none",
+      "comment": null
+    },
+    {
+      "id": "3c29f875-2ca4-426b-83fc-3b3498fedbae",
+      "createdAt": "2026-09-23T13:11:34.144441+00:00",
+      "stars": 5,
+      "outlet": "Kerala",
+      "storeCode": "FAZ-KTYM",
+      "reviewer": "Abhilash P t",
+      "language": "none",
+      "comment": null
+    },
+    {
+      "id": "871f8ffa-940b-4323-bda3-8d76b965e3a8",
+      "createdAt": "2026-09-23T12:13:10.243176+00:00",
+      "stars": 5,
+      "outlet": "Kerala",
+      "storeCode": "11181964837793805771",
+      "reviewer": "vipanjika thrissur",
+      "language": "en",
+      "comment": "Nice collections. Good Service."
+    },
+    {
+      "id": "2b5fc293-c26f-4e88-b6c8-c47d2dd43170",
+      "createdAt": "2026-09-23T11:46:19.767275+00:00",
+      "stars": 5,
+      "outlet": "Kerala",
+      "storeCode": "11181964837793805771",
+      "reviewer": "Sachin Mahesh",
+      "language": "none",
+      "comment": null
+    },
+    {
+      "id": "068fa8e0-0464-4598-ba5e-dc5bf68bad9e",
+      "createdAt": "2026-09-23T11:24:10.663945+00:00",
+      "stars": 5,
+      "outlet": "Kerala",
+      "storeCode": "FAZ-KTYM",
+      "reviewer": "Nidhimol AK",
+      "language": "en",
+      "comment": "We visited here today and fenuja approached us with a great smile and took us to each and every section and showed us every single item. A dream sales person for an introvert customer. Thank you so much dear and to Fazyo"
+    },
+    {
+      "id": "21556b67-7a6a-4251-a2db-54317dba3268",
+      "createdAt": "2026-09-23T11:22:03.525114+00:00",
+      "stars": 5,
+      "outlet": "Kerala",
+      "storeCode": "FAZ-KTYM",
+      "reviewer": "Hena Anil",
+      "language": "en",
+      "comment": "Had a very nice time while shopping here. Fenuja was way too nice, funny and helpful. Came looking for one  dress but ended up getting so many great ones. Thank you fazyo and dear Fenuja🫶🏻"
+    },
+    {
+      "id": "756fe71c-e8e0-4c98-b3ec-6f02b5e7988f",
+      "createdAt": "2026-09-23T11:21:18.584518+00:00",
+      "stars": 4,
+      "outlet": "Kerala",
+      "storeCode": "11181964837793805771",
+      "reviewer": "Pawn Pow",
+      "language": "none",
+      "comment": null
+    },
+    {
+      "id": "ca0e1d0d-f818-4ebf-966b-b060cda2ee5f",
+      "createdAt": "2026-09-23T10:29:09.392299+00:00",
+      "stars": 5,
+      "outlet": "Kerala",
+      "storeCode": "13785723634558556879",
+      "reviewer": "Lilly T Mathai",
+      "language": "en",
+      "comment": "(Translated by Google) Fall\n\n(Original)\nRamla"
+    },
+    {
+      "id": "a7df1f56-51ee-4b9d-93e1-1bdd39ed975b",
+      "createdAt": "2026-09-23T10:20:28.320448+00:00",
+      "stars": 5,
+      "outlet": "Kerala",
+      "storeCode": "13785723634558556879",
+      "reviewer": "Adithya Maya",
+      "language": "en",
+      "comment": "Sanjana was a great help and provided great customer service."
+    },
+    {
+      "id": "4b53eb7a-b51a-4f4c-b512-b605c8e793d3",
+      "createdAt": "2026-09-23T09:35:32.697982+00:00",
+      "stars": 5,
+      "outlet": "Kerala",
+      "storeCode": "13785723634558556879",
+      "reviewer": "Deepa Balan",
+      "language": "en",
+      "comment": "Very good customer service especially Ramla sooo good.very comfortable & frdly"
+    },
+    {
+      "id": "61d6436b-4d3e-4dab-8c3b-5a955aa193d1",
+      "createdAt": "2026-09-23T09:33:04.98193+00:00",
+      "stars": 5,
+      "outlet": "Kerala",
+      "storeCode": "13785723634558556879",
+      "reviewer": "Amritha Prakash",
+      "language": "en",
+      "comment": "We went to tripunithura outlet. Staff named sanjana help us. We had a very good experience there."
+    },
+    {
+      "id": "f20f6e35-6498-4bfe-ada2-705e1496887b",
+      "createdAt": "2026-09-23T08:56:37.736925+00:00",
+      "stars": 5,
+      "outlet": "Kerala",
+      "storeCode": "11181964837793805771",
+      "reviewer": "anil kumar",
+      "language": "none",
+      "comment": null
+    },
+    {
+      "id": "9da94a07-3c26-4286-bc03-0a1d8b0ebff0",
+      "createdAt": "2026-09-23T08:36:52.527984+00:00",
+      "stars": 5,
+      "outlet": "Kerala",
+      "storeCode": "11181964837793805771",
+      "reviewer": "Sanjay U Menon",
+      "language": "none",
+      "comment": null
+    },
+    {
+      "id": "dd1034fd-1522-40c8-a3f8-dbbb045c2b39",
+      "createdAt": "2026-09-23T07:48:34.17578+00:00",
+      "stars": 5,
+      "outlet": "Kerala",
+      "storeCode": "13785723634558556879",
+      "reviewer": "Ranjith Kolary",
+      "language": "en",
+      "comment": "Fazyo tripunithura..nice collection for gents and ladies and nice service from staff Sanjana"
+    },
+    {
+      "id": "3364131b-8856-42bb-9d50-cd9a0c61b2a1",
+      "createdAt": "2026-09-23T07:21:59.310635+00:00",
+      "stars": 5,
+      "outlet": "Kerala",
+      "storeCode": "13785723634558556879",
+      "reviewer": "Parvathy Saseendran",
+      "language": "en",
+      "comment": "Better collections... And customer service is best i am happy ❤️"
+    },
+    {
+      "id": "2a652ebf-9ca6-4d1b-a5a9-1e4496b9efad",
+      "createdAt": "2026-09-23T06:56:05.584106+00:00",
+      "stars": 5,
+      "outlet": "Kerala",
+      "storeCode": "13785723634558556879",
+      "reviewer": "Nimya Lal",
+      "language": "none",
+      "comment": null
+    },
+    {
+      "id": "795d00de-d63e-4702-b0f4-3e371ef7e2dd",
+      "createdAt": "2026-09-23T06:12:57.636306+00:00",
+      "stars": 5,
+      "outlet": "Kerala",
+      "storeCode": "FAZ-KTYM",
+      "reviewer": "Meera Vinod",
+      "language": "en",
+      "comment": "Excellent service and friendly approach of the staff is acknowledged. Helped a lot to select the articles and have a excellent shopping."
+    },
+    {
+      "id": "cde5c3ce-cc6d-45c1-8fe3-ece9493aaa55",
+      "createdAt": "2026-09-23T04:52:40.468288+00:00",
+      "stars": 1,
+      "outlet": "Kerala",
+      "storeCode": "12266160996918245031",
+      "reviewer": "Anamika Kalyani",
+      "language": "en",
+      "comment": "very bad customer service\nbilliing staff and floor staff everyone keeping so much attitude towards to the coustmoer. I tried to smile two or more times but they fully ignored. products have quality and you are keeping so much collection but bad coustmoer survice make there is no second time"
+    },
+    {
+      "id": "2b224dfd-b5c4-4aad-92c2-a4cb277eccd6",
+      "createdAt": "2026-09-22T16:09:35.571034+00:00",
+      "stars": 5,
+      "outlet": "Kerala",
+      "storeCode": "07842553729236549202",
+      "reviewer": "rahana mol",
+      "language": "en",
+      "comment": "Overall good very well customer experience"
+    },
+    {
+      "id": "43d5d9f3-caaa-493b-a7fc-e64ba72a9196",
+      "createdAt": "2026-09-22T14:57:58.764822+00:00",
+      "stars": 5,
+      "outlet": "Kerala",
+      "storeCode": "11181964837793805771",
+      "reviewer": "faizel abdul",
+      "language": "en",
+      "comment": "Happy to shop in Fazyo,I like the patience of arjun he is a good sales person good luck and keep it up"
+    },
+    {
+      "id": "7fe330e6-b014-4283-84a8-58fabf295d84",
+      "createdAt": "2026-09-22T14:39:28.428404+00:00",
+      "stars": 5,
+      "outlet": "Kerala",
+      "storeCode": "13785723634558556879",
+      "reviewer": "Rona Biju",
+      "language": "en",
+      "comment": "Fasyo has a fantastic collections with high quality dresses along with affordable prices.. especially staff Ms Shareefa...she was very helpful in purchasing... thank you so much❤️"
+    },
+    {
+      "id": "203f06da-35b5-4f8e-b29a-2e364332983b",
+      "createdAt": "2026-09-22T14:03:00.959315+00:00",
+      "stars": 5,
+      "outlet": "Kerala",
+      "storeCode": "10168253048224919230",
+      "reviewer": "maggi ignu",
+      "language": "en",
+      "comment": "Nice collection affordable"
+    },
+    {
+      "id": "4557d883-45f2-4a7c-9311-b050a243935b",
+      "createdAt": "2026-09-22T14:00:25.561369+00:00",
+      "stars": 5,
+      "outlet": "Kerala",
+      "storeCode": "11181964837793805771",
+      "reviewer": "Krishnadas 56",
+      "language": "en",
+      "comment": "Good Customer Service 😊"
+    },
+    {
+      "id": "0de3c8f9-6b14-417c-bfc5-5abd7a81c487",
+      "createdAt": "2026-09-22T12:24:19.132857+00:00",
+      "stars": 5,
+      "outlet": "Kerala",
+      "storeCode": "FAZ-TCR",
+      "reviewer": "Midhuna Jayaprakash",
+      "language": "none",
+      "comment": null
+    },
+    {
+      "id": "e17ca31a-817e-49c8-9f29-3772af6a3291",
+      "createdAt": "2026-09-22T12:13:36.198223+00:00",
+      "stars": 5,
+      "outlet": "Kerala",
+      "storeCode": "10168253048224919230",
+      "reviewer": "Siva S pillai",
+      "language": "en",
+      "comment": "Excellent"
+    },
+    {
+      "id": "6e7fc49d-46eb-4ddb-9c3e-72d3e4444f65",
+      "createdAt": "2026-09-22T11:52:01.652855+00:00",
+      "stars": 5,
+      "outlet": "Kerala",
+      "storeCode": "13785723634558556879",
+      "reviewer": "Silu Mohandas",
+      "language": "en",
+      "comment": "We had a wonderful customer service experience. Athulya was especially helpful and patient in assisting us with selecting the dresses. Her friendly and attentive service made our shopping experience very pleasant. Thank you, Athulya, for your excellent support!"
+    },
+    {
+      "id": "2bfe8ba7-3f6c-403f-937a-3bae7218a545",
+      "createdAt": "2026-09-22T11:18:00.9845+00:00",
+      "stars": 5,
+      "outlet": "Kerala",
+      "storeCode": "13785723634558556879",
+      "reviewer": "Barath Chandran",
+      "language": "en",
+      "comment": "Sherifa is a good staff and very corporative to the customers"
+    },
+    {
+      "id": "2379b337-62a1-4ad9-aee4-7e553501dc1c",
+      "createdAt": "2026-09-22T11:16:23.606522+00:00",
+      "stars": 5,
+      "outlet": "Kerala",
+      "storeCode": "13785723634558556879",
+      "reviewer": "Jaijo James",
+      "language": "en",
+      "comment": "Shareefa was too helpful for us to purchase.."
+    },
+    {
+      "id": "ede20613-ffb5-4b24-9a4f-383300d4ad3c",
+      "createdAt": "2026-09-22T09:48:24.87266+00:00",
+      "stars": 5,
+      "outlet": "Kerala",
+      "storeCode": "07842553729236549202",
+      "reviewer": "dharsana joshi",
+      "language": "en",
+      "comment": "Had a really good experience at Fazyo, Irinjalakuda. The staff were friendly, professional, and very helpful throughout the visit. Everything was handled smoothly, and I really appreciated the care and attention given to us. Thank you to the entire team for the wonderful service. Highly recommended! ❤️"
+    },
+    {
+      "id": "7b03beaa-560c-43a7-9871-335eeca0d94c",
+      "createdAt": "2026-09-22T09:44:43.663887+00:00",
+      "stars": 5,
+      "outlet": "Kerala",
+      "storeCode": "13785723634558556879",
+      "reviewer": "Divya Mohanan",
+      "language": "en",
+      "comment": "Sanjana She was very friendly, helpful, and polite. She understood what I was looking for and helped me choose the right items without making me feel pressured. Her customer service was excellent, and she made my shopping experience very pleasant. Thank you!"
+    },
+    {
+      "id": "6077d047-8652-44e4-a378-dc19d0577d8d",
+      "createdAt": "2026-09-22T09:28:57.3542+00:00",
+      "stars": 5,
+      "outlet": "Kerala",
+      "storeCode": "FAZ-KTYM",
+      "reviewer": "JD JD",
+      "language": "en",
+      "comment": "Great choices at very reasonable and affordable prices. Sapna was extremely helpful in finding the right designs and sizes. Really happy with the experience and her wonderful service!"
+    },
+    {
+      "id": "3008fe4a-4731-4fe2-8ae1-60fce653ab22",
+      "createdAt": "2026-09-22T09:20:22.974214+00:00",
+      "stars": 4,
+      "outlet": "Kerala",
+      "storeCode": "11181964837793805771",
+      "reviewer": "Gayathri menon",
+      "language": "none",
+      "comment": null
+    },
+    {
+      "id": "f8c22ad6-5ef6-4983-9a6a-31b72b0c594c",
+      "createdAt": "2026-09-22T08:25:24.103321+00:00",
+      "stars": 5,
+      "outlet": "Kerala",
+      "storeCode": "13785723634558556879",
+      "reviewer": "Guddu Gaurav",
+      "language": "none",
+      "comment": null
+    },
+    {
+      "id": "87aed0c9-9543-43a5-8421-b58f3281cc13",
+      "createdAt": "2026-09-22T08:25:16.97696+00:00",
+      "stars": 5,
+      "outlet": "Kerala",
+      "storeCode": "13785723634558556879",
+      "reviewer": "adarsh kumar",
+      "language": "none",
+      "comment": null
+    },
+    {
+      "id": "2f0c355e-9dae-44b1-a273-35fcc6655ce9",
+      "createdAt": "2026-09-22T08:14:06.43752+00:00",
+      "stars": 1,
+      "outlet": "Kerala",
+      "storeCode": "FAZ-TCR",
+      "reviewer": "Hemy Johny",
+      "language": "none",
+      "comment": null
+    },
+    {
+      "id": "a4021270-646e-4858-b91d-447917dc2dda",
+      "createdAt": "2026-09-22T07:38:19.453555+00:00",
+      "stars": 5,
+      "outlet": "Kerala",
+      "storeCode": "FAZ-KTYM",
+      "reviewer": "RAKESH PV",
+      "language": "en",
+      "comment": "Had a wonderful experience at Fazyo Kottayam, with excellent service and a lovely atmosphere.\nThe staff were extremely friendly, welcoming, and attentive throughout our visit.\nA special mention to Aswini, who was exceptionally kind, helpful, and professional.\nEverything was handled with great care, making the experience truly enjoyable.\nDefinitely a place I would happily recommend and visit again!"
+    },
+    {
+      "id": "cc9dfd80-7e21-4c89-a673-36900d80ba9e",
+      "createdAt": "2026-09-22T07:24:23.740492+00:00",
+      "stars": 4,
+      "outlet": "Kerala",
+      "storeCode": "13785723634558556879",
+      "reviewer": "Arya Allu",
+      "language": "none",
+      "comment": null
+    },
+    {
+      "id": "3160cbfa-7204-4ef8-99e4-0a7eb8ade175",
+      "createdAt": "2026-09-22T07:09:33.825277+00:00",
+      "stars": 5,
+      "outlet": "Kerala",
+      "storeCode": "07842553729236549202",
+      "reviewer": "Alsanna Jose",
+      "language": "none",
+      "comment": null
+    },
+    {
+      "id": "9f7e1c2c-f951-4b5c-ad51-68021ad98790",
+      "createdAt": "2026-09-22T06:34:27.955738+00:00",
+      "stars": 5,
+      "outlet": "Kerala",
+      "storeCode": "13785723634558556879",
+      "reviewer": "Bindu Sajith",
+      "language": "en",
+      "comment": "I had a wonderful experience at the shop. The shop was well-organized The staff were very friendly, helpful, and professional throughout the shopping . Special thanks to Sanjana for her kind and attentive service. She was very polite, approachable, and made the experience more pleasant. Overall, it was a great experience."
+    },
+    {
+      "id": "b0928710-7660-4fba-9d95-18be6674bd1d",
+      "createdAt": "2026-09-22T05:23:25.959222+00:00",
+      "stars": 5,
+      "outlet": "Kerala",
+      "storeCode": "11181964837793805771",
+      "reviewer": "Aiswarya K",
+      "language": "en",
+      "comment": "Good 👍🏻"
+    }
+  ]
+}

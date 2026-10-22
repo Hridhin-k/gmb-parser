@@ -19,6 +19,7 @@ import { ReviewDetailPanel } from "@/components/review-detail-panel";
 import { SelectField } from "@/components/ui/select-field";
 import { Spinner } from "@/components/ui/spinner";
 import { languageLabel, themeLabel, workflowState } from "@/lib/review-inbox";
+import type { ResolutionContact } from "@/lib/resolution-contact";
 import { useServerRefresh, useSettleWhenUpdated } from "@/hooks/use-server-refresh";
 import { ACTION_STATUS } from "@/lib/ui-status";
 
@@ -61,6 +62,7 @@ interface ReviewListProps {
   reviews: ReviewItem[];
   replies: Record<string, ReplyItem>;
   canApprove: boolean;
+  contact?: ResolutionContact;
   members?: Array<{ id: string; email: string }>;
 }
 
@@ -124,7 +126,7 @@ function ReplyStatusPill({ status, source }: { status: string; source?: string }
 
 type ReplyPatch = { status: string; reply: ReplyItem | null };
 
-export function ReviewList({ reviews, replies, canApprove, members = [] }: ReviewListProps) {
+export function ReviewList({ reviews, replies, canApprove, contact, members = [] }: ReviewListProps) {
   const { pending: refreshing, refresh, settle } = useServerRefresh();
   useSettleWhenUpdated(refreshing, settle, reviews);
   const [selectedId, setSelectedId] = useState<string | null>(null);
@@ -605,6 +607,7 @@ export function ReviewList({ reviews, replies, canApprove, members = [] }: Revie
               review={panelReview}
               reply={panelReply}
               canApprove={canApprove}
+              contact={contact}
               members={members}
               onClose={() => setSelectedId(null)}
               inboxRevision={inboxRevision}

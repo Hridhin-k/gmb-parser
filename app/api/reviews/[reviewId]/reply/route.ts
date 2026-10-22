@@ -185,10 +185,10 @@ export async function PUT(request: Request, { params }: RouteParams) {
     return NextResponse.json({ error: toUserMessage(error) }, { status });
   }
 
-  if (reply.status !== "draft" && reply.status !== "approved") {
+  if (reply.status === "pending_publish") {
     return NextResponse.json(
-      { error: "Only draft or approved replies can be edited" },
-      { status: 400 }
+      { error: "This reply is being published. Wait until that finishes, then edit it." },
+      { status: 409 }
     );
   }
 

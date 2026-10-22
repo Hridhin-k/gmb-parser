@@ -189,7 +189,7 @@ export function escalationEventLabel(
     return "Next step recorded. This does not mean the call, replacement, or visit happened.";
   }
   if (action === "reminder_recorded") {
-    return `Reminder at ${String(metadata.kind ?? "")} hours recorded in GRM. No email or message was sent.`;
+    return `Reminder at ${String(metadata.kind ?? "")} hours recorded. The assignee sees it in the bell when in-app alerts are on. No email was sent.`;
   }
   if (action === "comment") return "Comment added.";
   return action;
