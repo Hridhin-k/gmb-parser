@@ -33,7 +33,12 @@ const PAGE_SIZE = 1000;
 const LOCATION_CHUNK = 80;
 /** Ids per analysis-lookup query: 150 uuids ≈ 5.5KB of URL, under gateway URL limits. */
 const ANALYSIS_LOOKUP_CHUNK = 150;
-const BATCH_CONCURRENCY = 2;
+/**
+ * Gemini batches in flight at once. Raised 2 → 4 to roughly double analysis
+ * throughput; withRetry backoff absorbs occasional 429s, and failed batches
+ * are recorded per review and retried on a later run — never lost.
+ */
+const BATCH_CONCURRENCY = 4;
 const REQUEST_TIMEOUT_MS = 120_000;
 
 type BatchReview = ReviewForAnalysis & { comment: string; starRating: number };
