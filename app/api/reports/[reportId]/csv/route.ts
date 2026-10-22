@@ -7,6 +7,8 @@ import { reviewCsvLines } from "@/lib/services/review-export";
 import { latestDelivery, nextDelivery, parseDeliveryTime, reportWindow } from "@/lib/reporting";
 import { validateId } from "@/lib/validation";
 
+export const maxDuration = 60;
+
 export async function GET(_request: Request, { params }: { params: Promise<{ reportId: string }> }) {
   const supabase = await createClient();
   const {

@@ -308,13 +308,54 @@ function asSections(value: string[]): ReportSectionId[] {
   return value.filter((item): item is ReportSectionId => allowed.includes(item as ReportSectionId));
 }
 
+interface ReportScheduleRow {
+  id: string;
+  name: string;
+  client_id: string | null;
+  group_id: string | null;
+  location_id: string | null;
+  sections: string[];
+  frequency: string;
+  delivery_time: string;
+  timezone: string;
+  weekday: number | null;
+  day_of_month: number | null;
+  recipient_emails: string[];
+  channels: string[];
+  enabled: boolean;
+  next_run_at: string;
+}
+
+const REPORT_SCHEDULE_SELECT =
+  "id, name, client_id, group_id, location_id, sections, frequency, delivery_time, timezone, weekday, day_of_month, recipient_emails, channels, enabled, next_run_at";
+
+function toSavedReport(report: ReportScheduleRow): SavedReport {
+  return {
+    id: report.id,
+    name: report.name,
+    clientId: report.client_id,
+    groupId: report.group_id,
+    locationId: report.location_id,
+    sections: asSections(report.sections),
+    frequency: report.frequency as ReportFrequency,
+    deliveryTime: report.delivery_time,
+    timezone: report.timezone as ScheduleSpec["timezone"],
+    weekday: report.weekday,
+    dayOfMonth: report.day_of_month,
+    recipients: report.recipient_emails,
+    channels: asChannels(report.channels),
+    enabled: report.enabled,
+    nextRunAt: report.next_run_at,
+  };
+}
+
 export class ReportService {
   static async list(workspaceId: string): Promise<{ reports: SavedReport[]; runs: ReportRunRow[] }> {
     const admin = createAdminClient();
     const [reports, runs, deliveries] = await Promise.all([
       admin
         .from("grm_report_schedules")
-        .select("id, name, client_id, group_id, location_id, sections, frequency, delivery_time, timezone, weekday, day_of_month, recipient_emails, channels, enabled, next_run_at")
+        .select(REPORT_SCHEDULE_SELECT)
         .eq("workspace_id", workspaceId)
         .order("created_at", { ascending: false }),
       admin
@@ -346,23 +387,7 @@ export class ReportService {
       deliveriesByRun.set(delivery.run_id, list);
     }
     return {
-      reports: (reports.data ?? []).map((report) => ({
-        id: report.id,
-        name: report.name,
-        clientId: report.client_id,
-        groupId: report.group_id,
-        locationId: report.location_id,
-        sections: asSections(report.sections),
-        frequency: report.frequency as ReportFrequency,
-        deliveryTime: report.delivery_time,
-        timezone: report.timezone as ScheduleSpec["timezone"],
-        weekday: report.weekday,
-        dayOfMonth: report.day_of_month,
-        recipients: report.recipient_emails,
-        channels: asChannels(report.channels),
-        enabled: report.enabled,
-        nextRunAt: report.next_run_at,
-      })),
+      reports: (reports.data ?? []).map((report) => toSavedReport(report as ReportScheduleRow)),
       runs: (runs.data ?? []).map((run) => ({
         id: run.id,
         reportId: run.schedule_id ?? "",
@@ -445,9 +470,17 @@ export class ReportService {
     });
   }
 
+  /** One report by id — a single-row query, not a full workspace list scan. */
   static async load(workspaceId: string, reportId: string): Promise<SavedReport | null> {
-    const listed = await this.list(workspaceId);
-    return listed.reports.find((report) => report.id === reportId) ?? null;
+    const admin = createAdminClient();
+    const { data, error } = await admin
+      .from("grm_report_schedules")
+      .select(REPORT_SCHEDULE_SELECT)
+      .eq("workspace_id", workspaceId)
+      .eq("id", reportId)
+      .maybeSingle();
+    if (error) throw new Error(error.message);
+    return data ? toSavedReport(data as ReportScheduleRow) : null;
   }
 
   static async preview(workspaceId: string, reportId: string, now = new Date()): Promise<ReportDocument> {

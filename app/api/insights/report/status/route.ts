@@ -3,6 +3,8 @@ import { createClient } from "@/lib/supabase/server";
 import { ensurePersonalWorkspace } from "@/lib/services/workspace";
 import { getReportById } from "@/lib/services/insight-report";
 
+const NO_STORE = { "Cache-Control": "no-store" };
+
 /**
  * GET /api/insights/report/status?reportId=…
  *
@@ -38,5 +40,5 @@ export async function GET(request: Request) {
     error: report.error,
     finishedAt: report.finished_at,
     updatedAt: report.updated_at,
-  });
+  }, { headers: NO_STORE });
 }

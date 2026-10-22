@@ -1,6 +1,7 @@
 import { cache } from "react";
 import { createAdminClient } from "@/lib/supabase/admin";
 import type { ShellProfileAttention } from "@/lib/shell";
+import { mergeProfileAttention, parseShellProfileCounts } from "@/lib/shell-profile";
 import { listUnreadNotices, type ProfileNotice } from "@/lib/services/notifications";
 
 export interface ShellSummary {
@@ -34,89 +35,39 @@ async function count(
 }
 
 const CHUNK = 150;
-const PAGE = 1000;
 
-async function pagesOf<T>(
-  load: (from: number) => PromiseLike<{ data: T[] | null; error: { message: string } | null }>
-): Promise<T[]> {
-  const rows: T[] = [];
-  let from = 0;
-  while (from < 20_000) {
-    const { data, error } = await load(from);
-    if (error) throw new Error(`Failed to load navigation counts: ${error.message}`);
-    const page = data ?? [];
-    rows.push(...page);
-    if (page.length < PAGE) break;
-    from += PAGE;
-  }
-  return rows;
-}
-
+/**
+ * Per-location attention counts from Postgres (`grm_shell_profile_attention`).
+ * This used to page every unreplied/draft/failed review row and every open
+ * escalation row into the app just to count them — on every page render.
+ */
 async function profileAttention(workspaceId: string, locationIds: string[]): Promise<ShellProfileAttention[]> {
   if (locationIds.length === 0) return [];
   const admin = createAdminClient();
-  const names = new Map<string, string>();
-  const buckets = new Map<string, ShellProfileAttention>();
+  const counts: ReturnType<typeof parseShellProfileCounts> = [];
   for (let index = 0; index < locationIds.length; index += CHUNK) {
     const chunk = locationIds.slice(index, index + CHUNK);
+    const { data, error } = await admin.rpc("grm_shell_profile_attention", {
+      p_workspace_id: workspaceId,
+      p_location_ids: chunk,
+    });
+    if (error) throw new Error(`Failed to load navigation counts: ${error.message}`);
+    counts.push(...parseShellProfileCounts(data));
+  }
+  if (counts.length === 0) return [];
+
+  const names = new Map<string, string>();
+  for (let index = 0; index < counts.length; index += CHUNK) {
+    const ids = counts.slice(index, index + CHUNK).map((count) => count.locationId);
     const { data, error } = await admin
       .from("grm_google_locations")
       .select("id, location_title")
       .eq("workspace_id", workspaceId)
-      .in("id", chunk);
+      .in("id", ids);
     if (error) throw new Error(`Failed to load navigation counts: ${error.message}`);
     for (const location of data ?? []) names.set(location.id, location.location_title);
   }
-  for (const id of locationIds) {
-    buckets.set(id, {
-      id,
-      name: names.get(id) || "Profile",
-      unreplied: 0,
-      escalations: 0,
-      drafts: 0,
-      failed: 0,
-    });
-  }
-
-  for (let index = 0; index < locationIds.length; index += CHUNK) {
-    const chunk = locationIds.slice(index, index + CHUNK);
-    const [reviews, escalations] = await Promise.all([
-      pagesOf<{ location_id: string; reply_status: string }>((from) =>
-        admin
-          .from("grm_reviews")
-          .select("location_id, reply_status")
-          .eq("workspace_id", workspaceId)
-          .is("missing_on_google_at", null)
-          .in("location_id", chunk)
-          .in("reply_status", ["none", "draft", "failed"])
-          .range(from, from + PAGE - 1)
-      ),
-      pagesOf<{ location_id: string }>((from) =>
-        admin
-          .from("grm_escalations")
-          .select("location_id")
-          .eq("workspace_id", workspaceId)
-          .in("location_id", chunk)
-          .neq("status", "resolved")
-          .range(from, from + PAGE - 1)
-      ),
-    ]);
-    for (const review of reviews) {
-      const bucket = buckets.get(review.location_id);
-      if (!bucket) continue;
-      if (review.reply_status === "none") bucket.unreplied += 1;
-      else if (review.reply_status === "draft") bucket.drafts += 1;
-      else if (review.reply_status === "failed") bucket.failed += 1;
-    }
-    for (const escalation of escalations) {
-      const bucket = buckets.get(escalation.location_id);
-      if (bucket) bucket.escalations += 1;
-    }
-  }
-
-  return [...buckets.values()].filter(
-    (profile) => profile.unreplied + profile.escalations + profile.drafts + profile.failed > 0
-  );
+  return mergeProfileAttention(counts, names);
 }
 
 /** Counts for the sidebar and the bell. A location list limits both to those profiles. */

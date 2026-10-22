@@ -9,6 +9,8 @@ import { toUserMessage, toStatusCode } from "@/lib/errors";
 import { checkRateLimit, SYNC_LOCATION_LIMIT, SYNC_ALL_LIMIT } from "@/lib/rate-limit";
 import { assertCanSyncWorkspace, ensurePersonalWorkspace } from "@/lib/services/workspace";
 
+export const maxDuration = 60;
+
 /**
  * POST /api/reviews/sync
  *

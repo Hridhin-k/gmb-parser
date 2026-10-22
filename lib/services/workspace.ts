@@ -676,6 +676,7 @@ async function findUserIdByEmail(email: string): Promise<string | null> {
         apikey: key,
       },
       cache: "no-store",
+      signal: AbortSignal.timeout(10_000),
     }
   );
 

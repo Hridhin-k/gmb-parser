@@ -12,6 +12,8 @@ import { ensurePersonalWorkspace } from "@/lib/services/workspace";
 import { assertReviewAction } from "@/lib/services/access";
 import { assertSafePublicReply } from "@/lib/services/reply-checks";
 
+export const maxDuration = 60;
+
 type BulkAction = "generate" | "approve" | "publish" | "discard" | "assign";
 
 /**

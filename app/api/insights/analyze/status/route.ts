@@ -3,6 +3,8 @@ import { createClient } from "@/lib/supabase/server";
 import { ensurePersonalWorkspace } from "@/lib/services/workspace";
 import { getAnalysisRun } from "@/lib/services/insight-pipeline";
 
+const NO_STORE = { "Cache-Control": "no-store" };
+
 /**
  * GET /api/insights/analyze/status?runId=…
  *
@@ -41,5 +43,5 @@ export async function GET(request: Request) {
     startedAt: run.started_at,
     finishedAt: run.finished_at,
     updatedAt: run.updated_at,
-  });
+  }, { headers: NO_STORE });
 }
