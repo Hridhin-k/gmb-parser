@@ -1,7 +1,7 @@
 "use client";
 
 import { useRouter, usePathname, useSearchParams } from "next/navigation";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useState } from "react";
 import { useScopedTransition } from "@/components/transition-scope";
 import { cn } from "@/lib/utils";
 import { Star, Search } from "lucide-react";
@@ -10,8 +10,10 @@ import { DateRangeFilter, type DateRangeChange } from "@/components/date-range-f
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { SelectField } from "@/components/ui/select-field";
+import { MultiSelectField } from "@/components/ui/multi-select-field";
 import type { DateRangeKey } from "@/lib/date-range";
 import { COMPLAINT_THEMES, REVIEW_LANGUAGES } from "@/lib/review-inbox";
+import { serializeParamValues } from "@/lib/review-filter-params";
 
 const STATUS_FILTERS = [
   { key: "all", label: "All" },
@@ -28,9 +30,10 @@ const RATING_FILTERS = [5, 4, 3, 2, 1] as const;
 type StatusFilter = { key: string; label: string };
 
 interface ReviewFiltersProps {
-  currentFilter: string;
-  currentRating: string;
-  currentRatingBucket: string;
+  /** Applied status keys (multiselect). Empty = all. */
+  currentFilters: string[];
+  /** Applied star ratings (multiselect). Empty = any. */
+  currentRatings: number[];
   currentSearch: string;
   currentRange: { key: DateRangeKey; from: string; to: string };
   currentHasComment: boolean;
@@ -43,13 +46,11 @@ interface ReviewFiltersProps {
   hideScope?: boolean;
   /** Page already limits the star range, so the 1–2★ and 4–5★ toggles would be ignored. */
   hideStars?: boolean;
-  /** Status treated as the untouched default, so Clear does not count it. */
-  defaultFilter?: string;
   statusFilters?: readonly StatusFilter[];
   showInboxFilters?: boolean;
-  currentLanguage?: string;
-  currentTheme?: string;
-  currentAssignee?: string;
+  currentLanguages?: string[];
+  currentThemes?: string[];
+  currentAssignees?: string[];
   currentGroupId?: string;
   currentSort?: string;
   currentText?: "" | "has" | "none";
@@ -57,10 +58,58 @@ interface ReviewFiltersProps {
   members?: Array<{ id: string; email: string }>;
 }
 
+/**
+ * Everything the bar can change, held as a draft. Nothing navigates until
+ * Go writes the draft into the URL; the server then renders the matches.
+ */
+interface FilterDraft {
+  statuses: string[];
+  ratings: number[];
+  hasComment: boolean;
+  text: "" | "has" | "none";
+  languages: string[];
+  themes: string[];
+  assignees: string[];
+  groupId: string;
+  sort: string;
+  clientId: string;
+  locationId: string;
+  range: { key: DateRangeKey; from: string; to: string };
+  search: string;
+}
+
+const EMPTY_DRAFT: FilterDraft = {
+  statuses: [],
+  ratings: [],
+  hasComment: false,
+  text: "",
+  languages: [],
+  themes: [],
+  assignees: [],
+  groupId: "",
+  sort: "newest",
+  clientId: "",
+  locationId: "",
+  range: { key: "all", from: "", to: "" },
+  search: "",
+};
+
+function toggleValue(list: string[], value: string): string[] {
+  return list.includes(value) ? list.filter((item) => item !== value) : [...list, value];
+}
+
+function toggleRating(list: number[], value: number): number[] {
+  const next = list.includes(value) ? list.filter((item) => item !== value) : [...list, value];
+  return next.sort((a, b) => b - a);
+}
+
+function sameRatings(a: number[], b: readonly number[]): boolean {
+  return a.length === b.length && b.every((value) => a.includes(value));
+}
+
 export function ReviewFilters({
-  currentFilter,
-  currentRating,
-  currentRatingBucket,
+  currentFilters,
+  currentRatings,
   currentSearch,
   currentRange,
   currentHasComment,
@@ -71,12 +120,11 @@ export function ReviewFilters({
   compact = false,
   hideScope = false,
   hideStars = false,
-  defaultFilter = "all",
   statusFilters = STATUS_FILTERS,
   showInboxFilters = false,
-  currentLanguage = "",
-  currentTheme = "",
-  currentAssignee = "",
+  currentLanguages = [],
+  currentThemes = [],
+  currentAssignees = [],
   currentGroupId = "",
   currentSort = "newest",
   currentText = "",
@@ -86,29 +134,35 @@ export function ReviewFilters({
   const router = useRouter();
   const pathname = usePathname();
   const searchParams = useSearchParams();
-  const [searchValue, setSearchValue] = useState(currentSearch);
-  const [syncedSearch, setSyncedSearch] = useState(currentSearch);
-  const { start: startTransition } = useScopedTransition();
+  const { pending, start: startTransition } = useScopedTransition();
 
-  if (syncedSearch !== currentSearch) {
-    setSyncedSearch(currentSearch);
-    setSearchValue(currentSearch);
+  const applied: FilterDraft = {
+    statuses: currentFilters,
+    ratings: [...currentRatings].sort((a, b) => b - a),
+    hasComment: currentHasComment,
+    text: currentText || (currentHasComment ? "has" : ""),
+    languages: currentLanguages,
+    themes: currentThemes,
+    assignees: currentAssignees,
+    groupId: currentGroupId,
+    sort: currentSort,
+    clientId: currentClientId,
+    locationId: currentLocationId,
+    range: currentRange,
+    search: currentSearch,
+  };
+  const appliedKey = JSON.stringify(applied);
+  const [syncedKey, setSyncedKey] = useState(appliedKey);
+  const [draft, setDraft] = useState<FilterDraft>(applied);
+  if (syncedKey !== appliedKey) {
+    setSyncedKey(appliedKey);
+    setDraft(applied);
   }
+  const dirty = JSON.stringify(draft) !== appliedKey;
 
-  useEffect(() => {
-    if (hideScope) return;
-    if (searchValue === currentSearch) return;
-    const handle = window.setTimeout(() => {
-      const params = new URLSearchParams(searchParams.toString());
-      if (searchValue) params.set("q", searchValue);
-      else params.delete("q");
-      params.delete("page");
-      startTransition(() => {
-        router.push(`${pathname}?${params.toString()}`);
-      });
-    }, 320);
-    return () => window.clearTimeout(handle);
-  }, [hideScope, searchValue, currentSearch, pathname, router, searchParams, startTransition]);
+  const patch = useCallback((change: Partial<FilterDraft>) => {
+    setDraft((current) => ({ ...current, ...change }));
+  }, []);
 
   const pushParams = useCallback(
     (mutate: (params: URLSearchParams) => void) => {
@@ -122,20 +176,65 @@ export function ReviewFilters({
     [router, pathname, searchParams, startTransition]
   );
 
-  const updateParam = useCallback(
-    (key: string, value: string) => {
-      pushParams((params) => {
-        if (value && value !== "all" && value !== "") {
-          params.set(key, value);
+  function applyDraft() {
+    pushParams((params) => {
+      const setCsv = (key: string, values: readonly (string | number)[]) => {
+        const joined = serializeParamValues(values);
+        if (joined) params.set(key, joined);
+        else params.delete(key);
+      };
+      setCsv("filter", draft.statuses);
+      setCsv("rating", draft.ratings);
+      params.delete("stars");
+      setCsv("language", draft.languages);
+      setCsv("theme", draft.themes);
+      setCsv("assignee", draft.assignees);
+      if (draft.text) {
+        params.set("text", draft.text);
+        params.delete("comment");
+      } else {
+        params.delete("text");
+        if (!showInboxFilters && draft.hasComment) params.set("comment", "1");
+        else params.delete("comment");
+      }
+      if (draft.sort && draft.sort !== "newest") params.set("sort", draft.sort);
+      else params.delete("sort");
+      if (!hideScope) {
+        if (draft.groupId) params.set("group", draft.groupId);
+        else params.delete("group");
+        if (draft.clientId) params.set("client", draft.clientId);
+        else params.delete("client");
+        if (draft.locationId) params.set("location", draft.locationId);
+        else params.delete("location");
+        params.delete("period");
+        if (draft.range.key === "custom") {
+          params.set("range", "custom");
+          if (draft.range.from) params.set("from", draft.range.from);
+          else params.delete("from");
+          if (draft.range.to) params.set("to", draft.range.to);
+          else params.delete("to");
+        } else if (draft.range.key !== "all") {
+          params.set("range", draft.range.key);
+          params.delete("from");
+          params.delete("to");
         } else {
-          params.delete(key);
+          params.delete("range");
+          params.delete("from");
+          params.delete("to");
         }
-      });
-    },
-    [pushParams]
-  );
+        if (draft.search) params.set("q", draft.search);
+        else params.delete("q");
+      }
+    });
+  }
 
   const clearAll = () => {
+    if (!hasActive) {
+      // Nothing applied yet — just forget the un-applied edits.
+      setDraft(applied);
+      return;
+    }
+    setDraft(EMPTY_DRAFT);
     const params = new URLSearchParams();
     if (hideScope) {
       for (const key of ["client", "group", "location", "range", "from", "to"]) {
@@ -150,26 +249,25 @@ export function ReviewFilters({
   };
 
   const hasActive =
-    currentFilter !== defaultFilter ||
-    (!hideStars && (!!currentRating || !!currentRatingBucket)) ||
-    (!hideScope && !!currentSearch) ||
-    (!hideScope && currentRange.key !== "all") ||
-    currentHasComment ||
-    currentText !== "" ||
-    !!currentLanguage ||
-    !!currentTheme ||
-    !!currentAssignee ||
-    (!hideScope && !!currentGroupId) ||
-    currentSort !== "newest" ||
-    (!hideScope && !!currentClientId) ||
-    (!hideScope && !!currentLocationId);
+    applied.statuses.length > 0 ||
+    (!hideStars && applied.ratings.length > 0) ||
+    (!hideScope && !!applied.search) ||
+    (!hideScope && applied.range.key !== "all") ||
+    applied.hasComment ||
+    applied.text !== "" ||
+    applied.languages.length > 0 ||
+    applied.themes.length > 0 ||
+    applied.assignees.length > 0 ||
+    (!hideScope && !!applied.groupId) ||
+    applied.sort !== "newest" ||
+    (!hideScope && !!applied.clientId) ||
+    (!hideScope && !!applied.locationId);
 
-  const filteredLocations = currentClientId
-    ? locations.filter((l) => l.clientId === currentClientId)
+  const filteredLocations = draft.clientId
+    ? locations.filter((l) => l.clientId === draft.clientId)
     : locations;
 
-  const clientName =
-    clients.find((c) => c.id === currentClientId)?.name ?? "";
+  const clientName = clients.find((c) => c.id === draft.clientId)?.name ?? "";
   const useClientSearch = clients.length > 25;
   const [clientQuery, setClientQuery] = useState(clientName);
   const [syncedClientName, setSyncedClientName] = useState(clientName);
@@ -205,15 +303,9 @@ export function ReviewFilters({
                     c.name.toLowerCase() === e.target.value.trim().toLowerCase()
                 );
                 if (match) {
-                  pushParams((params) => {
-                    params.delete("location");
-                    params.set("client", match.id);
-                  });
-                } else if (!e.target.value.trim() && currentClientId) {
-                  pushParams((params) => {
-                    params.delete("client");
-                    params.delete("location");
-                  });
+                  patch({ clientId: match.id, locationId: "" });
+                } else if (!e.target.value.trim() && draft.clientId) {
+                  patch({ clientId: "", locationId: "" });
                 }
               }}
               aria-label="Search and filter by profile"
@@ -227,16 +319,10 @@ export function ReviewFilters({
         ) : (
           <SelectField
             label="Filter by client"
-            value={currentClientId}
+            value={draft.clientId}
             placeholder="All profiles"
             className="sm:w-auto"
-            onValueChange={(next) => {
-              pushParams((params) => {
-                params.delete("location");
-                if (next) params.set("client", next);
-                else params.delete("client");
-              });
-            }}
+            onValueChange={(next) => patch({ clientId: next, locationId: "" })}
             options={[
               { value: "", label: "All profiles" },
               ...clients.map((client) => ({ value: client.id, label: client.name })),
@@ -247,10 +333,10 @@ export function ReviewFilters({
         {hideScope || filteredLocations.length === 0 ? null : (
           <SelectField
             label="Filter by location"
-            value={currentLocationId}
+            value={draft.locationId}
             placeholder="All locations"
             className="sm:w-auto"
-            onValueChange={(next) => updateParam("location", next)}
+            onValueChange={(next) => patch({ locationId: next })}
             options={[
               { value: "", label: "All locations" },
               ...filteredLocations.map((location) => ({
@@ -263,35 +349,47 @@ export function ReviewFilters({
 
         {hideScope ? null : (
           <DateRangeFilter
-            value={currentRange}
+            value={draft.range}
             defaultKey="all"
             onChange={(change: DateRangeChange) =>
-              pushParams((params) => {
-                params.delete("period");
-                for (const [key, value] of Object.entries(change)) {
-                  if (value) params.set(key, value);
-                  else params.delete(key);
-                }
+              patch({
+                range: {
+                  key: (change.range ?? "all") as DateRangeKey,
+                  from: change.from ?? "",
+                  to: change.to ?? "",
+                },
               })
             }
           />
         )}
-
-        {hasActive && <ClearFiltersButton onClear={clearAll} />}
       </div>
 
       <div className="flex flex-wrap items-center gap-1">
-        {statusFilters.map((f) => (
-          <Button
-            key={f.key}
-            type="button"
-            size="sm"
-            variant={currentFilter === f.key ? "default" : "outline"}
-            onClick={() => updateParam("filter", f.key)}
-          >
-            {f.label}
-          </Button>
-        ))}
+        {statusFilters.map((f) =>
+          f.key === "all" ? (
+            <Button
+              key={f.key}
+              type="button"
+              size="sm"
+              variant={draft.statuses.length === 0 ? "default" : "outline"}
+              aria-pressed={draft.statuses.length === 0}
+              onClick={() => patch({ statuses: [] })}
+            >
+              {f.label}
+            </Button>
+          ) : (
+            <Button
+              key={f.key}
+              type="button"
+              size="sm"
+              variant={draft.statuses.includes(f.key) ? "default" : "outline"}
+              aria-pressed={draft.statuses.includes(f.key)}
+              onClick={() => patch({ statuses: toggleValue(draft.statuses, f.key) })}
+            >
+              {f.label}
+            </Button>
+          )
+        )}
       </div>
 
       <div className="flex flex-wrap items-center gap-1">
@@ -300,28 +398,18 @@ export function ReviewFilters({
         <Button
           type="button"
           size="sm"
-          variant={currentRatingBucket === "negative" ? "default" : "outline"}
-          onClick={() =>
-            pushParams((params) => {
-              params.delete("rating");
-              if (currentRatingBucket === "negative") params.delete("stars");
-              else params.set("stars", "negative");
-            })
-          }
+          variant={sameRatings(draft.ratings, [1, 2]) ? "default" : "outline"}
+          aria-pressed={sameRatings(draft.ratings, [1, 2])}
+          onClick={() => patch({ ratings: sameRatings(draft.ratings, [1, 2]) ? [] : [2, 1] })}
         >
           1–2★ Critical
         </Button>
         <Button
           type="button"
           size="sm"
-          variant={currentRatingBucket === "positive" ? "default" : "outline"}
-          onClick={() =>
-            pushParams((params) => {
-              params.delete("rating");
-              if (currentRatingBucket === "positive") params.delete("stars");
-              else params.set("stars", "positive");
-            })
-          }
+          variant={sameRatings(draft.ratings, [4, 5]) ? "default" : "outline"}
+          aria-pressed={sameRatings(draft.ratings, [4, 5])}
+          onClick={() => patch({ ratings: sameRatings(draft.ratings, [4, 5]) ? [] : [5, 4] })}
         >
           4–5★ Positive
         </Button>
@@ -333,14 +421,10 @@ export function ReviewFilters({
             key={r}
             type="button"
             size="sm"
-            variant={currentRating === String(r) ? "default" : "outline"}
-            onClick={() =>
-              pushParams((params) => {
-                params.delete("stars");
-                if (currentRating === String(r)) params.delete("rating");
-                else params.set("rating", String(r));
-              })
-            }
+            variant={draft.ratings.includes(r) ? "default" : "outline"}
+            aria-pressed={draft.ratings.includes(r)}
+            aria-label={`${r} star reviews`}
+            onClick={() => patch({ ratings: toggleRating(draft.ratings, r) })}
           >
             {r}
             <Star className="h-3 w-3 fill-current" aria-hidden />
@@ -355,13 +439,9 @@ export function ReviewFilters({
         <Button
           type="button"
           size="sm"
-          variant={currentHasComment ? "default" : "outline"}
-          onClick={() =>
-            pushParams((params) => {
-              if (currentHasComment) params.delete("comment");
-              else params.set("comment", "1");
-            })
-          }
+          variant={draft.hasComment ? "default" : "outline"}
+          aria-pressed={draft.hasComment}
+          onClick={() => patch({ hasComment: !draft.hasComment })}
         >
           Has comment
         </Button>
@@ -370,65 +450,63 @@ export function ReviewFilters({
           <>
             <SelectField
               label="Text"
-              value={currentText}
+              value={draft.text}
               options={[
                 { value: "", label: "Any text" },
                 { value: "has", label: "Has review text" },
                 { value: "none", label: "Rating only" },
               ]}
               onValueChange={(value) =>
-                pushParams((params) => {
-                  if (value) params.set("text", value);
-                  else params.delete("text");
-                  params.delete("comment");
-                })
+                patch({ text: value === "has" || value === "none" ? value : "" })
               }
               className="sm:w-40"
             />
-            <SelectField
+            <MultiSelectField
               label="Language"
-              value={currentLanguage}
-              options={[{ value: "", label: "Any language" }, ...REVIEW_LANGUAGES.map((item) => ({ value: item.id, label: item.label }))]}
-              onValueChange={(value) => updateParam("language", value)}
+              values={draft.languages}
+              options={REVIEW_LANGUAGES.map((item) => ({ value: item.id, label: item.label }))}
+              placeholder="Any language"
+              onChange={(values) => patch({ languages: values })}
               className="sm:w-40"
             />
-            <SelectField
+            <MultiSelectField
               label="Complaint theme"
-              value={currentTheme}
-              options={[{ value: "", label: "Any theme" }, ...COMPLAINT_THEMES.map((item) => ({ value: item.id, label: item.label }))]}
-              onValueChange={(value) => updateParam("theme", value)}
+              values={draft.themes}
+              options={COMPLAINT_THEMES.map((item) => ({ value: item.id, label: item.label }))}
+              placeholder="Any theme"
+              onChange={(values) => patch({ themes: values })}
               className="sm:w-48"
             />
-            <SelectField
+            <MultiSelectField
               label="Assignee"
-              value={currentAssignee}
+              values={draft.assignees}
               options={[
-                { value: "", label: "Anyone" },
                 { value: "unassigned", label: "Unassigned" },
                 ...members.map((member) => ({ value: member.id, label: member.email })),
               ]}
-              onValueChange={(value) => updateParam("assignee", value)}
+              placeholder="Anyone"
+              onChange={(values) => patch({ assignees: values })}
               className="sm:w-52"
             />
             {hideScope ? null : (
             <SelectField
               label="Group"
-              value={currentGroupId}
+              value={draft.groupId}
               options={[{ value: "", label: "Any group" }, ...groups.map((group) => ({ value: group.id, label: group.name }))]}
-              onValueChange={(value) => updateParam("group", value)}
+              onValueChange={(value) => patch({ groupId: value })}
               className="sm:w-44"
             />
             )}
             <SelectField
               label="Sort"
-              value={currentSort}
+              value={draft.sort}
               options={[
                 { value: "newest", label: "Newest" },
                 { value: "oldest", label: "Oldest" },
                 { value: "highest", label: "Highest rating" },
                 { value: "lowest", label: "Lowest rating" },
               ]}
-              onValueChange={(value) => updateParam("sort", value === "newest" ? "" : value)}
+              onValueChange={(value) => patch({ sort: value })}
               className="sm:w-40"
             />
           </>
@@ -444,13 +522,25 @@ export function ReviewFilters({
         <Input
           type="search"
           placeholder="Search reviewer or review text…"
-          value={searchValue}
-          onChange={(e) => setSearchValue(e.target.value)}
+          value={draft.search}
+          onChange={(e) => patch({ search: e.target.value })}
           className="pl-9"
           aria-label="Search reviews"
         />
       </div>
       )}
+
+      <div className="flex flex-wrap items-center gap-2 pt-0.5">
+        <Button type="button" disabled={!dirty || pending} onClick={applyDraft}>
+          {pending ? "Applying…" : "Go"}
+        </Button>
+        {dirty ? (
+          <span className="text-xs text-slate" role="status">
+            Filters changed — press Go to apply.
+          </span>
+        ) : null}
+        {(hasActive || dirty) && <ClearFiltersButton onClear={clearAll} disabled={pending} />}
+      </div>
     </div>
   );
 }

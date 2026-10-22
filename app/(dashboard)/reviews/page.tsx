@@ -15,9 +15,15 @@ import { PaginationBar } from "@/components/pagination-bar";
 import { Download, MessageSquareText } from "lucide-react";
 import {
   validatePage,
-  validateRatingFilter,
   validateFilterString,
 } from "@/lib/validation";
+import {
+  parseAllowedParams,
+  parseRatingParams,
+  parseStatusParams,
+  serializeParamValues,
+  splitParamValues,
+} from "@/lib/review-filter-params";
 import { dateRangeParams, parseDateRange } from "@/lib/date-range";
 import { overviewQueryKey } from "@/lib/overview-board";
 
@@ -31,21 +37,8 @@ export default async function ReviewsPage({ searchParams }: ReviewsPageProps) {
     getActiveWorkspace(),
   ]);
 
-  const filterParam = [
-    "all",
-    "unanswered",
-    "answered",
-    "draft",
-    "approved",
-    "failed",
-    "published",
-    "reopened",
-    "escalated",
-  ].includes(typeof params.filter === "string" ? params.filter : "")
-    ? (params.filter as string)
-    : "all";
-
-  const ratingParam = validateRatingFilter(params.rating);
+  const statusParams = parseStatusParams(params.filter);
+  const ratingParams = parseRatingParams(params.rating);
   const starsParam =
     params.stars === "negative" || params.stars === "positive" || params.stars === "low"
       ? params.stars
@@ -58,14 +51,29 @@ export default async function ReviewsPage({ searchParams }: ReviewsPageProps) {
   const hasRange = range.key !== "all";
   const hasComment = params.comment === "1" || params.comment === "true";
   const textParam = params.text === "0" || params.text === "none" ? "none" : params.text === "1" || params.text === "has" ? "has" : "";
-  const languageParam = REVIEW_LANGUAGES.some((item) => item.id === params.language) ? String(params.language) : "";
-  const themeParam = COMPLAINT_THEMES.some((item) => item.id === params.theme) ? String(params.theme) : "";
-  const assigneeParam =
-    params.assignee === "unassigned" ||
-    (typeof params.assignee === "string" && /^[0-9a-f-]{36}$/i.test(params.assignee))
-      ? params.assignee
-      : "";
+  const languageParams = parseAllowedParams(
+    params.language,
+    REVIEW_LANGUAGES.map((item) => item.id)
+  );
+  const themeParams = parseAllowedParams(
+    params.theme,
+    COMPLAINT_THEMES.map((item) => item.id)
+  );
+  const assigneeParams = splitParamValues(params.assignee).filter(
+    (value) => value === "unassigned" || /^[0-9a-f-]{36}$/i.test(value)
+  );
   const groupParam = resolved.groupId ?? "";
+  // Stars shown as selected in the filter bar: explicit picks, else the
+  // bucket an inbound link (stars=negative etc.) asked for.
+  const bucketRatings =
+    starsParam === "negative"
+      ? [1, 2]
+      : starsParam === "positive"
+        ? [4, 5]
+        : starsParam === "low"
+          ? [1, 2, 3]
+          : [];
+  const shownRatings = ratingParams.length > 0 ? ratingParams : bucketRatings;
   const sortParam: InboxSort =
     params.sort === "oldest" || params.sort === "highest" || params.sort === "lowest" ? params.sort : "newest";
   const currentPage = validatePage(params.page);
@@ -73,8 +81,8 @@ export default async function ReviewsPage({ searchParams }: ReviewsPageProps) {
   const [role, data, roster, contact] = await Promise.all([
     getActiveRole(),
     getDashboardData(workspaceId, {
-      filter: filterParam,
-      rating: ratingParam,
+      filters: statusParams,
+      ratings: ratingParams.length > 0 ? ratingParams : undefined,
       ratingBucket: starsParam === "low" ? "escalation" : starsParam || undefined,
       q: searchParam,
       clientId: clientParam,
@@ -83,9 +91,9 @@ export default async function ReviewsPage({ searchParams }: ReviewsPageProps) {
       until: range.end?.toISOString() ?? null,
       hasComment: hasComment || textParam === "has" || undefined,
       text: textParam || undefined,
-      language: languageParam || undefined,
-      theme: themeParam || undefined,
-      assignee: assigneeParam || undefined,
+      languages: languageParams.length > 0 ? languageParams : undefined,
+      themes: themeParams.length > 0 ? themeParams : undefined,
+      assignees: assigneeParams.length > 0 ? assigneeParams : undefined,
       groupId: groupParam || undefined,
       sort: sortParam,
       page: currentPage,
@@ -105,23 +113,38 @@ export default async function ReviewsPage({ searchParams }: ReviewsPageProps) {
 
   const queryForPagination = new URLSearchParams();
   for (const [k, v] of Object.entries({
-    filter: filterParam !== "all" ? filterParam : "",
-    rating: ratingParam != null ? String(ratingParam) : "",
-    stars: starsParam,
+    filter: serializeParamValues(statusParams) ?? "",
+    rating: serializeParamValues(ratingParams) ?? "",
+    stars: ratingParams.length > 0 ? "" : starsParam,
     q: searchParam,
     client: clientParam,
     location: locationParam,
     comment: hasComment ? "1" : "",
     text: textParam === "has" ? "1" : textParam === "none" ? "0" : "",
-    language: languageParam,
-    theme: themeParam,
-    assignee: assigneeParam,
+    language: serializeParamValues(languageParams) ?? "",
+    theme: serializeParamValues(themeParams) ?? "",
+    assignee: serializeParamValues(assigneeParams) ?? "",
     group: groupParam,
     sort: sortParam !== "newest" ? sortParam : "",
     ...dateRangeParams(range, "all"),
   })) {
     if (v) queryForPagination.set(k, v);
   }
+
+  const hasAnyFilter =
+    statusParams.length > 0 ||
+    ratingParams.length > 0 ||
+    !!starsParam ||
+    !!searchParam ||
+    !!clientParam ||
+    !!locationParam ||
+    hasRange ||
+    hasComment ||
+    !!textParam ||
+    languageParams.length > 0 ||
+    themeParams.length > 0 ||
+    assigneeParams.length > 0 ||
+    !!groupParam;
 
   return (
     <div className="space-y-6">
@@ -147,9 +170,8 @@ export default async function ReviewsPage({ searchParams }: ReviewsPageProps) {
 
       <TransitionScope>
         <ReviewFilters
-          currentFilter={filterParam}
-          currentRating={ratingParam !== undefined ? String(ratingParam) : ""}
-          currentRatingBucket={starsParam}
+          currentFilters={statusParams}
+          currentRatings={shownRatings}
           currentSearch={searchParam}
           currentRange={{ key: range.key, from: range.from, to: range.to }}
           currentHasComment={hasComment}
@@ -159,9 +181,9 @@ export default async function ReviewsPage({ searchParams }: ReviewsPageProps) {
           currentLocationId={locationParam}
           hideScope
           showInboxFilters
-          currentLanguage={languageParam}
-          currentTheme={themeParam}
-          currentAssignee={assigneeParam}
+          currentLanguages={languageParams}
+          currentThemes={themeParams}
+          currentAssignees={assigneeParams}
           currentGroupId={groupParam}
           currentSort={sortParam}
           currentText={textParam}
@@ -189,36 +211,12 @@ export default async function ReviewsPage({ searchParams }: ReviewsPageProps) {
             <EmptyState
               icon={MessageSquareText}
               title={
-                filterParam !== "all" ||
-                ratingParam !== undefined ||
-                starsParam ||
-                searchParam ||
-                clientParam ||
-                locationParam ||
-                hasRange ||
-                hasComment ||
-                textParam ||
-                languageParam ||
-                themeParam ||
-                assigneeParam ||
-                groupParam
+                hasAnyFilter
                   ? "No reviews match your filters"
                   : "No reviews synced"
               }
               description={
-                filterParam !== "all" ||
-                ratingParam !== undefined ||
-                starsParam ||
-                searchParam ||
-                clientParam ||
-                locationParam ||
-                hasRange ||
-                hasComment ||
-                textParam ||
-                languageParam ||
-                themeParam ||
-                assigneeParam ||
-                groupParam
+                hasAnyFilter
                   ? "Try a wider time range, or clear the filters."
                   : data.hasConnections
                     ? "Sync reviews from the dashboard to pull Google reviews here."

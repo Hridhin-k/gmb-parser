@@ -1,5 +1,6 @@
 import { createAdminClient } from "@/lib/supabase/admin";
 import { locationDisplayName } from "@/lib/ui/location-place";
+import { statusOrFilter } from "@/lib/review-filter-params";
 
 const PAGE_SIZE = 1000;
 export const EXPORT_MAX_ROWS = 50_000;
@@ -11,8 +12,12 @@ export interface ReviewExportFilters {
   since: string | null;
   until: string | null;
   replyFilter: string;
+  /** Multiple selected statuses; wins over replyFilter when it has 2+. */
+  replyFilters?: string[];
   ratingBucket: "negative" | "positive" | null;
   rating: number | null;
+  /** Multiple selected star ratings; wins over rating/ratingBucket. */
+  ratings?: number[];
 }
 
 const HEADER = [
@@ -143,11 +148,20 @@ export async function* reviewCsvLines(
     if (locationIds) query = query.in("location_id", locationIds);
     if (filters.since) query = query.gte("review_create_time", filters.since);
     if (filters.until) query = query.lt("review_create_time", filters.until);
-    if (filters.rating !== null) query = query.eq("star_rating", filters.rating);
+    if (filters.ratings?.length) query = query.in("star_rating", filters.ratings);
+    else if (filters.rating !== null) query = query.eq("star_rating", filters.rating);
     else if (filters.ratingBucket === "negative") query = query.lte("star_rating", 2);
     else if (filters.ratingBucket === "positive") query = query.gte("star_rating", 4);
 
-    switch (filters.replyFilter) {
+    const multiStatusOr =
+      filters.replyFilters && filters.replyFilters.length > 1
+        ? statusOrFilter(filters.replyFilters)
+        : null;
+    const singleStatus = filters.replyFilters?.[0] ?? filters.replyFilter;
+    if (multiStatusOr) {
+      query = query.or(multiStatusOr);
+    } else
+    switch (singleStatus) {
       case "unanswered":
         query = query.eq("reply_status", "none");
         break;
@@ -157,7 +171,7 @@ export async function* reviewCsvLines(
       case "draft":
       case "failed":
       case "published":
-        query = query.eq("reply_status", filters.replyFilter);
+        query = query.eq("reply_status", singleStatus);
         break;
       case "approved":
         query = query.in("reply_status", ["approved", "pending_publish"]);

@@ -6,6 +6,7 @@ import { reviewCsvLines, type ReviewExportFilters } from "@/lib/services/review-
 import { checkRateLimit, EXPORT_LIMIT } from "@/lib/rate-limit";
 import { logger } from "@/lib/logger";
 import { parseDateRange } from "@/lib/date-range";
+import { parseRatingParams, parseStatusParams } from "@/lib/review-filter-params";
 
 export const maxDuration = 60;
 
@@ -25,8 +26,10 @@ function parseFilters(params: URLSearchParams): ReviewExportFilters {
     since: range.start?.toISOString() ?? null,
     until: range.end?.toISOString() ?? null,
     replyFilter: params.get("filter") ?? "all",
+    replyFilters: parseStatusParams(params.get("filter")),
     ratingBucket: stars === "negative" || stars === "positive" ? stars : null,
     rating: Number.isInteger(rating) && rating >= 1 && rating <= 5 ? rating : null,
+    ratings: parseRatingParams(params.get("rating")),
   };
 }
 
