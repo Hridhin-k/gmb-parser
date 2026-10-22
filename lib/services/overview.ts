@@ -412,15 +412,16 @@ export async function listNewestReviews(
 export interface OverviewSignals {
   themes: Array<{ locationId: string; theme: string; count: number }>;
   themesTruncated: boolean;
+  complaints: Array<{ locationId: string; topic: string; count: number }>;
   recentNegative: { locationId: string; count: number; fromDay: string; toDay: string } | null;
   oldestOverdue: { id: string; dueAt: string; locationId: string } | null;
 }
 
 /**
  * Extra Overview rows that the dashboard bundle does not split by location:
- * 1–3 star themes, the busiest outlet in the last 48 hours, and the oldest
- * overdue escalation. Aggregated in Postgres (`grm_overview_signals`) —
- * full counts, never paged into the app or hidden behind a truncation cap.
+ * the top negative insight topic per outlet, the busiest outlet in the last
+ * 48 hours, and the oldest overdue escalation. Aggregated in Postgres
+ * (`grm_overview_signals`).
  */
 export async function loadOverviewSignals(
   workspaceId: string,

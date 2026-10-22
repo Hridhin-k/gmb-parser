@@ -1,6 +1,7 @@
 export interface OverviewSignalsData {
   themes: Array<{ locationId: string; theme: string; count: number }>;
   themesTruncated: boolean;
+  complaints: Array<{ locationId: string; topic: string; count: number }>;
   recentNegative: { locationId: string; count: number; fromDay: string; toDay: string } | null;
   oldestOverdue: { id: string; dueAt: string; locationId: string } | null;
 }
@@ -29,6 +30,13 @@ export function signalsFromRpc(
         return [{ locationId: row.locationId, theme: row.theme, count: num(row.count) }];
       })
     : [];
+  const complaints = Array.isArray(body.complaints)
+    ? body.complaints.flatMap((item) => {
+        const row = obj(item);
+        if (typeof row.locationId !== "string" || typeof row.topic !== "string" || row.topic.length === 0) return [];
+        return [{ locationId: row.locationId, topic: row.topic, count: num(row.count) }];
+      })
+    : [];
 
   const recentTop = body.recentTop ? obj(body.recentTop) : null;
   const recentCount = recentTop ? num(recentTop.count) : 0;
@@ -39,6 +47,7 @@ export function signalsFromRpc(
   return {
     themes,
     themesTruncated: false,
+    complaints,
     recentNegative:
       recentLocation && recentCount >= 3
         ? {
@@ -62,6 +71,7 @@ export function signalsFromRpc(
 export const EMPTY_OVERVIEW_SIGNALS: OverviewSignalsData = {
   themes: [],
   themesTruncated: false,
+  complaints: [],
   recentNegative: null,
   oldestOverdue: null,
 };

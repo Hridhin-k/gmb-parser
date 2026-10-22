@@ -1,13 +1,14 @@
+import { insightTopicLabel } from "@/lib/insight-dashboard";
 import { average, reviewWindow, type DashboardFacts, type StarCounts } from "@/lib/metrics";
-import { sumStarCounts } from "@/lib/star-breakdown";
-import { themeLabel } from "@/lib/review-inbox";
 
 /**
  * Overview numbers for one scope and one date window.
  *
  * Average rating is the sum of star ratings divided by the number of reviews.
  * It is never the average of location averages.
- * Negative share is reviews of 1–3 stars divided by all reviews in the window.
+ * 1–3 star share is reviews of 1–3 stars divided by all reviews in the window.
+ * The month chart keeps 3 stars separate: 4–5 positive, 3 neutral, 1–2 negative.
+ * Main complaint is the outlet's most common negative insight topic.
  * Reply rate is reviews with a Google reply divided by all reviews in the window.
  * A location is ranked only by its own average rating. Ties go to the location
  * with more reviews, then by name. Locations with no reviews in the window are left out.
@@ -20,10 +21,17 @@ export interface BoardPlace {
   groupName: string | null;
 }
 
-export interface BoardThemeRow {
+/** The negative insight topic with the most mentions at one outlet. */
+export interface BoardComplaint {
   locationId: string;
-  theme: string;
+  topic: string;
   count: number;
+}
+
+export interface BoardTopic {
+  topic: string;
+  count: number;
+  reviews: number;
 }
 
 export interface BoardLinks {
@@ -31,6 +39,7 @@ export interface BoardLinks {
   escalations: (extra?: Record<string, string>) => string;
   location: (place: BoardPlace) => string;
   analytics: string;
+  insights: string;
   reports: string;
   settings: string;
 }
@@ -70,7 +79,11 @@ export interface OverviewStoreRow {
 export interface OverviewMonthBar {
   key: string;
   label: string;
+  /** 4–5 star reviews. */
   positive: number;
+  /** 3 star reviews. */
+  neutral: number;
+  /** 1–2 star reviews. */
   negative: number;
   avgRating: number | null;
   href: string;
@@ -86,11 +99,22 @@ export interface OverviewAttentionRow {
 
 export interface OverviewThemeBar {
   label: string;
+  /** Negative observation mentions. */
   count: number;
-  previous: number | null;
-  direction: "new" | "rising" | "falling" | "steady" | null;
+  /** Distinct analysed reviews that mentioned the topic. */
+  reviews: number;
   href: string;
-  stars?: StarCounts;
+}
+
+export interface OverviewCoverage {
+  analysed: number;
+  ratingOnly: number;
+}
+
+export interface OverviewStarRow {
+  stars: number;
+  count: number;
+  href: string;
 }
 
 export interface OverviewBoard {
@@ -102,8 +126,10 @@ export interface OverviewBoard {
   lowest: OverviewStoreRow[];
   rankedCount: number;
   themes: OverviewThemeBar[];
-  themesTruncated: boolean;
+  coverage: OverviewCoverage;
+  starMix: OverviewStarRow[];
   analyticsHref: string;
+  insightsHref: string;
   reportsHref: string;
 }
 
@@ -123,7 +149,9 @@ export function overviewQueryKey(read: (key: string) => string | null | undefine
 
 function monthLabel(month: string): string {
   const monthNumber = Number(month.slice(5, 7));
-  return MONTHS[monthNumber - 1] ?? month.slice(0, 7);
+  const name = MONTHS[monthNumber - 1] ?? month.slice(0, 7);
+  const year = month.slice(2, 4);
+  return year ? `${name} ’${year}` : name;
 }
 
 function monthBounds(month: string): { from: string; to: string } {
@@ -139,22 +167,19 @@ function byLocation(rows: LocationFacts[]): Map<string, LocationFacts> {
   return new Map(rows.map((row) => [row.locationId, row]));
 }
 
-function complaintFor(
-  locationId: string,
-  themes: BoardThemeRow[]
-): string | null {
-  const chosen = themes
-    .filter((row) => row.locationId === locationId && row.count > 0)
-    .sort((a, b) => b.count - a.count || a.theme.localeCompare(b.theme))[0];
+function complaintFor(locationId: string, complaints: BoardComplaint[]): string | null {
+  const chosen = complaints
+    .filter((row) => row.locationId === locationId && row.count > 0 && row.topic.length > 0)
+    .sort((a, b) => b.count - a.count || a.topic.localeCompare(b.topic))[0];
   if (!chosen) return null;
-  return themeLabel(chosen.theme) ?? chosen.theme;
+  return insightTopicLabel(chosen.topic);
 }
 
 function placeRow(
   place: BoardPlace,
   current: LocationFacts,
   previous: LocationFacts | undefined,
-  themes: BoardThemeRow[],
+  complaints: BoardComplaint[],
   links: BoardLinks,
   rank: number,
   rankedCount: number
@@ -170,7 +195,7 @@ function placeRow(
     negativeShare: current.oneToThree / current.reviews,
     replyRate: current.replied / current.reviews,
     ratingChange: previousRating === null ? null : rating - previousRating,
-    complaint: complaintFor(place.id, themes),
+    complaint: complaintFor(place.id, complaints),
     rank,
     rankedCount,
     href: links.location(place),
@@ -184,7 +209,7 @@ function rankedPlaces(
   places: BoardPlace[],
   facts: DashboardFacts,
   previous: DashboardFacts | null,
-  themes: BoardThemeRow[],
+  complaints: BoardComplaint[],
   links: BoardLinks
 ): OverviewStoreRow[] {
   const earlier = byLocation(previous?.locations ?? []);
@@ -201,16 +226,8 @@ function rankedPlaces(
       return left - right || b.row.reviews - a.row.reviews || a.place.name.localeCompare(b.place.name);
     })
     .map((item, index, list) =>
-      placeRow(item.place, item.row, item.previous, themes, links, index + 1, list.length)
+      placeRow(item.place, item.row, item.previous, complaints, links, index + 1, list.length)
     );
-}
-
-function themeDirection(current: number, previous: number | null): OverviewThemeBar["direction"] {
-  if (previous === null) return null;
-  if (previous === 0 && current > 0) return "new";
-  if (current > previous) return "rising";
-  if (current < previous) return "falling";
-  return "steady";
 }
 
 function trendCaption(months: DashboardFacts["months"]): string | null {
@@ -241,26 +258,16 @@ export function buildOverviewBoard(input: {
   facts: DashboardFacts;
   previous: DashboardFacts | null;
   places: BoardPlace[];
-  themes: BoardThemeRow[];
-  themesTruncated: boolean;
+  complaints: BoardComplaint[];
+  topics: BoardTopic[];
+  coverage: OverviewCoverage;
   links: BoardLinks;
   attention: OverviewAttentionRow[];
 }): OverviewBoard {
   const current = reviewWindow(input.facts);
   const earlier = input.previous ? reviewWindow(input.previous) : null;
-  const ranked = rankedPlaces(input.places, input.facts, input.previous, input.themesTruncated ? [] : input.themes, input.links);
+  const ranked = rankedPlaces(input.places, input.facts, input.previous, input.complaints, input.links);
   const multiple = ranked.length > 1;
-
-  const themeTotals = new Map<string, number>();
-  const themeStarRows = new Map<string, Array<StarCounts | undefined>>();
-  const previousTotals = new Map<string, number>();
-  for (const row of input.facts.themeMonths) {
-    themeTotals.set(row.theme, (themeTotals.get(row.theme) ?? 0) + row.count);
-    const list = themeStarRows.get(row.theme) ?? [];
-    list.push(row.stars);
-    themeStarRows.set(row.theme, list);
-  }
-  for (const row of input.previous?.themeMonths ?? []) previousTotals.set(row.theme, (previousTotals.get(row.theme) ?? 0) + row.count);
 
   return {
     kpis: {
@@ -279,11 +286,13 @@ export function buildOverviewBoard(input: {
     worst: multiple ? ranked[0]! : null,
     months: input.facts.months.map((month) => {
       const bounds = monthBounds(month.month);
+      const neutral = Math.max(0, month.oneToThree - month.negative);
       return {
         key: month.month,
         label: monthLabel(month.month),
         positive: month.positive,
-        negative: month.oneToThree,
+        neutral,
+        negative: month.negative,
         avgRating: average(month.ratingSum, month.reviews),
         href: input.links.reviews({ range: "custom", from: bounds.from, to: bounds.to }),
         stars: month.stars,
@@ -293,20 +302,24 @@ export function buildOverviewBoard(input: {
     attention: input.attention,
     lowest: multiple ? ranked.slice(0, 5) : [],
     rankedCount: ranked.length,
-    themes: [...themeTotals.entries()]
-      .filter(([, count]) => count > 0)
-      .sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))
+    themes: input.topics
+      .filter((topic) => topic.count > 0 && topic.topic.length > 0)
+      .sort((a, b) => b.count - a.count || a.topic.localeCompare(b.topic))
       .slice(0, 5)
-      .map(([theme, count]) => ({
-        label: themeLabel(theme) ?? theme,
-        count,
-        previous: input.previous ? previousTotals.get(theme) ?? 0 : null,
-        direction: themeDirection(count, input.previous ? previousTotals.get(theme) ?? 0 : null),
-        href: input.links.reviews({ theme, stars: "low" }),
-        stars: sumStarCounts(themeStarRows.get(theme) ?? []),
+      .map((topic) => ({
+        label: insightTopicLabel(topic.topic),
+        count: topic.count,
+        reviews: topic.reviews,
+        href: input.links.insights,
       })),
-    themesTruncated: input.themesTruncated,
+    coverage: input.coverage,
+    starMix: [5, 4, 3, 2, 1].map((stars) => ({
+      stars,
+      count: input.facts.stars[stars - 1] ?? 0,
+      href: input.links.reviews({ rating: String(stars) }),
+    })),
     analyticsHref: input.links.analytics,
+    insightsHref: input.links.insights,
     reportsHref: input.links.reports,
   };
 }

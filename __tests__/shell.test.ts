@@ -105,6 +105,6 @@ describe("scopedHref", () => {
   });
 
   it("carries the page's current period when the URL has not named one", () => {
-    expect(scopedHref("/overview", new URLSearchParams(), "/analytics")).toBe("/overview?range=6m");
+    expect(scopedHref("/overview", new URLSearchParams(), "/analytics")).toBe("/overview?range=12m");
   });
 });

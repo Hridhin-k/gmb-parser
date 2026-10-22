@@ -11,6 +11,7 @@ const links: BoardLinks = {
   escalations: () => "/escalations",
   location: (place) => `/overview?location=${place.id}`,
   analytics: "/analytics",
+  insights: "/insights",
   reports: "/reports",
   settings: "/settings",
 };
@@ -43,11 +44,9 @@ describe("buildOverviewBoard", () => {
       }),
       previous: null,
       places,
-      themes: [
-        { locationId: "b", theme: "unspecified", count: 4 },
-        { locationId: "b", theme: "staff", count: 2 },
-      ],
-      themesTruncated: false,
+      complaints: [{ locationId: "b", topic: "wait_time", count: 4 }],
+      topics: [],
+      coverage: { analysed: 0, ratingOnly: 0 },
       links,
       attention: [],
     });
@@ -55,12 +54,12 @@ describe("buildOverviewBoard", () => {
     expect(board.kpis.avgRating).toBeCloseTo(1.4);
     expect(board.kpis.avgRating).not.toBeCloseTo(3);
     expect(board.worst?.id).toBe("b");
-    expect(board.worst?.complaint).toBe("Unspecified complaint");
+    expect(board.worst?.complaint).toBe("Wait Time");
     expect(board.worst?.href).toBe("/overview?location=b");
     expect(board.lowest.map((row) => row.id)).toEqual(["b", "a"]);
   });
 
-  it("names a complaint only when that theme is the largest 1–3 star group", () => {
+  it("names the negative topic with the most mentions and leaves a blank when there is none", () => {
     const board = buildOverviewBoard({
       facts: facts({
         reviews: 10,
@@ -72,16 +71,21 @@ describe("buildOverviewBoard", () => {
       }),
       previous: null,
       places,
-      themes: [
-        { locationId: "b", theme: "unspecified", count: 2 },
-        { locationId: "b", theme: "staff", count: 6 },
+      complaints: [{ locationId: "b", topic: "staff", count: 6 }],
+      topics: [
+        { topic: "food_quality", count: 2, reviews: 2 },
+        { topic: "staff", count: 6, reviews: 5 },
       ],
-      themesTruncated: false,
+      coverage: { analysed: 8, ratingOnly: 3 },
       links,
       attention: [],
     });
 
     expect(board.worst?.complaint).toBe("Staff");
+    expect(board.lowest.find((row) => row.id === "a")?.complaint).toBeNull();
+    expect(board.themes.map((theme) => theme.label)).toEqual(["Staff", "Food Quality"]);
+    expect(board.themes[0]?.href).toBe("/insights");
+    expect(board.coverage).toEqual({ analysed: 8, ratingOnly: 3 });
   });
 
   it("hides outlet ranking when the scope is a single outlet", () => {
@@ -95,8 +99,9 @@ describe("buildOverviewBoard", () => {
       }),
       previous: null,
       places: [places[0]!],
-      themes: [],
-      themesTruncated: false,
+      complaints: [],
+      topics: [],
+      coverage: { analysed: 0, ratingOnly: 0 },
       links,
       attention: [],
     });
@@ -123,8 +128,9 @@ describe("buildOverviewBoard", () => {
       facts: facts({ reviews: 6, ratingSum: 20, locations: [location, { ...location, locationId: "b", ratingSum: 20 }] }),
       previous: facts({ reviews: 5, ratingSum: 25, locations: [previousLocation], themeMonths: [] }),
       places,
-      themes: [],
-      themesTruncated: false,
+      complaints: [],
+      topics: [],
+      coverage: { analysed: 0, ratingOnly: 0 },
       links,
       attention: [],
     });
@@ -134,28 +140,42 @@ describe("buildOverviewBoard", () => {
       facts: facts({ reviews: 5, ratingSum: 15, locations: [location] }),
       previous: facts({ reviews: 2, ratingSum: 10, locations: [thin] }),
       places,
-      themes: [],
-      themesTruncated: false,
+      complaints: [],
+      topics: [],
+      coverage: { analysed: 0, ratingOnly: 0 },
       links,
       attention: [],
     });
   });
 
-  it("flags a complaint theme that was absent in the previous period", () => {
+  it("splits the month chart into 4–5, 3, and 1–2 stars", () => {
     const board = buildOverviewBoard({
       facts: facts({
         reviews: 4,
         ratingSum: 8,
-        themeMonths: [{ month: "2026-09-01", theme: "wait", count: 3 }],
+        stars: [1, 0, 2, 1, 0],
+        months: [{
+          month: "2026-09-01",
+          reviews: 4,
+          ratingSum: 8,
+          positive: 1,
+          oneToThree: 3,
+          negative: 1,
+          replied: 2,
+        }],
       }),
-      previous: facts({ reviews: 4, ratingSum: 16, themeMonths: [] }),
+      previous: null,
       places,
-      themes: [],
-      themesTruncated: false,
+      complaints: [],
+      topics: [{ topic: "wait_time", count: 3, reviews: 2 }],
+      coverage: { analysed: 2, ratingOnly: 1 },
       links,
       attention: [],
     });
-    expect(board.themes[0]?.direction).toBe("new");
+    expect(board.months[0]).toMatchObject({ positive: 1, neutral: 2, negative: 1 });
+    expect(board.starMix.map((row) => row.count)).toEqual([0, 1, 2, 0, 1]);
+    expect(board.themes[0]?.label).toBe("Wait Time");
+    expect(board.themes[0]?.count).toBe(3);
   });
 
   it("ignores a location that is outside the selected places", () => {
@@ -170,8 +190,9 @@ describe("buildOverviewBoard", () => {
       }),
       previous: null,
       places: [places[0]!],
-      themes: [],
-      themesTruncated: false,
+      complaints: [],
+      topics: [],
+      coverage: { analysed: 0, ratingOnly: 0 },
       links,
       attention: [],
     });

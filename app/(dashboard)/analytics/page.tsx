@@ -5,6 +5,7 @@ import { PageHeader } from "@/components/page-header";
 import { PendingRegion, TransitionScope } from "@/components/transition-scope";
 import { dateRangeParams, parseDateRange } from "@/lib/date-range";
 import { loadAnalyticsSlice } from "@/lib/services/analytics-slice";
+import { loadInsightDashboard } from "@/lib/services/insight-dashboard";
 import type { AnalyticsCompare, RankBy, RankShow } from "@/lib/analytics-metrics";
 import { getDashboardContext } from "@/lib/services/dashboard-metrics";
 import { readPageScope } from "@/lib/services/scope-catalog";
@@ -16,7 +17,7 @@ interface AnalyticsPageProps {
   searchParams: Promise<Record<string, string | string[] | undefined>>;
 }
 
-const DEFAULT_RANGE = "6m";
+const DEFAULT_RANGE = "12m";
 
 export default async function AnalyticsPage({ searchParams }: AnalyticsPageProps) {
   const [params, { user, workspaceId }] = await Promise.all([searchParams, getActiveWorkspace()]);
@@ -34,11 +35,16 @@ export default async function AnalyticsPage({ searchParams }: AnalyticsPageProps
     ? (requested as AnalyticsSection)
     : "performance";
 
-  const [loaded, roster, slice] = await Promise.all([
+  const [loaded, roster, slice, insights] = await Promise.all([
     getDashboardContext(workspaceId, range, { clientId, groupId, locationId }),
     getWorkspaceRoster(workspaceId),
     loadAnalyticsSlice({
       workspaceId,
+      locationIds: resolved.locationIds,
+      start: range.start?.toISOString() ?? null,
+      end: range.end?.toISOString() ?? null,
+    }),
+    loadInsightDashboard(workspaceId, {
       locationIds: resolved.locationIds,
       start: range.start?.toISOString() ?? null,
       end: range.end?.toISOString() ?? null,
@@ -103,6 +109,7 @@ export default async function AnalyticsPage({ searchParams }: AnalyticsPageProps
             members={roster.members.map((member) => ({ userId: member.userId, email: member.email }))}
             query={query.toString()}
             slice={slice}
+            insights={insights}
             rankBy={rankBy}
             show={show}
             compare={compare}

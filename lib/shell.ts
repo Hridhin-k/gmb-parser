@@ -205,7 +205,7 @@ export function scopeMode(pathname: string): ScopeMode {
 
 export function defaultRangeForPath(pathname: string): DateRangeKey {
   if (pathname === "/overview") return "12m";
-  if (pathname === "/analytics") return "6m";
+  if (pathname === "/analytics") return "12m";
   if (pathname === "/insights") return "12m";
   if (pathname === "/dashboard" || pathname === "/reports") return "1m";
   return "all";

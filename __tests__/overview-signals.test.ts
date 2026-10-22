@@ -14,6 +14,7 @@ describe("signalsFromRpc", () => {
       { since48: "2026-10-20T12:00:00.000Z", now: NOW }
     );
     expect(s.themes).toEqual([{ locationId: "loc-1", theme: "staff", count: 5 }]);
+    expect(s.complaints).toEqual([]);
     expect(s.themesTruncated).toBe(false);
     expect(s.recentNegative).toEqual({
       locationId: "loc-1",
@@ -31,5 +32,18 @@ describe("signalsFromRpc", () => {
     );
     expect(s.recentNegative).toBeNull();
     expect(signalsFromRpc(null, { since48: "2026-10-20T12:00:00.000Z", now: NOW }).themes).toEqual([]);
+  });
+
+  it("keeps the top negative topic for an outlet and drops a blank topic", () => {
+    const s = signalsFromRpc(
+      {
+        complaints: [
+          { locationId: "loc-1", topic: "wait_time", count: 4 },
+          { locationId: "loc-2", topic: "", count: 2 },
+        ],
+      },
+      { since48: "2026-10-20T12:00:00.000Z", now: NOW }
+    );
+    expect(s.complaints).toEqual([{ locationId: "loc-1", topic: "wait_time", count: 4 }]);
   });
 });
