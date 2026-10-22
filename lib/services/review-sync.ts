@@ -7,8 +7,7 @@ import { AppError } from "@/lib/errors";
 import { logger } from "@/lib/logger";
 import type { GoogleReview } from "@/lib/types/google";
 import { detectComplaintTheme, detectReviewLanguage, shouldReopenReview } from "@/lib/review-inbox";
-import { absenceIsConfirmed, planReviewVersion } from "@/lib/intelligence/ingestion-plan";
-import { applyIngestionEffects, markConfirmedAbsences } from "@/lib/services/intelligence-ingest";
+import { absenceIsConfirmed, planReviewVersion, reviewsConfirmedMissing } from "@/lib/review-version";
 import { isFreshReview } from "@/lib/services/notifications";
 import type { Database } from "@/lib/types/supabase";
 
@@ -128,6 +127,42 @@ function priorVersion(row: {
   };
 }
 
+/**
+ * Marks stored reviews that a confirmed full sync did not return as missing
+ * on Google. Their rows stay; listings exclude them while missing.
+ */
+async function markConfirmedAbsences(
+  supabase: ReturnType<typeof createAdminClient>,
+  input: { workspaceId: string; locationId: string; seenNames: readonly string[]; now: string }
+): Promise<number> {
+  const { data, error } = await supabase
+    .from("grm_reviews")
+    .select("id, google_review_name, missing_on_google_at")
+    .eq("workspace_id", input.workspaceId)
+    .eq("location_id", input.locationId);
+  if (error || !Array.isArray(data)) return 0;
+  const missing = reviewsConfirmedMissing(
+    data.map((row) => ({
+      id: row.id,
+      googleReviewName: row.google_review_name,
+      missingOnGoogleAt: row.missing_on_google_at,
+    })),
+    new Set(input.seenNames)
+  );
+  for (const row of missing) {
+    const { error: updateError } = await supabase
+      .from("grm_reviews")
+      .update({ missing_on_google_at: input.now, downstream_stale_at: input.now })
+      .eq("id", row.id)
+      .eq("workspace_id", input.workspaceId)
+      .is("missing_on_google_at", null);
+    if (updateError) {
+      logger.error("review_sync.absence_mark_failed", { reviewId: row.id, message: updateError.message });
+    }
+  }
+  return missing.length;
+}
+
 // ---------------------------------------------------------------------------
 // ReviewSyncService
 // ---------------------------------------------------------------------------
@@ -159,7 +194,7 @@ export class ReviewSyncService {
     // --- 1. Fetch location record ---
     const { data: location, error: locError } = await supabase
       .from("grm_google_locations")
-      .select("id, google_location_name, workspace_id, last_synced_at")
+      .select("id, google_location_name, workspace_id, last_synced_at, reviews_full_synced_at")
       .eq("id", locationId)
       .eq("workspace_id", workspaceId)
       .single();
@@ -197,8 +232,15 @@ export class ReviewSyncService {
       throw error;
     }
 
+    // A location that has never completed a full crawl must always crawl in
+    // full, even when the caller asked for incremental (cron / Sync button).
+    // `last_synced_at` cannot be used for this: location discovery stamps it
+    // before any review exists. `reviews_full_synced_at` is only set below,
+    // after a full crawl finishes every page without failing.
     const mode: ReviewSyncMode =
-      options.mode === "full" || !location.last_synced_at ? "full" : "incremental";
+      options.mode === "full" || !location.reviews_full_synced_at
+        ? "full"
+        : "incremental";
 
     // --- 4. Paginate newest-first. Incremental stops once we hit known pages. ---
     let reviewsSynced = 0;
@@ -211,6 +253,8 @@ export class ReviewSyncService {
     let errorMessage: string | null = null;
     let pageToken: string | undefined;
     let abortSync = false;
+    let googleTotalReviewCount: number | null = null;
+    let googleAverageRating: number | null = null;
     const seenNames = new Set<string>();
 
     do {
@@ -250,6 +294,12 @@ export class ReviewSyncService {
       if (abortSync || !pageResult) break;
 
       pagesProcessed++;
+      if (typeof pageResult.totalReviewCount === "number") {
+        googleTotalReviewCount = pageResult.totalReviewCount;
+      }
+      if (typeof pageResult.averageRating === "number") {
+        googleAverageRating = pageResult.averageRating;
+      }
       const pageReviews = pageResult.reviews ?? [];
       for (const review of pageReviews) seenNames.add(review.name);
       const pageUpdated = await this.upsertReviewPage(
@@ -258,6 +308,15 @@ export class ReviewSyncService {
         locationId,
         workspaceId
       );
+      // A failed page write is a sync failure — never an "unchanged page".
+      // Treating it as unchanged used to stop incremental sync early and
+      // silently discard the whole page.
+      if (pageUpdated.failed) {
+        errorClass = "db_error";
+        errorMessage = pageUpdated.errorMessage ?? "Failed to store reviews";
+        abortSync = true;
+        break;
+      }
       reviewsSynced += pageReviews.length;
       reviewsUpdated += pageUpdated.written;
       freshReviews += pageUpdated.fresh;
@@ -298,9 +357,12 @@ export class ReviewSyncService {
     const finalStatus =
       abortSync && reviewsSynced === 0
         ? "failed"
-        : abortSync
+        : abortSync || truncated
         ? "partial"
         : "success";
+
+    const completedFullCrawl =
+      mode === "full" && !abortSync && !truncated;
 
     await supabase
       .from("grm_google_locations")
@@ -309,6 +371,13 @@ export class ReviewSyncService {
         sync_completed_at: now,
         last_synced_at: now,
         sync_error: errorMessage,
+        ...(googleTotalReviewCount !== null
+          ? { total_review_count: googleTotalReviewCount }
+          : {}),
+        ...(googleAverageRating !== null
+          ? { average_rating: googleAverageRating }
+          : {}),
+        ...(completedFullCrawl ? { reviews_full_synced_at: now } : {}),
       })
       .eq("id", locationId);
 
@@ -339,6 +408,7 @@ export class ReviewSyncService {
         truncated,
         mode,
         status: finalStatus,
+        googleTotalReviewCount,
         errorClass,
         errorMessage,
       } as Record<string, unknown>,
@@ -469,19 +539,35 @@ export class ReviewSyncService {
     reviews: GoogleReview[],
     locationId: string,
     workspaceId: string
-  ): Promise<{ written: number; fresh: number }> {
-    if (reviews.length === 0) return { written: 0, fresh: 0 };
+  ): Promise<
+    | { written: number; fresh: number; failed: false }
+    | { written: 0; fresh: 0; failed: true; errorMessage: string }
+  > {
+    if (reviews.length === 0) return { written: 0, fresh: 0, failed: false };
 
-    const { data: existingRows } = await supabase
+    const { data: existingRows, error: existingError } = await supabase
       .from("grm_reviews")
       .select(
-        "id, google_review_name, sync_hash, reply_status, comment, star_rating, review_create_time, google_reply_comment, content_fingerprint, response_fingerprint, missing_on_google_at"
+        "id, google_review_name, sync_hash, reply_status, comment, star_rating, review_create_time, google_reply_comment, content_fingerprint, response_fingerprint, missing_on_google_at, reopened_at, downstream_stale_at"
       )
       .eq("workspace_id", workspaceId)
       .in(
         "google_review_name",
         reviews.map((r) => r.name)
       );
+
+    if (existingError) {
+      logger.error("review_sync.existing_lookup_failed", {
+        count: reviews.length,
+        message: existingError.message,
+      });
+      return {
+        written: 0,
+        fresh: 0,
+        failed: true,
+        errorMessage: existingError.message,
+      };
+    }
 
     const existing = new Map(
       (existingRows ?? []).map((row) => [
@@ -497,13 +583,14 @@ export class ReviewSyncService {
           contentFingerprint: row.content_fingerprint,
           responseFingerprint: row.response_fingerprint,
           missingOnGoogleAt: row.missing_on_google_at,
+          reopenedAt: row.reopened_at,
+          downstreamStaleAt: row.downstream_stale_at,
         },
       ])
     );
 
     const now = new Date().toISOString();
     const payloads: ReviewInsert[] = [];
-    const versionByName = new Map<string, ReturnType<typeof planReviewVersion>>();
     let fresh = 0;
 
     for (const review of reviews) {
@@ -522,7 +609,19 @@ export class ReviewSyncService {
         createTime: review.createTime,
         replyComment: googleReply,
       });
-      versionByName.set(review.name, version);
+      // Every key must be present on every row. PostgREST bulk upserts fill
+      // keys missing from some rows with NULL — leaving `reply_status` off
+      // unreplied rows in a mixed page used to null out a NOT NULL column
+      // and fail the entire page.
+      const reopened =
+        prior &&
+        shouldReopenReview({
+          replyStatus: prior.replyStatus,
+          previousComment: prior.comment,
+          previousStars: prior.stars,
+          nextComment: comment,
+          nextStars: stars,
+        });
       const payload: ReviewInsert = {
         workspace_id: workspaceId,
         location_id: locationId,
@@ -545,35 +644,24 @@ export class ReviewSyncService {
         response_fingerprint: version.responseFingerprint,
         missing_on_google_at: null,
         last_synced_at: now,
+        downstream_stale_at:
+          version.contentChanged || version.responseChanged
+            ? now
+            : (prior?.downstreamStaleAt ?? null),
+        reopened_at: reopened ? now : (prior?.reopenedAt ?? null),
+        // A reply that already exists on Google should not sit in
+        // "Needs reply". Never overwrite GRM drafts / in-flight publishes.
+        reply_status:
+          googleReply && (!prior || prior.replyStatus === "none")
+            ? "published"
+            : (prior?.replyStatus ?? "none"),
       };
-      if (version.contentChanged || version.responseChanged) {
-        payload.downstream_stale_at = now;
-      }
-
-      // A reply that already exists on Google should not sit in "Needs reply".
-      // Never overwrite GRM drafts / in-flight publishes.
-      if (googleReply && (!prior || prior.replyStatus === "none")) {
-        payload.reply_status = "published";
-      }
-
-      if (
-        prior &&
-        shouldReopenReview({
-          replyStatus: prior.replyStatus,
-          previousComment: prior.comment,
-          previousStars: prior.stars,
-          nextComment: comment,
-          nextStars: stars,
-        })
-      ) {
-        payload.reopened_at = now;
-      }
 
       if (!prior && isFreshReview(review.createTime)) fresh += 1;
       payloads.push(payload);
     }
 
-    if (payloads.length === 0) return { written: 0, fresh: 0 };
+    if (payloads.length === 0) return { written: 0, fresh: 0, failed: false };
 
     const { error } = await supabase.from("grm_reviews").upsert(payloads, {
       onConflict: "workspace_id,google_review_name",
@@ -585,34 +673,10 @@ export class ReviewSyncService {
         count: payloads.length,
         message: error.message,
       });
-      return { written: 0, fresh: 0 };
+      return { written: 0, fresh: 0, failed: true, errorMessage: error.message };
     }
 
-    try {
-      const names = payloads.map((row) => row.google_review_name);
-      const { data: stored } = await supabase
-        .from("grm_reviews")
-        .select("id, google_review_name")
-        .eq("workspace_id", workspaceId)
-        .in("google_review_name", names);
-      if (Array.isArray(stored)) {
-        const effects = stored.flatMap((row) => {
-          const version = versionByName.get(row.google_review_name);
-          if (!version || (!version.contentChanged && !version.responseChanged)) return [];
-          return [{ ...version, reviewId: row.id }];
-        });
-        if (effects.length > 0) {
-          await applyIngestionEffects(supabase, { workspaceId, locationId, effects, now });
-        }
-      }
-    } catch (error) {
-      logger.error("review_sync.intelligence_followup_failed", {
-        locationId,
-        message: error instanceof Error ? error.message : "Unknown",
-      });
-    }
-
-    return { written: payloads.length, fresh };
+    return { written: payloads.length, fresh, failed: false };
   }
 
   // ---------------------------------------------------------------------------

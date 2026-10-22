@@ -44,7 +44,7 @@ Sidebar badges stay at the permission boundary. The dashboard layout cannot read
 
 ## Screens
 
-Overview, Inbox, Escalations, Analytics, Insights (the overview insight panel), Reports, Review requests, and the agency home all call `readPageScope`. Phone routes under `/m` use the same resolver.
+Overview, Inbox, Escalations, Analytics, Reports, Review requests, and the agency home all call `readPageScope`. Phone routes under `/m` use the same resolver.
 
 The header owns the selector. Do not render a second client, group, or location control on these screens.
 

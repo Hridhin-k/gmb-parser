@@ -2,7 +2,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { logger } from "@/lib/logger";
 import type { Json } from "@/lib/types/supabase";
 
-export type AiGenerationKind = "reply" | "location_insight" | "scope_insight";
+export type AiGenerationKind = "reply";
 export type AiGenerationStatus = "generated" | "persisting" | "saved" | "failed" | "superseded";
 
 export interface AiGenerationJob {

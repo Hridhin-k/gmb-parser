@@ -9,7 +9,6 @@ import { Input } from "@/components/ui/input";
 import type { TenantDetail } from "@/lib/services/platform";
 
 const FLAG_LABELS: Record<string, string> = {
-  intelligence: "Review intelligence backfill (enforced on Update summary)",
   automation: "Auto-reply automation cron (enforced)",
   requests: "Review requests (stored — enforcement on campaign send is a follow-up)",
   reports: "Scheduled reports & alerts (stored — enforcement on report runs is a follow-up)",

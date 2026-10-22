@@ -16,8 +16,10 @@ export function MobileNav({ summary }: { summary: ShellSummary }) {
     const value = params.get(key);
     if (value) search.set(key, value);
   }
-  const range = params.get("range");
-  if (range === "7d" || range === "30d") search.set("range", range);
+  for (const key of ["range", "from", "to"] as const) {
+    const value = params.get(key);
+    if (value) search.set(key, value);
+  }
   const query = search.toString();
   const href = (path: string) => (query ? `${path}?${query}` : path);
   const overview = pathname === "/m";

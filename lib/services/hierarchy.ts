@@ -716,13 +716,6 @@ export async function mergeHierarchyGroups(input: {
     .eq("workspace_id", input.workspaceId)
     .eq("group_id", source.id);
   if (moved.error) throw new AppError("Could not move locations into the group.", "DB_ERROR", 500);
-  const { data: movedLocations } = await admin
-    .from("grm_google_locations")
-    .select("id")
-    .eq("workspace_id", input.workspaceId)
-    .eq("group_id", target.id);
-  const { noteMembershipChange } = await import("@/lib/services/summary-service");
-  await noteMembershipChange(admin, input.workspaceId, (movedLocations ?? []).map((location) => location.id));
   const removed = await admin.from("grm_groups").delete().eq("id", source.id).eq("workspace_id", input.workspaceId);
   if (removed.error) dbMessage(removed.error, "Could not remove the merged group.");
   await AuditService.log({
@@ -799,8 +792,6 @@ export async function moveHierarchyLocations(input: {
     .eq("workspace_id", input.workspaceId)
     .in("id", input.locationIds);
   if (error) dbMessage(error, "Could not move the locations.");
-  const { noteMembershipChange } = await import("@/lib/services/summary-service");
-  await noteMembershipChange(admin, input.workspaceId, input.locationIds);
   await AuditService.log({
     workspaceId: input.workspaceId,
     userId: input.userId,

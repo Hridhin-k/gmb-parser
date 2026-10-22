@@ -152,7 +152,6 @@ export default async function SettingsPage({
               label: aiBoard.active.label,
               snapshot: {
                 org: aiBoard.active.snapshot.org,
-                insights: aiBoard.active.snapshot.insights,
               },
             }}
             versions={aiBoard.versions.map((row) => ({

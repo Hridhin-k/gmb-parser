@@ -3,20 +3,23 @@ import { logger } from "@/lib/logger";
 /** Replacement for gemini-2.0-flash, which Google shut down on 1 June 2026. */
 export const GEMINI_MODEL_ID = "gemini-3.8-flash";
 
-/** Fast model for simple drafts and quick insight previews. Complex work stays on GEMINI_MODEL_ID. */
+/** Fast model for simple drafts. Complex work stays on GEMINI_MODEL_ID. */
 export const GEMINI_FAST_MODEL_ID = "gemini-3.5-flash-lite";
 
-/**
- * Text embeddings. 768 matches grm_review_embeddings and is one of the
- * documented sizes. gemini-embedding-2 can collapse several inputs into one
- * vector, so each review is a separate embedContent call on this model.
- * Published text price is $0.15 per 1M input tokens.
- */
-export const GEMINI_EMBEDDING_MODEL_ID = "gemini-embedding-001";
-export const EMBEDDING_DIMENSIONS = 768;
+export interface GeminiUsage {
+  inputTokens: number;
+  outputTokens: number;
+}
 
-export function geminiEmbedUrl(apiKey: string, modelId: string = GEMINI_EMBEDDING_MODEL_ID): string {
-  return `https://generativelanguage.googleapis.com/v1beta/models/${modelId}:embedContent?key=${apiKey}`;
+/** Token counts from a generateContent response, including hidden thinking tokens. */
+export function usageFromResponse(data: unknown): GeminiUsage {
+  const usage = (data as {
+    usageMetadata?: { promptTokenCount?: number; candidatesTokenCount?: number; thoughtsTokenCount?: number };
+  })?.usageMetadata;
+  return {
+    inputTokens: usage?.promptTokenCount ?? 0,
+    outputTokens: (usage?.candidatesTokenCount ?? 0) + (usage?.thoughtsTokenCount ?? 0),
+  };
 }
 
 export function geminiGenerateUrl(apiKey: string, modelId: string = GEMINI_MODEL_ID): string {

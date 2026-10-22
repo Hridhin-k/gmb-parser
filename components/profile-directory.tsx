@@ -96,8 +96,7 @@ export function ProfileDirectory({
             Profiles
           </h2>
           <p className="text-sm font-light text-slate">
-            {total.toLocaleString()} managed · search & sort · open one for AI
-            insight + inbox
+            {total.toLocaleString()} managed · search & sort · open one for its inbox
           </p>
         </div>
       </div>

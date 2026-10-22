@@ -1,7 +1,6 @@
 import type { ReactNode } from "react";
 import Link from "next/link";
 import { ChartTip, CHART } from "@/components/charts";
-import { OverviewInsightFeed } from "@/components/overview-insight-feed";
 import type { OverviewBoard, OverviewStoreRow } from "@/lib/overview-board";
 import { cn } from "@/lib/utils";
 
@@ -189,16 +188,12 @@ export function ClientOverviewView({
   negativeHref,
   unansweredHref,
   escalationsHref,
-  savedSummary,
-  generate,
 }: {
   board: OverviewBoard;
   reviewsHref: string;
   negativeHref: string;
   unansweredHref: string;
   escalationsHref: string;
-  savedSummary: string | null;
-  generate: { scopeKind: "client" | "group"; scopeId: string } | null;
 }) {
   const { kpis } = board;
   const themeMax = Math.max(1, ...board.themes.map((theme) => theme.count));
@@ -268,9 +263,6 @@ export function ClientOverviewView({
       </div>
 
       <div className="grid items-start gap-4 xl:grid-cols-[minmax(0,1.35fr)_minmax(18rem,0.8fr)]">
-        <Panel title="AI insights" action={<span className="text-xs text-slate">From stored reviews</span>}>
-          <OverviewInsightFeed cards={board.insights} savedSummary={savedSummary} generate={generate} />
-        </Panel>
         {board.worst ? <WorstStore store={board.worst} scopeRating={kpis.avgRating} /> : (
           <Panel title="This outlet">
             <p className="mt-3 text-sm text-slate">

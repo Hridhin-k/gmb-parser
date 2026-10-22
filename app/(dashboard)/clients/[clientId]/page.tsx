@@ -1,10 +1,7 @@
 import { notFound } from "next/navigation";
-import { Suspense } from "react";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { GoogleBusinessProfileService } from "@/lib/services/google-business-profile";
 import { isUnassignedClient } from "@/lib/services/unassigned-client";
-import { getLocationInsightView } from "@/lib/services/dashboard";
-import { ScopeInsightService } from "@/lib/services/scope-insights";
 import { getActiveRole, getActiveWorkspace } from "@/lib/services/session";
 import { getMemberAccess, visibleClientIds } from "@/lib/services/access";
 import { isOrgScope, workspaceGrant } from "@/lib/access";
@@ -14,13 +11,10 @@ import { ClientQueue } from "@/components/client-queue";
 import { canSyncWorkspace } from "@/lib/services/workspace";
 import { PageHeader } from "@/components/page-header";
 import { LocationTable } from "@/components/location-table";
-import { ProfileInsightPanel } from "@/components/profile-insight-panel";
-import { ScopeInsightPanel } from "@/components/scope-insight-panel";
 import { UnlinkedLocationsPanel } from "@/components/unlinked-locations-panel";
 import { ArrowLeft, MessageSquareText } from "lucide-react";
 import { locationDisplayName } from "@/lib/ui/location-place";
 import Link from "next/link";
-import { validateFilterString } from "@/lib/validation";
 
 interface ClientDetailPageProps {
   params: Promise<{ clientId: string }>;
@@ -64,7 +58,8 @@ export default async function ClientDetailPage({
       .from("grm_google_locations")
       .select(
         `id, google_location_name, location_title, address_formatted,
-         primary_phone, store_code, is_active, last_synced_at, client_id`
+         primary_phone, store_code, is_active, last_synced_at, client_id,
+         total_review_count, sync_status`
       )
       .eq("workspace_id", workspaceId)
       .eq("client_id", clientId)
@@ -83,13 +78,8 @@ export default async function ClientDetailPage({
   }
 
   const connectedLocations = connectedLocationsRaw.data ?? [];
-  const locationId = validateFilterString(query.location);
   const locationIds = connectedLocations.map((location) => location.id);
-  const [insight, orgInsight, directConnection, reviewRows] = await Promise.all([
-    locationId && connectedLocations.some((location) => location.id === locationId)
-      ? getLocationInsightView(workspaceId, locationId)
-      : Promise.resolve(null),
-    ScopeInsightService.getView(workspaceId, "client", clientId),
+  const [directConnection, reviewRows] = await Promise.all([
     admin
       .from("grm_google_connections")
       .select("status")
@@ -103,6 +93,7 @@ export default async function ClientDetailPage({
           .from("grm_reviews")
           .select("id, reviewer_display_name, star_rating")
           .eq("workspace_id", workspaceId)
+          .is("missing_on_google_at", null)
           .in("location_id", locationIds)
           .limit(200),
   ]);
@@ -185,21 +176,6 @@ export default async function ClientDetailPage({
         </Link>
       </PageHeader>
 
-      <div id="org-insight" className="scroll-mt-6">
-        <Suspense>
-          <ScopeInsightPanel
-            scopeKind="client"
-            scopeId={clientId}
-            title={orgInsight.title}
-            locationCount={orgInsight.locationCount}
-            reviewCount={orgInsight.reviewCount}
-            avgRating={orgInsight.avgRating}
-            insight={orgInsight.insight}
-            heuristicSummary={orgInsight.heuristicSummary}
-          />
-        </Suspense>
-      </div>
-
       {connectedLocations.length === 0 && (
         <div className="rounded-xl border border-silver bg-paper px-5 py-4 text-sm text-graphite">
           No locations on this client yet. On the{" "}
@@ -246,21 +222,12 @@ export default async function ClientDetailPage({
           store_code: l.store_code,
           is_active: l.is_active,
           last_synced_at: l.last_synced_at,
+          total_review_count: l.total_review_count,
+          sync_status: l.sync_status,
           client_id: l.client_id,
         }))}
       />
 
-      {insight ? (
-        <div id="insight" className="scroll-mt-6">
-          <Suspense>
-            <ProfileInsightPanel
-              profile={insight.profile}
-              insight={insight.insight}
-              heuristicSummary={insight.heuristicSummary}
-            />
-          </Suspense>
-        </div>
-      ) : null}
     </div>
   );
 }

@@ -104,7 +104,6 @@ describe("buildOverviewBoard", () => {
       links,
       attention: [],
     });
-    expect(enough.insights.some((card) => card.tone === "worse" && card.title === "Alpha")).toBe(true);
     expect(enough.lowest.find((row) => row.id === "a")?.ratingChange).toBeCloseTo(-2);
 
     const small = buildOverviewBoard({
@@ -116,7 +115,6 @@ describe("buildOverviewBoard", () => {
       links,
       attention: [],
     });
-    expect(small.insights.some((card) => card.tone === "worse")).toBe(false);
   });
 
   it("flags a complaint theme that was absent in the previous period", () => {
@@ -133,9 +131,6 @@ describe("buildOverviewBoard", () => {
       links,
       attention: [],
     });
-    const card = board.insights.find((item) => item.tone === "problem");
-    expect(card?.title).toBe("Wait time");
-    expect(card?.href).toContain("theme=wait");
     expect(board.themes[0]?.direction).toBe("new");
   });
 

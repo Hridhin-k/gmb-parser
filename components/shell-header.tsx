@@ -5,9 +5,7 @@ import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import type { User } from "@supabase/supabase-js";
 import { Bell, ChevronDown, LogOut, Menu, Search } from "lucide-react";
 import { ActivityStatus } from "@/components/activity-status";
-import { DateRangeFilter } from "@/components/date-range-filter";
-import { useFilterNavigation } from "@/components/filter-navigation";
-import { timeFilterApply } from "@/lib/filter-apply";
+import { GlobalFilters } from "@/components/global-filters";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import {
@@ -16,11 +14,9 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { ScopeSelector } from "@/components/scope-selector";
-import { parseDateRange } from "@/lib/date-range";
 import type { ScopeCatalog } from "@/lib/scope";
 import type { ShellSummary } from "@/lib/services/shell-summary";
-import { defaultRangeForPath, scopedHref, scopeMode, shellAlerts } from "@/lib/shell";
+import { scopedHref, shellAlerts } from "@/lib/shell";
 import { createClient } from "@/lib/supabase/client";
 
 interface ShellHeaderProps {
@@ -40,38 +36,22 @@ export function ShellHeader({ user, role, catalog, summary, onOpenMenu }: ShellH
   const [syncedQuery, setSyncedQuery] = useState(searchParams.get("q") ?? "");
   const initials = (user.email ?? "U").slice(0, 2).toUpperCase();
   const givenName = greetingName(user);
-  const mode = scopeMode(pathname);
   const alerts = shellAlerts(summary, role).map((alert) => ({
     ...alert,
     href: alert.id === "more-profiles" ? alert.href : scopedHref(alert.href, searchParams, pathname),
   }));
-  const { applying, begin } = useFilterNavigation();
-  const rangeDefault = defaultRangeForPath(pathname);
-  const range = parseDateRange(
-    {
-      range: searchParams.get("range") ?? undefined,
-      from: searchParams.get("from") ?? undefined,
-      to: searchParams.get("to") ?? undefined,
-    },
-    rangeDefault
-  );
   if (syncedQuery !== (searchParams.get("q") ?? "")) {
     const next = searchParams.get("q") ?? "";
     setSyncedQuery(next);
     setSearch(next);
   }
 
-  function writeParams(mutate: (params: URLSearchParams) => void, apply?: { title: string; detail: string }) {
+  function writeParams(mutate: (params: URLSearchParams) => void) {
     const params = new URLSearchParams(searchParams.toString());
     mutate(params);
     params.delete("page");
     const qs = params.toString();
-    const href = qs ? `${pathname}?${qs}` : pathname;
-    if (apply) {
-      begin({ ...apply, href }, () => router.push(href));
-      return;
-    }
-    router.push(href);
+    router.push(qs ? `${pathname}?${qs}` : pathname);
   }
 
   useEffect(() => {
@@ -108,30 +88,7 @@ export function ShellHeader({ user, role, catalog, summary, onOpenMenu }: ShellH
     router.push(href);
   }
 
-  const scope = mode === "none" || !catalog ? null : (
-    <div className="flex min-w-0 flex-col gap-2 sm:flex-row sm:items-center">
-      <ScopeSelector catalog={catalog} />
-      {mode === "client-range" ? (
-        <DateRangeFilter
-          value={{ key: range.key, from: range.from, to: range.to }}
-          defaultKey={rangeDefault}
-          disabled={applying !== null}
-          onChange={(change) =>
-            writeParams(
-              (params) => {
-                for (const [key, value] of Object.entries(change)) {
-                  if (value) params.set(key, value);
-                  else params.delete(key);
-                }
-              },
-              timeFilterApply(change, rangeDefault)
-            )
-          }
-          selectClassName="sm:w-44"
-        />
-      ) : null}
-    </div>
-  );
+  const scope = catalog ? <GlobalFilters catalog={catalog} /> : null;
 
   const searchForm = (
     <form onSubmit={submitSearch} className="min-w-0 flex-1" role="search">

@@ -35,7 +35,6 @@ export interface DashboardContext {
   expiredConnections: number;
   revokedConnections: number;
   pauses: { workspace: boolean; clientIds: string[]; locationIds: string[] };
-  insights: Array<{ locationId: string; summary: string; reviewCount: number; generatedAt: string }>;
 }
 
 async function loadFacts(
@@ -78,7 +77,6 @@ export async function getDashboardContext(
     locationsResult,
     connectionsResult,
     pausesResult,
-    insightsResult,
     factsDefault,
     previousDefault,
   ] = await Promise.all([
@@ -107,10 +105,6 @@ export async function getDashboardContext(
       .select("scope, client_id, location_id")
       .eq("workspace_id", workspaceId)
       .is("cleared_at", null),
-    admin
-      .from("grm_location_insights")
-      .select("location_id, summary, review_count, generated_at")
-      .eq("workspace_id", workspaceId),
     loadFacts(workspaceId, scope, startIso, endIso, defaultTimezone),
     previousWindow
       ? loadFacts(workspaceId, scope, previousWindow.start.toISOString(), previousWindow.end.toISOString(), defaultTimezone)
@@ -123,7 +117,6 @@ export async function getDashboardContext(
   if (locationsResult.error) throw new Error(`Failed to load locations: ${locationsResult.error.message}`);
   if (connectionsResult.error) throw new Error(`Failed to load Google connections: ${connectionsResult.error.message}`);
   if (pausesResult.error) throw new Error(`Failed to load autoreply pauses: ${pausesResult.error.message}`);
-  if (insightsResult.error) throw new Error(`Failed to load location insights: ${insightsResult.error.message}`);
 
   const timezone = ESCALATION_TIMEZONES.some((zone) => zone.id === policy.data?.timezone)
     ? policy.data!.timezone
@@ -204,11 +197,5 @@ export async function getDashboardContext(
       clientIds: pauses.flatMap((row) => (row.client_id ? [row.client_id] : [])),
       locationIds: pauses.flatMap((row) => (row.location_id ? [row.location_id] : [])),
     },
-    insights: (insightsResult.data ?? []).map((row) => ({
-      locationId: row.location_id,
-      summary: row.summary,
-      reviewCount: row.review_count,
-      generatedAt: row.generated_at,
-    })),
   };
 }

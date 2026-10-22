@@ -102,10 +102,6 @@ describe("buildClientOverview", () => {
       previousMonths: null,
       stats,
       locations,
-      insights: [
-        { locationId: "l1", highlights: ["Staff friendliness"], risks: ["Billing queue", "billing queue"] },
-        { locationId: "l3", highlights: ["Other praise"], risks: ["Other problem"] },
-      ],
       clients: [
         { id: "c1", name: "ACME Retail" },
         { id: "c2", name: "Other" },
@@ -123,8 +119,8 @@ describe("buildClientOverview", () => {
     expect(overview.attention[0]?.href).toBe("/reviews?filter=unanswered&client=c1");
     expect(overview.lowest.map((location) => location.id)).toEqual(["l1", "l2"]);
     expect(overview.lowest[0]?.rating).toBeCloseTo(3.6);
-    expect(overview.praised).toEqual([{ label: "Staff friendliness", count: 1 }]);
-    expect(overview.complained).toEqual([{ label: "Billing queue", count: 2 }]);
+    expect(overview.praised).toEqual([]);
+    expect(overview.complained).toEqual([]);
   });
 
   it("omits empty attention rows", () => {
@@ -143,7 +139,6 @@ describe("buildClientOverview", () => {
           isActive: true,
         },
       ],
-      insights: [],
       clients: [],
     });
     expect(overview.attention).toEqual([]);

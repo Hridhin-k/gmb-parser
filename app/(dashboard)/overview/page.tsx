@@ -8,7 +8,6 @@ import { buildAttention, reviewDrillHref } from "@/lib/metrics";
 import { buildOverviewBoard, overviewQueryKey, type BoardPlace } from "@/lib/overview-board";
 import { loadOverviewSignals } from "@/lib/services/overview";
 import { getDashboardContext } from "@/lib/services/dashboard-metrics";
-import { ScopeInsightService } from "@/lib/services/scope-insights";
 import { getOnboardingGate } from "@/lib/services/onboarding";
 import { readPageScope } from "@/lib/services/scope-catalog";
 import { getActiveRole, getActiveWorkspace } from "@/lib/services/session";
@@ -42,14 +41,9 @@ export default async function OverviewPage({ searchParams }: OverviewPageProps) 
   const locationId = resolved.locationId;
   const range = parseDateRange(params, DEFAULT_RANGE);
   const scope = { clientId, groupId, locationId };
-  const [loaded, signals, scopeInsight] = await Promise.all([
+  const [loaded, signals] = await Promise.all([
     getDashboardContext(workspaceId, range, scope),
     loadOverviewSignals(workspaceId, resolved.locationIds, range),
-    !locationId && groupId
-      ? ScopeInsightService.getView(workspaceId, "group", groupId)
-      : !locationId && clientId
-        ? ScopeInsightService.getView(workspaceId, "client", clientId)
-        : Promise.resolve(null),
   ]);
 
   const places = new Map(loaded.locations.map((location) => [location.id, location]));
@@ -149,11 +143,6 @@ export default async function OverviewPage({ searchParams }: OverviewPageProps) 
 
   const summary = scopeSummary(resolved);
   const rendered = overviewQueryKey((key) => param(params[key]) || null);
-  const generate =
-    !locationId && (groupId || clientId)
-      ? { scopeKind: (groupId ? "group" : "client") as "client" | "group", scopeId: (groupId ?? clientId)! }
-      : null;
-
   return (
     <TransitionScope>
       <div className="space-y-4">
@@ -189,8 +178,6 @@ export default async function OverviewPage({ searchParams }: OverviewPageProps) 
               negativeHref={reviews({ stars: "low" })}
               unansweredHref={reviews({ filter: "unanswered" })}
               escalationsHref={escalations()}
-              savedSummary={scopeInsight?.insight?.summary ?? null}
-              generate={generate}
             />
           </FreshMetrics>
         </PendingRegion>

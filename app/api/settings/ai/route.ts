@@ -31,14 +31,6 @@ const bodySchema = z.discriminatedUnion("action", [
     legacyVoice: z.enum(["warm", "professional", "brief", ""]).optional(),
     legacyNote: z.string().max(500).optional(),
     label: z.string().max(80).optional(),
-    insights: z
-      .object({
-        vertical: z.string().max(80).optional(),
-        watchThemes: z.array(z.string().max(80)).max(12).optional(),
-        focusQuestions: z.array(z.string().max(80)).max(8).optional(),
-        successSignals: z.array(z.string().max(80)).max(8).optional(),
-      })
-      .optional(),
   }),
   z.object({
     action: z.literal("knowledge-save"),
@@ -49,15 +41,6 @@ const bodySchema = z.discriminatedUnion("action", [
     enabled: z.boolean().optional(),
     target: targetSchema.optional(),
     metadata: z.record(z.string(), z.unknown()).optional(),
-  }),
-  z.object({
-    action: z.literal("save-insight-lens"),
-    vertical: z.string().max(80).optional(),
-    watchThemes: z.array(z.string().max(80)).max(12).optional(),
-    focusQuestions: z.array(z.string().max(80)).max(8).optional(),
-    successSignals: z.array(z.string().max(80)).max(8).optional(),
-    notes: z.string().max(4000).optional(),
-    target: targetSchema.optional(),
   }),
   z.object({ action: z.literal("knowledge-delete"), id: z.string().uuid() }),
   z.object({ action: z.literal("activate"), version: z.number().int().positive() }),
@@ -110,48 +93,8 @@ export async function POST(request: Request) {
           legacyVoice: body.legacyVoice ?? "",
           legacyNote: body.legacyNote ?? "",
         },
-        insights: body.insights,
       });
       return NextResponse.json({ ok: true, active });
-    }
-
-    if (body.action === "save-insight-lens") {
-      const target = body.target ?? { kind: "workspace" as const };
-      const lens = {
-        vertical: body.vertical ?? "",
-        watchThemes: body.watchThemes ?? [],
-        focusQuestions: body.focusQuestions ?? [],
-        successSignals: body.successSignals ?? [],
-      };
-      if (target.kind === "workspace") {
-        const active = await saveActiveAiSnapshot({
-          workspaceId,
-          userId: user.id,
-          insights: lens,
-        });
-        return NextResponse.json({ ok: true, active });
-      }
-      const board = await loadAiBoard(workspaceId, user.id);
-      const existing = board.knowledge.find(
-        (row) =>
-          row.kind === "insight_lens" &&
-          (target.kind === "client"
-            ? row.clientId === target.id && !row.groupId && !row.locationId
-            : target.kind === "group"
-              ? row.groupId === target.id
-              : row.locationId === target.id)
-      );
-      const row = await upsertKnowledge({
-        workspaceId,
-        userId: user.id,
-        id: existing?.id,
-        kind: "insight_lens",
-        title: "Insight lens",
-        body: body.notes?.trim() || "Insight lens",
-        target,
-        metadata: { lens },
-      });
-      return NextResponse.json({ ok: true, knowledge: row });
     }
 
     if (body.action === "knowledge-save") {

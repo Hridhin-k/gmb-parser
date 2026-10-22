@@ -1,5 +1,5 @@
 import { allows, workspaceGrant } from "@/lib/access";
-import { dateRangeParams, parseDateRange, type DateRangeKey } from "@/lib/date-range";
+import { parseDateRange, type DateRangeKey } from "@/lib/date-range";
 
 export type ShellRole = "owner" | "admin" | "member" | string | null | undefined;
 
@@ -212,9 +212,33 @@ export function defaultRangeForPath(pathname: string): DateRangeKey {
 }
 
 /**
- * Carry the client and the effective date range onto another scoped route.
- * A page's own default is expanded first, so leaving Overview for Inbox keeps
- * "Last 12 months" instead of silently switching to all time.
+ * Organisation and date the user has applied. An explicit range in the URL
+ * wins. When the URL has none, the page they are leaving contributes its
+ * current period, so the next page does not substitute its own default.
+ */
+export function globalFilterParams(current: URLSearchParams, pathname: string): URLSearchParams {
+  const params = new URLSearchParams();
+  for (const key of ["client", "group", "location"] as const) {
+    const value = current.get(key);
+    if (value) params.set(key, value);
+  }
+  if (current.has("range") || current.has("from") || current.has("to")) {
+    for (const key of ["range", "from", "to"] as const) {
+      const value = current.get(key);
+      if (value) params.set(key, value);
+    }
+    return params;
+  }
+  const range = parseDateRange({}, defaultRangeForPath(pathname));
+  params.set("range", range.key);
+  if (range.from) params.set("from", range.from);
+  if (range.to) params.set("to", range.to);
+  return params;
+}
+
+/**
+ * Carry the applied organisation and date onto the next page.
+ * A link that already names a place or a period keeps that value.
  */
 export function scopedHref(path: string, current: URLSearchParams, pathname: string): string {
   const hashAt = path.indexOf("#");
@@ -222,30 +246,13 @@ export function scopedHref(path: string, current: URLSearchParams, pathname: str
   const beforeHash = hashAt >= 0 ? path.slice(0, hashAt) : path;
   const queryAt = beforeHash.indexOf("?");
   const base = queryAt >= 0 ? beforeHash.slice(0, queryAt) : beforeHash;
-  if (scopeMode(base) === "none") return path;
 
   const params = new URLSearchParams(queryAt >= 0 ? beforeHash.slice(queryAt + 1) : "");
-  for (const key of ["client", "group", "location"] as const) {
-    const value = current.get(key);
-    if (value && !params.has(key)) params.set(key, value);
-  }
-
-  if (scopeMode(base) === "client-range") {
-    const range = parseDateRange(
-      {
-        range: current.get("range") ?? undefined,
-        from: current.get("from") ?? undefined,
-        to: current.get("to") ?? undefined,
-      },
-      defaultRangeForPath(pathname)
-    );
-    for (const [key, value] of Object.entries(dateRangeParams(range, "all"))) {
-      params.set(key, value);
-    }
-  } else {
-    params.delete("range");
-    params.delete("from");
-    params.delete("to");
+  const carried = globalFilterParams(current, pathname);
+  for (const key of ["client", "group", "location", "range", "from", "to"] as const) {
+    if (params.has(key)) continue;
+    const value = carried.get(key);
+    if (value) params.set(key, value);
   }
 
   const qs = params.toString();

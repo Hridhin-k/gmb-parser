@@ -11,12 +11,7 @@ import { themeLabel } from "@/lib/review-inbox";
  * Reply rate is reviews with a Google reply divided by all reviews in the window.
  * A location is ranked only by its own average rating. Ties go to the location
  * with more reviews, then by name. Locations with no reviews in the window are left out.
- * "Getting worse" and "Improving" require at least 5 reviews in this window and
- * 5 in the previous window of the same length, and a rating move of at least 0.15.
  */
-
-export const TREND_MIN_REVIEWS = 5;
-const RATING_MOVE = 0.15;
 
 export interface BoardPlace {
   id: string;
@@ -52,16 +47,6 @@ export interface OverviewKpis {
   unreplied: number;
   openEscalations: number;
   overdueEscalations: number;
-}
-
-export interface OverviewInsightCard {
-  id: string;
-  tone: "worse" | "problem" | "improving" | "steady";
-  kicker: string;
-  title: string;
-  body: string;
-  href: string;
-  bars: number[];
 }
 
 export interface OverviewStoreRow {
@@ -110,7 +95,6 @@ export interface OverviewThemeBar {
 
 export interface OverviewBoard {
   kpis: OverviewKpis;
-  insights: OverviewInsightCard[];
   worst: OverviewStoreRow | null;
   months: OverviewMonthBar[];
   trendCaption: string | null;
@@ -231,88 +215,6 @@ function themeDirection(current: number, previous: number | null): OverviewTheme
   return "steady";
 }
 
-function insightCards(
-  rows: OverviewStoreRow[],
-  facts: DashboardFacts,
-  previous: DashboardFacts | null,
-  links: BoardLinks
-): OverviewInsightCard[] {
-  const cards: OverviewInsightCard[] = [];
-  const scopeRating = average(facts.ratingSum, facts.reviews);
-  const earlier = byLocation(previous?.locations ?? []);
-
-  const moved = rows.flatMap((row) => {
-    const before = earlier.get(row.id);
-    if (!before || row.reviews < TREND_MIN_REVIEWS || before.reviews < TREND_MIN_REVIEWS || row.ratingChange === null) {
-      return [];
-    }
-    return [{ row, before }];
-  });
-
-  const worse = [...moved].filter((item) => item.row.ratingChange! <= -RATING_MOVE).sort((a, b) => a.row.ratingChange! - b.row.ratingChange!)[0];
-  if (worse) {
-    cards.push({
-      id: `worse-${worse.row.id}`,
-      tone: "worse",
-      kicker: "Getting worse",
-      title: worse.row.name,
-      body: `${worse.row.reviews.toLocaleString("en-US")} reviews in this period, average ${worse.row.rating.toFixed(2)}. That is ${Math.abs(worse.row.ratingChange!).toFixed(2)} below the previous period, which had ${worse.before.reviews.toLocaleString("en-US")} reviews.`,
-      href: worse.row.negativeHref,
-      bars: [worse.before.reviews, worse.row.reviews],
-    });
-  }
-
-  const currentThemes = new Map<string, number>();
-  const previousThemes = new Map<string, number>();
-  for (const row of facts.themeMonths) currentThemes.set(row.theme, (currentThemes.get(row.theme) ?? 0) + row.count);
-  for (const row of previous?.themeMonths ?? []) previousThemes.set(row.theme, (previousThemes.get(row.theme) ?? 0) + row.count);
-  const problem = [...currentThemes.entries()]
-    .filter(([theme, count]) => theme !== "unspecified" && count >= 3 && (previousThemes.get(theme) ?? 0) === 0 && previous)
-    .sort((a, b) => b[1] - a[1])[0];
-  if (problem) {
-    const label = themeLabel(problem[0]) ?? problem[0];
-    cards.push({
-      id: `problem-${problem[0]}`,
-      tone: "problem",
-      kicker: "New complaint theme",
-      title: label,
-      body: `${problem[1].toLocaleString("en-US")} reviews of 1–3 stars in this period mention ${label.toLowerCase()}. The previous period had none.`,
-      href: links.reviews({ theme: problem[0], stars: "low" }),
-      bars: [0, problem[1]],
-    });
-  }
-
-  const better = [...moved].filter((item) => item.row.ratingChange! >= RATING_MOVE).sort((a, b) => b.row.ratingChange! - a.row.ratingChange!)[0];
-  if (better) {
-    cards.push({
-      id: `improving-${better.row.id}`,
-      tone: "improving",
-      kicker: "Improving",
-      title: better.row.name,
-      body: `${better.row.reviews.toLocaleString("en-US")} reviews in this period, average ${better.row.rating.toFixed(2)}. That is ${better.row.ratingChange!.toFixed(2)} above the previous period, which had ${better.before.reviews.toLocaleString("en-US")} reviews.`,
-      href: better.row.reviewsHref,
-      bars: [better.before.reviews, better.row.reviews],
-    });
-  }
-
-  const steady = [...rows]
-    .filter((row) => row.reviews >= TREND_MIN_REVIEWS && scopeRating !== null && row.rating >= scopeRating)
-    .sort((a, b) => b.rating - a.rating || b.reviews - a.reviews)[0];
-  if (steady && rows.length > 1) {
-    cards.push({
-      id: `steady-${steady.id}`,
-      tone: "steady",
-      kicker: "Highest rated",
-      title: steady.name,
-      body: `Average ${steady.rating.toFixed(2)} from ${steady.reviews.toLocaleString("en-US")} reviews. The scope average is ${scopeRating!.toFixed(2)}, weighted by every review.`,
-      href: steady.reviewsHref,
-      bars: [steady.reviews],
-    });
-  }
-
-  return cards;
-}
-
 function trendCaption(months: DashboardFacts["months"]): string | null {
   const filled = months.filter((month) => month.reviews > 0);
   if (filled.length === 0) return null;
@@ -376,7 +278,6 @@ export function buildOverviewBoard(input: {
       openEscalations: input.facts.openEscalations,
       overdueEscalations: input.facts.overdueEscalations,
     },
-    insights: input.facts.reviews === 0 ? [] : insightCards(ranked, input.facts, input.previous, input.links),
     worst: multiple ? ranked[0]! : null,
     months: input.facts.months.map((month) => {
       const bounds = monthBounds(month.month);

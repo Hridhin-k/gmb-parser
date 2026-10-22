@@ -9,6 +9,8 @@ vi.stubGlobal("fetch", mockFetch);
 
 const syncState = vi.hoisted(() => ({
   locationLastSynced: null as string | null,
+  locationFullSynced: "2026-09-01T00:00:00Z" as string | null,
+  upsertError: null as { message: string } | null,
   existingReviewRows: [] as Array<{
     google_review_name: string;
     sync_hash: string;
@@ -34,6 +36,7 @@ vi.mock("@/lib/supabase/admin", () => {
                   google_location_name: "accounts/123/locations/456",
                   workspace_id: "ws-1",
                   last_synced_at: syncState.locationLastSynced,
+                  reviews_full_synced_at: syncState.locationFullSynced,
                 },
                 error: null,
               });
@@ -48,7 +51,7 @@ vi.mock("@/lib/supabase/admin", () => {
     }),
     upsert: vi.fn().mockImplementation((data: unknown) => {
       upsertCalls.push(data);
-      return Promise.resolve({ error: null });
+      return Promise.resolve({ error: syncState.upsertError });
     }),
     update: vi.fn().mockImplementation((data: unknown) => {
       updateCalls.push(data);
@@ -79,7 +82,6 @@ vi.mock("@/lib/services/audit", () => ({
 }));
 
 import { ReviewSyncService, classifyReviewError } from "@/lib/services/review-sync";
-import * as intelligenceIngest from "@/lib/services/intelligence-ingest";
 import { GoogleApiError } from "@/lib/errors";
 
 // ---------------------------------------------------------------------------
@@ -114,6 +116,8 @@ beforeEach(() => {
   upsertCalls.length = 0;
   updateCalls.length = 0;
   syncState.locationLastSynced = null;
+  syncState.locationFullSynced = "2026-09-01T00:00:00Z";
+  syncState.upsertError = null;
   syncState.existingReviewRows = [];
 });
 
@@ -380,6 +384,135 @@ describe("idempotency", () => {
 });
 
 // ---------------------------------------------------------------------------
+// Sync recovery regressions
+// ---------------------------------------------------------------------------
+
+describe("sync recovery", () => {
+  it("upgrades to a full crawl when the location was never fully synced, even if incremental was requested", async () => {
+    syncState.locationFullSynced = null;
+    // last_synced_at is stamped by location discovery before reviews exist;
+    // it must not turn the first crawl into an incremental one.
+    syncState.locationLastSynced = "2026-10-07T00:00:00Z";
+
+    mockApiResponse(200, {
+      reviews: [makeReview("r1")],
+      nextPageToken: "page2",
+      totalReviewCount: 2,
+      averageRating: 4.5,
+    });
+    mockApiResponse(200, {
+      reviews: [makeReview("r2")],
+      totalReviewCount: 2,
+      averageRating: 4.5,
+    });
+
+    const result = await ReviewSyncService.syncLocation(
+      "loc-1",
+      "conn-1",
+      "ws-1",
+      "user-1",
+      { mode: "incremental" }
+    );
+
+    expect(result.mode).toBe("full");
+    expect(result.truncated).toBe(false);
+    expect(result.pagesProcessed).toBe(2);
+    expect(result.reviewsSynced).toBe(2);
+    // A completed full crawl marks the location fully synced and stores
+    // Google's totals for gap detection.
+    const locationUpdate = updateCalls.find(
+      (call) =>
+        typeof call === "object" &&
+        call !== null &&
+        "reviews_full_synced_at" in (call as Record<string, unknown>)
+    ) as Record<string, unknown> | undefined;
+    expect(locationUpdate?.reviews_full_synced_at).toBeTruthy();
+    expect(locationUpdate?.total_review_count).toBe(2);
+    expect(locationUpdate?.sync_status).toBe("success");
+  });
+
+  it("stores replied and unreplied reviews from the same page with an explicit reply_status on every row", async () => {
+    mockApiResponse(200, {
+      reviews: [
+        makeReview("replied", {
+          reviewReply: { comment: "Thanks!", updateTime: "2026-08-02T10:00:00Z" },
+        }),
+        makeReview("unreplied"),
+      ],
+    });
+
+    const result = await ReviewSyncService.syncLocation(
+      "loc-1",
+      "conn-1",
+      "ws-1",
+      "user-1"
+    );
+
+    expect(result.reviewsUpdated).toBe(2);
+    const rows = upsertCalls.flatMap((call) =>
+      Array.isArray(call) ? call : [call]
+    ) as Array<Record<string, unknown>>;
+    expect(rows).toHaveLength(2);
+    // PostgREST fills keys missing from some bulk-upsert rows with NULL;
+    // every row must carry reply_status so a mixed page cannot fail on the
+    // NOT NULL column and lose all 50 reviews.
+    for (const row of rows) {
+      expect(row).toHaveProperty("reply_status");
+      expect(row).toHaveProperty("downstream_stale_at");
+      expect(row).toHaveProperty("reopened_at");
+    }
+    expect(rows.find((r) => r.google_review_id === "replied")?.reply_status).toBe("published");
+    expect(rows.find((r) => r.google_review_id === "unreplied")?.reply_status).toBe("none");
+  });
+
+  it("fails the sync instead of treating a failed page write as unchanged", async () => {
+    syncState.upsertError = { message: "null value in column reply_status" };
+    mockApiResponse(200, { reviews: [makeReview("r1")], nextPageToken: "page2" });
+    mockApiResponse(200, { reviews: [makeReview("r2")] });
+
+    const result = await ReviewSyncService.syncLocation(
+      "loc-1",
+      "conn-1",
+      "ws-1",
+      "user-1",
+      { mode: "incremental" }
+    );
+
+    expect(result.errorClass).toBe("db_error");
+    expect(result.errorMessage).toContain("reply_status");
+    // It must stop at the failed page, not keep paging or report success.
+    expect(mockFetch).toHaveBeenCalledTimes(1);
+    const locationUpdate = updateCalls[updateCalls.length - 1] as Record<string, unknown>;
+    expect(locationUpdate.sync_status).toBe("failed");
+  });
+
+  it("marks a truncated incremental sync as partial, not success", async () => {
+    syncState.locationLastSynced = "2026-10-01T00:00:00Z";
+    // 40 pages of brand-new reviews hit the incremental page cap.
+    for (let page = 0; page < 40; page++) {
+      mockApiResponse(200, {
+        reviews: [makeReview(`bulk-${page}`)],
+        nextPageToken: `page-${page + 1}`,
+      });
+    }
+
+    const result = await ReviewSyncService.syncLocation(
+      "loc-1",
+      "conn-1",
+      "ws-1",
+      "user-1",
+      { mode: "incremental" }
+    );
+
+    expect(result.truncated).toBe(true);
+    expect(result.pagesProcessed).toBe(40);
+    const locationUpdate = updateCalls[updateCalls.length - 1] as Record<string, unknown>;
+    expect(locationUpdate.sync_status).toBe("partial");
+    expect(locationUpdate.reviews_full_synced_at).toBeUndefined();
+  });
+});
+
+// ---------------------------------------------------------------------------
 // Error handling in sync audit
 // ---------------------------------------------------------------------------
 
@@ -408,25 +541,5 @@ describe("audit logging", () => {
 
     const actions = logSpy.mock.calls.map((c) => c[0].action);
     expect(actions).toContain("review.sync_failed");
-  });
-});
-
-describe("absence detection", () => {
-  it("does not treat a provider failure as deleted reviews", async () => {
-    const spy = vi.spyOn(intelligenceIngest, "markConfirmedAbsences").mockResolvedValue(0);
-    mockApiResponse(403, { error: { code: 403, message: "Forbidden", status: "PERMISSION_DENIED" } });
-    await ReviewSyncService.syncLocation("loc-1", "conn-1", "ws-1", "user-1", { mode: "full" });
-    expect(spy).not.toHaveBeenCalled();
-    spy.mockRestore();
-  });
-
-  it("checks absences only after a full sync that read every page", async () => {
-    const spy = vi.spyOn(intelligenceIngest, "markConfirmedAbsences").mockResolvedValue(0);
-    mockApiResponse(200, { reviews: [makeReview("r1")] });
-    await ReviewSyncService.syncLocation("loc-1", "conn-1", "ws-1", "user-1", { mode: "full" });
-    expect(spy).toHaveBeenCalledTimes(1);
-    const names = spy.mock.calls[0]?.[1].seenNames ?? [];
-    expect(names).toContain("accounts/123/locations/456/reviews/r1");
-    spy.mockRestore();
   });
 });

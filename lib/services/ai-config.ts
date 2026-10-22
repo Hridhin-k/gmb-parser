@@ -10,22 +10,16 @@ import {
   AI_KNOWLEDGE_KINDS,
   assertSameWorkspace,
   defaultSnapshot,
-  insightLensFingerprint,
-  insightLensFromMetadata,
   knowledgeInScope,
-  parseInsightLens,
   parseSnapshot,
-  resolveInsightLens,
   type AiConfigSnapshot,
   type AiConfigStatus,
   type AiKnowledgeKind,
   type AiKnowledgeRow,
-  type InsightLens,
   type KnowledgeScope,
   type OrgContext,
 } from "@/lib/ai-config";
 import { flattenAutomation, flattenTone } from "@/lib/automation";
-import { rulesHash } from "@/lib/intelligence/tenant-context";
 import type { SettingsTarget } from "@/lib/services/reply-settings";
 
 const KNOWLEDGE_SELECT =
@@ -211,7 +205,6 @@ export async function saveActiveAiSnapshot(input: {
   workspaceId: string;
   userId: string;
   org?: Partial<OrgContext>;
-  insights?: Partial<InsightLens>;
   label?: string;
 }): Promise<AiConfigRow> {
   await assertCanEdit(input.userId, input.workspaceId, { kind: "workspace" });
@@ -227,15 +220,6 @@ export async function saveActiveAiSnapshot(input: {
       legacyNote: input.org.legacyNote ?? next.org.legacyNote,
     };
   }
-  if (input.insights) {
-    next.insights = parseInsightLens({
-      vertical: input.insights.vertical ?? next.insights.vertical,
-      watchThemes: input.insights.watchThemes ?? next.insights.watchThemes,
-      focusQuestions: input.insights.focusQuestions ?? next.insights.focusQuestions,
-      successSignals: input.insights.successSignals ?? next.insights.successSignals,
-    });
-  }
-
   const admin = createAdminClient();
   const label = input.label?.trim() || active.label;
   const { error } = await admin
@@ -248,19 +232,6 @@ export async function saveActiveAiSnapshot(input: {
     .eq("id", active.id)
     .eq("workspace_id", input.workspaceId);
   if (error) throw new AppError("Could not save AI configuration.", "DB_ERROR", 500);
-
-  const previousLens = insightLensFingerprint(parseSnapshot(active.snapshot).insights);
-  const nextLens = insightLensFingerprint(next.insights);
-  if (previousLens !== nextLens) {
-    try {
-      const { noteTenantRulesChange } = await import("@/lib/services/intelligence-freshness");
-      await noteTenantRulesChange(admin, input.workspaceId, nextLens);
-    } catch (rulesError) {
-      logger.warn("intelligence.rules_invalidation_failed", {
-        message: rulesError instanceof Error ? rulesError.message : "rules",
-      });
-    }
-  }
 
   await AuditService.log({
     workspaceId: input.workspaceId,
@@ -441,9 +412,7 @@ export async function upsertKnowledge(input: {
   const title = input.title.trim();
   const body = input.body.trim();
   if (!title || title.length > 120) throw new ValidationError("Title must be 1–120 characters.");
-  if (input.kind === "insight_lens") {
-    if (body.length > 4000) throw new ValidationError("Notes must be at most 4,000 characters.");
-  } else if (!body || body.length > 4000) {
+  if (!body || body.length > 4000) {
     throw new ValidationError("Body must be 1–4,000 characters.");
   }
   const target = input.target ?? { kind: "workspace" as const };
@@ -455,12 +424,7 @@ export async function upsertKnowledge(input: {
     group_id: target.kind === "group" ? target.id : null,
     location_id: target.kind === "location" ? target.id : null,
   };
-  const metadataPayload =
-    input.kind === "insight_lens"
-      ? ({
-          lens: parseInsightLens(input.metadata?.lens ?? input.metadata ?? {}),
-        } as unknown as Json)
-      : ((input.metadata ?? {}) as unknown as Json);
+  const metadataPayload = (input.metadata ?? {}) as unknown as Json;
 
   if (input.id) {
     const existing = await admin
@@ -475,7 +439,7 @@ export async function upsertKnowledge(input: {
       .update({
         kind: input.kind,
         title,
-        body: body || (input.kind === "insight_lens" ? "Insight lens" : body),
+        body,
         enabled: input.enabled ?? true,
         metadata: metadataPayload,
         ...scope,
@@ -494,7 +458,6 @@ export async function upsertKnowledge(input: {
       entityId: updated.data.id,
       metadata: { kind: input.kind },
     });
-    await noteKnowledgeChange(admin, input.workspaceId, updated.data.id, body);
     return mapKnowledge(updated.data);
   }
 
@@ -504,7 +467,7 @@ export async function upsertKnowledge(input: {
       workspace_id: input.workspaceId,
       kind: input.kind,
       title,
-      body: body || (input.kind === "insight_lens" ? "Insight lens" : body),
+      body,
       enabled: input.enabled ?? true,
       metadata: metadataPayload,
       created_by: input.userId,
@@ -521,34 +484,7 @@ export async function upsertKnowledge(input: {
     entityId: inserted.data.id,
     metadata: { kind: input.kind },
   });
-  await noteKnowledgeChange(admin, input.workspaceId, inserted.data.id, body);
   return mapKnowledge(inserted.data);
-}
-
-/** Workspace defaults, overridden by a client-scoped insight_lens knowledge row. */
-export async function loadResolvedInsightLens(input: {
-  workspaceId: string;
-  clientId: string | null;
-}): Promise<{ lens: InsightLens; notes: string }> {
-  const [active, knowledge] = await Promise.all([
-    ensureActiveAiConfig(input.workspaceId),
-    listKnowledge(input.workspaceId),
-  ]);
-  const lens = resolveInsightLens({
-    workspaceLens: active.snapshot.insights,
-    knowledge,
-    clientId: input.clientId,
-  });
-  const noteRow = knowledge.find(
-    (row) =>
-      row.enabled &&
-      row.kind === "insight_lens" &&
-      (input.clientId
-        ? row.clientId === input.clientId && !row.groupId && !row.locationId
-        : !row.clientId && !row.groupId && !row.locationId) &&
-      insightLensFromMetadata(row.metadata)
-  );
-  return { lens, notes: noteRow?.body?.trim() && noteRow.body !== "Insight lens" ? noteRow.body : "" };
 }
 
 export async function deleteKnowledge(input: {
@@ -586,54 +522,6 @@ export async function deleteKnowledge(input: {
     entityId: input.id,
     metadata: {},
   });
-  await noteKnowledgeChange(admin, input.workspaceId, input.id, "deleted");
-}
-
-async function noteKnowledgeChange(
-  admin: ReturnType<typeof createAdminClient>,
-  workspaceId: string,
-  id: string,
-  body: string
-): Promise<void> {
-  try {
-    const { noteTenantRulesChange } = await import("@/lib/services/intelligence-freshness");
-    await noteTenantRulesChange(admin, workspaceId, rulesHash({ version: 0, lensFingerprint: id, knowledge: [{ id, body }] }));
-  } catch (error) {
-    logger.warn("intelligence.rules_invalidation_failed", {
-      message: error instanceof Error ? error.message : "knowledge",
-    });
-  }
-}
-
-/** Active configuration for this workspace, plus knowledge for the already authorised scope. */
-export async function loadAuthorisedTenantBundle(
-  workspaceId: string,
-  scope: KnowledgeScope
-): Promise<{ version: number; rulesHash: string; lensFingerprint: string; knowledge: AiKnowledgeRow[] }> {
-  if (scope.workspaceId && scope.workspaceId !== workspaceId) {
-    throw new AuthorizationError("That configuration belongs to another workspace.");
-  }
-  const admin = createAdminClient();
-  const [config, knowledge] = await Promise.all([
-    ensureActiveAiConfig(workspaceId),
-    admin.from("grm_ai_knowledge").select(KNOWLEDGE_SELECT).eq("workspace_id", workspaceId).eq("enabled", true),
-  ]);
-  if (knowledge.error) throw new AppError("Could not load saved instructions.", "DB_ERROR", 500);
-  const scoped = knowledgeInScope(assertSameWorkspace((knowledge.data ?? []).map(mapKnowledge), workspaceId), {
-    ...scope,
-    workspaceId,
-  });
-  const lensFingerprint = insightLensFingerprint(config.snapshot.insights);
-  return {
-    version: config.version,
-    lensFingerprint,
-    rulesHash: rulesHash({
-      version: config.version,
-      lensFingerprint,
-      knowledge: scoped.map((row) => ({ id: row.id, body: row.body })),
-    }),
-    knowledge: scoped,
-  };
 }
 
 export async function loadPromptContextForLocation(
@@ -698,32 +586,4 @@ export async function loadPromptContextForLocation(
     templates: scopedTemplates.map((row) => ({ name: row.name, body: row.body })),
     scope,
   };
-}
-
-export async function saveInsightFeedback(input: {
-  workspaceId: string;
-  userId: string;
-  insightKind: "location" | "scope" | "page";
-  scopeId: string;
-  rating: "useful" | "not_useful";
-  note?: string | null;
-}): Promise<void> {
-  const admin = createAdminClient();
-  const { error } = await admin.from("grm_insight_feedback").insert({
-    workspace_id: input.workspaceId,
-    insight_kind: input.insightKind,
-    scope_id: input.scopeId,
-    rating: input.rating,
-    note: input.note?.trim().slice(0, 500) || null,
-    user_id: input.userId,
-  });
-  if (error) throw new AppError("Could not save feedback.", "DB_ERROR", 500);
-  await AuditService.log({
-    workspaceId: input.workspaceId,
-    userId: input.userId,
-    action: "insight.feedback",
-    entityType: "grm_insight_feedback",
-    entityId: input.scopeId,
-    metadata: { insight_kind: input.insightKind, rating: input.rating },
-  });
 }

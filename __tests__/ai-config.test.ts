@@ -1,14 +1,10 @@
 import { describe, expect, it } from "vitest";
 import {
   assertSameWorkspace,
-  insightLensFingerprint,
-  insightLensPromptBlock,
   knowledgeInScope,
   knowledgePromptBlock,
   orgContextPromptBlock,
-  parseInsightLens,
   parseSnapshot,
-  resolveInsightLens,
   templatesPromptBlock,
   type AiKnowledgeRow,
 } from "@/lib/ai-config";
@@ -35,67 +31,6 @@ function row(
     ...partial,
   };
 }
-
-describe("insight lens", () => {
-  it("parses snapshot insights and resolves client override over workspace defaults", () => {
-    const snapshot = parseSnapshot({
-      insights: {
-        vertical: "retail",
-        watchThemes: ["staff", "price"],
-        focusQuestions: ["Where is staff praised?"],
-        successSignals: ["higher reply rate"],
-      },
-    });
-    expect(snapshot.insights.vertical).toBe("retail");
-    expect(snapshot.insights.watchThemes).toEqual(["staff", "price"]);
-
-    const clientLens = resolveInsightLens({
-      workspaceLens: snapshot.insights,
-      clientId: CLIENT_A,
-      knowledge: [
-        row({
-          id: "lens",
-          workspaceId: WS_A,
-          kind: "insight_lens",
-          title: "Insight lens",
-          body: "Fashion notes",
-          clientId: CLIENT_A,
-          metadata: {
-            lens: {
-              vertical: "fashion",
-              watchThemes: ["quality", "fit"],
-              focusQuestions: ["Which outlets drag quality?"],
-              successSignals: [],
-            },
-          },
-        }),
-      ],
-    });
-    expect(clientLens.vertical).toBe("fashion");
-    expect(clientLens.watchThemes).toEqual(["quality", "fit"]);
-
-    const block = insightLensPromptBlock(clientLens, "Fashion notes");
-    expect(block).toMatch(/quality/);
-    expect(block).toMatch(/Fashion notes/);
-    expect(insightLensFingerprint(clientLens)).not.toBe(insightLensFingerprint(parseInsightLens({})));
-  });
-
-  it("keeps insight_lens rows out of reply knowledge prompts", () => {
-    const block = knowledgePromptBlock([
-      row({
-        id: "lens",
-        workspaceId: WS_A,
-        kind: "insight_lens",
-        title: "Insight lens",
-        body: "Should not appear in reply prompt",
-        metadata: { lens: { vertical: "fashion", watchThemes: ["fit"], focusQuestions: [], successSignals: [] } },
-      }),
-      row({ id: "1", workspaceId: WS_A, kind: "instruction", title: "Org", body: "Be kind" }),
-    ]);
-    expect(block).toMatch(/Be kind/);
-    expect(block).not.toMatch(/Should not appear/);
-  });
-});
 
 describe("knowledgeInScope", () => {
   const rows = [

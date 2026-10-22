@@ -72,10 +72,11 @@ describe("scopedHref", () => {
     expect(scopedHref("/reviews", new URLSearchParams(), "/overview")).toBe("/reviews?range=12m");
   });
 
-  it("carries the client and leaves team URLs alone", () => {
+  it("carries the client and date onto every page, including team", () => {
     const current = new URLSearchParams("client=c1&range=3m&q=staff");
     expect(scopedHref("/analytics", current, "/reviews")).toBe("/analytics?client=c1&range=3m");
-    expect(scopedHref("/team", current, "/reviews")).toBe("/team");
+    expect(scopedHref("/team", current, "/reviews")).toBe("/team?client=c1&range=3m");
+    expect(scopedHref("/settings", current, "/reviews")).toBe("/settings?client=c1&range=3m");
   });
 
   it("carries the organisation, group, and outlet onto the next review screen", () => {
@@ -91,9 +92,19 @@ describe("scopedHref", () => {
     );
   });
 
-  it("drops the date range on review-request links", () => {
+  it("keeps the date range on review-request links", () => {
     const current = new URLSearchParams("client=c1&range=12m");
     expect(scopeMode("/requests")).toBe("client");
-    expect(scopedHref("/requests", current, "/overview")).toBe("/requests?client=c1");
+    expect(scopedHref("/requests", current, "/overview")).toBe("/requests?client=c1&range=12m");
+  });
+
+  it("keeps an explicit period instead of the next page's default", () => {
+    const current = new URLSearchParams("client=c1&range=3m");
+    expect(scopedHref("/analytics", current, "/overview")).toBe("/analytics?client=c1&range=3m");
+    expect(scopedHref("/reports", current, "/overview")).toBe("/reports?client=c1&range=3m");
+  });
+
+  it("carries the page's current period when the URL has not named one", () => {
+    expect(scopedHref("/overview", new URLSearchParams(), "/analytics")).toBe("/overview?range=6m");
   });
 });

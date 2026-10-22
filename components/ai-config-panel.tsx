@@ -1,21 +1,12 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { FailureBanner, OperationStatus } from "@/components/status-banner";
-import {
-  AI_KNOWLEDGE_KINDS,
-  INSIGHT_VERTICAL_DEFAULTS,
-  INSIGHT_VERTICAL_PRESETS,
-  insightLensFingerprint,
-  insightLensFromMetadata,
-  parseInsightLens,
-  type AiKnowledgeKind,
-  type InsightLens,
-} from "@/lib/ai-config";
+import { AI_KNOWLEDGE_KINDS, type AiKnowledgeKind } from "@/lib/ai-config";
 import { ACTION_STATUS } from "@/lib/ui-status";
 
 export interface AiConfigPanelProps {
@@ -33,7 +24,6 @@ export interface AiConfigPanelProps {
         legacyVoice: string;
         legacyNote: string;
       };
-      insights?: InsightLens;
     };
   };
   versions: Array<{ version: number; status: string; label: string; createdAt: string }>;
@@ -73,18 +63,9 @@ const KIND_LABEL: Record<AiKnowledgeKind, string> = {
   faq: "FAQ",
   response_rule: "Response rule",
   approved_example: "Approved example",
-  insight_lens: "Insight lens",
 };
 
-const REPLY_KINDS = AI_KNOWLEDGE_KINDS.filter((kind) => kind !== "insight_lens");
-
-function linesToList(value: string): string[] {
-  return value
-    .split(/\n|,/)
-    .map((item) => item.trim())
-    .filter(Boolean)
-    .slice(0, 12);
-}
+const REPLY_KINDS = AI_KNOWLEDGE_KINDS;
 
 export function AiConfigPanel({ canEdit, target, active, versions, knowledge }: AiConfigPanelProps) {
   const router = useRouter();
@@ -99,37 +80,7 @@ export function AiConfigPanel({ canEdit, target, active, versions, knowledge }: 
   const [previewPending, setPreviewPending] = useState(false);
   const [comment, setComment] = useState("Staff were helpful and the collection was good.");
   const org = active.snapshot.org;
-  const workspaceLens = parseInsightLens(active.snapshot.insights);
-  const scopedLensRow = useMemo(() => {
-    if (target.kind === "workspace") return null;
-    return (
-      knowledge.find(
-        (row) =>
-          row.kind === "insight_lens" &&
-          (target.kind === "client"
-            ? row.clientId === target.id && !row.groupId && !row.locationId
-            : target.kind === "group"
-              ? row.groupId === target.id
-              : row.locationId === target.id)
-      ) ?? null
-    );
-  }, [knowledge, target]);
-  const lens: InsightLens =
-    target.kind === "workspace"
-      ? workspaceLens
-      : insightLensFromMetadata(scopedLensRow?.metadata) ?? { ...workspaceLens };
-  const replyKnowledge = knowledge.filter((row) => row.kind !== "insight_lens");
-  const [lensDraft, setLensDraft] = useState(lens);
-  const [lensNotes, setLensNotes] = useState(
-    scopedLensRow?.body && scopedLensRow.body !== "Insight lens" ? scopedLensRow.body : ""
-  );
-  const lensKey = insightLensFingerprint(lens);
-  useEffect(() => {
-    setLensDraft(lens);
-    setLensNotes(scopedLensRow?.body && scopedLensRow.body !== "Insight lens" ? scopedLensRow.body : "");
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- sync when saved lens identity changes
-  }, [lensKey, scopedLensRow?.body, scopedLensRow?.id]);
-
+  const replyKnowledge = knowledge;
   return (
     <div className="space-y-6">
       <section className="space-y-3 rounded-xl border border-silver bg-white p-4">
@@ -242,113 +193,6 @@ export function AiConfigPanel({ canEdit, target, active, versions, knowledge }: 
             </p>
           )}
         </form>
-      </section>
-
-      <section className="space-y-3 rounded-xl border border-silver bg-white p-4">
-        <h2 className="text-base font-medium text-graphite">Insight lens</h2>
-        <p className="text-sm text-slate">
-          Parameters that shape the Insights page brief. Saved instructions only — the model is not trained on
-          your brand. Organisation scope overrides the workspace default.
-        </p>
-        <div className="flex flex-wrap gap-2">
-          {INSIGHT_VERTICAL_PRESETS.map((preset) => (
-            <Button
-              key={preset}
-              type="button"
-              variant="outline"
-              disabled={!canEdit}
-              onClick={() => {
-                setLensDraft(INSIGHT_VERTICAL_DEFAULTS[preset]);
-              }}
-            >
-              {preset}
-            </Button>
-          ))}
-        </div>
-        <label className="block text-sm text-slate">
-          Vertical
-          <Input
-            value={lensDraft.vertical}
-            disabled={!canEdit}
-            onChange={(event) => setLensDraft((current) => ({ ...current, vertical: event.target.value }))}
-            className="mt-1"
-            placeholder="fashion, restaurant, …"
-          />
-        </label>
-        <label className="block text-sm text-slate">
-          Watch themes (comma or new line)
-          <textarea
-            value={lensDraft.watchThemes.join("\n")}
-            disabled={!canEdit}
-            rows={3}
-            onChange={(event) =>
-              setLensDraft((current) => ({ ...current, watchThemes: linesToList(event.target.value) }))
-            }
-            className="mt-1 w-full rounded-md border border-silver p-2 text-graphite"
-          />
-        </label>
-        <label className="block text-sm text-slate">
-          Focus questions
-          <textarea
-            value={lensDraft.focusQuestions.join("\n")}
-            disabled={!canEdit}
-            rows={3}
-            onChange={(event) =>
-              setLensDraft((current) => ({ ...current, focusQuestions: linesToList(event.target.value) }))
-            }
-            className="mt-1 w-full rounded-md border border-silver p-2 text-graphite"
-          />
-        </label>
-        <label className="block text-sm text-slate">
-          Success signals
-          <textarea
-            value={lensDraft.successSignals.join("\n")}
-            disabled={!canEdit}
-            rows={2}
-            onChange={(event) =>
-              setLensDraft((current) => ({ ...current, successSignals: linesToList(event.target.value) }))
-            }
-            className="mt-1 w-full rounded-md border border-silver p-2 text-graphite"
-          />
-        </label>
-        {target.kind !== "workspace" ? (
-          <label className="block text-sm text-slate">
-            Extra notes for this scope
-            <textarea
-              value={lensNotes}
-              disabled={!canEdit}
-              rows={2}
-              onChange={(event) => setLensNotes(event.target.value)}
-              className="mt-1 w-full rounded-md border border-silver p-2 text-graphite"
-            />
-          </label>
-        ) : null}
-        {canEdit ? (
-          <Button
-            type="button"
-            loading={pending}
-            onClick={() => {
-              setPending(true);
-              setError(null);
-              void post({
-                action: "save-insight-lens",
-                ...lensDraft,
-                notes: lensNotes,
-                target,
-              })
-                .then(() => {
-                  toast.success("Insight lens saved");
-                  router.refresh();
-                })
-                .catch((caught: unknown) =>
-                  setError(caught instanceof Error ? caught.message : "Could not save.")
-                )
-                .finally(() => setPending(false));
-            }}
-          >
-            Save insight lens
-          </Button>
-        ) : null}
       </section>
 
       <section className="space-y-3 rounded-xl border border-silver bg-white p-4">
