@@ -3,6 +3,7 @@ import { rpcLocationReviewStats } from "@/lib/supabase/rpc";
 import { UNASSIGNED_CLIENT_MARKER } from "@/lib/services/unassigned-client";
 import { locationDisplayName } from "@/lib/ui/location-place";
 import { previousDateRange, type DateRange } from "@/lib/date-range";
+import { EMPTY_OVERVIEW_SIGNALS, signalsFromRpc } from "@/lib/overview-signals";
 
 /** One month from `grm_review_trends`. `negative` is 1–2★; `positive` is 4–5★. */
 export interface OverviewTrendMonth {
@@ -123,11 +124,6 @@ export function summarizeOverviewWindow(months: OverviewTrendMonth[]): OverviewW
     replyRate: reviews > 0 ? replied / reviews : null,
     unreplied: Math.max(0, reviews - replied),
   };
-}
-
-function stringList(value: unknown): string[] {
-  if (!Array.isArray(value)) return [];
-  return value.filter((item): item is string => typeof item === "string" && item.trim().length > 0);
 }
 
 function themeCounts(values: string[], limit = 5): OverviewTheme[] {
@@ -420,16 +416,11 @@ export interface OverviewSignals {
   oldestOverdue: { id: string; dueAt: string; locationId: string } | null;
 }
 
-function chunks<T>(values: T[], size: number): T[][] {
-  const groups: T[][] = [];
-  for (let index = 0; index < values.length; index += size) groups.push(values.slice(index, index + size));
-  return groups;
-}
-
 /**
  * Extra Overview rows that the dashboard bundle does not split by location:
- * 1–3 star themes, the busiest outlet in the last 48 hours, and the oldest overdue escalation.
- * A full page of 1,000 rows means the theme total is incomplete, so the caller must not show it.
+ * 1–3 star themes, the busiest outlet in the last 48 hours, and the oldest
+ * overdue escalation. Aggregated in Postgres (`grm_overview_signals`) —
+ * full counts, never paged into the app or hidden behind a truncation cap.
  */
 export async function loadOverviewSignals(
   workspaceId: string,
@@ -437,109 +428,18 @@ export async function loadOverviewSignals(
   range: { start: Date | null; end: Date | null },
   now = new Date()
 ): Promise<OverviewSignals> {
-  if (locationIds.length === 0) {
-    return { themes: [], themesTruncated: false, recentNegative: null, oldestOverdue: null };
-  }
+  if (locationIds.length === 0) return EMPTY_OVERVIEW_SIGNALS;
   const admin = createAdminClient();
-  const allowed = new Set(locationIds);
   const since48 = new Date(now.getTime() - 48 * 60 * 60 * 1000).toISOString();
-  const groups = chunks(locationIds, 80);
-
-  const parts = await Promise.all(
-    groups.map(async (group) => {
-      let themes = admin
-        .from("grm_reviews")
-        .select("location_id, complaint_theme")
-        .eq("workspace_id", workspaceId)
-        .is("missing_on_google_at", null)
-        .in("location_id", group)
-        .lte("star_rating", 3);
-      if (range.start) themes = themes.gte("review_create_time", range.start.toISOString());
-      if (range.end) themes = themes.lt("review_create_time", range.end.toISOString());
-
-      let recent = admin
-        .from("grm_reviews")
-        .select("location_id")
-        .eq("workspace_id", workspaceId)
-        .is("missing_on_google_at", null)
-        .in("location_id", group)
-        .lte("star_rating", 3)
-        .gte("review_create_time", since48);
-      if (range.end && range.end < now) recent = recent.lt("review_create_time", range.end.toISOString());
-
-      const [themeResult, recentResult, overdueResult] = await Promise.all([
-        themes.limit(1000),
-        recent.limit(1000),
-        admin
-          .from("grm_escalations")
-          .select("id, due_at, location_id")
-          .eq("workspace_id", workspaceId)
-          .in("location_id", group)
-          .neq("status", "resolved")
-          .lt("due_at", now.toISOString())
-          .order("due_at", { ascending: true })
-          .limit(1),
-      ]);
-      if (themeResult.error) throw new Error(`Failed to load complaint themes: ${themeResult.error.message}`);
-      if (recentResult.error) throw new Error(`Failed to load recent negative reviews: ${recentResult.error.message}`);
-      if (overdueResult.error) throw new Error(`Failed to load overdue escalations: ${overdueResult.error.message}`);
-      return {
-        themes: themeResult.data ?? [],
-        themesFull: (themeResult.data ?? []).length >= 1000,
-        recent: recentResult.data ?? [],
-        recentFull: (recentResult.data ?? []).length >= 1000,
-        overdue: overdueResult.data?.[0] ?? null,
-      };
-    })
-  );
-
-  const themesTruncated = parts.some((part) => part.themesFull);
-  const recentTruncated = parts.some((part) => part.recentFull);
-  const themeCounts = new Map<string, number>();
-  const recentCounts = new Map<string, number>();
-  let oldest: OverviewSignals["oldestOverdue"] = null;
-  for (const part of parts) {
-    if (!themesTruncated) {
-      for (const row of part.themes) {
-        if (!allowed.has(row.location_id)) continue;
-        const theme = row.complaint_theme ?? "unspecified";
-        const key = `${row.location_id}\t${theme}`;
-        themeCounts.set(key, (themeCounts.get(key) ?? 0) + 1);
-      }
-    }
-    if (!recentTruncated) {
-      for (const row of part.recent) {
-        if (!allowed.has(row.location_id)) continue;
-        recentCounts.set(row.location_id, (recentCounts.get(row.location_id) ?? 0) + 1);
-      }
-    }
-    const candidate = part.overdue;
-    if (candidate && allowed.has(candidate.location_id) && (!oldest || candidate.due_at < oldest.dueAt)) {
-      oldest = { id: candidate.id, dueAt: candidate.due_at, locationId: candidate.location_id };
-    }
-  }
-
-  const recent = recentTruncated
-    ? null
-    : [...recentCounts.entries()].sort((a, b) => b[1] - a[1])[0];
-
-  return {
-    themes: themesTruncated
-      ? []
-      : [...themeCounts.entries()].map(([key, count]) => {
-          const [locationId, theme] = key.split("\t");
-          return { locationId: locationId!, theme: theme!, count };
-        }),
-    themesTruncated,
-    recentNegative:
-      recent && recent[1] >= 3
-        ? {
-            locationId: recent[0],
-            count: recent[1],
-            fromDay: since48.slice(0, 10),
-            toDay: now.toISOString().slice(0, 10),
-          }
-        : null,
-    oldestOverdue: oldest,
-  };
+  const { data, error } = await admin.rpc("grm_overview_signals", {
+    p_workspace_id: workspaceId,
+    p_location_ids: locationIds,
+    p_start: range.start?.toISOString() ?? null,
+    p_end: range.end?.toISOString() ?? null,
+    p_recent_start: since48,
+    p_recent_end: range.end && range.end < now ? range.end.toISOString() : null,
+    p_now: now.toISOString(),
+  });
+  if (error) throw new Error(`Failed to load overview signals: ${error.message}`);
+  return signalsFromRpc(data, { since48, now });
 }

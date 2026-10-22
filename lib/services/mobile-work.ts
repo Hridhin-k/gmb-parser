@@ -25,6 +25,7 @@ import { EscalationContactStore } from "@/lib/services/escalations";
 import { readPageScope } from "@/lib/services/scope-catalog";
 import {
   getDashboardContext,
+  loadDashboardWindowFacts,
   type DashboardLocation,
   type DashboardScope,
 } from "@/lib/services/dashboard-metrics";
@@ -303,11 +304,16 @@ export async function loadMobileOverview(input: {
 
   const range = mobileDateRange(rangeKey, now);
   const weekRange = mobileDateRange("7d", now);
-  const [context, week, allowedClientIds] = await Promise.all([
+  const [context, allowedClientIds] = await Promise.all([
     getDashboardContext(input.workspaceId, range, view.scope),
-    rangeKey === "7d" ? Promise.resolve(null) : getDashboardContext(input.workspaceId, weekRange, view.scope),
     visibleClientIds(input.workspaceId, view.access.scope),
   ]);
+  // The 7-day brief needs only window totals, not a second full context:
+  // reuse the first context's timezone and fetch just the bundle facts.
+  const week =
+    rangeKey === "7d"
+      ? null
+      : await loadDashboardWindowFacts(input.workspaceId, view.scope, weekRange, context.timezone);
   const locations = inView(context.locations, view.scope, allowedClientIds);
   const locationIds = locations.map((location) => location.id);
   const clients = context.clients.filter((client) => !allowedClientIds || allowedClientIds.includes(client.id));
