@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { runAutomation } from "@/lib/services/reply-settings";
 import { logger } from "@/lib/logger";
+import { mapPool } from "@/lib/pool";
 
 /** GET /api/cron/automation — drafts or posts only when every automation rule allows it. */
 export async function GET(request: Request) {
@@ -16,7 +17,7 @@ export async function GET(request: Request) {
   let drafted = 0;
   let published = 0;
   let held = 0;
-  for (const workspace of data ?? []) {
+  await mapPool(data ?? [], 3, async (workspace) => {
     try {
       const result = await runAutomation(workspace.id);
       drafted += result.drafted;
@@ -28,6 +29,6 @@ export async function GET(request: Request) {
         message: err instanceof Error ? err.message : "Unknown",
       });
     }
-  }
+  });
   return NextResponse.json({ drafted, published, held });
 }

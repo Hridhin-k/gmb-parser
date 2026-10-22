@@ -1,14 +1,15 @@
 import { NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { EscalationService } from "@/lib/services/escalations";
-import { runRequestJobs } from "@/lib/services/request-campaigns";
-import { runReportingJobs } from "@/lib/services/reporting";
 import { logger } from "@/lib/logger";
+import { mapPool } from "@/lib/pool";
 
 /**
  * GET /api/cron/escalations
  * Records due in-app reminders and opens new complaint records.
  * Safe to run more than once: a reminder is claimed with sent_at before it is recorded.
+ * Report delivery and review-request retries have their own crons
+ * (/api/cron/reports, /api/cron/requests) and are not repeated here.
  * Auth: Authorization: Bearer $CRON_SECRET
  */
 export async function GET(request: Request) {
@@ -26,7 +27,8 @@ export async function GET(request: Request) {
   let created = 0;
   let advanced = 0;
   let paused = 0;
-  for (const workspace of data ?? []) {
+  // Workspaces are independent: run a few at a time instead of one by one.
+  await mapPool(data ?? [], 3, async (workspace) => {
     try {
       const result = await EscalationService.runScheduled(workspace.id);
       reminders += result.reminders;
@@ -39,25 +41,7 @@ export async function GET(request: Request) {
         message: err instanceof Error ? err.message : "Unknown",
       });
     }
-  }
-
-  let reporting: { reportsDelivered: number; alertsOpened: number } | null = null;
-  try {
-    reporting = await runReportingJobs();
-  } catch (err) {
-    logger.error("cron.escalations.reports_failed", {
-      message: err instanceof Error ? err.message : "Unknown",
-    });
-  }
-
-  let requests: { retried: number; reminded: number } | null = null;
-  try {
-    requests = await runRequestJobs();
-  } catch (err) {
-    logger.error("cron.escalations.requests_failed", {
-      message: err instanceof Error ? err.message : "Unknown",
-    });
-  }
+  });
 
   return NextResponse.json({
     workspaces: data?.length ?? 0,
@@ -65,9 +49,5 @@ export async function GET(request: Request) {
     remindersRecorded: reminders,
     levelsAdvanced: advanced,
     pausedWorkspaces: paused,
-    reportsDelivered: reporting?.reportsDelivered ?? 0,
-    alertsOpened: reporting?.alertsOpened ?? 0,
-    requestsRetried: requests?.retried ?? 0,
-    requestsReminded: requests?.reminded ?? 0,
   });
 }

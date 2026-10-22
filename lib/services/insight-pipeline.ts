@@ -71,38 +71,12 @@ export interface ScopeReviews {
  * each review classified as already-analysed, rating-only, or pending.
  * Nothing is dropped silently — the counts reconcile.
  */
-export async function discoverScopeReviews(
+async function classifyReviews(
   admin: Admin,
-  workspaceId: string,
-  input: { locationIds: string[]; start: string | null; end: string | null }
+  rows: ReviewForAnalysis[]
 ): Promise<ScopeReviews> {
-  const discovered: ReviewForAnalysis[] = [];
-  for (const locationChunk of chunk(input.locationIds, LOCATION_CHUNK)) {
-    let from = 0;
-    for (;;) {
-      let query = admin
-        .from("grm_reviews")
-        .select("id, location_id, comment, star_rating, review_create_time, review_language")
-        .eq("workspace_id", workspaceId)
-        .in("location_id", locationChunk)
-        .is("missing_on_google_at", null)
-        // Stable keyset-style ordering: paging by the primary key cannot
-        // skip or repeat rows if reviews are synced mid-discovery.
-        .order("id", { ascending: true })
-        .range(from, from + PAGE_SIZE - 1);
-      if (input.start) query = query.gte("review_create_time", input.start);
-      if (input.end) query = query.lt("review_create_time", input.end);
-      const { data, error } = await query;
-      if (error) throw new Error(`Failed to load reviews: ${error.message}`);
-      const rows = (data ?? []) as ReviewForAnalysis[];
-      discovered.push(...rows);
-      if (rows.length < PAGE_SIZE) break;
-      from += PAGE_SIZE;
-    }
-  }
-
-  const eligible = discovered.filter((r) => (r.comment?.trim() ?? "").length > 0);
-  const ratingOnly = discovered.filter((r) => (r.comment?.trim() ?? "").length === 0);
+  const eligible = rows.filter((r) => (r.comment?.trim() ?? "").length > 0);
+  const ratingOnly = rows.filter((r) => (r.comment?.trim() ?? "").length === 0);
 
   const ratingOnlyToMark: ReviewForAnalysis[] = [];
   for (const group of chunk(ratingOnly, ANALYSIS_LOOKUP_CHUNK)) {
@@ -157,7 +131,79 @@ export async function discoverScopeReviews(
     }
   }
 
-  return { discovered, eligible, alreadyAnalysed, ratingOnly, ratingOnlyToMark, pendingReviews, failedCount };
+  return { discovered: rows, eligible, alreadyAnalysed, ratingOnly, ratingOnlyToMark, pendingReviews, failedCount };
+}
+
+/**
+ * Streams the scope one database page at a time: each page is classified
+ * (already-analysed / rating-only / pending) and handed to `onPage`, then
+ * released. Memory stays flat no matter how large the scope is — only the
+ * current page is held.
+ */
+export async function streamScopeReviews(
+  admin: Admin,
+  workspaceId: string,
+  input: { locationIds: string[]; start: string | null; end: string | null },
+  onPage: (page: ScopeReviews) => Promise<void>
+): Promise<void> {
+  let lastId: string | null = null;
+  for (const locationChunk of chunk(input.locationIds, LOCATION_CHUNK)) {
+    lastId = null;
+    for (;;) {
+      let query = admin
+        .from("grm_reviews")
+        .select("id, location_id, comment, star_rating, review_create_time, review_language")
+        .eq("workspace_id", workspaceId)
+        .in("location_id", locationChunk)
+        .is("missing_on_google_at", null)
+        // Keyset paging on the primary key: cannot skip or repeat rows if
+        // reviews are synced mid-discovery, and never pays offset costs.
+        .order("id", { ascending: true })
+        .limit(PAGE_SIZE);
+      if (lastId) query = query.gt("id", lastId);
+      if (input.start) query = query.gte("review_create_time", input.start);
+      if (input.end) query = query.lt("review_create_time", input.end);
+      const { data, error } = await query;
+      if (error) throw new Error(`Failed to load reviews: ${error.message}`);
+      const rows = (data ?? []) as ReviewForAnalysis[];
+      if (rows.length === 0) break;
+      lastId = rows[rows.length - 1].id;
+      await onPage(await classifyReviews(admin, rows));
+      if (rows.length < PAGE_SIZE) break;
+    }
+  }
+}
+
+/**
+ * Loads the COMPLETE review set for a scope and classifies each review as
+ * already-analysed, rating-only, or pending. Nothing is dropped silently —
+ * the counts reconcile. Callers that only need counts or process page by
+ * page should use streamScopeReviews instead of holding everything.
+ */
+export async function discoverScopeReviews(
+  admin: Admin,
+  workspaceId: string,
+  input: { locationIds: string[]; start: string | null; end: string | null }
+): Promise<ScopeReviews> {
+  const all: ScopeReviews = {
+    discovered: [],
+    eligible: [],
+    alreadyAnalysed: 0,
+    ratingOnly: [],
+    ratingOnlyToMark: [],
+    pendingReviews: [],
+    failedCount: 0,
+  };
+  await streamScopeReviews(admin, workspaceId, input, async (page) => {
+    all.discovered.push(...page.discovered);
+    all.eligible.push(...page.eligible);
+    all.alreadyAnalysed += page.alreadyAnalysed;
+    all.ratingOnly.push(...page.ratingOnly);
+    all.ratingOnlyToMark.push(...page.ratingOnlyToMark);
+    all.pendingReviews.push(...page.pendingReviews);
+    all.failedCount += page.failedCount;
+  });
+  return all;
 }
 
 async function callBatchExtractor(
@@ -253,25 +299,38 @@ export async function executeAnalysisRun(
 ): Promise<void> {
   const admin = createAdminClient();
   try {
-    const scope = await discoverScopeReviews(admin, workspaceId, input);
+    const processor = makeRunProcessor(runId, workspaceId, hooks);
+    let discovered = 0;
+    let eligible = 0;
+    let alreadyAnalysed = 0;
+    let failedCount = 0;
 
-    // Rating-only reviews are accounted for as no_text without a model call.
-    await markRatingOnlyBulk(admin, workspaceId, scope.ratingOnlyToMark).catch(() => undefined);
+    // Stream the scope page by page: rating-only reviews are accounted for
+    // and pending reviews are analysed as they are discovered, so a 41k
+    // review scope never sits in memory at once.
+    await streamScopeReviews(admin, workspaceId, input, async (page) => {
+      discovered += page.discovered.length;
+      eligible += page.eligible.length;
+      alreadyAnalysed += page.alreadyAnalysed;
+      failedCount += page.failedCount;
+      await markRatingOnlyBulk(admin, workspaceId, page.ratingOnlyToMark).catch(() => undefined);
+      processor.state.pendingTotal += page.pendingReviews.length;
+      await processor.process(page.pendingReviews);
+      await admin
+        .from("grm_analysis_runs")
+        .update({
+          discovered,
+          eligible,
+          already_analysed: alreadyAnalysed,
+          pending: processor.state.pendingTotal,
+          failed: failedCount,
+          batches_total: processor.state.batchesTotal,
+        })
+        .eq("id", runId)
+        .then(undefined, () => undefined);
+    });
 
-    const batches = buildBatches(toBatchReviews(scope.pendingReviews));
-    await admin
-      .from("grm_analysis_runs")
-      .update({
-        discovered: scope.discovered.length,
-        eligible: scope.eligible.length,
-        already_analysed: scope.alreadyAnalysed,
-        pending: scope.pendingReviews.length,
-        failed: scope.failedCount,
-        batches_total: batches.length,
-      })
-      .eq("id", runId);
-
-    await processAnalysisRun(runId, workspaceId, scope.pendingReviews, hooks);
+    await processor.finish();
   } catch (error) {
     const message = error instanceof Error ? error.message : "Analysis run failed";
     await admin
@@ -311,35 +370,52 @@ export async function failStaleAnalysisRuns(workspaceId: string): Promise<void> 
     .then(undefined, () => undefined);
 }
 
-export async function processAnalysisRun(
+interface RunProcessorState {
+  newlyAnalysed: number;
+  failed: number;
+  retries: number;
+  batchesCompleted: number;
+  batchesTotal: number;
+  inputTokens: number;
+  outputTokens: number;
+  pendingTotal: number;
+}
+
+/**
+ * Batch processor with shared, mutable progress state. `process` can be fed
+ * pending reviews incrementally (streamed discovery) or all at once;
+ * `finish` writes the terminal status.
+ */
+function makeRunProcessor(
   runId: string,
   workspaceId: string,
-  pendingReviews: ReviewForAnalysis[],
   hooks?: { onProgress?: () => void | Promise<void> }
-): Promise<void> {
+) {
   const admin = createAdminClient();
-  const batches = buildBatches(toBatchReviews(pendingReviews));
-  let newlyAnalysed = 0;
-  let failed = 0;
-  let retries = 0;
-  let batchesCompleted = 0;
-  let inputTokens = 0;
-  let outputTokens = 0;
+  const state: RunProcessorState = {
+    newlyAnalysed: 0,
+    failed: 0,
+    retries: 0,
+    batchesCompleted: 0,
+    batchesTotal: 0,
+    inputTokens: 0,
+    outputTokens: 0,
+    pendingTotal: 0,
+  };
 
   async function updateProgress(finalStatus?: string) {
     await admin
       .from("grm_analysis_runs")
       .update({
-        newly_analysed: newlyAnalysed,
-        failed: failed,
-        pending: Math.max(pendingReviews.length - newlyAnalysed - failed, 0),
-        batches_completed: batchesCompleted,
-        retries,
-        input_tokens: inputTokens,
-        output_tokens: outputTokens,
-        ...(finalStatus
-          ? { status: finalStatus, finished_at: new Date().toISOString() }
-          : {}),
+        newly_analysed: state.newlyAnalysed,
+        failed: state.failed,
+        pending: Math.max(state.pendingTotal - state.newlyAnalysed - state.failed, 0),
+        batches_completed: state.batchesCompleted,
+        batches_total: state.batchesTotal,
+        retries: state.retries,
+        input_tokens: state.inputTokens,
+        output_tokens: state.outputTokens,
+        ...(finalStatus ? { status: finalStatus, finished_at: new Date().toISOString() } : {}),
       })
       .eq("id", runId);
   }
@@ -350,11 +426,11 @@ export async function processAnalysisRun(
         attempts: 3,
         baseDelayMs: 1000,
         onRetry: () => {
-          retries += 1;
+          state.retries += 1;
         },
       });
-      inputTokens += usage.inputTokens;
-      outputTokens += usage.outputTokens;
+      state.inputTokens += usage.inputTokens;
+      state.outputTokens += usage.outputTokens;
       const parsed = parseBatchExtractionResponse(text);
       const { byReview, missingReviewIds, unknownReviewIds } = splitBatchResults(batch, parsed);
       if (unknownReviewIds.length > 0) {
@@ -371,7 +447,7 @@ export async function processAnalysisRun(
           try {
             const observations = validateObservations(rawObservations, review.comment ?? "");
             await persistAnalysisResult(admin, workspaceId, review, observations, model);
-            newlyAnalysed += 1;
+            state.newlyAnalysed += 1;
           } catch (error) {
             await markAnalysisFailed(
               admin,
@@ -379,7 +455,7 @@ export async function processAnalysisRun(
               review,
               error instanceof Error ? error.message : "Failed to store analysis"
             ).catch(() => undefined);
-            failed += 1;
+            state.failed += 1;
           }
         })
       );
@@ -393,7 +469,7 @@ export async function processAnalysisRun(
             review,
             "Missing from Gemini batch response"
           ).catch(() => undefined);
-          failed += 1;
+          state.failed += 1;
         })
       );
       // The usage ledger must never fail a batch whose reviews already persisted.
@@ -409,22 +485,53 @@ export async function processAnalysisRun(
       for (const review of batch) {
         await markAnalysisFailed(admin, workspaceId, review, message).catch(() => undefined);
       }
-      failed += batch.length;
+      state.failed += batch.length;
       logger.error("insight_pipeline.batch_failed", { runId, message });
     } finally {
-      batchesCompleted += 1;
+      state.batchesCompleted += 1;
       await updateProgress().catch(() => undefined);
       await hooks?.onProgress?.()?.catch?.(() => undefined);
     }
   }
 
-  for (let i = 0; i < batches.length; i += BATCH_CONCURRENCY) {
-    await Promise.all(batches.slice(i, i + BATCH_CONCURRENCY).map((b) => processBatch(b)));
-  }
+  return {
+    state,
+    async process(pendingReviews: ReviewForAnalysis[]): Promise<void> {
+      const batches = buildBatches(toBatchReviews(pendingReviews));
+      state.batchesTotal += batches.length;
+      for (let i = 0; i < batches.length; i += BATCH_CONCURRENCY) {
+        await Promise.all(batches.slice(i, i + BATCH_CONCURRENCY).map((b) => processBatch(b)));
+      }
+    },
+    async finish(): Promise<void> {
+      const finalStatus = state.failed > 0 ? "partial" : "completed";
+      await updateProgress(finalStatus).catch(() => undefined);
+      logger.info("insight_pipeline.finished", {
+        runId,
+        status: finalStatus,
+        newlyAnalysed: state.newlyAnalysed,
+        failed: state.failed,
+      });
+    },
+  };
+}
 
-  const finalStatus = failed > 0 ? "partial" : "completed";
-  await updateProgress(finalStatus).catch(() => undefined);
-  logger.info("insight_pipeline.finished", { runId, status: finalStatus, newlyAnalysed, failed });
+/**
+ * Processes every pending review in bounded batches. Results are stored
+ * immediately per batch; failed batches mark their reviews failed so a
+ * later run retries exactly those. The run only reports "completed"
+ * when every eligible review holds a current analysis.
+ */
+export async function processAnalysisRun(
+  runId: string,
+  workspaceId: string,
+  pendingReviews: ReviewForAnalysis[],
+  hooks?: { onProgress?: () => void | Promise<void> }
+): Promise<void> {
+  const processor = makeRunProcessor(runId, workspaceId, hooks);
+  processor.state.pendingTotal = pendingReviews.length;
+  await processor.process(pendingReviews);
+  await processor.finish();
 }
 
 /** Counts-only discovery for the insights page header. */
@@ -433,15 +540,21 @@ export async function loadScopeAnalysisCounts(
   input: { locationIds: string[]; start: string | null; end: string | null }
 ) {
   const admin = createAdminClient();
-  const scope = await discoverScopeReviews(admin, workspaceId, input);
-  return {
-    discovered: scope.discovered.length,
-    eligible: scope.eligible.length,
-    alreadyAnalysed: scope.alreadyAnalysed,
-    ratingOnly: scope.ratingOnly.length,
-    pending: scope.pendingReviews.length,
-    failed: scope.failedCount,
-  };
+  let discovered = 0;
+  let eligible = 0;
+  let alreadyAnalysed = 0;
+  let ratingOnly = 0;
+  let pending = 0;
+  let failed = 0;
+  await streamScopeReviews(admin, workspaceId, input, async (page) => {
+    discovered += page.discovered.length;
+    eligible += page.eligible.length;
+    alreadyAnalysed += page.alreadyAnalysed;
+    ratingOnly += page.ratingOnly.length;
+    pending += page.pendingReviews.length;
+    failed += page.failedCount;
+  });
+  return { discovered, eligible, alreadyAnalysed, ratingOnly, pending, failed };
 }
 
 export async function getAnalysisRun(workspaceId: string, runId: string) {

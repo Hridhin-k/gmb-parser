@@ -39,6 +39,7 @@ export function csvRow(values: unknown[]): string {
 }
 
 type ExportRow = {
+  id: string;
   review_create_time: string;
   reviewer_display_name: string;
   reviewer_is_anonymous: boolean;
@@ -114,11 +115,17 @@ export async function* reviewCsvLines(
   const locationIds = await exportLocationIds(admin, workspaceId, filters);
   if (locationIds && locationIds.length === 0) return;
 
-  for (let from = 0; from < EXPORT_MAX_ROWS; from += PAGE_SIZE) {
+  // Keyset paging on (review_create_time desc, id asc): stable if reviews
+  // are synced mid-export, and no offset cost on large scopes.
+  let lastTime: string | null = null;
+  let lastId: string | null = null;
+  let exported = 0;
+  for (;;) {
+    if (exported >= EXPORT_MAX_ROWS) return;
     let query = admin
       .from("grm_reviews")
       .select(
-        `review_create_time, reviewer_display_name, reviewer_is_anonymous, star_rating,
+        `id, review_create_time, reviewer_display_name, reviewer_is_anonymous, star_rating,
          comment, reply_status, google_reply_comment, google_reply_update_time,
          grm_google_locations!inner(location_title, address_formatted, grm_clients(name))`
       )
@@ -126,7 +133,12 @@ export async function* reviewCsvLines(
       .is("missing_on_google_at", null)
       .order("review_create_time", { ascending: false })
       .order("id", { ascending: true })
-      .range(from, from + PAGE_SIZE - 1);
+      .limit(Math.min(PAGE_SIZE, EXPORT_MAX_ROWS - exported));
+    if (lastTime && lastId) {
+      query = query.or(
+        `review_create_time.lt."${lastTime}",and(review_create_time.eq."${lastTime}",id.gt."${lastId}")`
+      );
+    }
 
     if (locationIds) query = query.in("location_id", locationIds);
     if (filters.since) query = query.gte("review_create_time", filters.since);
@@ -178,6 +190,10 @@ export async function* reviewCsvLines(
       ]);
     }
 
+    exported += rows.length;
+    if (rows.length === 0) return;
+    lastTime = rows[rows.length - 1].review_create_time;
+    lastId = rows[rows.length - 1].id;
     if (rows.length < PAGE_SIZE) return;
   }
 }

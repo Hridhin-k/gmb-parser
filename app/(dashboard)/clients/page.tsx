@@ -12,7 +12,7 @@ import { SyncLocationsButton } from "@/components/sync-locations-button";
 import { AlertTriangle, Building2, FolderTree, MapPin } from "lucide-react";
 import { locationDisplayName } from "@/lib/ui/location-place";
 import { loadHierarchy } from "@/lib/services/hierarchy";
-import { HierarchyBoard } from "@/components/hierarchy-board";
+import { HierarchyBoardLoader } from "@/components/hierarchy-board-loader";
 import Link from "next/link";
 
 function queryId(value: string | string[] | undefined): string | null {
@@ -111,7 +111,7 @@ export default async function ClientsPage({
         </section>
       ) : null}
 
-      <HierarchyBoard
+      <HierarchyBoardLoader
         canManage={allows(role, "manage_locations")}
         canEditRules={allows(role, "edit_rules") && !workspaceGrant(role, "manage_locations")}
         brands={visibleClients.map((client) => ({ id: client.id, name: client.name }))}
