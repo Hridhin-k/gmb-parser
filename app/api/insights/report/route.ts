@@ -7,7 +7,11 @@ import { parseDateRange, previousDateRange } from "@/lib/date-range";
 import { generateReport, requestReport } from "@/lib/services/insight-report";
 import { logger } from "@/lib/logger";
 
-export const maxDuration = 60;
+// Synthesis for a large scope is one long Gemini call (100s+). The route
+// needs a ceiling well above that or the platform kills generation
+// mid-synthesis; progress is saved on the report row either way and the
+// status poll resumes a stalled report.
+export const maxDuration = 300;
 
 /**
  * POST /api/insights/report

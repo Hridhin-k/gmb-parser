@@ -143,11 +143,9 @@ function complaintFor(
   locationId: string,
   themes: BoardThemeRow[]
 ): string | null {
-  const rows = themes
+  const chosen = themes
     .filter((row) => row.locationId === locationId && row.count > 0)
-    .sort((a, b) => b.count - a.count || a.theme.localeCompare(b.theme));
-  const named = rows.find((row) => row.theme !== "unspecified");
-  const chosen = named ?? rows[0];
+    .sort((a, b) => b.count - a.count || a.theme.localeCompare(b.theme))[0];
   if (!chosen) return null;
   return themeLabel(chosen.theme) ?? chosen.theme;
 }

@@ -71,6 +71,30 @@ export async function getReportByCacheKey(workspaceId: string, cacheKey: string)
   return data;
 }
 
+/**
+ * Atomically claims a report whose generator has gone quiet, so exactly one
+ * re-kick resumes it. Touching updated_at acts as the lease: concurrent
+ * pollers lose the race and stand down.
+ */
+export async function claimStaleReport(
+  workspaceId: string,
+  reportId: string,
+  staleMs = 20_000
+): Promise<boolean> {
+  const admin = createAdminClient();
+  const cutoff = new Date(Date.now() - staleMs).toISOString();
+  const { data } = await admin
+    .from("grm_insight_reports")
+    .update({ updated_at: new Date().toISOString() })
+    .eq("id", reportId)
+    .eq("workspace_id", workspaceId)
+    .in("status", ["processing", "pending"])
+    .lt("updated_at", cutoff)
+    .select("id")
+    .maybeSingle();
+  return Boolean(data);
+}
+
 export async function getReportById(workspaceId: string, reportId: string) {
   const admin = createAdminClient();
   const { data } = await admin

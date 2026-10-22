@@ -55,9 +55,33 @@ describe("buildOverviewBoard", () => {
     expect(board.kpis.avgRating).toBeCloseTo(1.4);
     expect(board.kpis.avgRating).not.toBeCloseTo(3);
     expect(board.worst?.id).toBe("b");
-    expect(board.worst?.complaint).toBe("Staff");
+    expect(board.worst?.complaint).toBe("Unspecified complaint");
     expect(board.worst?.href).toBe("/overview?location=b");
     expect(board.lowest.map((row) => row.id)).toEqual(["b", "a"]);
+  });
+
+  it("names a complaint only when that theme is the largest 1–3 star group", () => {
+    const board = buildOverviewBoard({
+      facts: facts({
+        reviews: 10,
+        ratingSum: 14,
+        locations: [
+          { locationId: "a", reviews: 1, ratingSum: 5, oneToThree: 0, replied: 1, unreplied: 0, drafts: 0, responseHoursSum: 0, responseCount: 0 },
+          { locationId: "b", reviews: 9, ratingSum: 9, oneToThree: 9, replied: 3, unreplied: 6, drafts: 0, responseHoursSum: 0, responseCount: 0 },
+        ],
+      }),
+      previous: null,
+      places,
+      themes: [
+        { locationId: "b", theme: "unspecified", count: 2 },
+        { locationId: "b", theme: "staff", count: 6 },
+      ],
+      themesTruncated: false,
+      links,
+      attention: [],
+    });
+
+    expect(board.worst?.complaint).toBe("Staff");
   });
 
   it("hides outlet ranking when the scope is a single outlet", () => {
