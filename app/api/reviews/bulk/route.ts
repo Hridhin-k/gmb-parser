@@ -1,4 +1,4 @@
-import { NextResponse } from "next/server";
+import { NextResponse, after } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { AIReviewService } from "@/lib/services/ai-review";
@@ -11,6 +11,7 @@ import { checkRateLimit, AI_GENERATE_LIMIT, PUBLISH_LIMIT, WORKSPACE_AI_LIMIT } 
 import { ensurePersonalWorkspace } from "@/lib/services/workspace";
 import { assertReviewAction } from "@/lib/services/access";
 import { assertSafePublicReply } from "@/lib/services/reply-checks";
+import { createBulkJob, processBulkJob } from "@/lib/services/bulk-jobs";
 
 export const maxDuration = 60;
 
@@ -87,6 +88,28 @@ export async function POST(request: Request) {
     replyId?: string;
     content?: string;
   }> = [];
+
+  // Generate and publish make slow external calls per review, so they run as
+  // a queued background job with bounded concurrency; the request only
+  // enqueues and the client polls /api/reviews/bulk/[jobId]. If the jobs
+  // table is unavailable we fall through to the synchronous loop below.
+  if (body.action === "generate" || body.action === "publish") {
+    const jobId = await createBulkJob({
+      workspaceId,
+      userId,
+      action: body.action,
+      reviewIds: body.reviewIds,
+    });
+    if (jobId) {
+      after(async () => {
+        await processBulkJob(jobId);
+      });
+      return NextResponse.json(
+        { jobId, status: "queued", total: body.reviewIds.length },
+        { status: 202 }
+      );
+    }
+  }
 
   if (body.action === "assign") {
     const assigneeId = body.assigneeId ?? null;

@@ -15,13 +15,14 @@ import {
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { ActivityStatus } from "@/components/activity-status";
-import { ReviewDetailPanel } from "@/components/review-detail-panel";
+import dynamic from "next/dynamic";
 import { SelectField } from "@/components/ui/select-field";
 import { Spinner } from "@/components/ui/spinner";
 import { languageLabel, themeLabel, workflowState } from "@/lib/review-inbox";
 import type { ResolutionContact } from "@/lib/resolution-contact";
 import { useServerRefresh, useSettleWhenUpdated } from "@/hooks/use-server-refresh";
 import { ACTION_STATUS } from "@/lib/ui-status";
+import { pollBulkJob } from "@/lib/bulk-job-client";
 
 interface ReviewItem {
   id: string;
@@ -67,6 +68,19 @@ interface ReviewListProps {
 }
 
 type BulkAction = "generate" | "approve" | "publish" | "discard" | "assign";
+
+// The detail panel (1,200+ lines) only appears when a review is opened, so
+// it loads on demand instead of riding in the inbox bundle.
+const ReviewDetailPanel = dynamic(
+  () => import("@/components/review-detail-panel").then((m) => m.ReviewDetailPanel),
+  {
+    loading: () => (
+      <div className="flex h-full items-center justify-center p-8">
+        <Spinner />
+      </div>
+    ),
+  }
+);
 
 function formatWhen(iso: string): string {
   return new Date(iso).toLocaleString("en-US", {
@@ -240,8 +254,9 @@ export function ReviewList({ reviews, replies, canApprove, contact, members = []
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ action, reviewIds: selectedIds, ...extra }),
       });
-      const data = (await response.json()) as {
+      let data = (await response.json()) as {
         error?: string;
+        jobId?: string;
         succeeded?: number;
         failed?: number;
         results?: Array<{
@@ -255,6 +270,15 @@ export function ReviewList({ reviews, replies, canApprove, contact, members = []
       if (!response.ok) {
         setBulkError(data.error ?? "Bulk action failed");
         return;
+      }
+      // Generate/publish run as a queued job: wait for its real results.
+      if (data.jobId) {
+        const final = await pollBulkJob(data.jobId);
+        if (final.status !== "done") {
+          setBulkError(final.error ?? "That bulk action did not finish. Check the reviews and try again.");
+          return;
+        }
+        data = { ...data, succeeded: final.succeeded, failed: final.failed, results: final.results };
       }
       const verb = {
         generate: "drafted",

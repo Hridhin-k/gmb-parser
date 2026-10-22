@@ -376,27 +376,32 @@ export class GoogleBusinessProfileService {
       }
     }
 
+    // Batch write: one read of the existing rows for this workspace, then
+    // one upsert per chunk — instead of a select + insert/update per location.
+    const existingByName = new Map<string, { id: string; client_id: string | null }>();
+    {
+      const { data: existingRows } = await supabase
+        .from("grm_google_locations")
+        .select("id, client_id, google_location_name")
+        .eq("workspace_id", workspaceId);
+      for (const row of existingRows ?? []) {
+        existingByName.set(row.google_location_name, { id: row.id, client_id: row.client_id });
+      }
+    }
+
+    const syncedAt = new Date().toISOString();
+    const payloads: Array<Record<string, unknown>> = [];
     for (const rawLocation of locationByName.values()) {
       const loc = normalizeLocation(rawLocation);
-      const accountMatch = loc.googleLocationName.match(
-        /^(accounts\/[^/]+)\//
-      );
+      const accountMatch = loc.googleLocationName.match(/^(accounts\/[^/]+)\//);
       const owningAccountName = accountMatch?.[1] ?? fallbackAccountName;
-      const googleAccountId =
-        accountIdByName.get(owningAccountName) ?? fallbackAccountId;
+      const googleAccountId = accountIdByName.get(owningAccountName) ?? fallbackAccountId;
       const googleLocationName = this.resolveLocationResourceName(
         loc.googleLocationName,
         owningAccountName
       );
 
-      const { data: existing } = await supabase
-        .from("grm_google_locations")
-        .select("id, client_id")
-        .eq("workspace_id", workspaceId)
-        .eq("google_location_name", googleLocationName)
-        .maybeSingle();
-
-      const payload = {
+      payloads.push({
         workspace_id: workspaceId,
         google_account_id: googleAccountId,
         google_location_name: googleLocationName,
@@ -409,26 +414,26 @@ export class GoogleBusinessProfileService {
         voice_of_merchant: loc.voiceOfMerchant,
         google_duplicate_of: loc.googleDuplicateOf,
         is_active: true,
-        last_synced_at: new Date().toISOString(),
+        last_synced_at: syncedAt,
         // Keep existing client mapping. New rows start unassigned, then
         // auto-provision creates/links clients without extra Google calls.
-        client_id: existing?.client_id ?? unassigned.id,
-      };
+        client_id: existingByName.get(googleLocationName)?.client_id ?? unassigned.id,
+      });
+    }
 
-      const { error: locError } = existing
-        ? await supabase
-            .from("grm_google_locations")
-            .update(payload)
-            .eq("id", existing.id)
-        : await supabase.from("grm_google_locations").insert(payload);
-
+    const UPSERT_CHUNK = 500;
+    for (let i = 0; i < payloads.length; i += UPSERT_CHUNK) {
+      const chunkRows = payloads.slice(i, i + UPSERT_CHUNK);
+      const { error: locError } = await supabase
+        .from("grm_google_locations")
+        .upsert(chunkRows as never, { onConflict: "workspace_id,google_location_name" });
       if (locError) {
-        logger.error("gbp.sync.upsert_location_failed", {
-          googleLocationName,
+        logger.error("gbp.sync.upsert_locations_failed", {
           dbError: locError.message,
+          count: chunkRows.length,
         });
       } else {
-        locationsUpserted += 1;
+        locationsUpserted += chunkRows.length;
       }
     }
 

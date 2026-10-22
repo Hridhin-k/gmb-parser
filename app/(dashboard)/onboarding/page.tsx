@@ -1,5 +1,5 @@
 import { redirect } from "next/navigation";
-import { OnboardingWizard } from "@/components/onboarding-wizard";
+import { OnboardingWizardLoader } from "@/components/onboarding-wizard-loader";
 import { PageHeader } from "@/components/page-header";
 import { googleConnectError } from "@/lib/onboarding";
 import { getOnboardingView } from "@/lib/services/onboarding";
@@ -41,7 +41,7 @@ export default async function OnboardingPage({ searchParams }: OnboardingPagePro
     );
   }
   return (
-    <OnboardingWizard
+    <OnboardingWizardLoader
       data={data}
       requestedStep={requested}
       notice={googleConnectError(googleError)}

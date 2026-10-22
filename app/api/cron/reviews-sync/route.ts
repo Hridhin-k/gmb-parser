@@ -3,6 +3,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { ReviewSyncService } from "@/lib/services/review-sync";
 import { EscalationService } from "@/lib/services/escalations";
 import { logger } from "@/lib/logger";
+import { mapPool } from "@/lib/pool";
 
 /**
  * GET /api/cron/reviews-sync
@@ -42,7 +43,8 @@ export async function GET(request: Request) {
   let failed = 0;
   let updated = 0;
 
-  for (const ws of workspaces) {
+  // Workspaces are independent: sync a few at a time instead of one by one.
+  await mapPool(workspaces, 3, async (ws) => {
     try {
       const result = await ReviewSyncService.syncAllWorkspaceLocations(
         ws.workspaceId,
@@ -60,7 +62,7 @@ export async function GET(request: Request) {
         message: err instanceof Error ? err.message : "Unknown",
       });
     }
-  }
+  });
 
   return NextResponse.json({
     workspaces: workspaces.length,

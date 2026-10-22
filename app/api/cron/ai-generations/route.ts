@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { logger } from "@/lib/logger";
 import { listStaleAiGenerationJobs } from "@/lib/services/ai-generation-jobs";
 import { persistAiGenerationJob } from "@/lib/services/ai-generation-persist";
+import { mapPool } from "@/lib/pool";
 
 /**
  * GET /api/cron/ai-generations
@@ -18,9 +19,9 @@ export async function GET(request: Request) {
 
   try {
     const jobs = await listStaleAiGenerationJobs(10);
-    for (const job of jobs) {
+    await mapPool(jobs, 3, async (job) => {
       await persistAiGenerationJob(job.id);
-    }
+    });
     return NextResponse.json({ processed: jobs.length });
   } catch (error) {
     logger.error("cron.ai_generations.failed", {

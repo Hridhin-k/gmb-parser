@@ -19,6 +19,10 @@
     {
       "path": "/api/cron/automation",
       "schedule": "45 5 * * *"
+    },
+    {
+      "path": "/api/cron/ai-generations",
+      "schedule": "0 6 * * *"
     }
   ]
 }

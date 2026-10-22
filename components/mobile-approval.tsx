@@ -15,6 +15,7 @@ import {
 import type { MobileApproval } from "@/lib/services/mobile-work";
 import { mobileHref } from "@/lib/mobile-work";
 import { useServerRefresh } from "@/hooks/use-server-refresh";
+import { pollBulkJob } from "@/lib/bulk-job-client";
 
 async function errorText(response: Response): Promise<string> {
   const payload = (await response.json().catch(() => ({}))) as { error?: string };
@@ -177,8 +178,9 @@ export function MobileApprovalView({ data }: { data: MobileApproval }) {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ action: "publish", reviewIds: card.publishableIds }),
     });
-    const payload = (await response.json().catch(() => ({}))) as {
+    let payload = (await response.json().catch(() => ({}))) as {
       error?: string;
+      jobId?: string;
       succeeded?: number;
       failed?: number;
     };
@@ -186,6 +188,16 @@ export function MobileApprovalView({ data }: { data: MobileApproval }) {
       setError(payload.error || "Those replies were not posted.");
       setPending(null);
       return;
+    }
+    // Publish runs as a queued job: wait for its real counts.
+    if (payload.jobId) {
+      const final = await pollBulkJob(payload.jobId);
+      if (final.status !== "done") {
+        setError(final.error || "Those replies were not posted.");
+        setPending(null);
+        return;
+      }
+      payload = { ...payload, succeeded: final.succeeded, failed: final.failed };
     }
     setNotice(
       `${payload.succeeded ?? 0} posted to Google. ${payload.failed ?? 0} could not be posted.`

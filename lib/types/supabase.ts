@@ -298,6 +298,59 @@ export type Database = {
           },
         ]
       }
+      grm_bulk_jobs: {
+        Row: {
+          action: string
+          created_at: string
+          failed: number
+          id: string
+          last_error: string | null
+          results: Json
+          review_ids: Json
+          status: string
+          succeeded: number
+          updated_at: string
+          user_id: string
+          workspace_id: string
+        }
+        Insert: {
+          action: string
+          created_at?: string
+          failed?: number
+          id?: string
+          last_error?: string | null
+          results?: Json
+          review_ids?: Json
+          status?: string
+          succeeded?: number
+          updated_at?: string
+          user_id: string
+          workspace_id: string
+        }
+        Update: {
+          action?: string
+          created_at?: string
+          failed?: number
+          id?: string
+          last_error?: string | null
+          results?: Json
+          review_ids?: Json
+          status?: string
+          succeeded?: number
+          updated_at?: string
+          user_id?: string
+          workspace_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "grm_bulk_jobs_workspace_id_fkey"
+            columns: ["workspace_id"]
+            isOneToOne: false
+            referencedRelation: "grm_workspaces"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       grm_ai_usage_monthly: {
         Row: {
           calls: number
