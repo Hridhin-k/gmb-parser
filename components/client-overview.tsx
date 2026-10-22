@@ -1,6 +1,7 @@
 import type { ReactNode } from "react";
 import Link from "next/link";
-import { ChartTip, CHART } from "@/components/charts";
+import { ChartTip, CHART, MetricStrip } from "@/components/charts";
+import { monthlySeriesMetrics } from "@/lib/chart-metrics";
 import type { OverviewBoard, OverviewStoreRow } from "@/lib/overview-board";
 import { cn } from "@/lib/utils";
 
@@ -172,6 +173,49 @@ function MonthChart({ months }: { months: OverviewBoard["months"] }) {
           </span>
         ))}
       </div>
+      {(() => {
+        // Same buckets the bars draw: positive = 4–5★, negative = 1–3★.
+        const m = monthlySeriesMetrics(
+          months.map((month) => ({
+            // X labels repeat every year; metric labels must not ("Dec ’24", not "Dec").
+            label: /^\d{4}-\d{2}/.test(month.key) ? `${month.label} ’${month.key.slice(2, 4)}` : month.label,
+            positive: month.positive,
+            negative: month.negative,
+            avgRating: month.avgRating,
+          }))
+        );
+        if (m.total === 0) return null;
+        return (
+          <MetricStrip
+            items={[
+              { label: "Total reviews", value: m.total.toLocaleString("en-US"), sub: `across ${months.length} months` },
+              {
+                label: "Average / month",
+                value: Math.round(m.averagePerMonth).toLocaleString("en-US"),
+                sub: `${m.monthsWithData} months with reviews`,
+              },
+              ...(m.peak
+                ? [{ label: "Busiest month", value: m.peak.label, sub: `${m.peak.total.toLocaleString("en-US")} reviews` }]
+                : []),
+              ...(m.weightedAvgRating !== null
+                ? [{ label: "Average rating", value: m.weightedAvgRating.toFixed(2), sub: "weighted by monthly volume" }]
+                : []),
+              ...(m.positiveShare !== null
+                ? [
+                    {
+                      label: "Positive (4–5★)",
+                      value: `${Math.round(m.positiveShare * 100)}%`,
+                      sub:
+                        m.positiveShareChangePoints === null
+                          ? undefined
+                          : `${m.positiveShareChangePoints >= 0 ? "+" : "−"}${Math.abs(m.positiveShareChangePoints).toFixed(1)} pts vs first month`,
+                    },
+                  ]
+                : []),
+            ]}
+          />
+        );
+      })()}
     </div>
   );
 }

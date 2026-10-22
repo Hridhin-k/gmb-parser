@@ -1,6 +1,7 @@
 import type { CSSProperties, ReactNode } from "react";
 import Link from "next/link";
 import type { StarCounts } from "@/lib/metrics";
+import { bucketMetrics, monthlySeriesMetrics } from "@/lib/chart-metrics";
 import { cn } from "@/lib/utils";
 
 const TIP_FONT = { fontFamily: "var(--font-heading), sans-serif" };
@@ -46,6 +47,30 @@ export function ChartTip({
         </span>
       ) : null}
     </span>
+  );
+}
+
+/**
+ * Visible metrics strip rendered under every graph. Items must be
+ * computed from the same series the graph draws (see lib/chart-metrics)
+ * — never decorative numbers.
+ */
+export function MetricStrip({
+  items,
+}: {
+  items: Array<{ label: string; value: string; sub?: string }>;
+}) {
+  if (items.length === 0) return null;
+  return (
+    <dl className="mt-4 grid grid-cols-2 gap-x-4 gap-y-3 border-t border-[#eef2f7] pt-3 sm:grid-cols-3 lg:grid-cols-5">
+      {items.map((item) => (
+        <div key={item.label}>
+          <dt className="text-[11px] font-medium uppercase tracking-wide text-slate">{item.label}</dt>
+          <dd className="mt-0.5 text-sm font-semibold tabular-nums text-graphite">{item.value}</dd>
+          {item.sub ? <dd className="text-[11px] tabular-nums text-slate">{item.sub}</dd> : null}
+        </div>
+      ))}
+    </dl>
   );
 }
 
@@ -270,6 +295,46 @@ export function MonthVolumeChart({
         <LegendDot color={CHART.rose} label="1–2★" />
         <LegendDot color={CHART.blue} label="Avg rating" line />
       </div>
+      {(() => {
+        const m = monthlySeriesMetrics(
+          months.map((month) => ({
+            ...month,
+            // X labels repeat every year; metric labels must not ("Dec ’24", not "Dec").
+            label: /^\d{4}-\d{2}/.test(month.key) ? `${month.label} ’${month.key.slice(2, 4)}` : month.label,
+          }))
+        );
+        if (m.total === 0) return null;
+        return (
+          <MetricStrip
+            items={[
+              { label: "Total reviews", value: m.total.toLocaleString("en-US"), sub: `across ${months.length} months` },
+              {
+                label: "Average / month",
+                value: Math.round(m.averagePerMonth).toLocaleString("en-US"),
+                sub: `${m.monthsWithData} months with reviews`,
+              },
+              ...(m.peak
+                ? [{ label: "Busiest month", value: m.peak.label, sub: `${m.peak.total.toLocaleString("en-US")} reviews` }]
+                : []),
+              ...(m.weightedAvgRating !== null
+                ? [{ label: "Average rating", value: m.weightedAvgRating.toFixed(2), sub: "weighted by monthly volume" }]
+                : []),
+              ...(m.positiveShare !== null
+                ? [
+                    {
+                      label: "Positive (4–5★)",
+                      value: `${Math.round(m.positiveShare * 100)}%`,
+                      sub:
+                        m.positiveShareChangePoints === null
+                          ? undefined
+                          : `${m.positiveShareChangePoints >= 0 ? "+" : "−"}${Math.abs(m.positiveShareChangePoints).toFixed(1)} pts vs first month`,
+                    },
+                  ]
+                : []),
+            ]}
+          />
+        );
+      })()}
     </div>
   );
 }
@@ -411,7 +476,9 @@ export function VBarChart({
   rows: Array<{ label: string; value: number; href?: string; lines?: string[]; stars?: StarCounts | null }>;
 }) {
   const max = Math.max(1, ...rows.map((row) => row.value));
+  const buckets = bucketMetrics(rows);
   return (
+    <div>
     <div className="flex h-52 items-end gap-2 sm:gap-4">
       {rows.map((row, index) => {
         const height = row.value === 0 ? 4 : Math.max(12, Math.round((row.value / max) * 128));
@@ -442,6 +509,19 @@ export function VBarChart({
           </div>
         );
       })}
+    </div>
+    {buckets.largest ? (
+      <MetricStrip
+        items={[
+          { label: "Total", value: buckets.total.toLocaleString("en-US"), sub: `across ${rows.length} buckets` },
+          {
+            label: "Largest bucket",
+            value: buckets.largest.label,
+            sub: `${buckets.largest.value.toLocaleString("en-US")} · ${Math.round(buckets.largest.share * 100)}% of total`,
+          },
+        ]}
+      />
+    ) : null}
     </div>
   );
 }

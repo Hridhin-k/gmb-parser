@@ -1,13 +1,16 @@
 import { createClient } from "@supabase/supabase-js";
 import type { Database } from "@/lib/types/supabase";
+import { fetchWithTransientRetry } from "@/lib/supabase/transient-fetch";
 
 const QUERY_TIMEOUT_MS = 20_000;
 
-/** A stuck database call must fail the page instead of holding it until the browser times out. */
+/**
+ * A stuck database call must fail the page instead of holding it until the
+ * browser times out, and a sporadic "JWT issued at future" gateway rejection
+ * is retried instead of crashing the page.
+ */
 function fetchWithTimeout(input: RequestInfo | URL, init?: RequestInit): Promise<Response> {
-  const timeout = AbortSignal.timeout(QUERY_TIMEOUT_MS);
-  const signal = init?.signal ? AbortSignal.any([init.signal, timeout]) : timeout;
-  return fetch(input, { ...init, signal });
+  return fetchWithTransientRetry(input, init, { timeoutMs: QUERY_TIMEOUT_MS });
 }
 
 export function createAdminClient() {

@@ -1,6 +1,8 @@
 import Link from "next/link";
 import type { ObservationAggregates } from "@/lib/review-intelligence";
 import type { InsightRecord } from "@/lib/insight-report";
+import { monthlySeriesMetrics } from "@/lib/chart-metrics";
+import { MetricStrip } from "@/components/charts";
 
 /**
  * Dashboard visualisation for the insights page. Pure server-rendered
@@ -58,11 +60,22 @@ export function SentimentTrend({ byMonth }: { byMonth: ObservationAggregates["by
     months.map((m, i) => `${x(i)},${y(m[key])}`).join(" ");
   const monthName = (m: string) =>
     new Date(`${m}-02T00:00:00Z`).toLocaleDateString("en-GB", { month: "short", timeZone: "UTC" });
+  const monthLabel = (m: string) =>
+    new Date(`${m}-02T00:00:00Z`).toLocaleDateString("en-GB", { month: "short", year: "2-digit", timeZone: "UTC" });
+  // Metrics are computed from the same 12 months the lines draw.
+  const metrics = monthlySeriesMetrics(
+    months.map((m) => ({ label: monthLabel(m.month), positive: m.positive, negative: m.negative }))
+  );
   return (
     <div>
       <svg viewBox={`0 0 ${w} ${h}`} className="mt-2 w-full" role="img" aria-label="Monthly positive and negative observations">
         {[0.25, 0.5, 0.75, 1].map((f) => (
-          <line key={f} x1={pad} x2={w - pad} y1={y(max * f)} y2={y(max * f)} stroke="#eef2f7" strokeWidth="1" />
+          <g key={f}>
+            <line x1={pad} x2={w - pad} y1={y(max * f)} y2={y(max * f)} stroke="#eef2f7" strokeWidth="1" />
+            <text x={w - pad} y={y(max * f) - 3} textAnchor="end" fontSize="9" fill="#94a3b8">
+              {Math.round(max * f).toLocaleString()}
+            </text>
+          </g>
         ))}
         <polyline points={line("positive")} fill="none" stroke="#10b981" strokeWidth="2.5" strokeLinejoin="round" />
         <polyline points={line("negative")} fill="none" stroke="#f43f5e" strokeWidth="2.5" strokeLinejoin="round" />
@@ -81,6 +94,54 @@ export function SentimentTrend({ byMonth }: { byMonth: ObservationAggregates["by
         </span>
         <span>{monthName(months[months.length - 1].month)}</span>
       </div>
+      <MetricStrip
+        items={[
+          {
+            label: "Mentions in chart",
+            value: metrics.total.toLocaleString(),
+            sub: `${metrics.positive.toLocaleString()} positive · ${metrics.negative.toLocaleString()} negative`,
+          },
+          ...(metrics.positiveShare !== null
+            ? [
+                {
+                  label: "Positive share",
+                  value: `${Math.round(metrics.positiveShare * 100)}%`,
+                  sub:
+                    metrics.positiveShareChangePoints === null
+                      ? "of praise + complaint mentions"
+                      : `${metrics.positiveShareChangePoints >= 0 ? "+" : "−"}${Math.abs(metrics.positiveShareChangePoints).toFixed(1)} pts vs first month`,
+                },
+              ]
+            : []),
+          ...(metrics.latest
+            ? [
+                {
+                  label: `Latest · ${metrics.latest.label}`,
+                  value: metrics.latest.total.toLocaleString(),
+                  sub: `${metrics.latest.positive.toLocaleString()} pos · ${metrics.latest.negative.toLocaleString()} neg`,
+                },
+              ]
+            : []),
+          ...(metrics.peakNegative
+            ? [
+                {
+                  label: "Most complaints",
+                  value: metrics.peakNegative.label,
+                  sub: `${metrics.peakNegative.negative.toLocaleString()} negative mentions`,
+                },
+              ]
+            : []),
+          ...(metrics.peak
+            ? [
+                {
+                  label: "Busiest month",
+                  value: metrics.peak.label,
+                  sub: `${metrics.peak.total.toLocaleString()} mentions`,
+                },
+              ]
+            : []),
+        ]}
+      />
     </div>
   );
 }
@@ -105,11 +166,11 @@ export function TopThemes({ aggregates, limit = 7 }: { aggregates: ObservationAg
     row.negative += e.count;
     byTopic.set(e.topic, row);
   }
-  const rows = [...byTopic.values()]
-    .map((r) => ({ ...r, total: r.positive + r.negative }))
-    .sort((a, b) => b.total - a.total)
-    .slice(0, limit);
-  const totalMentions = rows.reduce((s, r) => s + r.total, 0);
+  const allRows = [...byTopic.values()].map((r) => ({ ...r, total: r.positive + r.negative }));
+  // Share is of ALL theme mentions, not just the rows displayed below —
+  // otherwise the top themes' percentages would always sum to ~100%.
+  const totalMentions = allRows.reduce((s, r) => s + r.total, 0);
+  const rows = allRows.sort((a, b) => b.total - a.total).slice(0, limit);
   if (rows.length === 0) return <p className="mt-3 text-sm text-slate">No themes yet.</p>;
   const max = Math.max(1, ...rows.map((r) => r.total));
   return (
@@ -124,7 +185,7 @@ export function TopThemes({ aggregates, limit = 7 }: { aggregates: ObservationAg
               <span className="capitalize">{topicLabel(row.topic)}</span>
             </span>
             <span className="text-xs text-slate">
-              {row.total.toLocaleString()} · {totalMentions > 0 ? Math.round((row.total / totalMentions) * 100) : 0}%
+              {row.total.toLocaleString()} · {totalMentions > 0 ? Math.round((row.total / totalMentions) * 100) : 0}% of all mentions
             </span>
           </div>
           <div className="mt-1 flex h-2 overflow-hidden rounded-full bg-paper" aria-hidden="true">
@@ -185,6 +246,7 @@ export function LocationPerformance({
                     <span className="h-1.5 w-16 overflow-hidden rounded-full bg-paper">
                       <span className="block h-full bg-emerald-500" style={{ width: `${pct}%` }} />
                     </span>
+                    <span className="text-xs tabular-nums text-slate">{row.positive.toLocaleString()} mentions</span>
                   </span>
                 </td>
                 <td className="py-2 pr-2 text-rose-600">{row.negative.toLocaleString()}</td>
@@ -280,13 +342,17 @@ export function StaffPraised({ aggregates, limit = 5 }: { aggregates: Observatio
   const rows = aggregates.staffPraise.slice(0, limit);
   if (rows.length === 0) return <p className="mt-3 text-sm text-slate">No staff named in praise yet.</p>;
   const max = Math.max(1, ...rows.map((r) => r.count));
+  // Share is of every staff-praise mention, including names below the cut.
+  const totalPraise = aggregates.staffPraise.reduce((s, r) => s + r.count, 0);
   return (
     <ul className="mt-3 space-y-2.5">
       {rows.map((row) => (
         <li key={row.name}>
           <div className="flex items-baseline justify-between text-sm">
             <span className="text-graphite">{row.name}</span>
-            <span className="text-xs text-slate">{row.count} mentions</span>
+            <span className="text-xs text-slate">
+              {row.count} mentions{totalPraise > 0 ? ` · ${Math.round((row.count / totalPraise) * 100)}% of staff praise` : ""}
+            </span>
           </div>
           <div className="mt-1 h-1.5 overflow-hidden rounded-full bg-paper" aria-hidden="true">
             <div className="h-full bg-emerald-500" style={{ width: `${(row.count / max) * 100}%` }} />
