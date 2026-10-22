@@ -23,6 +23,7 @@ import {
   type ResolutionCode,
 } from "@/lib/escalations";
 import type { Json } from "@/lib/types/supabase";
+import { escapeOrSearchValue, orIlikeAny } from "@/lib/postgrest-search";
 import { escalationTiming, scopedGroupIds } from "@/lib/services/hierarchy";
 import { logger } from "@/lib/logger";
 import { normalizeResolutionContact, type ResolutionContact } from "@/lib/resolution-contact";
@@ -229,6 +230,7 @@ export class EscalationService {
         .from("grm_reviews")
         .select(reviewSelect)
         .eq("workspace_id", workspaceId)
+        .is("missing_on_google_at", null)
         .lte("star_rating", policy.maxStars)
         .order("review_create_time", { ascending: false })
         .limit(500),
@@ -236,6 +238,7 @@ export class EscalationService {
         .from("grm_reviews")
         .select(reviewSelect)
         .eq("workspace_id", workspaceId)
+        .is("missing_on_google_at", null)
         .not("comment", "is", null)
         .order("review_create_time", { ascending: false })
         .limit(250),
@@ -914,16 +917,16 @@ export class EscalationService {
     }
     let searchReviewIds: string[] | null = null;
     let ticketNo: number | null = null;
-    const needle = input.query?.replace(/[%_,]/g, " ").trim().slice(0, 80) ?? "";
+    const needle = input.query?.trim().slice(0, 80) ?? "";
     const ticketMatch = needle.match(/^(?:esc-)?(\d+)$/i);
     if (ticketMatch) ticketNo = Number(ticketMatch[1]);
     if (needle && ticketNo === null) {
-      const pattern = `%${needle}%`;
+      const pattern = `%${escapeOrSearchValue(needle)}%`;
       let textQuery = admin
         .from("grm_reviews")
         .select("id")
         .eq("workspace_id", input.workspaceId)
-        .or(`reviewer_display_name.ilike.${pattern},comment.ilike.${pattern}`)
+        .or(orIlikeAny(["reviewer_display_name", "comment"], needle))
         .limit(200);
       let placeQuery = admin
         .from("grm_google_locations")

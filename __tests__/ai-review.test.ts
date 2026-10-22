@@ -540,18 +540,6 @@ describe("buildReplyPrompt", () => {
     expect(regen).toContain("noticeably different");
   });
 
-  it("adds the location reply playbook when present", async () => {
-    const { buildReplyPrompt } = await import("@/lib/services/ai-review");
-    const prompt = buildReplyPrompt({
-      ...base,
-      comment: "Nice",
-      playbook: { tone: "Warm and local", do: ["Mention the saree section"], avoid: ["Promising discounts"] },
-    });
-    expect(prompt).toContain("THIS LOCATION'S REPLY STYLE");
-    expect(prompt).toContain("Tone: Warm and local");
-    expect(prompt).toContain("- Promising discounts");
-  });
-
   it("includes the workspace reply tone when one is saved", async () => {
     const { buildReplyPrompt } = await import("@/lib/services/ai-review");
     const prompt = buildReplyPrompt({

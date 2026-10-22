@@ -4,15 +4,12 @@ import { rpcLocationReviewStats } from "@/lib/supabase/rpc";
 import { UNASSIGNED_CLIENT_MARKER } from "@/lib/services/unassigned-client";
 import { formatLocationOption, locationDisplayName } from "@/lib/ui/location-place";
 import {
-  LocationInsightService,
-  type LocationInsight,
-} from "@/lib/services/location-insights";
-import {
   detectComplaintTheme,
   detectReviewLanguage,
   type InboxSort,
 } from "@/lib/review-inbox";
 import { replyActivityLabel } from "@/lib/reply-activity";
+import { orIlikeAny } from "@/lib/postgrest-search";
 import { groupIdsInScope } from "@/lib/hierarchy";
 
 export interface DashboardFilters {
@@ -124,7 +121,7 @@ export async function getDashboardData(
 ) {
   const admin = createAdminClient();
   // One small batch, and never two at once. A wide update loop starves the
-  // next page (reports, insights, clients) until the browser times out.
+  // next page (reports, clients) until the browser times out.
   scheduleReviewBackfill(admin, workspaceId);
 
   const [
@@ -180,7 +177,7 @@ export async function getDashboardData(
   });
 
   // The inbox only needs locations, filters, and the current page of reviews.
-  // Org-wide stats and saved insights are loaded by the pages that render them.
+  // Org-wide stats are loaded by the pages that render them.
   const kpis: DashboardKpis = {
     ...EMPTY_KPIS,
     clientsActive: (allClients ?? []).length,
@@ -190,7 +187,6 @@ export async function getDashboardData(
   const profileDirectory: ProfileRow[] = [];
   const profileTotal = 0;
   const profilePageSize = PROFILE_PAGE_SIZE;
-  const selectedInsight: LocationInsight | null = null;
   const selectedHeuristic: string | null = null;
   const selectedProfile: ProfileRow | null = null;
 
@@ -250,7 +246,6 @@ export async function getDashboardData(
     profileTotal,
     profilePageSize,
     selectedProfile,
-    selectedInsight,
     selectedHeuristic,
     reviews: [] as DashboardReviewRow[],
     replies: {} as Record<string, never>,
@@ -280,7 +275,8 @@ export async function getDashboardData(
        )`,
       { count: "exact" }
     )
-    .eq("workspace_id", workspaceId);
+    .eq("workspace_id", workspaceId)
+    .is("missing_on_google_at", null);
 
   if (locationFilterIds) {
     reviewQuery = reviewQuery.in("location_id", locationFilterIds);
@@ -349,10 +345,10 @@ export async function getDashboardData(
   }
 
   if (filters.q) {
-    const escaped = filters.q.replace(/[%_\\]/g, (c) => `\\${c}`);
-    reviewQuery = reviewQuery.or(
-      `comment.ilike.%${escaped}%,reviewer_display_name.ilike.%${escaped}%`
-    );
+    // Quoted operands: search text may contain commas or parentheses
+    // (e.g. an excerpt pasted from a review), which are structural in
+    // PostgREST logic trees and must not be interpolated raw.
+    reviewQuery = reviewQuery.or(orIlikeAny(["comment", "reviewer_display_name"], filters.q));
   }
 
   if (filters.sort === "oldest") {
@@ -551,7 +547,6 @@ export async function getDashboardData(
     profileTotal,
     profilePageSize,
     selectedProfile,
-    selectedInsight,
     selectedHeuristic,
     reviews,
     replies: repliesMap,
@@ -590,6 +585,7 @@ async function backfillReviewSignals(
     .select("id, comment, star_rating")
     .eq("workspace_id", workspaceId)
     .is("review_language", null)
+    .is("missing_on_google_at", null)
     .limit(8);
   if (error || !data?.length) return;
 
@@ -611,73 +607,4 @@ async function backfillReviewSignals(
       )
     );
   }
-}
-
-const LOCATION_ID = /^[0-9a-f-]{36}$/i;
-
-/** Insight panel data for one location. Used on the client page. */
-export async function getLocationInsightView(workspaceId: string, locationId: string) {
-  if (!LOCATION_ID.test(locationId)) return null;
-
-  const admin = createAdminClient();
-  const [{ data: location, error }, statsResult] = await Promise.all([
-    admin
-      .from("grm_google_locations")
-      .select(
-        `id, location_title, store_code, address_formatted, client_id,
-         grm_clients(name, notes)`
-      )
-      .eq("workspace_id", workspaceId)
-      .eq("id", locationId)
-      .maybeSingle(),
-    rpcLocationReviewStats(admin, workspaceId),
-  ]);
-
-  if (error) throw new Error("Failed to load location");
-  if (!location) return null;
-  if (statsResult.error) throw new Error(`Failed to load review stats: ${statsResult.error.message}`);
-
-  const client = Array.isArray(location.grm_clients)
-    ? location.grm_clients[0]
-    : location.grm_clients;
-  if ((client as { notes?: string | null } | null)?.notes === UNASSIGNED_CLIENT_MARKER) {
-    return null;
-  }
-
-  const stat = (statsResult.data ?? []).find((row) => row.location_id === locationId);
-  const reviewCount = stat?.review_count ?? 0;
-  const profile: ProfileRow = {
-    id: location.id,
-    title: location.location_title,
-    clientId: location.client_id,
-    clientName: (client as { name?: string } | null)?.name ?? null,
-    storeCode: location.store_code,
-    address: location.address_formatted,
-    reviewCount,
-    unanswered: stat?.unanswered ?? 0,
-    critical: stat?.critical ?? 0,
-    avgRating: stat && reviewCount > 0 ? Number(stat.rating_sum) / reviewCount : null,
-    lastReviewAt: stat?.last_review_at ?? null,
-    attentionScore: 0,
-  };
-
-  const statsMap = await LocationInsightService.buildLocationReviewStats(workspaceId, [
-    locationId,
-  ]);
-  const insightStats = statsMap.get(locationId);
-  let insight: LocationInsight | null = null;
-  if (insightStats) {
-    const cached = await LocationInsightService.getCachedInsights(
-      workspaceId,
-      [locationId],
-      new Map([[locationId, insightStats.fingerprint]])
-    );
-    insight = cached.get(locationId) ?? null;
-  }
-
-  return {
-    profile,
-    insight,
-    heuristicSummary: insightStats?.heuristic.summary ?? null,
-  };
 }

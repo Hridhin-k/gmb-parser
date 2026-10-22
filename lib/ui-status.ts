@@ -39,12 +39,6 @@ export const PAGE_LOADING = {
     short: "Calculating…",
     tone: "work" as const,
   },
-  insights: {
-    title: "Opening insights…",
-    detail: "Counting this scope’s reviews for the selected period before any model text is shown.",
-    short: "Loading insights…",
-    tone: "work" as const,
-  },
   escalations: {
     title: "Loading escalations…",
     detail: "Opening complaints that need a person, with their due times and owners.",
@@ -115,12 +109,6 @@ export const SCOPE_REFRESH = {
     short: "Recalculating analytics…",
     tone: "work" as const,
   },
-  insights: {
-    title: "Updating insights…",
-    detail: "Refreshing counted insights for the selected scope and period.",
-    short: "Updating insights…",
-    tone: "work" as const,
-  },
   escalations: {
     title: "Updating escalations…",
     detail: "Refreshing open cases for the selected scope.",
@@ -159,12 +147,6 @@ export const ACTION_STATUS = {
     title: "Generating your AI reply…",
     detail: "AI is drafting a reply using your organisation's saved guidelines. Nothing is posted to Google until you approve it.",
     short: "Generating reply…",
-    tone: "gemini" as const,
-  },
-  aiInsight: {
-    title: "Analysing customer feedback…",
-    detail: "The model is preparing an interpretation for the selected scope. Counted totals above stay available.",
-    short: "Generating summary…",
     tone: "gemini" as const,
   },
   applying: {
@@ -229,7 +211,6 @@ export function explainFailure(
     | "generic"
     | "save"
     | "aiDraft"
-    | "aiInsight"
     | "publish"
     | "sync"
     | "refresh"
@@ -250,12 +231,6 @@ export function explainFailure(
       return {
         title: "Your AI reply couldn't be generated",
         detail: trimmed || "Your existing draft has been preserved. You can try again or write manually.",
-        canRetry: true,
-      };
-    case "aiInsight":
-      return {
-        title: "Insights couldn't be updated",
-        detail: trimmed || "Counted sections stay available. You can retry the model summary.",
         canRetry: true,
       };
     case "publish":

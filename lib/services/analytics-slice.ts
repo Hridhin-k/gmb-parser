@@ -63,6 +63,7 @@ async function readLocationChunk(
         "id, star_rating, review_create_time, google_reply_update_time, google_reply_comment, reply_status, review_language"
       )
       .eq("workspace_id", workspaceId)
+      .is("missing_on_google_at", null)
       .in("location_id", locationIds)
       .order("review_create_time", { ascending: true })
       .range(from, from + PAGE - 1);

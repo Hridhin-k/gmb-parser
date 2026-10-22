@@ -35,10 +35,9 @@ import {
   type AiKnowledgeRow,
   type OrgContext,
 } from "@/lib/ai-config";
-import { replyTopicBlock, inventedPromiseViolations, neverSayViolations, presentTopics, retrieveKnowledge, topicExtensionsFromKnowledge } from "@/lib/intelligence/tenant-context";
-import { usageFromResponse } from "@/lib/services/intelligence-extract";
+import { inventedPromiseViolations, neverSayViolations, retrieveKnowledge } from "@/lib/reply-knowledge";
+import { usageFromResponse } from "@/lib/gemini";
 import { getAiBudget, recordAiUsage } from "@/lib/services/ai-usage-ledger";
-import { EXTRACT_ANALYSIS_VERSION } from "@/lib/intelligence/extraction";
 
 // ---------------------------------------------------------------------------
 // Config
@@ -121,12 +120,6 @@ export interface GenerateDraftParams {
   deferPersistence?: boolean;
 }
 
-export interface ReplyPlaybook {
-  tone: string;
-  do: string[];
-  avoid: string[];
-}
-
 export interface ReviewContext {
   /** null when the reviewer is anonymous or has no usable name. */
   reviewerName: string | null;
@@ -134,7 +127,6 @@ export interface ReviewContext {
   comment: string | null;
   businessName: string;
   locationName: string;
-  playbook?: ReplyPlaybook | null;
   /** The unpublished draft being replaced when the user clicks Regenerate. */
   previousDraft?: string | null;
   /** The draft to revise for shorter, warmer, formal, or language changes. */
@@ -146,8 +138,6 @@ export interface ReviewContext {
   orgContext?: OrgContext | null;
   knowledge?: AiKnowledgeRow[] | null;
   templates?: Array<{ name: string; body: string }> | null;
-  /** Canonical topic labels. They do not replace `comment`. */
-  topics?: Array<{ code: string; label: string }> | null;
 }
 
 export interface GenerateDraftResult {
@@ -179,18 +169,6 @@ function commentBlock(comment: string | null): string {
     : `Written comment:\n${original}`;
 }
 
-function playbookBlock(playbook: ReplyPlaybook | null | undefined): string {
-  if (!playbook) return "";
-  const lines: string[] = [];
-  if (playbook.tone) lines.push(`Tone: ${playbook.tone}`);
-  if (playbook.do.length) lines.push(`Do:\n${playbook.do.map((d) => `- ${d}`).join("\n")}`);
-  if (playbook.avoid.length) {
-    lines.push(`Avoid:\n${playbook.avoid.map((a) => `- ${a}`).join("\n")}`);
-  }
-  if (!lines.length) return "";
-  return `\nTHIS LOCATION'S REPLY STYLE (from analysis of its past reviews — follow it unless it conflicts with the rules above)\n${lines.join("\n")}\n`;
-}
-
 function previousDraftBlock(previous: string | null | undefined): string {
   const text = previous?.trim();
   if (!text) return "";
@@ -206,7 +184,6 @@ REVIEW
 Reviewer name: ${ctx.reviewerName ?? "(anonymous — do not use a name)"}
 Star rating: ${ctx.starRating}/5
 ${commentBlock(comment)}
-${replyTopicBlock(comment, ctx.topics ?? [])}
 
 READ THE REVIEW FIRST
 - Base the tone on what the reviewer actually wrote. The star rating is only a hint: a 5-star review can contain a complaint and a 1-star review can contain praise. Respond to both sides.
@@ -231,7 +208,7 @@ RULES
 - Never offer refunds, discounts, gifts, or compensation.
 - Never invent facts, staff names, policies, opening hours, phone numbers, email addresses, or URLs. Never use placeholders like [Name].
 - Avoid stock phrases such as "We appreciate your kind words" or "Your feedback is valuable to us".
-${toneInstruction(ctx.tone?.voice, ctx.tone?.note)}${ctx.voiceGuide ?? ""}${orgContextPromptBlock(ctx.orgContext ?? { industry: "", positioning: "", priorities: "", policies: "", legacyVoice: "", legacyNote: "" })}${knowledgePromptBlock(ctx.knowledge ?? [])}${templatesPromptBlock(ctx.templates ?? [])}${playbookBlock(ctx.playbook)}${previousDraftBlock(ctx.previousDraft)}${adjustmentInstruction(ctx.adjustment, ctx.currentDraft)}
+${toneInstruction(ctx.tone?.voice, ctx.tone?.note)}${ctx.voiceGuide ?? ""}${orgContextPromptBlock(ctx.orgContext ?? { industry: "", positioning: "", priorities: "", policies: "", legacyVoice: "", legacyNote: "" })}${knowledgePromptBlock(ctx.knowledge ?? [])}${templatesPromptBlock(ctx.templates ?? [])}${previousDraftBlock(ctx.previousDraft)}${adjustmentInstruction(ctx.adjustment, ctx.currentDraft)}
 OUTPUT
 Return only the reply text — no quotes, labels, or notes.`;
 }
@@ -244,35 +221,8 @@ function cleanReply(text: string): string {
     .trim();
 }
 
-function playbookFromAnalysis(analysis: unknown): ReplyPlaybook | null {
-  const pb = (analysis as { replyPlaybook?: Partial<ReplyPlaybook> } | null)?.replyPlaybook;
-  if (!pb || typeof pb !== "object") return null;
-  const list = (v: unknown) =>
-    Array.isArray(v) ? v.filter((x): x is string => typeof x === "string" && !!x.trim()) : [];
-  const playbook = {
-    tone: typeof pb.tone === "string" ? pb.tone.trim() : "",
-    do: list(pb.do).slice(0, 4),
-    avoid: list(pb.avoid).slice(0, 4),
-  };
-  return playbook.tone || playbook.do.length || playbook.avoid.length ? playbook : null;
-}
-
 function hashPrompt(prompt: string): string {
   return createHash("sha256").update(prompt).digest("hex").slice(0, 16);
-}
-
-async function loadCanonicalTopics(admin: ReturnType<typeof createAdminClient>, workspaceId: string, reviewId: string): Promise<string[]> {
-  const { data, error } = await admin
-    .from("grm_review_intelligence")
-    .select("extraction")
-    .eq("workspace_id", workspaceId)
-    .eq("review_id", reviewId)
-    .eq("analysis_version", EXTRACT_ANALYSIS_VERSION)
-    .eq("is_current", true)
-    .maybeSingle();
-  if (error || !data?.extraction || typeof data.extraction !== "object" || Array.isArray(data.extraction)) return [];
-  const quotations = (data.extraction as { facts?: { quotations?: Array<{ topicCode?: string }> } }).facts?.quotations ?? [];
-  return [...new Set(quotations.map((item) => item.topicCode).filter((code): code is string => Boolean(code)))];
 }
 
 export { classifyGeminiError } from "@/lib/gemini";
@@ -307,8 +257,7 @@ export class AIReviewService {
            hold_reason,
            client_id,
            group_id,
-           grm_clients(name),
-           grm_location_insights(workspace_id, analysis)
+           grm_clients(name)
          ),
          grm_review_replies(content, status, source, workspace_id, grm_review_ai_drafts(content))`
       )
@@ -349,7 +298,6 @@ export class AIReviewService {
       client_id?: string | null;
       group_id?: string | null;
       grm_clients?: { name: string } | Array<{ name: string }> | null;
-      grm_location_insights?: Array<{ workspace_id: string; analysis: unknown }> | null;
     };
     if (locTyped.hold_reason === "duplicate" || locTyped.hold_reason === "unverified") {
       throw new ValidationError(
@@ -361,9 +309,6 @@ export class AIReviewService {
       ? (clientData[0]?.name ?? locTyped.location_title)
       : (clientData?.name ?? locTyped.location_title);
 
-    const insightRow = (locTyped.grm_location_insights ?? []).find(
-      (row) => row.workspace_id === params.workspaceId
-    );
     const replies = (review as {
       grm_review_replies?: Array<{
         content: string;
@@ -406,7 +351,6 @@ export class AIReviewService {
       loadPromptContextForLocation(params.workspaceId, review.location_id),
     ]);
     const org = promptContext.config.snapshot.org;
-    const topics = presentTopics(await loadCanonicalTopics(admin, params.workspaceId, review.id), topicExtensionsFromKnowledge(promptContext.knowledge));
     const knowledge = retrieveKnowledge(promptContext.knowledge, promptContext.scope, review.comment ?? "");
     const legacyTone =
       org.legacyVoice || org.legacyNote
@@ -423,7 +367,6 @@ export class AIReviewService {
       comment: review.comment,
       businessName,
       locationName: locTyped.location_title,
-      playbook: playbookFromAnalysis(insightRow?.analysis),
       previousDraft: revising ? null : previousDraft,
       currentDraft: revising ? previousDraft : null,
       adjustment: params.adjustment ?? null,
@@ -432,7 +375,6 @@ export class AIReviewService {
       orgContext: org,
       knowledge,
       templates: promptContext.templates,
-      topics,
     };
 
     const systemPrompt = buildReplyPrompt(ctx);

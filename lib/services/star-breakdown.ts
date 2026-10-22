@@ -107,6 +107,7 @@ async function loadStarBreakdownFromRows(input: StarBreakdownInput): Promise<Sta
         .from("grm_reviews")
         .select("star_rating, review_create_time, location_id, complaint_theme")
         .eq("workspace_id", input.workspaceId)
+        .is("missing_on_google_at", null)
         .in("location_id", ids)
         .order("review_create_time", { ascending: true })
         .range(from, from + PAGE - 1);

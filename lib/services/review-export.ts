@@ -92,7 +92,8 @@ export async function countExportableReviews(
   let query = admin
     .from("grm_reviews")
     .select("id", { count: "exact", head: true })
-    .eq("workspace_id", workspaceId);
+    .eq("workspace_id", workspaceId)
+    .is("missing_on_google_at", null);
   if (locationIds) query = query.in("location_id", locationIds);
   if (filters.since) query = query.gte("review_create_time", filters.since);
   if (filters.until) query = query.lt("review_create_time", filters.until);
@@ -122,6 +123,7 @@ export async function* reviewCsvLines(
          grm_google_locations!inner(location_title, address_formatted, grm_clients(name))`
       )
       .eq("workspace_id", workspaceId)
+      .is("missing_on_google_at", null)
       .order("review_create_time", { ascending: false })
       .order("id", { ascending: true })
       .range(from, from + PAGE_SIZE - 1);

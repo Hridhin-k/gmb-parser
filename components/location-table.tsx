@@ -4,7 +4,7 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Unlink, MapPin, Sparkles } from "lucide-react";
+import { Unlink, MapPin } from "lucide-react";
 import Link from "next/link";
 import { SyncButton } from "@/components/sync-button";
 import { ActivityStatus } from "@/components/activity-status";
@@ -20,6 +20,7 @@ interface Location {
   is_active: boolean;
   last_synced_at: string | null;
   sync_status?: string | null;
+  total_review_count?: number | null;
   client_id: string | null;
 }
 
@@ -158,7 +159,17 @@ export function LocationTable({
                     ) : null}
                     <p className="text-xs text-slate">
                       {formatSyncDate(loc.last_synced_at)}
+                      {typeof loc.total_review_count === "number"
+                        ? ` · ${loc.total_review_count.toLocaleString()} reviews on Google`
+                        : ""}
                     </p>
+                    {loc.sync_status === "partial" || loc.sync_status === "failed" ? (
+                      <p className="text-xs font-medium text-red-600">
+                        {loc.sync_status === "failed"
+                          ? "Last review sync failed — reviews may be missing. Sync again."
+                          : "Last review sync was incomplete — some reviews may be missing. Sync again."}
+                      </p>
+                    ) : null}
                   </div>
                   <div className="flex flex-wrap items-center gap-2 lg:shrink-0">
                     {canSync && connectionId ? (
@@ -169,13 +180,6 @@ export function LocationTable({
                         size="xs"
                       />
                     ) : null}
-                    <Link
-                      href={`/clients/${clientId}?location=${loc.id}#insight`}
-                      className="inline-flex h-8 items-center gap-1 rounded-full px-2 text-xs font-medium text-ink hover:bg-paper"
-                    >
-                      <Sparkles className="h-3.5 w-3.5" aria-hidden />
-                      Insights
-                    </Link>
                     <Button
                       variant="ghost"
                       size="sm"

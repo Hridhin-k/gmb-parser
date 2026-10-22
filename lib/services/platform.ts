@@ -298,7 +298,7 @@ export async function loadPlatformOverview(
     headCount((query) => query.eq("status", "deleted")),
     admin.from("grm_platform_invites").select("id", { count: "exact", head: true }).eq("status", "pending").gt("expires_at", new Date().toISOString()),
     admin.from("grm_workspace_members").select("id", { count: "exact", head: true }),
-    admin.from("grm_reviews").select("id", { count: "exact", head: true }),
+    admin.from("grm_reviews").select("id", { count: "exact", head: true }).is("missing_on_google_at", null),
   ]);
   if (inviteResult.error) throw new AppError("Platform invites are not available until the invite-only migration is applied.", "DB_ERROR", 500, { dbError: inviteResult.error.message });
   if (tenantResult.error) throw new AppError("Could not load tenants.", "DB_ERROR", 500, { dbError: tenantResult.error.message });
@@ -418,7 +418,7 @@ export async function getTenantDetail(actor: { id: string; email?: string | null
     admin.from("grm_google_connections").select("id, google_email, status, last_refreshed_at").eq("workspace_id", workspaceId),
     admin.from("grm_google_locations").select("id, location_title, is_active, sync_status, last_synced_at, sync_error").eq("workspace_id", workspaceId).order("last_synced_at", { ascending: false }).limit(50),
     admin.from("grm_clients").select("id", { count: "exact", head: true }).eq("workspace_id", workspaceId),
-    admin.from("grm_reviews").select("id", { count: "exact", head: true }).eq("workspace_id", workspaceId),
+    admin.from("grm_reviews").select("id", { count: "exact", head: true }).eq("workspace_id", workspaceId).is("missing_on_google_at", null),
     admin.from("grm_escalations").select("id", { count: "exact", head: true }).eq("workspace_id", workspaceId),
     admin.from("grm_ai_usage_monthly").select("month, operation, calls, estimated_usd").eq("workspace_id", workspaceId).order("month", { ascending: false }).limit(24),
     admin.from("grm_audit_logs").select("id, action, user_id, created_at, entity_type").eq("workspace_id", workspaceId).order("created_at", { ascending: false }).limit(30),
@@ -480,7 +480,7 @@ export interface PlatformHealth {
   connections: { active: number; expired: number; revoked: number; problemTenants: Array<{ workspaceId: string; tenantName: string; status: string; googleEmail: string }> };
   sync: { failedLocations: number; staleLocations: number; problems: Array<{ workspaceId: string; locationName: string; syncStatus: string | null; lastSyncedAt: string | null; syncError: string | null }> };
   invites: { pending: number; expiredPending: number };
-  readiness: { platformInvitesTable: boolean; reviewIntelligence: boolean; aiUsageLedger: boolean; cronSecretConfigured: boolean; resendConfigured: boolean; superAdminsConfigured: number };
+  readiness: { platformInvitesTable: boolean; aiUsageLedger: boolean; cronSecretConfigured: boolean; resendConfigured: boolean; superAdminsConfigured: number };
   tenantsByStatus: { active: number; suspended: number; deleted: number };
   plansExpiringSoon: Array<{ id: string; name: string; plan: string; planExpiresAt: string }>;
 }
@@ -489,12 +489,11 @@ export async function loadPlatformHealth(actor: { id: string; email?: string | n
   await requireSuperAdmin(actor);
   const admin = createAdminClient();
   const staleBefore = new Date(Date.now() - 48 * 60 * 60 * 1000).toISOString();
-  const [connRows, locRows, inviteRows, wsRows, intelProbe, usageProbe] = await Promise.all([
+  const [connRows, locRows, inviteRows, wsRows, usageProbe] = await Promise.all([
     admin.from("grm_google_connections").select("workspace_id, google_email, status").limit(2000),
     admin.from("grm_google_locations").select("workspace_id, location_title, sync_status, last_synced_at, sync_error, is_active").eq("is_active", true).limit(2000),
     admin.from("grm_platform_invites").select("status, expires_at").eq("status", "pending").limit(500),
     admin.from("grm_workspaces").select("id, name, status, plan, plan_expires_at").limit(500),
-    admin.from("grm_review_intelligence").select("id").limit(1).then((r) => !r.error, () => false),
     admin.from("grm_ai_usage_monthly").select("workspace_id").limit(1).then((r) => !r.error, () => false),
   ]);
   const tenantName = new Map(((wsRows.data ?? []) as Array<{ id: string; name: string }>).map((w) => [w.id, w.name]));
@@ -521,7 +520,6 @@ export async function loadPlatformHealth(actor: { id: string; email?: string | n
     },
     readiness: {
       platformInvitesTable: !inviteRows.error,
-      reviewIntelligence: Boolean(intelProbe),
       aiUsageLedger: Boolean(usageProbe),
       cronSecretConfigured: Boolean(process.env.CRON_SECRET?.trim()),
       resendConfigured: Boolean(process.env.RESEND_API_KEY && (process.env.REPORT_FROM_EMAIL || process.env.PLATFORM_FROM_EMAIL)),

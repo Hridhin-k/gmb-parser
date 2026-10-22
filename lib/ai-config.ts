@@ -6,21 +6,10 @@ export const AI_KNOWLEDGE_KINDS = [
   "faq",
   "response_rule",
   "approved_example",
-  "insight_lens",
 ] as const;
 export type AiKnowledgeKind = (typeof AI_KNOWLEDGE_KINDS)[number];
 
 export type AiConfigStatus = "draft" | "active" | "archived";
-
-export const INSIGHT_VERTICAL_PRESETS = ["fashion", "restaurant", "hospitality", "retail", "general"] as const;
-export type InsightVerticalPreset = (typeof INSIGHT_VERTICAL_PRESETS)[number];
-
-export interface InsightLens {
-  vertical: string;
-  watchThemes: string[];
-  focusQuestions: string[];
-  successSignals: string[];
-}
 
 export interface OrgContext {
   industry: string;
@@ -35,7 +24,6 @@ export interface AiConfigSnapshot {
   org: OrgContext;
   tone: ToneValue;
   automation: AutomationValue;
-  insights: InsightLens;
 }
 
 export interface AiKnowledgeRow {
@@ -68,164 +56,11 @@ export const EMPTY_ORG: OrgContext = {
   legacyNote: "",
 };
 
-export const EMPTY_INSIGHT_LENS: InsightLens = {
-  vertical: "",
-  watchThemes: [],
-  focusQuestions: [],
-  successSignals: [],
-};
-
-/** Suggested lens fields when an owner picks a vertical preset. */
-export const INSIGHT_VERTICAL_DEFAULTS: Record<InsightVerticalPreset, InsightLens> = {
-  fashion: {
-    vertical: "fashion",
-    watchThemes: ["quality", "fit", "staff", "price", "returns"],
-    focusQuestions: [
-      "Which outlets drag quality or fit complaints?",
-      "Is price mentioned more often in low-star reviews than before?",
-    ],
-    successSignals: ["fewer quality complaints", "higher reply rate on 1–3 star reviews"],
-  },
-  restaurant: {
-    vertical: "restaurant",
-    watchThemes: ["food", "service", "wait time", "hygiene", "value"],
-    focusQuestions: [
-      "Where is wait time rising in low-star reviews?",
-      "Which outlets earn praise for service worth copying?",
-    ],
-    successSignals: ["lower wait-time share", "stable or rising average rating"],
-  },
-  hospitality: {
-    vertical: "hospitality",
-    watchThemes: ["cleanliness", "staff", "check-in", "noise", "value"],
-    focusQuestions: [
-      "Which properties show cleanliness or noise spikes?",
-      "Is staff praise concentrated in a few outlets?",
-    ],
-    successSignals: ["fewer cleanliness complaints", "higher reply coverage"],
-  },
-  retail: {
-    vertical: "retail",
-    watchThemes: ["staff", "stock", "price", "checkout", "store experience"],
-    focusQuestions: [
-      "Which outlets mention stock or checkout friction most?",
-      "Is staff tone improving or getting worse?",
-    ],
-    successSignals: ["fewer stock complaints", "faster replies on negative reviews"],
-  },
-  general: {
-    vertical: "general",
-    watchThemes: ["staff", "quality", "price", "wait time"],
-    focusQuestions: [
-      "Which themes rose among 1–3 star reviews?",
-      "Which outlets improved or slipped on average rating?",
-    ],
-    successSignals: ["stable average rating", "higher reply rate"],
-  },
-};
-
-function stringList(value: unknown, max = 12): string[] {
-  if (!Array.isArray(value)) return [];
-  const out: string[] = [];
-  for (const item of value) {
-    if (typeof item !== "string") continue;
-    const trimmed = item.trim().slice(0, 80);
-    if (!trimmed || out.includes(trimmed)) continue;
-    out.push(trimmed);
-    if (out.length >= max) break;
-  }
-  return out;
-}
-
-export function parseInsightLens(value: unknown): InsightLens {
-  if (!value || typeof value !== "object" || Array.isArray(value)) {
-    return { ...EMPTY_INSIGHT_LENS };
-  }
-  const raw = value as Record<string, unknown>;
-  return {
-    vertical: typeof raw.vertical === "string" ? raw.vertical.trim().slice(0, 80) : "",
-    watchThemes: stringList(raw.watchThemes),
-    focusQuestions: stringList(raw.focusQuestions, 8),
-    successSignals: stringList(raw.successSignals, 8),
-  };
-}
-
-export function insightLensFromMetadata(metadata: Record<string, unknown> | null | undefined): InsightLens | null {
-  if (!metadata || typeof metadata !== "object") return null;
-  const lens = parseInsightLens(metadata.lens ?? metadata);
-  if (!lens.vertical && !lens.watchThemes.length && !lens.focusQuestions.length && !lens.successSignals.length) {
-    return null;
-  }
-  return lens;
-}
-
-/** Client-scoped insight_lens row wins; otherwise workspace snapshot.insights. */
-export function resolveInsightLens(input: {
-  workspaceLens: InsightLens;
-  knowledge: AiKnowledgeRow[];
-  clientId: string | null;
-}): InsightLens {
-  const clientRows = input.knowledge.filter(
-    (row) =>
-      row.enabled &&
-      row.kind === "insight_lens" &&
-      input.clientId &&
-      row.clientId === input.clientId &&
-      !row.groupId &&
-      !row.locationId
-  );
-  for (const row of clientRows) {
-    const fromMeta = insightLensFromMetadata(row.metadata);
-    if (fromMeta) return fromMeta;
-  }
-  const workspaceRows = input.knowledge.filter(
-    (row) =>
-      row.enabled &&
-      row.kind === "insight_lens" &&
-      !row.clientId &&
-      !row.groupId &&
-      !row.locationId
-  );
-  for (const row of workspaceRows) {
-    const fromMeta = insightLensFromMetadata(row.metadata);
-    if (fromMeta) return fromMeta;
-  }
-  return parseInsightLens(input.workspaceLens);
-}
-
-export function insightLensPromptBlock(lens: InsightLens, notes?: string): string {
-  const lines: string[] = [];
-  if (lens.vertical.trim()) lines.push(`Business vertical / lens: ${lens.vertical.trim()}`);
-  if (lens.watchThemes.length) lines.push(`Watch themes (prioritise when present in reviews): ${lens.watchThemes.join(", ")}`);
-  if (lens.focusQuestions.length) {
-    lines.push("Focus questions from the operator:\n" + lens.focusQuestions.map((q) => `- ${q}`).join("\n"));
-  }
-  if (lens.successSignals.length) {
-    lines.push("Success signals they care about:\n" + lens.successSignals.map((s) => `- ${s}`).join("\n"));
-  }
-  if (notes?.trim()) lines.push(`Extra lens notes: ${notes.trim().slice(0, 800)}`);
-  if (!lines.length) return "";
-  return (
-    `\nINSIGHT LENS (saved parameters — shape the brief around these; do not invent causes outside the reviews)\n` +
-    `${lines.join("\n")}\n`
-  );
-}
-
-export function insightLensFingerprint(lens: InsightLens): string {
-  return JSON.stringify({
-    v: lens.vertical,
-    t: lens.watchThemes,
-    q: lens.focusQuestions,
-    s: lens.successSignals,
-  });
-}
-
 export function defaultSnapshot(): AiConfigSnapshot {
   return {
     org: { ...EMPTY_ORG },
     tone: { ...TONE_DEFAULTS },
     automation: { ...AUTOMATION_DEFAULTS },
-    insights: { ...EMPTY_INSIGHT_LENS },
   };
 }
 
@@ -290,7 +125,6 @@ export function parseSnapshot(value: unknown): AiConfigSnapshot {
       varyWording:
         typeof automation.varyWording === "boolean" ? automation.varyWording : base.automation.varyWording,
     },
-    insights: parseInsightLens(raw.insights),
   };
 }
 
@@ -315,7 +149,7 @@ export function assertSameWorkspace(rows: AiKnowledgeRow[], workspaceId: string)
 }
 
 export function knowledgePromptBlock(rows: AiKnowledgeRow[]): string {
-  const scoped = rows.filter((row) => row.enabled && row.body.trim() && row.kind !== "insight_lens");
+  const scoped = rows.filter((row) => row.enabled && row.body.trim());
   if (!scoped.length) return "";
   const byKind = (kind: AiKnowledgeKind) => scoped.filter((row) => row.kind === kind);
   const parts: string[] = [];

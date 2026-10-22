@@ -32,12 +32,6 @@ export interface OverviewLocationRef {
   isActive: boolean;
 }
 
-export interface OverviewInsightSnippet {
-  locationId: string;
-  highlights: string[];
-  risks: string[];
-}
-
 export interface OverviewWindow {
   reviewCount: number;
   avgRating: number | null;
@@ -96,7 +90,6 @@ export interface OverviewAssemblyInput {
   previousMonths: OverviewTrendMonth[] | null;
   stats: OverviewLocationStat[];
   locations: OverviewLocationRef[];
-  insights: OverviewInsightSnippet[];
   clients: Array<{ id: string; name: string }>;
 }
 
@@ -239,11 +232,6 @@ export function buildClientOverview(input: OverviewAssemblyInput): ClientOvervie
 
   const praised: string[] = [];
   const complained: string[] = [];
-  for (const insight of input.insights) {
-    if (!scopedIds.has(insight.locationId)) continue;
-    praised.push(...insight.highlights);
-    complained.push(...insight.risks);
-  }
 
   return {
     clients: input.clients,
@@ -301,7 +289,7 @@ export async function getClientOverview(
   };
   const previousWindow = previousDateRange(range);
 
-  const [trends, previousTrends, statsResult, clientsResult, locationsResult, connectionsResult, insightsResult] =
+  const [trends, previousTrends, statsResult, clientsResult, locationsResult, connectionsResult] =
     await Promise.all([
       admin.rpc("grm_review_trends", {
         ...scope,
@@ -334,10 +322,6 @@ export async function getClientOverview(
         .select("id, status")
         .eq("workspace_id", workspaceId)
         .eq("status", "expired"),
-      admin
-        .from("grm_location_insights")
-        .select("location_id, highlights, risks")
-        .eq("workspace_id", workspaceId),
     ]);
 
   if (trends.error) throw new Error(`Failed to load review trends: ${trends.error.message}`);
@@ -350,7 +334,6 @@ export async function getClientOverview(
   if (connectionsResult.error) {
     throw new Error(`Failed to load Google connections: ${connectionsResult.error.message}`);
   }
-  if (insightsResult.error) throw new Error(`Failed to load location insights: ${insightsResult.error.message}`);
 
   const clients = (clientsResult.data ?? [])
     .filter((client) => client.notes !== UNASSIGNED_CLIENT_MARKER)
@@ -388,11 +371,6 @@ export async function getClientOverview(
     previousMonths: previousTrends ? toMonths(previousTrends.data) : null,
     stats,
     locations,
-    insights: (insightsResult.data ?? []).map((row) => ({
-      locationId: row.location_id,
-      highlights: stringList(row.highlights),
-      risks: stringList(row.risks),
-    })),
     clients,
   });
 }
@@ -419,6 +397,7 @@ export async function listNewestReviews(
     .from("grm_reviews")
     .select("id, star_rating, comment, reviewer_display_name, review_create_time, location_id")
     .eq("workspace_id", workspaceId)
+    .is("missing_on_google_at", null)
     .in("location_id", locationIds);
   if (range.start) query = query.gte("review_create_time", range.start.toISOString());
   if (range.end) query = query.lt("review_create_time", range.end.toISOString());
@@ -472,6 +451,7 @@ export async function loadOverviewSignals(
         .from("grm_reviews")
         .select("location_id, complaint_theme")
         .eq("workspace_id", workspaceId)
+        .is("missing_on_google_at", null)
         .in("location_id", group)
         .lte("star_rating", 3);
       if (range.start) themes = themes.gte("review_create_time", range.start.toISOString());
@@ -481,6 +461,7 @@ export async function loadOverviewSignals(
         .from("grm_reviews")
         .select("location_id")
         .eq("workspace_id", workspaceId)
+        .is("missing_on_google_at", null)
         .in("location_id", group)
         .lte("star_rating", 3)
         .gte("review_create_time", since48);

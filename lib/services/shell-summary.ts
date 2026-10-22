@@ -86,6 +86,7 @@ async function profileAttention(workspaceId: string, locationIds: string[]): Pro
           .from("grm_reviews")
           .select("location_id, reply_status")
           .eq("workspace_id", workspaceId)
+          .is("missing_on_google_at", null)
           .in("location_id", chunk)
           .in("reply_status", ["none", "draft", "failed"])
           .range(from, from + PAGE - 1)
@@ -165,7 +166,7 @@ export const getShellSummary = cache(async function getShellSummary(
     if (scopedLocationIds.length === 0) return { ...EMPTY, notices };
   }
 
-  const reviews = admin.from("grm_reviews").select("id", { count: "exact", head: true }).eq("workspace_id", workspaceId);
+  const reviews = admin.from("grm_reviews").select("id", { count: "exact", head: true }).eq("workspace_id", workspaceId).is("missing_on_google_at", null);
   const escalationsQuery = admin
     .from("grm_escalations")
     .select("id", { count: "exact", head: true })
@@ -175,11 +176,13 @@ export const getShellSummary = cache(async function getShellSummary(
     .from("grm_reviews")
     .select("id", { count: "exact", head: true })
     .eq("workspace_id", workspaceId)
+    .is("missing_on_google_at", null)
     .eq("reply_status", "draft");
   const failedQuery = admin
     .from("grm_reviews")
     .select("id", { count: "exact", head: true })
     .eq("workspace_id", workspaceId)
+    .is("missing_on_google_at", null)
     .eq("reply_status", "failed");
   const [unreplied, escalations, drafts, failed, expiredConnections] = await Promise.all([
     count(

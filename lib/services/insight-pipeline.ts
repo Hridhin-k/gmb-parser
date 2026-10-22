@@ -1,0 +1,468 @@
+import { createAdminClient } from "@/lib/supabase/admin";
+import {
+  GEMINI_FAST_MODEL_ID,
+  GEMINI_MODEL_ID,
+  GEMINI_THINKING_LOW,
+  GEMINI_THINKING_MINIMAL,
+  extractGeminiText,
+  geminiGenerateUrl,
+  usageFromResponse,
+} from "@/lib/gemini";
+import { recordAiUsage } from "@/lib/services/ai-usage-ledger";
+import {
+  ANALYSIS_VERSION,
+  batchExtractionPrompt,
+  buildBatches,
+  parseBatchExtractionResponse,
+  splitBatchResults,
+  validateObservations,
+  withRetry,
+} from "@/lib/review-intelligence";
+import {
+  fingerprintOf,
+  markAnalysisFailed,
+  markRatingOnlyBulk,
+  persistAnalysisResult,
+  type ReviewForAnalysis,
+} from "@/lib/services/review-observations";
+import { logger } from "@/lib/logger";
+
+type Admin = ReturnType<typeof createAdminClient>;
+
+const PAGE_SIZE = 1000;
+const LOCATION_CHUNK = 80;
+/** Ids per analysis-lookup query: 150 uuids ≈ 5.5KB of URL, under gateway URL limits. */
+const ANALYSIS_LOOKUP_CHUNK = 150;
+const BATCH_CONCURRENCY = 2;
+const REQUEST_TIMEOUT_MS = 120_000;
+
+type BatchReview = ReviewForAnalysis & { comment: string; starRating: number };
+
+function toBatchReviews(reviews: ReviewForAnalysis[]): BatchReview[] {
+  return reviews.map((r) => ({ ...r, comment: r.comment ?? "", starRating: r.star_rating }));
+}
+
+function chunk<T>(items: T[], size: number): T[][] {
+  const out: T[][] = [];
+  for (let i = 0; i < items.length; i += size) out.push(items.slice(i, i + size));
+  return out;
+}
+
+export interface ScopeReviews {
+  /** Every review found in scope (written + rating-only). */
+  discovered: ReviewForAnalysis[];
+  /** Reviews with meaningful written text — the analysis corpus. */
+  eligible: ReviewForAnalysis[];
+  /** Eligible reviews already holding a current ready analysis. */
+  alreadyAnalysed: number;
+  /** Rating-only reviews (counted in discovered, never analysed as evidence). */
+  ratingOnly: ReviewForAnalysis[];
+  /** Rating-only reviews not yet accounted for as no_text. */
+  ratingOnlyToMark: ReviewForAnalysis[];
+  /** Eligible reviews needing (re)analysis. */
+  pendingReviews: ReviewForAnalysis[];
+  /** Eligible reviews whose latest analysis attempt failed (subset of pending). */
+  failedCount: number;
+}
+
+/**
+ * Loads the COMPLETE review set for a scope: paged reads with no
+ * default-limit surprises, deleted-on-Google reviews excluded, and
+ * each review classified as already-analysed, rating-only, or pending.
+ * Nothing is dropped silently — the counts reconcile.
+ */
+export async function discoverScopeReviews(
+  admin: Admin,
+  workspaceId: string,
+  input: { locationIds: string[]; start: string | null; end: string | null }
+): Promise<ScopeReviews> {
+  const discovered: ReviewForAnalysis[] = [];
+  for (const locationChunk of chunk(input.locationIds, LOCATION_CHUNK)) {
+    let from = 0;
+    for (;;) {
+      let query = admin
+        .from("grm_reviews")
+        .select("id, location_id, comment, star_rating, review_create_time, review_language")
+        .eq("workspace_id", workspaceId)
+        .in("location_id", locationChunk)
+        .is("missing_on_google_at", null)
+        // Stable keyset-style ordering: paging by the primary key cannot
+        // skip or repeat rows if reviews are synced mid-discovery.
+        .order("id", { ascending: true })
+        .range(from, from + PAGE_SIZE - 1);
+      if (input.start) query = query.gte("review_create_time", input.start);
+      if (input.end) query = query.lt("review_create_time", input.end);
+      const { data, error } = await query;
+      if (error) throw new Error(`Failed to load reviews: ${error.message}`);
+      const rows = (data ?? []) as ReviewForAnalysis[];
+      discovered.push(...rows);
+      if (rows.length < PAGE_SIZE) break;
+      from += PAGE_SIZE;
+    }
+  }
+
+  const eligible = discovered.filter((r) => (r.comment?.trim() ?? "").length > 0);
+  const ratingOnly = discovered.filter((r) => (r.comment?.trim() ?? "").length === 0);
+
+  const ratingOnlyToMark: ReviewForAnalysis[] = [];
+  for (const group of chunk(ratingOnly, ANALYSIS_LOOKUP_CHUNK)) {
+    const { data, error } = await admin
+      .from("grm_review_analyses")
+      .select("review_id, status, content_fingerprint")
+      .eq("analysis_version", ANALYSIS_VERSION)
+      .in(
+        "review_id",
+        group.map((r) => r.id)
+      );
+    if (error) throw new Error(`Failed to load existing analyses: ${error.message}`);
+    const byReview = new Map((data ?? []).map((row) => [row.review_id as string, row]));
+    for (const review of group) {
+      const analysis = byReview.get(review.id);
+      if (
+        !analysis ||
+        analysis.status !== "no_text" ||
+        analysis.content_fingerprint !== fingerprintOf(review)
+      ) {
+        ratingOnlyToMark.push(review);
+      }
+    }
+  }
+
+  let alreadyAnalysed = 0;
+  let failedCount = 0;
+  const pendingReviews: ReviewForAnalysis[] = [];
+  for (const group of chunk(eligible, ANALYSIS_LOOKUP_CHUNK)) {
+    const { data, error } = await admin
+      .from("grm_review_analyses")
+      .select("review_id, status, content_fingerprint")
+      .eq("analysis_version", ANALYSIS_VERSION)
+      .in(
+        "review_id",
+        group.map((r) => r.id)
+      );
+    if (error) throw new Error(`Failed to load existing analyses: ${error.message}`);
+    const byReview = new Map((data ?? []).map((row) => [row.review_id as string, row]));
+    for (const review of group) {
+      const analysis = byReview.get(review.id);
+      if (
+        analysis &&
+        analysis.status === "ready" &&
+        analysis.content_fingerprint === fingerprintOf(review)
+      ) {
+        alreadyAnalysed += 1;
+      } else {
+        if (analysis?.status === "failed") failedCount += 1;
+        pendingReviews.push(review);
+      }
+    }
+  }
+
+  return { discovered, eligible, alreadyAnalysed, ratingOnly, ratingOnlyToMark, pendingReviews, failedCount };
+}
+
+async function callBatchExtractor(
+  reviews: BatchReview[]
+): Promise<{ text: string; model: string; usage: { inputTokens: number; outputTokens: number } }> {
+  const apiKey = process.env.GEMINI_API_KEY;
+  if (!apiKey) throw new Error("config: GEMINI_API_KEY is missing");
+  const prompt = batchExtractionPrompt(reviews);
+
+  async function call(model: string): Promise<Response> {
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
+    try {
+      return await fetch(geminiGenerateUrl(apiKey as string, model), {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          contents: [{ role: "user", parts: [{ text: prompt }] }],
+          generationConfig: {
+            temperature: 0.1,
+            maxOutputTokens: 8192,
+            responseMimeType: "application/json",
+            thinkingConfig: model === GEMINI_FAST_MODEL_ID ? GEMINI_THINKING_MINIMAL : GEMINI_THINKING_LOW,
+          },
+        }),
+        signal: controller.signal,
+      });
+    } finally {
+      clearTimeout(timeout);
+    }
+  }
+
+  let model = GEMINI_MODEL_ID;
+  let response = await call(model);
+  if (!response.ok && (response.status === 502 || response.status === 503)) {
+    model = GEMINI_FAST_MODEL_ID;
+    response = await call(model);
+  }
+  if (!response.ok) {
+    throw new Error(`Gemini batch extraction failed (${response.status})`);
+  }
+  const body = (await response.json()) as unknown;
+  const { text } = extractGeminiText(body);
+  if (!text.trim()) throw new Error("Gemini returned an empty response");
+  return { text, model, usage: usageFromResponse(body) };
+}
+
+export interface AnalysisRunScope {
+  locationIds: string[];
+  clientId: string | null;
+  groupId: string | null;
+  locationId: string | null;
+  start: string | null;
+  end: string | null;
+}
+
+/** Opens a run row immediately so the request never waits on discovery. */
+export async function createAnalysisRun(
+  workspaceId: string,
+  requestedBy: string | null,
+  input: AnalysisRunScope
+): Promise<string> {
+  const admin = createAdminClient();
+  const { data: run, error } = await admin
+    .from("grm_analysis_runs")
+    .insert({
+      workspace_id: workspaceId,
+      requested_by: requestedBy,
+      client_id: input.clientId,
+      group_id: input.groupId,
+      location_id: input.locationId,
+      range_start: input.start,
+      range_end: input.end,
+      status: "running",
+    })
+    .select("id")
+    .single();
+  if (error || !run) throw new Error(`Failed to start analysis run: ${error?.message ?? "unknown"}`);
+  return run.id as string;
+}
+
+/**
+ * Full run body, intended for a background `after()` so large scopes
+ * never hit a request timeout: discovery, rating-only accounting,
+ * then bounded batch processing. A discovery failure fails the run
+ * loudly instead of leaving it running forever.
+ */
+export async function executeAnalysisRun(
+  runId: string,
+  workspaceId: string,
+  input: AnalysisRunScope,
+  hooks?: { onProgress?: () => void | Promise<void> }
+): Promise<void> {
+  const admin = createAdminClient();
+  try {
+    const scope = await discoverScopeReviews(admin, workspaceId, input);
+
+    // Rating-only reviews are accounted for as no_text without a model call.
+    await markRatingOnlyBulk(admin, workspaceId, scope.ratingOnlyToMark).catch(() => undefined);
+
+    const batches = buildBatches(toBatchReviews(scope.pendingReviews));
+    await admin
+      .from("grm_analysis_runs")
+      .update({
+        discovered: scope.discovered.length,
+        eligible: scope.eligible.length,
+        already_analysed: scope.alreadyAnalysed,
+        pending: scope.pendingReviews.length,
+        failed: scope.failedCount,
+        batches_total: batches.length,
+      })
+      .eq("id", runId);
+
+    await processAnalysisRun(runId, workspaceId, scope.pendingReviews, hooks);
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Analysis run failed";
+    await admin
+      .from("grm_analysis_runs")
+      .update({ status: "failed", error: message.slice(0, 500), finished_at: new Date().toISOString() })
+      .eq("id", runId)
+      .then(undefined, () => undefined);
+    logger.error("insight_pipeline.run_failed", { runId, message });
+  }
+}
+
+/**
+ * Processes every pending review in bounded batches. Results are stored
+ * immediately per batch; failed batches mark their reviews failed so a
+ * later run retries exactly those. The run only reports "completed"
+ * when every eligible review holds a current analysis.
+ */
+/**
+ * Marks analysis runs whose owner died (server restart, crashed job) as
+ * failed so the UI never shows a phantom "running" job forever. A healthy
+ * run heartbeats its progress after every batch, so five idle minutes
+ * means the owner is gone.
+ */
+export async function failStaleAnalysisRuns(workspaceId: string): Promise<void> {
+  const admin = createAdminClient();
+  const cutoff = new Date(Date.now() - 5 * 60 * 1000).toISOString();
+  await admin
+    .from("grm_analysis_runs")
+    .update({
+      status: "failed",
+      error: "Interrupted — the process running this job stopped. Start again to resume; completed reviews are reused.",
+      finished_at: new Date().toISOString(),
+    })
+    .eq("workspace_id", workspaceId)
+    .eq("status", "running")
+    .lt("updated_at", cutoff)
+    .then(undefined, () => undefined);
+}
+
+export async function processAnalysisRun(
+  runId: string,
+  workspaceId: string,
+  pendingReviews: ReviewForAnalysis[],
+  hooks?: { onProgress?: () => void | Promise<void> }
+): Promise<void> {
+  const admin = createAdminClient();
+  const batches = buildBatches(toBatchReviews(pendingReviews));
+  let newlyAnalysed = 0;
+  let failed = 0;
+  let retries = 0;
+  let batchesCompleted = 0;
+  let inputTokens = 0;
+  let outputTokens = 0;
+
+  async function updateProgress(finalStatus?: string) {
+    await admin
+      .from("grm_analysis_runs")
+      .update({
+        newly_analysed: newlyAnalysed,
+        failed: failed,
+        pending: Math.max(pendingReviews.length - newlyAnalysed - failed, 0),
+        batches_completed: batchesCompleted,
+        retries,
+        input_tokens: inputTokens,
+        output_tokens: outputTokens,
+        ...(finalStatus
+          ? { status: finalStatus, finished_at: new Date().toISOString() }
+          : {}),
+      })
+      .eq("id", runId);
+  }
+
+  async function processBatch(batch: BatchReview[]) {
+    try {
+      const { text, model, usage } = await withRetry(() => callBatchExtractor(batch), {
+        attempts: 3,
+        baseDelayMs: 1000,
+        onRetry: () => {
+          retries += 1;
+        },
+      });
+      inputTokens += usage.inputTokens;
+      outputTokens += usage.outputTokens;
+      const parsed = parseBatchExtractionResponse(text);
+      const { byReview, missingReviewIds, unknownReviewIds } = splitBatchResults(batch, parsed);
+      if (unknownReviewIds.length > 0) {
+        // Model invented review ids. They are dropped, never stored.
+        logger.warn("insight_pipeline.unknown_review_ids", { runId, count: unknownReviewIds.length });
+      }
+      const byId = new Map(batch.map((r) => [r.id, r]));
+
+      // Store immediately, per review: one bad write must not fail reviews
+      // that already persisted.
+      await Promise.all(
+        [...byReview].map(async ([reviewId, rawObservations]) => {
+          const review = byId.get(reviewId)!;
+          try {
+            const observations = validateObservations(rawObservations, review.comment ?? "");
+            await persistAnalysisResult(admin, workspaceId, review, observations, model);
+            newlyAnalysed += 1;
+          } catch (error) {
+            await markAnalysisFailed(
+              admin,
+              workspaceId,
+              review,
+              error instanceof Error ? error.message : "Failed to store analysis"
+            ).catch(() => undefined);
+            failed += 1;
+          }
+        })
+      );
+      // Reviews the model omitted are explicit failures, never silent losses.
+      await Promise.all(
+        missingReviewIds.map(async (reviewId) => {
+          const review = byId.get(reviewId)!;
+          await markAnalysisFailed(
+            admin,
+            workspaceId,
+            review,
+            "Missing from Gemini batch response"
+          ).catch(() => undefined);
+          failed += 1;
+        })
+      );
+      // The usage ledger must never fail a batch whose reviews already persisted.
+      await recordAiUsage(admin, {
+        workspaceId,
+        operation: "extract_review",
+        model,
+        inputTokens: usage.inputTokens,
+        outputTokens: usage.outputTokens,
+      }).catch(() => undefined);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Batch extraction failed";
+      for (const review of batch) {
+        await markAnalysisFailed(admin, workspaceId, review, message).catch(() => undefined);
+      }
+      failed += batch.length;
+      logger.error("insight_pipeline.batch_failed", { runId, message });
+    } finally {
+      batchesCompleted += 1;
+      await updateProgress().catch(() => undefined);
+      await hooks?.onProgress?.()?.catch?.(() => undefined);
+    }
+  }
+
+  for (let i = 0; i < batches.length; i += BATCH_CONCURRENCY) {
+    await Promise.all(batches.slice(i, i + BATCH_CONCURRENCY).map((b) => processBatch(b)));
+  }
+
+  const finalStatus = failed > 0 ? "partial" : "completed";
+  await updateProgress(finalStatus).catch(() => undefined);
+  logger.info("insight_pipeline.finished", { runId, status: finalStatus, newlyAnalysed, failed });
+}
+
+/** Counts-only discovery for the insights page header. */
+export async function loadScopeAnalysisCounts(
+  workspaceId: string,
+  input: { locationIds: string[]; start: string | null; end: string | null }
+) {
+  const admin = createAdminClient();
+  const scope = await discoverScopeReviews(admin, workspaceId, input);
+  return {
+    discovered: scope.discovered.length,
+    eligible: scope.eligible.length,
+    alreadyAnalysed: scope.alreadyAnalysed,
+    ratingOnly: scope.ratingOnly.length,
+    pending: scope.pendingReviews.length,
+    failed: scope.failedCount,
+  };
+}
+
+export async function getAnalysisRun(workspaceId: string, runId: string) {
+  const admin = createAdminClient();
+  const { data } = await admin
+    .from("grm_analysis_runs")
+    .select("*")
+    .eq("id", runId)
+    .eq("workspace_id", workspaceId)
+    .maybeSingle();
+  return data;
+}
+
+export async function getLatestAnalysisRun(workspaceId: string) {
+  const admin = createAdminClient();
+  const { data } = await admin
+    .from("grm_analysis_runs")
+    .select("*")
+    .eq("workspace_id", workspaceId)
+    .order("created_at", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  return data;
+}

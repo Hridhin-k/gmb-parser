@@ -62,7 +62,7 @@ export interface ResolvedScope {
   clientId: string | null;
   groupId: string | null;
   locationId: string | null;
-  /** Locations whose reviews, escalations, and insights belong in this scope. */
+  /** Locations whose reviews and escalations belong in this scope. */
   locationIds: string[];
   title: string;
   trail: string[];

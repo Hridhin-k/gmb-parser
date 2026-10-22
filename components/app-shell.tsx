@@ -29,7 +29,7 @@ import { ShellHeader } from "@/components/shell-header";
 import { MobileNav } from "@/components/mobile-nav";
 import { ActivityStatus } from "@/components/activity-status";
 import { SelectField } from "@/components/ui/select-field";
-import { ScopeSelector } from "@/components/scope-selector";
+import { GlobalFilters } from "@/components/global-filters";
 import type { ScopeCatalog } from "@/lib/scope";
 import type { ShellSummary } from "@/lib/services/shell-summary";
 import { scopedHref, visibleNav, type ShellNavId } from "@/lib/shell";
@@ -199,6 +199,7 @@ export function AppShell({
 }: AppShellProps) {
   const pathname = usePathname();
   const router = useRouter();
+  const searchParams = useSearchParams();
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [savingWorkspace, setSavingWorkspace] = useState(false);
   const [isRefreshing, startRefresh] = useTransition();
@@ -235,13 +236,13 @@ export function AppShell({
         <header className="shrink-0 border-b border-silver bg-white px-4 py-2">
           <div className="flex items-center justify-between gap-3">
             <p className="truncate text-sm font-medium text-ink">{workspaceName}</p>
-            <Link href="/overview" className="shrink-0 text-sm text-ink underline">
+            <Link href={scopedHref("/overview", searchParams, pathname)} className="shrink-0 text-sm text-ink underline">
               Full app
             </Link>
           </div>
           {catalog ? (
             <div className="mt-2">
-              <ScopeSelector catalog={catalog} />
+              <GlobalFilters catalog={catalog} showDate={false} />
             </div>
           ) : null}
         </header>
@@ -278,7 +279,7 @@ export function AppShell({
       >
         <div className="flex items-center justify-between gap-2 px-3 py-3">
           <Link
-            href="/overview"
+            href={scopedHref("/overview", searchParams, pathname)}
             onClick={closeSidebar}
             className="flex h-10 min-w-0 flex-1 items-center gap-2.5 rounded-lg border border-white/15 bg-white/10 px-2.5 text-sm font-medium text-white transition-colors hover:bg-white/15"
           >

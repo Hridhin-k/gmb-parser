@@ -339,38 +339,6 @@ export type Database = {
           },
         ]
       }
-      grm_org_summaries: {
-        Row: {
-          client_id: string
-          review_count: number
-          state: Json
-          updated_at: string
-          workspace_id: string
-        }
-        Insert: {
-          client_id: string
-          review_count?: number
-          state: Json
-          updated_at?: string
-          workspace_id: string
-        }
-        Update: {
-          client_id?: string
-          review_count?: number
-          state?: Json
-          updated_at?: string
-          workspace_id?: string
-        }
-        Relationships: [
-          {
-            foreignKeyName: "grm_org_summaries_workspace_id_fkey"
-            columns: ["workspace_id"]
-            isOneToOne: false
-            referencedRelation: "grm_workspaces"
-            referencedColumns: ["id"]
-          },
-        ]
-      }
       grm_google_accounts: {
         Row: {
           account_display_name: string
@@ -489,6 +457,7 @@ export type Database = {
           id: string
           is_active: boolean
           last_synced_at: string | null
+          reviews_full_synced_at: string | null
           location_title: string
           place_id: string | null
           group_id: string | null
@@ -519,6 +488,7 @@ export type Database = {
           id?: string
           is_active?: boolean
           last_synced_at?: string | null
+          reviews_full_synced_at?: string | null
           location_title: string
           place_id?: string | null
           group_id?: string | null
@@ -549,6 +519,7 @@ export type Database = {
           id?: string
           is_active?: boolean
           last_synced_at?: string | null
+          reviews_full_synced_at?: string | null
           location_title?: string
           place_id?: string | null
           group_id?: string | null
@@ -729,33 +700,6 @@ export type Database = {
         }
         Relationships: []
       }
-      grm_insight_feedback: {
-        Row: {
-          id: string
-          workspace_id: string
-          insight_kind: string
-          scope_id: string
-          rating: string
-          note: string | null
-          user_id: string
-          created_at: string
-        }
-        Insert: {
-          id?: string
-          workspace_id: string
-          insight_kind: string
-          scope_id: string
-          rating: string
-          note?: string | null
-          user_id: string
-          created_at?: string
-        }
-        Update: {
-          rating?: string
-          note?: string | null
-        }
-        Relationships: []
-      }
       grm_reply_settings: {
         Row: { workspace_id: string; tone: Json; automation: Json; updated_at: string }
         Insert: { workspace_id: string; tone?: Json; automation?: Json; updated_at?: string }
@@ -785,161 +729,6 @@ export type Database = {
         }
         Update: { name?: string; body?: string }
         Relationships: []
-      }
-      grm_location_insights: {
-        Row: {
-          ai_model: string
-          analysis: Json
-          avg_rating: number | null
-          created_at: string
-          generated_at: string
-          generated_by: string | null
-          highlights: Json
-          id: string
-          location_id: string
-          prompt_version: string
-          review_count: number
-          risks: Json
-          sentiment_label: string
-          source_hash: string
-          summary: string
-          themes: Json
-          updated_at: string
-          workspace_id: string
-        }
-        Insert: {
-          ai_model: string
-          analysis?: Json
-          avg_rating?: number | null
-          created_at?: string
-          generated_at?: string
-          generated_by?: string | null
-          highlights?: Json
-          id?: string
-          location_id: string
-          prompt_version: string
-          review_count?: number
-          risks?: Json
-          sentiment_label: string
-          source_hash: string
-          summary: string
-          themes?: Json
-          updated_at?: string
-          workspace_id: string
-        }
-        Update: {
-          ai_model?: string
-          analysis?: Json
-          avg_rating?: number | null
-          created_at?: string
-          generated_at?: string
-          generated_by?: string | null
-          highlights?: Json
-          id?: string
-          location_id?: string
-          prompt_version?: string
-          review_count?: number
-          risks?: Json
-          sentiment_label?: string
-          source_hash?: string
-          summary?: string
-          themes?: Json
-          updated_at?: string
-          workspace_id?: string
-        }
-        Relationships: [
-          {
-            foreignKeyName: "grm_location_insights_location_id_fkey"
-            columns: ["location_id"]
-            isOneToOne: false
-            referencedRelation: "grm_google_locations"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "grm_location_insights_workspace_id_fkey"
-            columns: ["workspace_id"]
-            isOneToOne: false
-            referencedRelation: "grm_workspaces"
-            referencedColumns: ["id"]
-          },
-        ]
-      }
-      grm_scope_insights: {
-        Row: {
-          ai_model: string
-          analysis: Json
-          avg_rating: number | null
-          created_at: string
-          generated_at: string
-          generated_by: string | null
-          highlights: Json
-          id: string
-          location_count: number
-          prompt_version: string
-          review_count: number
-          risks: Json
-          scope_id: string
-          scope_kind: string
-          sentiment_label: string
-          source_hash: string
-          summary: string
-          themes: Json
-          updated_at: string
-          workspace_id: string
-        }
-        Insert: {
-          ai_model: string
-          analysis?: Json
-          avg_rating?: number | null
-          created_at?: string
-          generated_at?: string
-          generated_by?: string | null
-          highlights?: Json
-          id?: string
-          location_count?: number
-          prompt_version: string
-          review_count?: number
-          risks?: Json
-          scope_id: string
-          scope_kind: string
-          sentiment_label: string
-          source_hash: string
-          summary: string
-          themes?: Json
-          updated_at?: string
-          workspace_id: string
-        }
-        Update: {
-          ai_model?: string
-          analysis?: Json
-          avg_rating?: number | null
-          created_at?: string
-          generated_at?: string
-          generated_by?: string | null
-          highlights?: Json
-          id?: string
-          location_count?: number
-          prompt_version?: string
-          review_count?: number
-          risks?: Json
-          scope_id?: string
-          scope_kind?: string
-          sentiment_label?: string
-          source_hash?: string
-          summary?: string
-          themes?: Json
-          updated_at?: string
-          workspace_id?: string
-        }
-        Relationships: [
-          {
-            foreignKeyName: "grm_scope_insights_workspace_id_fkey"
-            columns: ["workspace_id"]
-            isOneToOne: false
-            referencedRelation: "grm_workspaces"
-            referencedColumns: ["id"]
-          },
-        ]
       }
       grm_review_ai_drafts: {
         Row: {
@@ -1738,6 +1527,290 @@ export type Database = {
         }
         Relationships: []
       }
+      grm_analysis_runs: {
+        Row: {
+          id: string
+          workspace_id: string
+          requested_by: string | null
+          client_id: string | null
+          group_id: string | null
+          location_id: string | null
+          range_start: string | null
+          range_end: string | null
+          status: string
+          discovered: number
+          eligible: number
+          already_analysed: number
+          newly_analysed: number
+          pending: number
+          failed: number
+          batches_total: number
+          batches_completed: number
+          retries: number
+          input_tokens: number
+          output_tokens: number
+          error: string | null
+          started_at: string
+          finished_at: string | null
+          created_at: string
+          updated_at: string
+        }
+        Insert: {
+          id?: string
+          workspace_id: string
+          requested_by?: string | null
+          client_id?: string | null
+          group_id?: string | null
+          location_id?: string | null
+          range_start?: string | null
+          range_end?: string | null
+          status?: string
+          discovered?: number
+          eligible?: number
+          already_analysed?: number
+          newly_analysed?: number
+          pending?: number
+          failed?: number
+          batches_total?: number
+          batches_completed?: number
+          retries?: number
+          input_tokens?: number
+          output_tokens?: number
+          error?: string | null
+          started_at?: string
+          finished_at?: string | null
+          created_at?: string
+          updated_at?: string
+        }
+        Update: {
+          status?: string
+          discovered?: number
+          eligible?: number
+          already_analysed?: number
+          newly_analysed?: number
+          pending?: number
+          failed?: number
+          batches_total?: number
+          batches_completed?: number
+          retries?: number
+          input_tokens?: number
+          output_tokens?: number
+          error?: string | null
+          finished_at?: string | null
+          updated_at?: string
+        }
+        Relationships: []
+      }
+
+      grm_insight_reports: {
+        Row: {
+          id: string
+          workspace_id: string
+          cache_key: string
+          requested_by: string | null
+          client_id: string | null
+          group_id: string | null
+          location_id: string | null
+          location_ids: string[]
+          range_start: string | null
+          range_end: string | null
+          status: string
+          phase: string | null
+          insights: unknown
+          evidence_summary: unknown
+          limitations: string[]
+          data_fingerprint: string | null
+          analysis_version: string
+          prompt_version: string
+          model: string | null
+          discovered_count: number
+          eligible_count: number
+          analysed_count: number
+          failed_count: number
+          pending_count: number
+          failed_review_ids: string[]
+          input_tokens: number
+          output_tokens: number
+          error: string | null
+          started_at: string | null
+          finished_at: string | null
+          created_at: string
+          updated_at: string
+        }
+        Insert: {
+          id?: string
+          workspace_id: string
+          cache_key: string
+          requested_by?: string | null
+          client_id?: string | null
+          group_id?: string | null
+          location_id?: string | null
+          location_ids?: string[]
+          range_start?: string | null
+          range_end?: string | null
+          status?: string
+          phase?: string | null
+          insights?: unknown
+          evidence_summary?: unknown
+          limitations?: string[]
+          data_fingerprint?: string | null
+          analysis_version: string
+          prompt_version: string
+          model?: string | null
+          discovered_count?: number
+          eligible_count?: number
+          analysed_count?: number
+          failed_count?: number
+          pending_count?: number
+          failed_review_ids?: string[]
+          input_tokens?: number
+          output_tokens?: number
+          error?: string | null
+          started_at?: string | null
+          finished_at?: string | null
+          created_at?: string
+          updated_at?: string
+        }
+        Update: {
+          status?: string
+          phase?: string | null
+          insights?: unknown
+          evidence_summary?: unknown
+          limitations?: string[]
+          data_fingerprint?: string | null
+          model?: string | null
+          discovered_count?: number
+          eligible_count?: number
+          analysed_count?: number
+          failed_count?: number
+          pending_count?: number
+          failed_review_ids?: string[]
+          input_tokens?: number
+          output_tokens?: number
+          error?: string | null
+          started_at?: string | null
+          finished_at?: string | null
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      grm_review_analyses: {
+        Row: {
+          id: string
+          workspace_id: string
+          review_id: string
+          location_id: string
+          analysis_version: string
+          content_fingerprint: string
+          status: string
+          model: string | null
+          observation_count: number
+          error: string | null
+          processed_at: string | null
+          created_at: string
+          updated_at: string
+        }
+        Insert: {
+          id?: string
+          workspace_id: string
+          review_id: string
+          location_id: string
+          analysis_version: string
+          content_fingerprint: string
+          status?: string
+          model?: string | null
+          observation_count?: number
+          error?: string | null
+          processed_at?: string | null
+          created_at?: string
+          updated_at?: string
+        }
+        Update: {
+          status?: string
+          model?: string | null
+          observation_count?: number
+          content_fingerprint?: string
+          error?: string | null
+          processed_at?: string | null
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      grm_review_observations: {
+        Row: {
+          id: string
+          workspace_id: string
+          analysis_id: string
+          review_id: string
+          location_id: string
+          client_id: string | null
+          group_id: string | null
+          review_create_time: string
+          star_rating: number
+          language: string | null
+          topic: string
+          subtopic: string | null
+          sentiment: string
+          detail: string
+          entity_type: string | null
+          entity_name: string | null
+          severity: number | null
+          severity_rationale: string | null
+          evidence_excerpt: string
+          evidence_start: number | null
+          evidence_end: number | null
+          basis: string
+          confidence: number | null
+          is_ambiguous: boolean
+          dedupe_key: string
+          created_at: string
+        }
+        Insert: {
+          id?: string
+          workspace_id: string
+          analysis_id: string
+          review_id: string
+          location_id: string
+          client_id?: string | null
+          group_id?: string | null
+          review_create_time: string
+          star_rating: number
+          language?: string | null
+          topic: string
+          subtopic?: string | null
+          sentiment: string
+          detail: string
+          entity_type?: string | null
+          entity_name?: string | null
+          severity?: number | null
+          severity_rationale?: string | null
+          evidence_excerpt: string
+          evidence_start?: number | null
+          evidence_end?: number | null
+          basis?: string
+          confidence?: number | null
+          is_ambiguous?: boolean
+          dedupe_key: string
+          created_at?: string
+        }
+        Update: {
+          topic?: string
+          subtopic?: string | null
+          sentiment?: string
+          detail?: string
+          entity_type?: string | null
+          entity_name?: string | null
+          severity?: number | null
+          severity_rationale?: string | null
+          evidence_excerpt?: string
+          evidence_start?: number | null
+          evidence_end?: number | null
+          basis?: string
+          confidence?: number | null
+          is_ambiguous?: boolean
+        }
+        Relationships: []
+      }
       grm_notifications: {
         Row: {
           id: string
@@ -2375,863 +2448,6 @@ export type Database = {
         Update: { body?: string }
         Relationships: []
       }
-      grm_topics: {
-        Row: {
-          id: string
-          workspace_id: string | null
-          parent_id: string | null
-          code: string
-          label: string
-          kind: string
-          status: string
-          taxonomy_version: string
-          description: string
-          created_at: string
-          updated_at: string
-        }
-        Insert: {
-          id?: string
-          workspace_id?: string | null
-          parent_id?: string | null
-          code: string
-          label: string
-          kind: string
-          status?: string
-          taxonomy_version: string
-          description?: string
-          created_at?: string
-          updated_at?: string
-        }
-        Update: {
-          id?: string
-          workspace_id?: string | null
-          parent_id?: string | null
-          code?: string
-          label?: string
-          kind?: string
-          status?: string
-          taxonomy_version?: string
-          description?: string
-          created_at?: string
-          updated_at?: string
-        }
-        Relationships: [
-          {
-            foreignKeyName: "grm_topics_workspace_id_fkey"
-            columns: ["workspace_id"]
-            isOneToOne: false
-            referencedRelation: "grm_workspaces"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "grm_topics_parent_id_fkey"
-            columns: ["parent_id"]
-            isOneToOne: false
-            referencedRelation: "grm_topics"
-            referencedColumns: ["id"]
-          },
-        ]
-      }
-      grm_topic_aliases: {
-        Row: {
-          id: string
-          topic_id: string
-          workspace_id: string | null
-          alias: string
-          created_at: string
-        }
-        Insert: {
-          id?: string
-          topic_id: string
-          workspace_id?: string | null
-          alias: string
-          created_at?: string
-        }
-        Update: {
-          id?: string
-          topic_id?: string
-          workspace_id?: string | null
-          alias?: string
-          created_at?: string
-        }
-        Relationships: [
-          {
-            foreignKeyName: "grm_topic_aliases_topic_id_fkey"
-            columns: ["topic_id"]
-            isOneToOne: false
-            referencedRelation: "grm_topics"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "grm_topic_aliases_workspace_id_fkey"
-            columns: ["workspace_id"]
-            isOneToOne: false
-            referencedRelation: "grm_workspaces"
-            referencedColumns: ["id"]
-          },
-        ]
-      }
-      grm_review_intelligence: {
-        Row: {
-          id: string
-          workspace_id: string
-          review_id: string
-          location_id: string
-          content_hash: string
-          analysis_version: string
-          taxonomy_version: string
-          prompt_version: string
-          schema_version: string
-          model: string
-          sentiment: string
-          extraction: Json
-          status: string
-          error_class: string | null
-          is_current: boolean
-          ai_config_version: number | null
-          knowledge_ids: string[]
-          source_review_update_time: string | null
-          generated_at: string | null
-          created_at: string
-          updated_at: string
-        }
-        Insert: {
-          id?: string
-          workspace_id: string
-          review_id: string
-          location_id: string
-          content_hash: string
-          analysis_version: string
-          taxonomy_version: string
-          prompt_version: string
-          schema_version?: string
-          model: string
-          sentiment: string
-          extraction?: Json
-          status?: string
-          error_class?: string | null
-          is_current?: boolean
-          ai_config_version?: number | null
-          knowledge_ids?: string[]
-          source_review_update_time?: string | null
-          generated_at?: string | null
-          created_at?: string
-          updated_at?: string
-        }
-        Update: {
-          id?: string
-          workspace_id?: string
-          review_id?: string
-          location_id?: string
-          content_hash?: string
-          analysis_version?: string
-          taxonomy_version?: string
-          prompt_version?: string
-          schema_version?: string
-          model?: string
-          sentiment?: string
-          extraction?: Json
-          status?: string
-          error_class?: string | null
-          is_current?: boolean
-          ai_config_version?: number | null
-          knowledge_ids?: string[]
-          source_review_update_time?: string | null
-          generated_at?: string | null
-          created_at?: string
-          updated_at?: string
-        }
-        Relationships: [
-          {
-            foreignKeyName: "grm_review_intelligence_workspace_id_fkey"
-            columns: ["workspace_id"]
-            isOneToOne: false
-            referencedRelation: "grm_workspaces"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "grm_review_intelligence_review_id_fkey"
-            columns: ["review_id"]
-            isOneToOne: false
-            referencedRelation: "grm_reviews"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "grm_review_intelligence_location_id_fkey"
-            columns: ["location_id"]
-            isOneToOne: false
-            referencedRelation: "grm_google_locations"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "grm_review_intelligence_workspace_id_ai_config_version_fkey"
-            columns: ["workspace_id", "ai_config_version"]
-            isOneToOne: false
-            referencedRelation: "grm_ai_configs"
-            referencedColumns: ["workspace_id", "version"]
-          },
-        ]
-      }
-      grm_review_topic_assignments: {
-        Row: {
-          id: string
-          workspace_id: string
-          intelligence_id: string
-          review_id: string
-          topic_id: string
-          relevance: number
-          sentiment: string
-          polarity: string
-          excerpt: string | null
-          assignment_rank: string
-          confidence: number
-          uncertain: boolean
-          basis: string
-          created_at: string
-        }
-        Insert: {
-          id?: string
-          workspace_id: string
-          intelligence_id: string
-          review_id: string
-          topic_id: string
-          relevance: number
-          sentiment: string
-          polarity: string
-          excerpt?: string | null
-          assignment_rank?: string
-          confidence?: number
-          uncertain?: boolean
-          basis?: string
-          created_at?: string
-        }
-        Update: {
-          id?: string
-          workspace_id?: string
-          intelligence_id?: string
-          review_id?: string
-          topic_id?: string
-          relevance?: number
-          sentiment?: string
-          polarity?: string
-          excerpt?: string | null
-          assignment_rank?: string
-          confidence?: number
-          uncertain?: boolean
-          basis?: string
-          created_at?: string
-        }
-        Relationships: [
-          {
-            foreignKeyName: "grm_review_topic_assignments_intelligence_id_fkey"
-            columns: ["intelligence_id"]
-            isOneToOne: false
-            referencedRelation: "grm_review_intelligence"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "grm_review_topic_assignments_review_id_fkey"
-            columns: ["review_id"]
-            isOneToOne: false
-            referencedRelation: "grm_reviews"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "grm_review_topic_assignments_topic_id_fkey"
-            columns: ["topic_id"]
-            isOneToOne: false
-            referencedRelation: "grm_topics"
-            referencedColumns: ["id"]
-          },
-        ]
-      }
-      grm_semantic_clusters: {
-        Row: {
-          id: string
-          workspace_id: string
-          cluster_key: string
-          taxonomy_version: string
-          description: string
-          version: number
-          status: string
-          model: string | null
-          topic_key: string
-          title: string
-          confidence: number | null
-          quality: string
-          stats: Json
-          evidence: Json
-          signals: Json
-          created_at: string
-          updated_at: string
-        }
-        Insert: {
-          id?: string
-          workspace_id: string
-          cluster_key: string
-          taxonomy_version: string
-          description?: string
-          version?: number
-          status?: string
-          model?: string | null
-          topic_key?: string
-          title?: string
-          confidence?: number | null
-          quality?: string
-          stats?: Json
-          evidence?: Json
-          signals?: Json
-          created_at?: string
-          updated_at?: string
-        }
-        Update: {
-          id?: string
-          workspace_id?: string
-          cluster_key?: string
-          taxonomy_version?: string
-          description?: string
-          version?: number
-          status?: string
-          model?: string | null
-          topic_key?: string
-          title?: string
-          confidence?: number | null
-          quality?: string
-          stats?: Json
-          evidence?: Json
-          signals?: Json
-          created_at?: string
-          updated_at?: string
-        }
-        Relationships: [
-          {
-            foreignKeyName: "grm_semantic_clusters_workspace_id_fkey"
-            columns: ["workspace_id"]
-            isOneToOne: false
-            referencedRelation: "grm_workspaces"
-            referencedColumns: ["id"]
-          },
-        ]
-      }
-      grm_cluster_members: {
-        Row: {
-          cluster_id: string
-          review_id: string
-          workspace_id: string
-          intelligence_id: string | null
-          distance: number | null
-          created_at: string
-        }
-        Insert: {
-          cluster_id: string
-          review_id: string
-          workspace_id: string
-          intelligence_id?: string | null
-          distance?: number | null
-          created_at?: string
-        }
-        Update: {
-          cluster_id?: string
-          review_id?: string
-          workspace_id?: string
-          intelligence_id?: string | null
-          distance?: number | null
-          created_at?: string
-        }
-        Relationships: [
-          {
-            foreignKeyName: "grm_cluster_members_cluster_id_fkey"
-            columns: ["cluster_id"]
-            isOneToOne: false
-            referencedRelation: "grm_semantic_clusters"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "grm_cluster_members_review_id_fkey"
-            columns: ["review_id"]
-            isOneToOne: false
-            referencedRelation: "grm_reviews"
-            referencedColumns: ["id"]
-          },
-        ]
-      }
-      grm_review_embeddings: {
-        Row: {
-          id: string
-          workspace_id: string
-          review_id: string
-          content_hash: string
-          model: string
-          dimensions: number
-          embedding: string | null
-          created_at: string
-        }
-        Insert: {
-          id?: string
-          workspace_id: string
-          review_id: string
-          content_hash: string
-          model: string
-          dimensions?: number
-          embedding?: string | null
-          created_at?: string
-        }
-        Update: {
-          id?: string
-          workspace_id?: string
-          review_id?: string
-          content_hash?: string
-          model?: string
-          dimensions?: number
-          embedding?: string | null
-          created_at?: string
-        }
-        Relationships: [
-          {
-            foreignKeyName: "grm_review_embeddings_review_id_fkey"
-            columns: ["review_id"]
-            isOneToOne: false
-            referencedRelation: "grm_reviews"
-            referencedColumns: ["id"]
-          },
-        ]
-      }
-      grm_cluster_events: {
-        Row: {
-          id: string
-          workspace_id: string
-          cluster_key: string
-          event: string
-          related_cluster_key: string | null
-          review_ids: string[]
-          detail: Json
-          created_at: string
-        }
-        Insert: {
-          id?: string
-          workspace_id: string
-          cluster_key: string
-          event: string
-          related_cluster_key?: string | null
-          review_ids?: string[]
-          detail?: Json
-          created_at?: string
-        }
-        Update: {
-          id?: string
-          workspace_id?: string
-          cluster_key?: string
-          event?: string
-          related_cluster_key?: string | null
-          review_ids?: string[]
-          detail?: Json
-          created_at?: string
-        }
-        Relationships: []
-      }
-      grm_scope_summaries: {
-        Row: {
-          id: string
-          workspace_id: string
-          client_id: string
-          scope_type: string
-          scope_id: string
-          group_id: string | null
-          location_id: string | null
-          placed_group_id: string | null
-          parent_group_id: string | null
-          scope_label: string
-          range_kind: string
-          range_start: string | null
-          range_end: string | null
-          range_label: string
-          timezone: string
-          analysis_version: string
-          taxonomy_version: string
-          schema_version: string
-          prompt_version: string
-          membership_basis: string
-          member_location_ids: string[]
-          membership_hash: string
-          source_hash: string
-          source_review_count: number
-          summary: string
-          status: string
-          ai_config_version: number | null
-          knowledge_ids: string[]
-          scope_retired_at: string | null
-          generated_at: string | null
-          document: Json
-          last_error: string | null
-          created_at: string
-          updated_at: string
-        }
-        Insert: {
-          id?: string
-          workspace_id: string
-          client_id: string
-          scope_type: string
-          scope_id: string
-          group_id?: string | null
-          location_id?: string | null
-          placed_group_id?: string | null
-          parent_group_id?: string | null
-          scope_label: string
-          range_kind: string
-          range_start?: string | null
-          range_end?: string | null
-          range_label?: string
-          timezone: string
-          analysis_version: string
-          taxonomy_version: string
-          schema_version?: string
-          prompt_version?: string
-          membership_basis?: string
-          member_location_ids?: string[]
-          membership_hash: string
-          source_hash?: string
-          source_review_count?: number
-          summary?: string
-          status?: string
-          ai_config_version?: number | null
-          knowledge_ids?: string[]
-          scope_retired_at?: string | null
-          generated_at?: string | null
-          document?: Json
-          last_error?: string | null
-          created_at?: string
-          updated_at?: string
-        }
-        Update: {
-          id?: string
-          workspace_id?: string
-          client_id?: string
-          scope_type?: string
-          scope_id?: string
-          group_id?: string | null
-          location_id?: string | null
-          placed_group_id?: string | null
-          parent_group_id?: string | null
-          scope_label?: string
-          range_kind?: string
-          range_start?: string | null
-          range_end?: string | null
-          range_label?: string
-          timezone?: string
-          analysis_version?: string
-          taxonomy_version?: string
-          schema_version?: string
-          prompt_version?: string
-          membership_basis?: string
-          member_location_ids?: string[]
-          membership_hash?: string
-          source_hash?: string
-          source_review_count?: number
-          summary?: string
-          status?: string
-          ai_config_version?: number | null
-          knowledge_ids?: string[]
-          scope_retired_at?: string | null
-          generated_at?: string | null
-          document?: Json
-          last_error?: string | null
-          created_at?: string
-          updated_at?: string
-        }
-        Relationships: [
-          {
-            foreignKeyName: "grm_scope_summaries_workspace_id_fkey"
-            columns: ["workspace_id"]
-            isOneToOne: false
-            referencedRelation: "grm_workspaces"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "grm_scope_summaries_workspace_id_ai_config_version_fkey"
-            columns: ["workspace_id", "ai_config_version"]
-            isOneToOne: false
-            referencedRelation: "grm_ai_configs"
-            referencedColumns: ["workspace_id", "version"]
-          },
-        ]
-      }
-      grm_insight_reports: {
-        Row: {
-          id: string
-          workspace_id: string
-          summary_id: string
-          prompt_version: string
-          model: string
-          status: string
-          findings: Json
-          recommendations: Json
-          metrics: Json
-          generated_at: string | null
-          source_hash: string
-          report_version: number
-          input_key: string
-          created_at: string
-          updated_at: string
-        }
-        Insert: {
-          id?: string
-          workspace_id: string
-          summary_id: string
-          prompt_version: string
-          model: string
-          status?: string
-          findings?: Json
-          recommendations?: Json
-          metrics?: Json
-          generated_at?: string | null
-          source_hash?: string
-          report_version?: number
-          input_key?: string
-          created_at?: string
-          updated_at?: string
-        }
-        Update: {
-          id?: string
-          workspace_id?: string
-          summary_id?: string
-          prompt_version?: string
-          model?: string
-          status?: string
-          findings?: Json
-          recommendations?: Json
-          metrics?: Json
-          generated_at?: string | null
-          source_hash?: string
-          report_version?: number
-          input_key?: string
-          created_at?: string
-          updated_at?: string
-        }
-        Relationships: [
-          {
-            foreignKeyName: "grm_insight_reports_summary_id_fkey"
-            columns: ["summary_id"]
-            isOneToOne: false
-            referencedRelation: "grm_scope_summaries"
-            referencedColumns: ["id"]
-          },
-        ]
-      }
-      grm_insight_evidence: {
-        Row: {
-          id: string
-          workspace_id: string
-          report_id: string
-          finding_key: string
-          review_id: string | null
-          excerpt: string | null
-          review_removed_at: string | null
-          created_at: string
-        }
-        Insert: {
-          id?: string
-          workspace_id: string
-          report_id: string
-          finding_key: string
-          review_id?: string | null
-          excerpt?: string | null
-          review_removed_at?: string | null
-          created_at?: string
-        }
-        Update: {
-          id?: string
-          workspace_id?: string
-          report_id?: string
-          finding_key?: string
-          review_id?: string | null
-          excerpt?: string | null
-          review_removed_at?: string | null
-          created_at?: string
-        }
-        Relationships: [
-          {
-            foreignKeyName: "grm_insight_evidence_report_id_fkey"
-            columns: ["report_id"]
-            isOneToOne: false
-            referencedRelation: "grm_insight_reports"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "grm_insight_evidence_review_id_fkey"
-            columns: ["review_id"]
-            isOneToOne: false
-            referencedRelation: "grm_reviews"
-            referencedColumns: ["id"]
-          },
-        ]
-      }
-      grm_intelligence_jobs: {
-        Row: {
-          id: string
-          workspace_id: string
-          operation: string
-          status: string
-          attempts: number
-          max_attempts: number
-          error_class: string | null
-          last_error: string | null
-          review_id: string | null
-          location_id: string | null
-          summary_id: string | null
-          source_hash: string | null
-          analysis_version: string | null
-          not_before: string | null
-          started_at: string | null
-          finished_at: string | null
-          created_at: string
-          updated_at: string
-        }
-        Insert: {
-          id?: string
-          workspace_id: string
-          operation: string
-          status?: string
-          attempts?: number
-          max_attempts?: number
-          error_class?: string | null
-          last_error?: string | null
-          review_id?: string | null
-          location_id?: string | null
-          summary_id?: string | null
-          source_hash?: string | null
-          analysis_version?: string | null
-          not_before?: string | null
-          started_at?: string | null
-          finished_at?: string | null
-          created_at?: string
-          updated_at?: string
-        }
-        Update: {
-          id?: string
-          workspace_id?: string
-          operation?: string
-          status?: string
-          attempts?: number
-          max_attempts?: number
-          error_class?: string | null
-          last_error?: string | null
-          review_id?: string | null
-          location_id?: string | null
-          summary_id?: string | null
-          source_hash?: string | null
-          analysis_version?: string | null
-          not_before?: string | null
-          started_at?: string | null
-          finished_at?: string | null
-          created_at?: string
-          updated_at?: string
-        }
-        Relationships: [
-          {
-            foreignKeyName: "grm_intelligence_jobs_review_id_fkey"
-            columns: ["review_id"]
-            isOneToOne: false
-            referencedRelation: "grm_reviews"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "grm_intelligence_jobs_summary_id_fkey"
-            columns: ["summary_id"]
-            isOneToOne: false
-            referencedRelation: "grm_scope_summaries"
-            referencedColumns: ["id"]
-          },
-        ]
-      }
-      grm_metric_definitions: {
-        Row: {
-          id: string
-          workspace_id: string | null
-          metric_key: string
-          version: number
-          title: string
-          semantics: string
-          requires: Json
-          created_at: string
-        }
-        Insert: {
-          id?: string
-          workspace_id?: string | null
-          metric_key: string
-          version: number
-          title: string
-          semantics: string
-          requires?: Json
-          created_at?: string
-        }
-        Update: {
-          id?: string
-          workspace_id?: string | null
-          metric_key?: string
-          version?: number
-          title?: string
-          semantics?: string
-          requires?: Json
-          created_at?: string
-        }
-        Relationships: [
-          {
-            foreignKeyName: "grm_metric_definitions_workspace_id_fkey"
-            columns: ["workspace_id"]
-            isOneToOne: false
-            referencedRelation: "grm_workspaces"
-            referencedColumns: ["id"]
-          },
-        ]
-      }
-      grm_metric_snapshots: {
-        Row: {
-          id: string
-          workspace_id: string
-          summary_id: string
-          definition_id: string
-          value: number | null
-          sample_size: number
-          inputs_hash: string
-          computed_at: string
-        }
-        Insert: {
-          id?: string
-          workspace_id: string
-          summary_id: string
-          definition_id: string
-          value?: number | null
-          sample_size?: number
-          inputs_hash: string
-          computed_at?: string
-        }
-        Update: {
-          id?: string
-          workspace_id?: string
-          summary_id?: string
-          definition_id?: string
-          value?: number | null
-          sample_size?: number
-          inputs_hash?: string
-          computed_at?: string
-        }
-        Relationships: [
-          {
-            foreignKeyName: "grm_metric_snapshots_summary_id_fkey"
-            columns: ["summary_id"]
-            isOneToOne: false
-            referencedRelation: "grm_scope_summaries"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "grm_metric_snapshots_definition_id_fkey"
-            columns: ["definition_id"]
-            isOneToOne: false
-            referencedRelation: "grm_metric_definitions"
-            referencedColumns: ["id"]
-          },
-        ]
-      }
     }
     Views: {
       [_ in never]: never
@@ -3406,7 +2622,6 @@ export type GrmReview           = GrmTables["grm_reviews"]["Row"]
 export type GrmReviewAiDraft    = GrmTables["grm_review_ai_drafts"]["Row"]
 export type GrmReviewReply      = GrmTables["grm_review_replies"]["Row"]
 export type GrmAuditLog         = GrmTables["grm_audit_logs"]["Row"]
-export type GrmLocationInsight  = GrmTables["grm_location_insights"]["Row"]
 
 export type GrmEnums = Database["public"]["Enums"]
 export type GrmMemberRole       = GrmEnums["grm_member_role"]

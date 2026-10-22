@@ -348,7 +348,7 @@ async function loadAgencyCounts(
     admin.from("grm_review_replies").select("review_id").eq("workspace_id", workspaceId).eq("client_approval", "requested"),
     eventQuery,
     publishedQuery,
-    admin.from("grm_reviews").select("id, location_id").eq("workspace_id", workspaceId),
+    admin.from("grm_reviews").select("id, location_id").eq("workspace_id", workspaceId).is("missing_on_google_at", null),
   ]);
   if (escalationsResult.error || approvalsResult.error || eventsResult.error || publishedResult.error || reviewsResult.error) {
     throw new Error("Failed to load client activity");

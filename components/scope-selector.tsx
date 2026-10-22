@@ -26,7 +26,17 @@ function KindIcon({ kind }: { kind: ScopeChoice["kind"] }) {
   return <Building2 className={className} aria-hidden />;
 }
 
-export function ScopeSelector({ catalog }: { catalog: ScopeCatalog }) {
+export function ScopeSelector({
+  catalog,
+  request: requestOverride,
+  onSelect,
+}: {
+  catalog: ScopeCatalog;
+  /** Draft selection. When omitted, the control shows the URL. */
+  request?: { client?: string | null; group?: string | null; location?: string | null };
+  /** When set, choosing a place updates the draft and does not navigate. */
+  onSelect?: (choice: ScopeChoice) => void;
+}) {
   const pathname = usePathname();
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -35,11 +45,17 @@ export function ScopeSelector({ catalog }: { catalog: ScopeCatalog }) {
   const [query, setQuery] = useState("");
   const [syncedOpen, setSyncedOpen] = useState(false);
   const listRef = useRef<HTMLDivElement>(null);
-  const request = readScopeRequest({
-    client: searchParams.get("client"),
-    group: searchParams.get("group"),
-    location: searchParams.get("location"),
-  });
+  const request = requestOverride
+    ? readScopeRequest({
+        client: requestOverride.client,
+        group: requestOverride.group,
+        location: requestOverride.location,
+      })
+    : readScopeRequest({
+        client: searchParams.get("client"),
+        group: searchParams.get("group"),
+        location: searchParams.get("location"),
+      });
   const scope = resolveScope(catalog, request);
   const summary = scopeSummary(scope);
   const rows = useMemo(() => filterScopeChoices(scopeChoices(catalog), query), [catalog, query]);
@@ -50,11 +66,15 @@ export function ScopeSelector({ catalog }: { catalog: ScopeCatalog }) {
   }
 
   function choose(choice: ScopeChoice) {
+    setOpen(false);
+    if (onSelect) {
+      onSelect(choice);
+      return;
+    }
     const params = new URLSearchParams(searchParams.toString());
     writeScopeParams(params, choice);
     const next = params.toString();
     const href = next ? `${pathname}?${next}` : pathname;
-    setOpen(false);
     begin({ ...scopeFilterApply(choice), href }, () => router.push(href));
   }
 

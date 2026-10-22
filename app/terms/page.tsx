@@ -80,11 +80,10 @@ export default function TermsPage() {
           AI drafts are not the published reply
         </h2>
         <p className="mt-3">
-          When you choose AI draft, or generate a profile insight, GRM sends
-          the relevant review text to Google Gemini and stores the result.
-          That result is a suggestion inside GRM. Profile insights may include
-          branding notes, staff comments from reviews, and feature ideas.
-          They are not sent to Google until a person acts on them.
+          When you choose AI draft, GRM sends the relevant review text to
+          Google Gemini and stores the result. That result is a suggestion
+          inside GRM. It is not sent to Google until a person approves and
+          publishes it as a reply.
         </p>
         <ul>
           <li>

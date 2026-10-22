@@ -169,4 +169,102 @@
   ::selection {
     background-color: #bfdbfe;
   }
+
+  /*
+   * Cursor semantics — one definition for the whole app.
+   *
+   *   pointer     Anything that performs an action on click: buttons, links,
+   *               menu/select items, tabs, checkboxes, radios, switches,
+   *               summaries, date/range pickers, rows marked data-cursor.
+   *   text        Editable text fields (incl. contenteditable).
+   *   not-allowed Disabled controls. Loading buttons report `wait` instead.
+   *   grab        Draggable elements (grabbing while the drag is active).
+   *   help        Elements that reveal explanation on hover (abbr etc.).
+   *
+   * Tailwind v4's preflight leaves <button> with the default arrow, so
+   * without this layer most controls show no affordance at all. Custom
+   * clickable elements that are not semantic controls opt in with
+   * data-cursor="pointer" (or another value above) instead of ad-hoc
+   * cursor-* classes. Component-level cursor-* utilities still win over
+   * these base rules when a case genuinely differs.
+   */
+  a[href],
+  button:not(:disabled),
+  input[type="button"]:not(:disabled),
+  input[type="submit"]:not(:disabled),
+  input[type="reset"]:not(:disabled),
+  input[type="image"]:not(:disabled),
+  input[type="checkbox"]:not(:disabled),
+  input[type="radio"]:not(:disabled),
+  input[type="file"]:not(:disabled),
+  input[type="range"]:not(:disabled),
+  input[type="color"]:not(:disabled),
+  input[type="date"]:not(:disabled),
+  input[type="time"]:not(:disabled),
+  input[type="month"]:not(:disabled),
+  input[type="week"]:not(:disabled),
+  input[type="datetime-local"]:not(:disabled),
+  select:not(:disabled),
+  summary,
+  label:has(> input[type="checkbox"]:not(:disabled)),
+  label:has(> input[type="radio"]:not(:disabled)),
+  [role="button"]:not([aria-disabled="true"]),
+  [role="link"]:not([aria-disabled="true"]),
+  [role="tab"]:not([aria-disabled="true"]),
+  [role="menuitem"]:not([aria-disabled="true"]),
+  [role="menuitemcheckbox"]:not([aria-disabled="true"]),
+  [role="menuitemradio"]:not([aria-disabled="true"]),
+  [role="option"]:not([aria-disabled="true"]),
+  [role="switch"]:not([aria-disabled="true"]),
+  [role="checkbox"]:not([aria-disabled="true"]),
+  [role="radio"]:not([aria-disabled="true"]),
+  [data-cursor="pointer"] {
+    cursor: pointer;
+  }
+
+  input:not([type]):not(:disabled),
+  input[type="text"]:not(:disabled),
+  input[type="email"]:not(:disabled),
+  input[type="password"]:not(:disabled),
+  input[type="search"]:not(:disabled),
+  input[type="tel"]:not(:disabled),
+  input[type="url"]:not(:disabled),
+  input[type="number"]:not(:disabled),
+  textarea:not(:disabled),
+  [contenteditable="true"],
+  [contenteditable="plaintext-only"],
+  [data-cursor="text"] {
+    cursor: text;
+  }
+
+  button:disabled,
+  input:disabled,
+  select:disabled,
+  textarea:disabled,
+  [aria-disabled="true"],
+  [data-cursor="not-allowed"] {
+    cursor: not-allowed;
+  }
+
+  /* A loading control is busy, not forbidden. Wins over :disabled above. */
+  button[data-loading="true"],
+  [aria-busy="true"],
+  [data-cursor="wait"] {
+    cursor: wait;
+  }
+
+  [draggable="true"],
+  [data-cursor="grab"] {
+    cursor: grab;
+  }
+  [draggable="true"]:active,
+  [data-cursor="grabbing"] {
+    cursor: grabbing;
+  }
+
+  abbr[title],
+  dfn[title],
+  [data-cursor="help"] {
+    cursor: help;
+  }
 }

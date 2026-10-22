@@ -12,7 +12,6 @@ export type {
   GrmReviewAiDraft,
   GrmReviewReply,
   GrmAuditLog,
-  GrmLocationInsight,
   GrmMemberRole,
   GrmConnectionStatus,
   GrmReplyStatus,
@@ -58,7 +57,6 @@ export type AuditAction =
   | "ai_knowledge.created"
   | "ai_knowledge.updated"
   | "ai_knowledge.deleted"
-  | "insight.feedback"
   | "automation.ready"
   | "automation.held"
   | "reply.deleted"
@@ -67,8 +65,6 @@ export type AuditAction =
   | "reviews.bulk_approve"
   | "reviews.bulk_publish"
   | "reviews.bulk_discard"
-  | "location_insight.generated"
-  | "scope_insight.generated"
   | "workspace.invite_created"
   | "workspace.invite_resent"
   | "workspace.invite_revoked"

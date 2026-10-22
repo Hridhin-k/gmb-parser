@@ -335,6 +335,7 @@ export async function loadMobileOverview(input: {
     .from("grm_reviews")
     .select("id", { count: "exact", head: true })
     .eq("workspace_id", input.workspaceId)
+    .is("missing_on_google_at", null)
     .eq("reply_status", "draft")
     .gte("star_rating", 4);
   const [openCount, overdueCount, draftCount, connections] = await Promise.all([
@@ -510,6 +511,7 @@ export async function loadMobileApproval(input: {
     .from("grm_reviews")
     .select("id, star_rating, reviewer_display_name, comment, review_create_time, location_id, reply_status, complaint_theme")
     .eq("workspace_id", input.workspaceId)
+    .is("missing_on_google_at", null)
     .in("location_id", locationIds)
     .in("reply_status", ["draft", "approved", "failed"])
     .order("review_create_time", { ascending: false })

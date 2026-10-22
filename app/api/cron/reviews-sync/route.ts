@@ -41,8 +41,6 @@ export async function GET(request: Request) {
   let succeeded = 0;
   let failed = 0;
   let updated = 0;
-  let intelligenceFailed = 0;
-  let jobsProcessed = 0;
 
   for (const ws of workspaces) {
     try {
@@ -55,18 +53,6 @@ export async function GET(request: Request) {
       failed += result.locationsFailed;
       updated += result.totalReviewsSynced;
       await EscalationService.runScheduled(ws.workspaceId);
-      try {
-        const { runIntelligenceMaintenance } = await import("@/lib/services/intelligence-jobs");
-        const report = await runIntelligenceMaintenance(ws.workspaceId);
-        jobsProcessed += report.processed;
-        intelligenceFailed += report.failedJobs;
-      } catch (err) {
-        intelligenceFailed += 1;
-        logger.error("cron.reviews_sync.intelligence_failed", {
-          workspaceId: ws.workspaceId,
-          message: err instanceof Error ? err.message : "Unknown",
-        });
-      }
     } catch (err) {
       failed += 1;
       logger.error("cron.reviews_sync.workspace_failed", {
@@ -81,7 +67,5 @@ export async function GET(request: Request) {
     locationsSucceeded: succeeded,
     locationsFailed: failed,
     reviewsUpdated: updated,
-    intelligenceJobsProcessed: jobsProcessed,
-    intelligenceJobsFailed: intelligenceFailed,
   });
 }

@@ -35,7 +35,6 @@ export default async function PlatformHealthPage() {
             <h2 className="text-lg font-medium text-graphite">Readiness</h2>
             <ul className="mt-2 space-y-1 text-sm text-graphite">
               <li>Platform invites table: {health.readiness.platformInvitesTable ? "available" : "MISSING — apply migration 20261022001"}</li>
-              <li>Review intelligence tables: {health.readiness.reviewIntelligence ? "available" : "not available (migrations 20261020002+ or no rows yet)"}</li>
               <li>AI usage ledger: {health.readiness.aiUsageLedger ? "available" : "not available yet"}</li>
               <li>CRON_SECRET: {health.readiness.cronSecretConfigured ? "configured (scheduled jobs can run)" : "NOT configured — all cron routes return 401"}</li>
               <li>Invite email (Resend): {health.readiness.resendConfigured ? "configured" : "not configured — invites are saved, not emailed"}</li>
