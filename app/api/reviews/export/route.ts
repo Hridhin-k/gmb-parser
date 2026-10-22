@@ -7,6 +7,8 @@ import { checkRateLimit, EXPORT_LIMIT } from "@/lib/rate-limit";
 import { logger } from "@/lib/logger";
 import { parseDateRange } from "@/lib/date-range";
 
+export const maxDuration = 60;
+
 const UUID = /^[0-9a-f-]{36}$/i;
 function parseFilters(params: URLSearchParams): ReviewExportFilters {
   const client = params.get("client");

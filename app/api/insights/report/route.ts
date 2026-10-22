@@ -7,6 +7,8 @@ import { parseDateRange, previousDateRange } from "@/lib/date-range";
 import { generateReport, requestReport } from "@/lib/services/insight-report";
 import { logger } from "@/lib/logger";
 
+export const maxDuration = 60;
+
 /**
  * POST /api/insights/report
  *

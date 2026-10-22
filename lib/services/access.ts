@@ -2,6 +2,7 @@ import { cache } from "react";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { AuthorizationError, ValidationError } from "@/lib/errors";
 import { UNASSIGNED_CLIENT_MARKER } from "@/lib/services/unassigned-client";
+import { loadCatalogTables } from "@/lib/services/catalog-tables";
 import {
   canAct,
   isOrgScope,
@@ -273,19 +274,14 @@ function isOrg(scope: ScopeIds): boolean {
 export async function listScopeChoices(workspaceId: string): Promise<
   Array<{ id: string; label: string; kind: "client" | "group" | "location" }>
 > {
-  const admin = createAdminClient();
-  const [clients, groups, locations] = await Promise.all([
-    admin.from("grm_clients").select("id, name, notes").eq("workspace_id", workspaceId).eq("is_active", true).order("name"),
-    admin.from("grm_groups").select("id, name").eq("workspace_id", workspaceId).order("name"),
-    admin.from("grm_google_locations").select("id, location_title").eq("workspace_id", workspaceId).order("location_title"),
-  ]);
+  const catalog = await loadCatalogTables(workspaceId);
   const choices: Array<{ id: string; label: string; kind: "client" | "group" | "location" }> = [];
-  for (const client of clients.data ?? []) {
+  for (const client of catalog.clients) {
     if (client.notes === UNASSIGNED_CLIENT_MARKER) continue;
     choices.push({ id: client.id, label: client.name, kind: "client" });
   }
-  for (const group of groups.data ?? []) choices.push({ id: group.id, label: group.name, kind: "group" });
-  for (const location of locations.data ?? []) {
+  for (const group of catalog.groups) choices.push({ id: group.id, label: group.name, kind: "group" });
+  for (const location of catalog.locations) {
     choices.push({ id: location.id, label: location.location_title ?? "Location", kind: "location" });
   }
   return choices;
@@ -372,7 +368,10 @@ export const visibleLocationIds = cache(async function visibleLocationIds(
 });
 
 /** Null means the whole organization. An array is the only client ids this person may see. */
-export async function visibleClientIds(workspaceId: string, scope: ScopeIds | null | undefined): Promise<string[] | null> {
+export const visibleClientIds = cache(async function visibleClientIds(
+  workspaceId: string,
+  scope: ScopeIds | null | undefined
+): Promise<string[] | null> {
   const current = scope ?? { clientId: null, groupId: null, locationId: null };
   if (isOrgScope(current)) return null;
   const admin = createAdminClient();
@@ -397,4 +396,4 @@ export async function visibleClientIds(workspaceId: string, scope: ScopeIds | nu
     .eq("workspace_id", workspaceId)
     .in("group_id", groupIds);
   return [...new Set((locations ?? []).flatMap((location) => (location.client_id ? [location.client_id] : [])))];
-}
+});

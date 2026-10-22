@@ -494,6 +494,7 @@ export class GoogleOAuthService {
       {
         headers: { Authorization: `Bearer ${accessToken}` },
         cache: "no-store",
+        signal: AbortSignal.timeout(10_000),
       }
     );
 

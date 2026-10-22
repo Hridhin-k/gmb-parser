@@ -11,6 +11,8 @@ import {
 } from "@/lib/services/insight-pipeline";
 import { logger } from "@/lib/logger";
 
+export const maxDuration = 60;
+
 /**
  * POST /api/insights/analyze
  *

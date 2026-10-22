@@ -4,6 +4,8 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { getAiGenerationJob } from "@/lib/services/ai-generation-jobs";
 import { persistAiGenerationJob } from "@/lib/services/ai-generation-persist";
 
+const NO_STORE = { "Cache-Control": "no-store" };
+
 interface RouteParams {
   params: Promise<{ jobId: string }>;
 }
@@ -43,7 +45,7 @@ export async function GET(_request: Request, { params }: RouteParams) {
     draftId: job!.draft_id,
     replyId: job!.reply_id,
     error: job!.last_error,
-  });
+  }, { headers: NO_STORE });
 }
 
 /** POST /api/ai-generations/[jobId] — retry a failed background save. No model call. */

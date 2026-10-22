@@ -5,6 +5,7 @@ import { issueOnboardingLink, setClientApproval, updateAgencyClient } from "@/li
 import { ensurePersonalWorkspace } from "@/lib/services/workspace";
 import { AppError, toStatusCode, toUserMessage } from "@/lib/errors";
 import { parseBody } from "@/lib/validation";
+import { bustCatalogCache } from "@/lib/services/catalog-tables";
 
 const saveSchema = z.object({
   action: z.literal("save"),
@@ -55,6 +56,7 @@ export async function POST(
         reviewId: body.reviewId,
         decision: body.decision,
       });
+      bustCatalogCache();
       return NextResponse.json({ ok: true });
     }
     await updateAgencyClient({
@@ -63,6 +65,7 @@ export async function POST(
       clientId,
       client: body,
     });
+    bustCatalogCache();
     return NextResponse.json({ ok: true });
   } catch (error) {
     if (error instanceof AppError) {

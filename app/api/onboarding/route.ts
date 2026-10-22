@@ -4,6 +4,7 @@ import { createClient } from "@/lib/supabase/server";
 import { AppError, toErrorCode, toStatusCode, toUserMessage } from "@/lib/errors";
 import { parseBody } from "@/lib/validation";
 import { ensurePersonalWorkspace } from "@/lib/services/workspace";
+import { bustCatalogCache } from "@/lib/services/catalog-tables";
 import {
   applyCsvGrouping,
   applyGrouping,
@@ -81,6 +82,7 @@ export async function POST(request: Request) {
 
     if (body.action === "progress") {
       await saveOnboardingStep(workspaceId, user.id, body.step);
+      bustCatalogCache();
       return NextResponse.json({ ok: true });
     }
     if (body.action === "grouping") {
@@ -103,6 +105,7 @@ export async function POST(request: Request) {
     }
     if (body.action === "create-group") {
       await createLocationGroup({ workspaceId, userId: user.id, name: body.name });
+      bustCatalogCache();
       return NextResponse.json({ ok: true });
     }
     if (body.action === "rename-group") {
@@ -112,6 +115,7 @@ export async function POST(request: Request) {
         groupId: body.groupId,
         name: body.name,
       });
+      bustCatalogCache();
       return NextResponse.json({ ok: true });
     }
     if (body.action === "merge-groups") {
@@ -121,6 +125,7 @@ export async function POST(request: Request) {
         sourceId: body.sourceId,
         targetId: body.targetId,
       });
+      bustCatalogCache();
       return NextResponse.json({ ok: true });
     }
     if (body.action === "move-location") {
@@ -131,6 +136,7 @@ export async function POST(request: Request) {
         groupId: body.groupId,
         confirmHold: body.confirmHold === true,
       });
+      bustCatalogCache();
       return NextResponse.json({ ok: true });
     }
     if (body.action === "tone") {
@@ -140,9 +146,11 @@ export async function POST(request: Request) {
         voice: body.voice,
         note: body.note,
       });
+      bustCatalogCache();
       return NextResponse.json({ ok: true });
     }
     await completeOnboarding(workspaceId, user.id);
+    bustCatalogCache();
     return NextResponse.json({ ok: true });
   } catch (error) {
     const status = error instanceof AppError ? error.statusCode : toStatusCode(error);

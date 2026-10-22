@@ -46,6 +46,7 @@ async function reviewApiFetch<T>(url: string, accessToken: string): Promise<T> {
     response = await fetch(url, {
       headers: { Authorization: `Bearer ${accessToken}` },
       cache: "no-store",
+      signal: AbortSignal.timeout(15_000),
     });
   } catch (cause) {
     // Network-level failure — no HTTP response
@@ -125,6 +126,7 @@ export class GoogleReviewService {
         },
         body: JSON.stringify({ comment }),
         cache: "no-store",
+        signal: AbortSignal.timeout(15_000),
       });
     } catch (cause) {
       throw new GoogleApiError(
@@ -172,6 +174,7 @@ export class GoogleReviewService {
         method: "DELETE",
         headers: { Authorization: `Bearer ${accessToken}` },
         cache: "no-store",
+        signal: AbortSignal.timeout(15_000),
       });
     } catch (cause) {
       throw new GoogleApiError(

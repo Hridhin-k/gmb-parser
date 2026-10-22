@@ -6,6 +6,7 @@ import { draftsPausedForLocation } from "@/lib/services/hierarchy";
 import type { Json } from "@/lib/types/supabase";
 import { AppError, AuthorizationError, ValidationError } from "@/lib/errors";
 import { UNASSIGNED_CLIENT_MARKER } from "@/lib/services/unassigned-client";
+import { loadCatalogTables } from "@/lib/services/catalog-tables";
 import { workspaceGrant } from "@/lib/access";
 import { getMemberRole } from "@/lib/services/workspace";
 import {
@@ -72,14 +73,15 @@ export async function loadReplySettings(workspaceId: string, target: SettingsTar
   overrides: number;
 }> {
   const admin = createAdminClient();
-  const [workspaceRow, scopeRows, templates, groups, clients, locations] = await Promise.all([
+  const [workspaceRow, scopeRows, templates, catalog] = await Promise.all([
     admin.from("grm_reply_settings").select("tone, automation").eq("workspace_id", workspaceId).maybeSingle(),
     admin.from("grm_scope_settings").select("client_id, group_id, location_id, tone, automation").eq("workspace_id", workspaceId),
     admin.from("grm_reply_templates").select("id, name, body, client_id, group_id, location_id").eq("workspace_id", workspaceId).order("name"),
-    admin.from("grm_groups").select("id, name, parent_id, client_id").eq("workspace_id", workspaceId),
-    admin.from("grm_clients").select("id, name, notes").eq("workspace_id", workspaceId),
-    admin.from("grm_google_locations").select("id, location_title, client_id, group_id").eq("workspace_id", workspaceId),
+    loadCatalogTables(workspaceId),
   ]);
+  const groups = { data: catalog.groups };
+  const clients = { data: catalog.clients };
+  const locations = { data: catalog.locations };
   if (scopeRows.error) throw new AppError("Could not load settings.", "DB_ERROR", 500);
   const rows = (scopeRows.data ?? []) as ScopeRow[];
   const groupById = new Map((groups.data ?? []).map((group) => [group.id, group]));

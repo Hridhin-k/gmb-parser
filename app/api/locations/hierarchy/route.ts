@@ -4,6 +4,7 @@ import { createClient } from "@/lib/supabase/server";
 import { toStatusCode, toUserMessage } from "@/lib/errors";
 import { parseBody } from "@/lib/validation";
 import { actingUser } from "@/lib/services/reporting";
+import { bustCatalogCache } from "@/lib/services/catalog-tables";
 import {
   createHierarchyGroup,
   mergeHierarchyGroups,
@@ -103,6 +104,7 @@ export async function POST(request: Request) {
         locationIds: body.locationIds,
         managerUserId: body.managerUserId,
       });
+      bustCatalogCache();
       return NextResponse.json({ ok: true, id });
     } else if (body.action === "rename-group") {
       await renameHierarchyGroup({ ...base, groupId: body.groupId, name: body.name });
@@ -128,6 +130,7 @@ export async function POST(request: Request) {
     } else {
       await reviewDuplicate({ ...base, locationId: body.locationId, duplicate: body.duplicate });
     }
+    bustCatalogCache();
     return NextResponse.json({ ok: true });
   } catch (error) {
     return NextResponse.json({ error: toUserMessage(error) }, { status: toStatusCode(error) });

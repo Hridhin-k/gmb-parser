@@ -5,6 +5,7 @@ import { parseDashboardFacts, type DashboardFacts } from "@/lib/metrics";
 import { applyStarBreakdown } from "@/lib/star-breakdown";
 import { loadStarBreakdown } from "@/lib/services/star-breakdown";
 import { UNASSIGNED_CLIENT_MARKER } from "@/lib/services/unassigned-client";
+import { loadCatalogTables } from "@/lib/services/catalog-tables";
 import { locationDisplayName } from "@/lib/ui/location-place";
 
 export interface DashboardScope {
@@ -58,6 +59,28 @@ async function loadFacts(
   return parseDashboardFacts(data);
 }
 
+/**
+ * Facts for one window (current + previous) without the catalog, policy,
+ * connections or star-breakdown work of a full dashboard context. For
+ * callers that already hold a context and only need a second window's
+ * totals (e.g. the mobile 7-day brief inside a 30-day view).
+ */
+export async function loadDashboardWindowFacts(
+  workspaceId: string,
+  scope: DashboardScope,
+  range: DateRange,
+  timezone: string
+): Promise<{ facts: DashboardFacts; previous: DashboardFacts | null }> {
+  const previousWindow = previousDateRange(range);
+  const [facts, previous] = await Promise.all([
+    loadFacts(workspaceId, scope, range.start?.toISOString() ?? null, range.end?.toISOString() ?? null, timezone),
+    previousWindow
+      ? loadFacts(workspaceId, scope, previousWindow.start.toISOString(), previousWindow.end.toISOString(), timezone)
+      : Promise.resolve(null),
+  ]);
+  return { facts, previous };
+}
+
 export async function getDashboardContext(
   workspaceId: string,
   range: DateRange,
@@ -72,9 +95,7 @@ export async function getDashboardContext(
   const endIso = range.end?.toISOString() ?? null;
   const [
     policy,
-    clientsResult,
-    groupsResult,
-    locationsResult,
+    catalog,
     connectionsResult,
     pausesResult,
     factsDefault,
@@ -85,20 +106,7 @@ export async function getDashboardContext(
       .select("timezone")
       .eq("workspace_id", workspaceId)
       .maybeSingle(),
-    admin
-      .from("grm_clients")
-      .select("id, name, notes")
-      .eq("workspace_id", workspaceId)
-      .eq("is_active", true)
-      .or(`notes.is.null,notes.neq.${UNASSIGNED_CLIENT_MARKER}`)
-      .order("name"),
-    admin.from("grm_groups").select("id, name, parent_id").eq("workspace_id", workspaceId).order("name"),
-    admin
-      .from("grm_google_locations")
-      .select(
-        "id, client_id, group_id, location_title, store_code, address_formatted, is_active, hold_reason, voice_of_merchant, last_synced_at"
-      )
-      .eq("workspace_id", workspaceId),
+    loadCatalogTables(workspaceId),
     admin.from("grm_google_connections").select("status").eq("workspace_id", workspaceId),
     admin
       .from("grm_autoreply_pauses")
@@ -112,21 +120,18 @@ export async function getDashboardContext(
   ]);
 
   if (policy.error) throw new Error(`Failed to load dashboard settings: ${policy.error.message}`);
-  if (clientsResult.error) throw new Error(`Failed to load clients: ${clientsResult.error.message}`);
-  if (groupsResult.error) throw new Error(`Failed to load groups: ${groupsResult.error.message}`);
-  if (locationsResult.error) throw new Error(`Failed to load locations: ${locationsResult.error.message}`);
   if (connectionsResult.error) throw new Error(`Failed to load Google connections: ${connectionsResult.error.message}`);
   if (pausesResult.error) throw new Error(`Failed to load autoreply pauses: ${pausesResult.error.message}`);
 
   const timezone = ESCALATION_TIMEZONES.some((zone) => zone.id === policy.data?.timezone)
     ? policy.data!.timezone
     : defaultTimezone;
-  const clients = (clientsResult.data ?? [])
+  const clients = catalog.clients
     .filter((client) => client.notes !== UNASSIGNED_CLIENT_MARKER)
     .map((client) => ({ id: client.id, name: client.name }));
   const clientNames = new Map(clients.map((client) => [client.id, client.name]));
-  const parentByGroup = new Map((groupsResult.data ?? []).map((group) => [group.id, group.parent_id]));
-  const scopedLocations = (locationsResult.data ?? []).filter((location) => {
+  const parentByGroup = new Map(catalog.groups.map((group) => [group.id, group.parent_id]));
+  const scopedLocations = catalog.locations.filter((location) => {
     if (!location.client_id || !clientNames.has(location.client_id)) return false;
     if (scope.locationId && location.id !== scope.locationId) return false;
     if (scope.clientId && location.client_id !== scope.clientId) return false;
@@ -162,7 +167,7 @@ export async function getDashboardContext(
           starTask,
         ]);
   const facts = starMaps ? applyStarBreakdown(factsBase, starMaps) : factsBase;
-  const locations: DashboardLocation[] = (locationsResult.data ?? [])
+  const locations: DashboardLocation[] = catalog.locations
     .filter((location) => location.client_id && clientNames.has(location.client_id))
     .map((location) => ({
       id: location.id,
@@ -188,7 +193,7 @@ export async function getDashboardContext(
     facts,
     previous,
     clients,
-    groups: groupsResult.data ?? [],
+    groups: catalog.groups.map((group) => ({ id: group.id, name: group.name })),
     locations,
     expiredConnections: connections.filter((row) => row.status === "expired").length,
     revokedConnections: connections.filter((row) => row.status === "revoked").length,

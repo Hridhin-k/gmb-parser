@@ -575,7 +575,7 @@ export async function listGlobalUsers(
     if (!url || !key) throw new AppError("Could not list users.", "DB_ERROR", 500);
     const response = await fetch(
       `${url}/auth/v1/admin/users?filter=${encodeURIComponent(needle)}&page=${currentPage}&per_page=${USER_PAGE_SIZE}`,
-      { headers: { Authorization: `Bearer ${key}`, apikey: key }, cache: "no-store" }
+      { headers: { Authorization: `Bearer ${key}`, apikey: key }, cache: "no-store", signal: AbortSignal.timeout(10_000) }
     );
     if (!response.ok) throw new AppError("Could not list users.", "DB_ERROR", 500);
     total = Number(response.headers.get("x-total-count") ?? 0) || 0;

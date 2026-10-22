@@ -281,12 +281,6 @@ interface AgencyCounts {
   events: Map<string, number>;
 }
 
-function isMissingAgencyCounts(error: { code?: string; message?: string } | null): boolean {
-  if (!error) return false;
-  const message = (error.message ?? "").toLowerCase();
-  return error.code === "PGRST202" || error.code === "42883" || message.includes("grm_agency_counts");
-}
-
 function countRows(rows: Array<{ location_id?: string; client_id?: string; n?: number | string }> | null | undefined, key: "location_id" | "client_id"): Map<string, number> {
   const map = new Map<string, number>();
   for (const row of rows ?? []) {
@@ -298,9 +292,10 @@ function countRows(rows: Array<{ location_id?: string; client_id?: string; n?: n
 
 /**
  * Per-location / per-client activity counts for the portfolio. Aggregated in
- * Postgres (`grm_agency_counts`) so the page never downloads every reply,
- * event, escalation and review id in the workspace. Until that migration is
- * applied, falls back to the original row reads.
+ * Postgres (`grm_agency_counts`, applied in production) so the page never
+ * downloads every reply, event, escalation and review id in the workspace.
+ * There is deliberately no row-download fallback: if the RPC is missing the
+ * page must fail loudly, not silently pull the whole reviews table.
  */
 async function loadAgencyCounts(
   admin: ReturnType<typeof createAdminClient>,
@@ -312,71 +307,18 @@ async function loadAgencyCounts(
     p_start: range.start?.toISOString() ?? null,
     p_end: range.end?.toISOString() ?? null,
   });
-  if (!result.error) {
-    const data = (result.data ?? {}) as {
-      published?: Array<{ location_id: string; n: number }>;
-      approvals?: Array<{ location_id: string; n: number }>;
-      escalations?: Array<{ location_id: string; n: number }>;
-      events?: Array<{ client_id: string; n: number }>;
-    };
-    return {
-      published: countRows(data.published, "location_id"),
-      approvals: countRows(data.approvals, "location_id"),
-      escalations: countRows(data.escalations, "location_id"),
-      events: countRows(data.events, "client_id"),
-    };
-  }
-  if (!isMissingAgencyCounts(result.error)) throw new Error("Failed to load client activity");
-
-  // Pre-migration fallback: the original row reads.
-  let publishedQuery = admin
-    .from("grm_review_replies")
-    .select("review_id")
-    .eq("workspace_id", workspaceId)
-    .eq("status", "published");
-  let eventQuery = admin.from("grm_usage_events").select("client_id").eq("workspace_id", workspaceId);
-  if (range.start) {
-    publishedQuery = publishedQuery.gte("published_at", range.start.toISOString());
-    eventQuery = eventQuery.gte("occurred_at", range.start.toISOString());
-  }
-  if (range.end) {
-    publishedQuery = publishedQuery.lt("published_at", range.end.toISOString());
-    eventQuery = eventQuery.lt("occurred_at", range.end.toISOString());
-  }
-  const [escalationsResult, approvalsResult, eventsResult, publishedResult, reviewsResult] = await Promise.all([
-    admin.from("grm_escalations").select("location_id").eq("workspace_id", workspaceId).is("resolved_at", null),
-    admin.from("grm_review_replies").select("review_id").eq("workspace_id", workspaceId).eq("client_approval", "requested"),
-    eventQuery,
-    publishedQuery,
-    admin.from("grm_reviews").select("id, location_id").eq("workspace_id", workspaceId).is("missing_on_google_at", null),
-  ]);
-  if (escalationsResult.error || approvalsResult.error || eventsResult.error || publishedResult.error || reviewsResult.error) {
-    throw new Error("Failed to load client activity");
-  }
-  const reviewLocation = new Map((reviewsResult.data ?? []).map((review) => [review.id, review.location_id]));
-  const countByLocation = (ids: string[]) => {
-    const counts = new Map<string, number>();
-    for (const id of ids) {
-      const locationId = reviewLocation.get(id);
-      if (!locationId) continue;
-      counts.set(locationId, (counts.get(locationId) ?? 0) + 1);
-    }
-    return counts;
+  if (result.error) throw new Error("Failed to load client activity");
+  const data = (result.data ?? {}) as {
+    published?: Array<{ location_id: string; n: number }>;
+    approvals?: Array<{ location_id: string; n: number }>;
+    escalations?: Array<{ location_id: string; n: number }>;
+    events?: Array<{ client_id: string; n: number }>;
   };
-  const escalations = new Map<string, number>();
-  for (const row of escalationsResult.data ?? []) {
-    escalations.set(row.location_id, (escalations.get(row.location_id) ?? 0) + 1);
-  }
-  const events = new Map<string, number>();
-  for (const row of eventsResult.data ?? []) {
-    if (!row.client_id) continue;
-    events.set(row.client_id, (events.get(row.client_id) ?? 0) + 1);
-  }
   return {
-    published: countByLocation((publishedResult.data ?? []).map((row) => row.review_id)),
-    approvals: countByLocation((approvalsResult.data ?? []).map((row) => row.review_id)),
-    escalations,
-    events,
+    published: countRows(data.published, "location_id"),
+    approvals: countRows(data.approvals, "location_id"),
+    escalations: countRows(data.escalations, "location_id"),
+    events: countRows(data.events, "client_id"),
   };
 }
 

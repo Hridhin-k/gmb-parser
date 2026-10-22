@@ -5,6 +5,7 @@ import { AuditService } from "@/lib/services/audit";
 import { AppError } from "@/lib/errors";
 import { logger } from "@/lib/logger";
 import { ensurePersonalWorkspace } from "@/lib/services/workspace";
+import { bustCatalogCache } from "@/lib/services/catalog-tables";
 
 /**
  * POST /api/google/locations/reset
@@ -35,6 +36,7 @@ export async function POST() {
       metadata: { reset } as Record<string, unknown>,
     });
 
+    bustCatalogCache();
     return NextResponse.json({ success: true, reset });
   } catch (error) {
     if (error instanceof AppError) {

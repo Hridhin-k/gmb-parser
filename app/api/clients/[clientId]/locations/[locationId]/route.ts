@@ -6,6 +6,7 @@ import { AppError } from "@/lib/errors";
 import { logger } from "@/lib/logger";
 import { validateId } from "@/lib/validation";
 import { ensurePersonalWorkspace } from "@/lib/services/workspace";
+import { bustCatalogCache } from "@/lib/services/catalog-tables";
 
 interface RouteParams {
   params: Promise<{ clientId: string; locationId: string }>;
@@ -52,6 +53,7 @@ export async function PUT(_request: Request, { params }: RouteParams) {
       metadata: { clientId } as Record<string, unknown>,
     });
 
+    bustCatalogCache();
     return NextResponse.json({ success: true });
   } catch (error) {
     if (error instanceof AppError && error.code === "NOT_FOUND") {
@@ -102,6 +104,7 @@ export async function DELETE(_request: Request, { params }: RouteParams) {
       entityId: locationId,
     });
 
+    bustCatalogCache();
     return NextResponse.json({ success: true });
   } catch {
     logger.error("location.disconnect.failed", {

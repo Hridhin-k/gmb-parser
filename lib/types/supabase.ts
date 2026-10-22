@@ -2541,6 +2541,45 @@ export type Database = {
         }
         Returns: Json
       }
+      grm_overview_signals: {
+        Args: {
+          p_workspace_id: string
+          p_location_ids: string[]
+          p_start?: string | null
+          p_end?: string | null
+          p_recent_start?: string | null
+          p_recent_end?: string | null
+          p_now?: string
+        }
+        Returns: Json
+      }
+      grm_analytics_summary: {
+        Args: {
+          p_workspace_id: string
+          p_location_ids: string[]
+          p_start?: string | null
+          p_end?: string | null
+          p_include_auto?: boolean
+        }
+        Returns: Json
+      }
+      grm_analytics_slice: {
+        Args: {
+          p_workspace_id: string
+          p_location_ids: string[]
+          p_start?: string | null
+          p_end?: string | null
+          p_onboarding_completed_at?: string | null
+        }
+        Returns: Json
+      }
+      grm_shell_profile_attention: {
+        Args: {
+          p_workspace_id: string
+          p_location_ids: string[]
+        }
+        Returns: Json
+      }
       grm_insight_dashboard: {
         Args: {
           p_workspace_id: string
