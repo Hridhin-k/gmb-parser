@@ -10,11 +10,14 @@ import {
 } from "@/lib/review-inbox";
 import { replyActivityLabel } from "@/lib/reply-activity";
 import { orIlikeAny } from "@/lib/postgrest-search";
+import { statusOrFilter } from "@/lib/review-filter-params";
 import { groupIdsInScope } from "@/lib/hierarchy";
 
 export interface DashboardFilters {
-  filter: string;
-  rating?: number;
+  /** Selected status keys; empty = all statuses. */
+  filters: string[];
+  /** Selected star ratings; empty = any (unless ratingBucket is set). */
+  ratings?: number[];
   ratingBucket?: "negative" | "positive" | "escalation";
   q: string;
   clientId: string;
@@ -25,10 +28,10 @@ export interface DashboardFilters {
   hasComment?: boolean;
   /** has = written text, none = rating only. */
   text?: "has" | "none";
-  language?: string;
-  theme?: string;
-  /** A member id, or "unassigned". */
-  assignee?: string;
+  languages?: string[];
+  themes?: string[];
+  /** Member ids and/or "unassigned". */
+  assignees?: string[];
   groupId?: string;
   sort?: InboxSort;
   page: number;
@@ -284,7 +287,12 @@ export async function getDashboardData(
   if (since) reviewQuery = reviewQuery.gte("review_create_time", since);
   if (until) reviewQuery = reviewQuery.lt("review_create_time", until);
 
-  switch (filters.filter) {
+  const statusList = filters.filters ?? [];
+  const multiStatusOr = statusList.length > 1 ? statusOrFilter(statusList) : null;
+  if (multiStatusOr) {
+    reviewQuery = reviewQuery.or(multiStatusOr);
+  } else {
+    switch (statusList[0]) {
     case "unanswered":
       reviewQuery = reviewQuery.eq("reply_status", "none");
       break;
@@ -319,17 +327,29 @@ export async function getDashboardData(
       break;
     default:
       break;
+    }
   }
 
-  if (filters.language) reviewQuery = reviewQuery.eq("review_language", filters.language);
-  if (filters.theme) reviewQuery = reviewQuery.eq("complaint_theme", filters.theme);
-  if (filters.assignee === "unassigned") reviewQuery = reviewQuery.is("assigned_to", null);
-  else if (filters.assignee && /^[0-9a-f-]{36}$/i.test(filters.assignee)) {
-    reviewQuery = reviewQuery.eq("assigned_to", filters.assignee);
+  if (filters.languages?.length) {
+    reviewQuery = reviewQuery.in("review_language", filters.languages);
+  }
+  if (filters.themes?.length) {
+    reviewQuery = reviewQuery.in("complaint_theme", filters.themes);
+  }
+  const assigneeIds = (filters.assignees ?? []).filter((id) => /^[0-9a-f-]{36}$/i.test(id));
+  const wantUnassigned = (filters.assignees ?? []).includes("unassigned");
+  if (assigneeIds.length > 0 && wantUnassigned) {
+    reviewQuery = reviewQuery.or(
+      `assigned_to.in.(${assigneeIds.join(",")}),assigned_to.is.null`
+    );
+  } else if (assigneeIds.length > 0) {
+    reviewQuery = reviewQuery.in("assigned_to", assigneeIds);
+  } else if (wantUnassigned) {
+    reviewQuery = reviewQuery.is("assigned_to", null);
   }
 
-  if (filters.rating !== undefined) {
-    reviewQuery = reviewQuery.eq("star_rating", filters.rating);
+  if (filters.ratings?.length) {
+    reviewQuery = reviewQuery.in("star_rating", filters.ratings);
   } else if (filters.ratingBucket === "negative") {
     reviewQuery = reviewQuery.lte("star_rating", 2);
   } else if (filters.ratingBucket === "escalation") {

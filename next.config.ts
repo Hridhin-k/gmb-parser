@@ -26,10 +26,10 @@ const nextConfig: NextConfig = {
     optimizePackageImports: ["lucide-react", "date-fns", "@base-ui/react"],
     // Keep prefetched route payloads briefly so revisiting a page is instant
     // instead of re-rendering on the server every click. Server renders are
-    // cheap now (RPC aggregates), and 30s is short enough that counts never
-    // look stale for long.
+    // cheap now (RPC aggregates), and 2 minutes is short enough that counts
+    // never look stale for long.
     staleTimes: {
-      dynamic: 30,
+      dynamic: 120,
     },
   },
   async headers() {

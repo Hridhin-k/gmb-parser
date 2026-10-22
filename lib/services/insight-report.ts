@@ -16,6 +16,7 @@ import {
   computeReportCacheKey,
   computeScopeDataFingerprint,
   normaliseLocationIds,
+  reportRangeMatches,
   parseSynthesisResponse,
   synthesisPrompt,
   type SampleObservation,
@@ -104,6 +105,56 @@ export async function getReportById(workspaceId: string, reportId: string) {
     .eq("workspace_id", workspaceId)
     .maybeSingle();
   return data;
+}
+
+/**
+ * Display fallback: the most recent completed/partial report for the same
+ * scope whose stored window is the same preset (rolling windows drift a
+ * day at a time, so an exact cache-key hit fails from the next day on).
+ * The report is shown with its own generated date, never relabelled.
+ */
+export async function getLatestReportForScope(
+  workspaceId: string,
+  input: {
+    clientId: string | null;
+    groupId: string | null;
+    locationId: string | null;
+    locationIds: readonly string[];
+    rangeStart: string | null;
+    rangeEnd: string | null;
+  }
+) {
+  const admin = createAdminClient();
+  let query = admin
+    .from("grm_insight_reports")
+    .select("*")
+    .eq("workspace_id", workspaceId)
+    .in("status", ["completed", "partial"])
+    .order("created_at", { ascending: false })
+    .limit(10);
+  query = input.clientId ? query.eq("client_id", input.clientId) : query.is("client_id", null);
+  query = input.groupId ? query.eq("group_id", input.groupId) : query.is("group_id", null);
+  query = input.locationId ? query.eq("location_id", input.locationId) : query.is("location_id", null);
+  const { data } = await query;
+  const expectedLocations = normaliseLocationIds(input.locationIds).join(",");
+  for (const row of data ?? []) {
+    const storedLocations = normaliseLocationIds(
+      Array.isArray(row.location_ids) ? (row.location_ids as string[]) : []
+    ).join(",");
+    if (storedLocations !== expectedLocations) continue;
+    if (
+      reportRangeMatches(
+        {
+          rangeStart: (row.range_start as string | null) ?? null,
+          rangeEnd: (row.range_end as string | null) ?? null,
+        },
+        { rangeStart: input.rangeStart, rangeEnd: input.rangeEnd }
+      )
+    ) {
+      return row;
+    }
+  }
+  return null;
 }
 
 /**

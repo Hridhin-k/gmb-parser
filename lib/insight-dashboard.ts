@@ -44,6 +44,13 @@ function rows(value: unknown): Record<string, unknown>[] {
   return value.filter((item): item is Record<string, unknown> => !!item && typeof item === "object");
 }
 
+/** Display label for an insight topic id such as `wait_time`. */
+export function insightTopicLabel(topic: string): string {
+  const text = topic.replace(/_/g, " ").trim();
+  if (!text) return topic;
+  return text.replace(/\b\p{L}/gu, (letter) => letter.toUpperCase());
+}
+
 function topics(value: unknown): TopicCount[] {
   return rows(value).flatMap((row) => {
     if (typeof row.topic !== "string" || row.topic.length === 0) return [];

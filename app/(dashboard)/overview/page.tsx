@@ -6,6 +6,8 @@ import { PendingRegion, TransitionScope } from "@/components/transition-scope";
 import { dateRangeParams, parseDateRange } from "@/lib/date-range";
 import { buildAttention, reviewDrillHref } from "@/lib/metrics";
 import { buildOverviewBoard, overviewQueryKey, type BoardPlace } from "@/lib/overview-board";
+import { loadInsightDashboard } from "@/lib/services/insight-dashboard";
+import { getLatestReportForScope, getReportByCacheKey, reportCacheKey } from "@/lib/services/insight-report";
 import { loadOverviewSignals } from "@/lib/services/overview";
 import { getDashboardContext } from "@/lib/services/dashboard-metrics";
 import { getOnboardingGate } from "@/lib/services/onboarding";
@@ -41,10 +43,34 @@ export default async function OverviewPage({ searchParams }: OverviewPageProps) 
   const locationId = resolved.locationId;
   const range = parseDateRange(params, DEFAULT_RANGE);
   const scope = { clientId, groupId, locationId };
-  const [loaded, signals] = await Promise.all([
+  const start = range.start?.toISOString() ?? null;
+  const end = range.end?.toISOString() ?? null;
+  const insightScope = {
+    locationIds: resolved.locationIds,
+    clientId,
+    groupId,
+    locationId,
+    start,
+    end,
+  };
+  const [loaded, signals, insights, exactReport, latestReport] = await Promise.all([
     getDashboardContext(workspaceId, range, scope),
     loadOverviewSignals(workspaceId, resolved.locationIds, range),
+    loadInsightDashboard(workspaceId, { locationIds: resolved.locationIds, start, end }),
+    getReportByCacheKey(workspaceId, reportCacheKey(workspaceId, insightScope)),
+    getLatestReportForScope(workspaceId, {
+      clientId,
+      groupId,
+      locationId,
+      locationIds: resolved.locationIds,
+      rangeStart: start,
+      rangeEnd: end,
+    }),
   ]);
+  const savedReport = [exactReport, latestReport].find(
+    (row) => row && (row.status === "completed" || row.status === "partial")
+  );
+  const severeLead = insights.severeIncidents[0];
 
   const places = new Map(loaded.locations.map((location) => [location.id, location]));
   const groupNames = new Map(loaded.groups.map((group) => [group.id, group.name]));
@@ -79,6 +105,10 @@ export default async function OverviewPage({ searchParams }: OverviewPageProps) 
   if (clientId) analytics.set("client", clientId);
   if (groupId) analytics.set("group", groupId);
   if (locationId) analytics.set("location", locationId);
+  const insightParams = new URLSearchParams(dateRangeParams(range, DEFAULT_RANGE));
+  if (clientId) insightParams.set("client", clientId);
+  if (groupId) insightParams.set("group", groupId);
+  if (locationId) insightParams.set("location", locationId);
 
   const heldLocations = boardPlaces.filter((place) => places.get(place.id)?.holdReason).length;
   const inactiveLocations = boardPlaces.filter((place) => places.get(place.id)?.isActive === false).length;
@@ -122,8 +152,21 @@ export default async function OverviewPage({ searchParams }: OverviewPageProps) 
     facts: loaded.facts,
     previous: loaded.previous,
     places: boardPlaces,
-    themes: signals.themes,
-    themesTruncated: signals.themesTruncated,
+    complaints: signals.complaints,
+    topics: insights.aggregates.negative,
+    praise: insights.aggregates.positive,
+    staff: insights.aggregates.staffPraise,
+    severeCount: insights.severeCount,
+    severeExcerpt: severeLead?.evidenceExcerpt ?? null,
+    severeStars: severeLead ? severeLead.starRating : null,
+    reportInsights: savedReport?.insights ?? null,
+    reportStatus: savedReport ? String(savedReport.status) : null,
+    reportFinishedAt: typeof savedReport?.finished_at === "string" ? savedReport.finished_at : null,
+    periodLabel: range.label,
+    coverage: {
+      analysed: insights.counts.alreadyAnalysed,
+      ratingOnly: insights.counts.ratingOnly,
+    },
     links: {
       reviews,
       escalations,
@@ -135,6 +178,7 @@ export default async function OverviewPage({ searchParams }: OverviewPageProps) 
         return qs ? `/overview?${qs}` : "/overview";
       },
       analytics: analytics.size ? `/analytics?${analytics.toString()}` : "/analytics",
+      insights: insightParams.size ? `/insights?${insightParams.toString()}` : "/insights",
       reports: reports.size ? `/reports?${reports.toString()}` : "/reports",
       settings: "/settings",
     },
@@ -148,7 +192,7 @@ export default async function OverviewPage({ searchParams }: OverviewPageProps) 
       <div className="space-y-4">
         <PageHeader
           title="Overview"
-          description={[summary.eyebrow, summary.title, summary.trail].filter(Boolean).join(" · ")}
+          description={[summary.eyebrow, summary.title, summary.trail, range.label].filter(Boolean).join(" · ")}
         >
           <Link
             href={board.reportsHref}

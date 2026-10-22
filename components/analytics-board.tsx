@@ -22,6 +22,7 @@ import type { AnalyticsSlice } from "@/lib/services/analytics-slice";
 import { dateRangeParams, type DateRange } from "@/lib/date-range";
 import { average, monthBounds, reviewDrillHref, reviewWindow, share, type DashboardFacts, type StarCounts } from "@/lib/metrics";
 import { sumStarCounts } from "@/lib/star-breakdown";
+import { insightTopicLabel, type InsightDashboardData } from "@/lib/insight-dashboard";
 import { themeLabel } from "@/lib/review-inbox";
 import type { DashboardContext, DashboardScope } from "@/lib/services/dashboard-metrics";
 import { formatFriendlyDate } from "@/lib/format-date";
@@ -37,6 +38,13 @@ export const ANALYTICS_SECTIONS = [
 ] as const;
 
 export type AnalyticsSection = (typeof ANALYTICS_SECTIONS)[number]["id"];
+
+function insightsHref(query: string): string {
+  const params = new URLSearchParams(query);
+  for (const key of ["rankBy", "show", "compare", "section"]) params.delete(key);
+  const text = params.toString();
+  return text ? `/insights?${text}` : "/insights";
+}
 
 function percent(value: number | null) {
   return value === null ? "—" : `${Math.round(value * 100)}%`;
@@ -73,6 +81,7 @@ export function AnalyticsBoard({
   members,
   query,
   slice,
+  insights,
   rankBy,
   show,
   compare,
@@ -84,6 +93,7 @@ export function AnalyticsBoard({
   members: Array<{ userId: string; email: string }>;
   query: string;
   slice: AnalyticsSlice;
+  insights: InsightDashboardData;
   rankBy: RankBy;
   show: RankShow;
   compare: AnalyticsCompare;
@@ -135,12 +145,21 @@ export function AnalyticsBoard({
           parentOf={(groupId) => context.locations.find((location) => location.groupId === groupId)?.parentGroupId ?? null}
         />
       ) : null}
-      {section === "themes" ? <Themes facts={context.facts} groupNames={groupNames} drill={drill} /> : null}
+      {section === "themes" ? (
+        <Themes
+          facts={context.facts}
+          groupNames={groupNames}
+          names={names}
+          drill={drill}
+          insights={insights}
+          insightsHref={insightsHref(query)}
+        />
+      ) : null}
       {section === "profile" ? <Profile context={context} scope={scope} /> : null}
       {section === "automation" ? <Automation context={context} scope={scope} /> : null}
       {section === "team" ? <Team facts={context.facts} members={members} drill={drill} /> : null}
       <p className="text-xs leading-relaxed text-slate">
-        Negative share is the portion of reviews rated 1–3 stars. Reply rate counts a review once Google has a reply.
+        1–3 star share is the portion of reviews rated 1–3 stars. The month chart splits reviews into 4–5 stars, 3 stars, and 1–2 stars. Reply rate counts a review once Google has a reply.
         Average rating is the sum of stars divided by reviews. Reply rate is reviews with a Google reply divided by reviews.
         Median reply time is the middle elapsed time among reviews whose Google reply timestamp is present and not earlier
         than the review. Hour buckets are under 1 hour, 1–6 hours, 6–24 hours, and over 24 hours. Reviews without that
@@ -237,7 +256,7 @@ function Performance({
         />
         <Tile label="Reply rate" value={percent(current.replyRate)} tone="blue" href={drill({ filter: "published" })} />
         <Tile
-          label="1–3★ share"
+          label="1–3 star share"
           value={percent(current.negativeShare)}
           tone="rose"
           href={drill({ stars: "low" })}
@@ -617,6 +636,20 @@ function Leaderboard({
   );
 }
 
+function complaintHeat(ratio: number): { background: string; color: string } {
+  const clamped = Math.min(1, Math.max(0, ratio));
+  const green = [187, 247, 208];
+  const yellow = [250, 204, 21];
+  const red = [239, 68, 68];
+  const [from, to, blend] = clamped < 0.5 ? [green, yellow, clamped * 2] : [yellow, red, (clamped - 0.5) * 2];
+  const rgb = from.map((channel, index) => Math.round(channel + (to[index] - channel) * blend));
+  const luminance = (0.2126 * rgb[0] + 0.7152 * rgb[1] + 0.0722 * rgb[2]) / 255;
+  return {
+    background: `rgb(${rgb[0]}, ${rgb[1]}, ${rgb[2]})`,
+    color: luminance < 0.55 ? "#ffffff" : "#1e293b",
+  };
+}
+
 function ThemeMatrix({
   facts,
   groupNames,
@@ -643,7 +676,7 @@ function ThemeMatrix({
   const groups = [...new Set([...counts.keys()].map((key) => key.split("::")[0]))];
   const max = Math.max(1, ...counts.values());
   return (
-    <ChartCard title="Complaints by theme and group" hint="Darker cells are more 1–3 star reviews with that theme. A cell opens those reviews.">
+    <ChartCard title="Complaints by theme and group" hint="Cell color runs from green for fewer 1–3 star reviews with that theme, through yellow, to red for more. A cell opens those reviews.">
       {themes.length === 0 ? (
         <p className="text-sm text-slate">No 1–3 star reviews in this period.</p>
       ) : (
@@ -666,14 +699,14 @@ function ThemeMatrix({
                   {groups.map((groupId) => {
                     const key = `${groupId}::${theme}`;
                     const count = counts.get(key) ?? 0;
-                    const intensity = count === 0 ? 0.06 : 0.15 + (count / max) * 0.75;
+                    const heat = complaintHeat(count / max);
                     const groupName = groupId ? groupNames.get(groupId) ?? "Removed group" : "No group";
                     return (
                       <td key={groupId || "none"} className="group relative py-2 pr-3 hover:z-20">
                         <Link
                           href={drill({ ...(groupId ? { group: groupId, location: "" } : { location: "" }), theme, stars: "low" })}
-                          className="inline-flex min-w-9 justify-center rounded-md px-1.5 py-0.5 tabular-nums text-graphite"
-                          style={{ background: `rgba(15, 23, 42, ${intensity})` }}
+                          className="inline-flex min-w-9 justify-center rounded-md px-1.5 py-0.5 tabular-nums"
+                          style={{ background: heat.background, color: heat.color }}
                         >
                           {count}
                         </Link>
@@ -699,48 +732,51 @@ function ThemeMatrix({
 function Themes({
   facts,
   groupNames,
+  names,
   drill,
+  insights,
+  insightsHref,
 }: {
   facts: DashboardFacts;
   groupNames: Map<string, string>;
+  names: Map<string, string>;
   drill: (extra?: Record<string, string>) => string;
+  insights: InsightDashboardData;
+  insightsHref: string;
 }) {
-  const themes = [...new Set(facts.themeGroups.map((row) => row.theme))];
-  const groups = [...new Set(facts.groups.map((row) => row.groupId))];
-  const max = Math.max(1, ...facts.themeGroups.map((row) => row.count));
-  const themeTotals = new Map<string, number>();
-  const themeStarRows = new Map<string, Array<StarCounts | undefined>>();
-  for (const row of facts.themeMonths) {
-    themeTotals.set(row.theme, (themeTotals.get(row.theme) ?? 0) + row.count);
-    const list = themeStarRows.get(row.theme) ?? [];
-    list.push(row.stars);
-    themeStarRows.set(row.theme, list);
-  }
-  const ranked = [...themeTotals.entries()].sort((a, b) => b[1] - a[1]);
+  const topics = insights.aggregates.negative.filter((topic) => topic.count > 0);
+  const outlets = [...insights.aggregates.byOutlet].sort(
+    (a, b) => b.negative - a.negative || (names.get(a.locationId) ?? "").localeCompare(names.get(b.locationId) ?? "")
+  );
   const themeColors = [CHART.rose, CHART.orange, CHART.amber, CHART.indigo, CHART.blue, CHART.sky];
+  const analysed = insights.counts.alreadyAnalysed;
+  const ratingOnly = insights.counts.ratingOnly;
 
   return (
     <div className="space-y-4">
-      <div className="grid gap-4 lg:grid-cols-2">
-        <ChartCard title="Complaint themes" hint="1–3 star reviews tagged from the review text.">
-          {ranked.length === 0 ? (
-            <p className="text-sm text-slate">No 1–3 star reviews in this period.</p>
+      <div className="grid items-stretch gap-4 lg:grid-cols-2">
+        <ChartCard title="Complaint themes" hint="Negative topics from analysed review text. Counts are mentions, not 1–3 star reviews.">
+          {topics.length === 0 ? (
+            <p className="text-sm text-slate">No negative topics in analysed reviews for this period.</p>
           ) : (
             <HBarChart
-              max={Math.max(1, ...ranked.map(([, count]) => count))}
-              rows={ranked.map(([theme, count], index) => ({
-                label: themeLabel(theme) ?? theme,
-                value: count,
+              max={Math.max(1, ...topics.map((topic) => topic.count))}
+              rows={topics.map((topic, index) => ({
+                label: insightTopicLabel(topic.topic),
+                value: topic.count,
                 color: themeColors[index % themeColors.length],
-                href: drill({ theme, stars: "low" }),
-                stars: sumStarCounts(themeStarRows.get(theme) ?? []),
-                lines: ["1–3 star reviews with this theme"],
+                href: insightsHref,
+                suffix: topic.reviews > 0 ? `· ${topic.reviews.toLocaleString("en-US")} reviews` : undefined,
+                lines: ["Negative mentions in analysed reviews"],
               }))}
             />
           )}
+          <p className="mt-3 text-xs text-slate">
+            {`${analysed.toLocaleString("en-US")} reviews analysed${ratingOnly > 0 ? `. ${ratingOnly.toLocaleString("en-US")} reviews in this period have no text` : ""}.`}
+          </p>
         </ChartCard>
 
-        <ChartCard title="Group comparison" hint="Review volume and 1–3★ share by group.">
+        <ChartCard title="Group comparison" hint="Review volume and 1–3 star share by group.">
           {facts.groups.length === 0 ? (
             <p className="text-sm text-slate">No reviews in this period.</p>
           ) : (
@@ -750,11 +786,12 @@ function Themes({
                 .slice()
                 .sort((a, b) => b.reviews - a.reviews)
                 .map((group, index) => ({
+                  id: group.groupId ?? `none-${index}`,
                   label: group.groupId ? groupNames.get(group.groupId) ?? "Removed group" : "No group",
                   value: group.reviews,
                   color: themeColors[index % themeColors.length],
                   href: group.groupId ? drill({ group: group.groupId }) : drill(),
-                  suffix: `· ${percent(share(group.oneToThree, group.reviews))} 1–3★`,
+                  suffix: `· ${percent(share(group.oneToThree, group.reviews))} 1–3 stars`,
                   stars: group.stars,
                   lines: ["Reviews in this group"],
                 }))}
@@ -763,51 +800,33 @@ function Themes({
         </ChartCard>
       </div>
 
-      <ChartCard title="Complaint themes by group" hint="Darker cells mean more complaints with that theme.">
-        {themes.length === 0 ? (
-          <p className="text-sm text-slate">No 1–3 star reviews in this period.</p>
+      <ChartCard title="Negative mentions by outlet" hint="Negative observation mentions at each outlet. These are analysed mentions, not a count of 1–3 star reviews.">
+        {outlets.length === 0 ? (
+          <p className="text-sm text-slate">No analysed complaints in this period.</p>
         ) : (
           <div className="overflow-x-auto">
-            <table className="w-full min-w-[36rem] text-left text-sm">
+            <table className="w-full min-w-[32rem] text-left text-sm">
               <thead>
                 <tr className="text-xs text-slate">
-                  <th className="py-2 pr-3 font-medium">Group</th>
-                  {themes.map((theme) => (
-                    <th key={theme} className="py-2 pr-3 font-medium">
-                      {themeLabel(theme) ?? theme}
-                    </th>
-                  ))}
+                  <th className="py-2 pr-3 font-medium">Outlet</th>
+                  <th className="py-2 pr-3 font-medium">Negative mentions</th>
+                  <th className="py-2 pr-3 font-medium">Positive mentions</th>
+                  <th className="py-2 font-medium">Analysed reviews</th>
                 </tr>
               </thead>
               <tbody>
-                {groups.map((groupId) => (
-                  <tr key={groupId ?? "none"} className="border-t border-silver">
-                    <td className="py-2 pr-3 text-graphite">
-                      {groupId ? groupNames.get(groupId) ?? "Removed group" : "No group"}
+                {outlets.map((row) => (
+                  <tr key={row.locationId} className="border-t border-silver">
+                    <td className="py-2 pr-3">
+                      <Link href={drill({ location: row.locationId })} className="text-graphite hover:text-navy">
+                        {names.get(row.locationId) ?? "Removed outlet"}
+                      </Link>
                     </td>
-                    {themes.map((theme) => {
-                      const match = facts.themeGroups.find((row) => row.groupId === groupId && row.theme === theme);
-                      const count = match?.count ?? 0;
-                      const intensity = count === 0 ? 0 : 0.12 + (count / max) * 0.75;
-                      const groupName = groupId ? groupNames.get(groupId) ?? "Removed group" : "No group";
-                      return (
-                        <td key={theme} className="group relative py-2 pr-3 hover:z-20">
-                          <Link
-                            href={drill({ ...(groupId ? { group: groupId } : {}), theme, stars: "low" })}
-                            className="inline-flex min-w-9 justify-center rounded-md px-1.5 py-0.5 tabular-nums text-graphite"
-                            style={{ background: `rgba(244, 63, 94, ${intensity})` }}
-                          >
-                            {count}
-                          </Link>
-                          <ChartTip
-                            title={`${themeLabel(theme) ?? theme} · ${groupName}`}
-                            lines={[`${count.toLocaleString("en-US")} reviews`]}
-                            stars={match?.stars}
-                            className="bottom-full left-1/2 mb-1 -translate-x-1/2"
-                          />
-                        </td>
-                      );
-                    })}
+                    <td className="py-2 pr-3 tabular-nums">{row.negative.toLocaleString("en-US")}</td>
+                    <td className="py-2 pr-3 tabular-nums">{row.positive.toLocaleString("en-US")}</td>
+                    <td className="py-2 tabular-nums">
+                      {(insights.aggregates.outletReviews[row.locationId] ?? 0).toLocaleString("en-US")}
+                    </td>
                   </tr>
                 ))}
               </tbody>
