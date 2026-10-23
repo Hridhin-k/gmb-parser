@@ -15,11 +15,11 @@ describe("visibleNav", () => {
     ]);
   });
 
-  it("lets an admin see the portfolio and not billing", () => {
+  it("lets an admin see the portfolio and usage", () => {
     const items = visibleNav("admin");
     expect(items).toContain("clients");
     expect(items).toContain("team");
-    expect(items).not.toContain("usage");
+    expect(items).toContain("usage");
   });
 
   it("lets the owner see billing", () => {

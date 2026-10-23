@@ -5,7 +5,7 @@ import { readPageScope } from "@/lib/services/scope-catalog";
 import { reviewCsvLines, type ReviewExportFilters } from "@/lib/services/review-export";
 import { checkRateLimit, EXPORT_LIMIT } from "@/lib/rate-limit";
 import { logger } from "@/lib/logger";
-import { parseDateRange } from "@/lib/date-range";
+import { parseDateRange, parseFocusWindow } from "@/lib/date-range";
 import { parseRatingParams, parseStatusParams } from "@/lib/review-filter-params";
 
 export const maxDuration = 60;
@@ -17,7 +17,8 @@ function parseFilters(params: URLSearchParams): ReviewExportFilters {
   const location = params.get("location");
   const stars = params.get("stars");
   const rating = Number(params.get("rating"));
-  const range = parseDateRange(Object.fromEntries(params), "all");
+  const raw = Object.fromEntries(params);
+  const range = parseFocusWindow(raw) ?? parseDateRange(raw, "all");
 
   return {
     clientId: client && UUID.test(client) ? client : null,

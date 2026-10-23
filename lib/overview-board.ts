@@ -175,7 +175,10 @@ export interface OverviewBoard {
   attention: OverviewAttentionRow[];
   lowest: OverviewStoreRow[];
   rankedCount: number;
+  /** Complaint mentions, largest first. Same counts as Analytics → Complaint themes. */
   themes: OverviewThemeBar[];
+  /** Praise mentions, largest first. Ranked separately from complaints. */
+  praiseThemes: OverviewThemeBar[];
   themeMix: OverviewThemeMix[];
   sentiment: OverviewSentiment;
   staff: OverviewStaffMention[];
@@ -369,6 +372,21 @@ export function glanceInsights(raw: unknown): OverviewInsightGlance[] {
     if (!duplicate) cards.push(glanceCard("action", "Suggested next step", action, action.suggestedAction));
   }
   return cards;
+}
+
+const THEME_LIST_LIMIT = 6;
+
+function themeBars(topics: BoardTopic[], insightsHref: string): OverviewThemeBar[] {
+  return topics
+    .filter((topic) => topic.count > 0 && topic.topic.length > 0)
+    .sort((a, b) => b.count - a.count || a.topic.localeCompare(b.topic))
+    .slice(0, THEME_LIST_LIMIT)
+    .map((topic) => ({
+      label: insightTopicLabel(topic.topic),
+      count: topic.count,
+      reviews: topic.reviews,
+      href: insightsHref,
+    }));
 }
 
 function themeMix(positive: BoardTopic[], negative: BoardTopic[]): OverviewThemeMix[] {
@@ -572,7 +590,7 @@ export function buildOverviewBoard(input: {
         neutral,
         negative: month.negative,
         avgRating: average(month.ratingSum, month.reviews),
-        href: input.links.reviews({ range: "custom", from: bounds.from, to: bounds.to }),
+        href: input.links.reviews({ focusFrom: bounds.from, focusTo: bounds.to }),
         stars: month.stars,
       };
     }),
@@ -580,16 +598,8 @@ export function buildOverviewBoard(input: {
     attention: input.attention,
     lowest: multiple ? ranked.slice(0, 5) : [],
     rankedCount: ranked.length,
-    themes: input.topics
-      .filter((topic) => topic.count > 0 && topic.topic.length > 0)
-      .sort((a, b) => b.count - a.count || a.topic.localeCompare(b.topic))
-      .slice(0, 5)
-      .map((topic) => ({
-        label: insightTopicLabel(topic.topic),
-        count: topic.count,
-        reviews: topic.reviews,
-        href: input.links.insights,
-      })),
+    themes: themeBars(complaintsTopics, input.links.insights),
+    praiseThemes: themeBars(praise, input.links.insights),
     themeMix: mixed,
     sentiment: {
       positive: praise.reduce((sum, topic) => sum + topic.count, 0),

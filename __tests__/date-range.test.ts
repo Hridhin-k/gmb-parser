@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { dateRangeParams, parseDateRange, previousDateRange } from "@/lib/date-range";
+import { dateRangeParams, parseDateRange, parseFocusWindow, previousDateRange } from "@/lib/date-range";
 import { scopeFilterApply, timeFilterApply } from "@/lib/filter-apply";
 
 const now = new Date("2026-10-08T12:00:00Z");
@@ -55,6 +55,16 @@ describe("previousDateRange", () => {
 
   it("has nothing before all time", () => {
     expect(previousDateRange(parseDateRange({}, "all", now), now)).toBeNull();
+  });
+});
+
+describe("parseFocusWindow", () => {
+  it("opens one slice without becoming the navbar period", () => {
+    const focus = parseFocusWindow({ focusFrom: "2026-09-01", focusTo: "2026-09-30" });
+    expect(focus?.key).toBe("custom");
+    expect(focus?.from).toBe("2026-09-01");
+    expect(parseFocusWindow({})).toBeNull();
+    expect(parseDateRange({ range: "all" }, "12m", now).key).toBe("all");
   });
 });
 

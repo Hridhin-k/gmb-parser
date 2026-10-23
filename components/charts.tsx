@@ -185,7 +185,7 @@ export function HBarChart({
   );
 }
 
-/** Vertical stacked month bars with an optional average-rating line. */
+/** Vertical stacked month bars. Height is review count. */
 export function MonthVolumeChart({
   months,
 }: {
@@ -202,15 +202,11 @@ export function MonthVolumeChart({
 }) {
   const totals = months.map((month) => month.positive + month.neutral + month.negative);
   const max = Math.max(1, ...totals);
-  const ratings = months.flatMap((month) => (month.avgRating === null ? [] : [month.avgRating]));
-  const ratingMin = ratings.length ? Math.min(...ratings) : 1;
-  const ratingMax = ratings.length ? Math.max(...ratings) : 5;
-  const span = Math.max(0.2, ratingMax - ratingMin);
 
   return (
     <div>
       <div className="relative h-64">
-        <div className="flex h-full items-end gap-1.5 sm:gap-2" role="img" aria-label="Reviews by month">
+        <div className="flex h-full items-end gap-1.5 sm:gap-2" role="img" aria-label="Reviews by month. Bar height is review count.">
           {months.map((month, index) => {
             const total = month.positive + month.neutral + month.negative;
             const height = total === 0 ? 0 : Math.max(8, (total / max) * 62);
@@ -257,30 +253,6 @@ export function MonthVolumeChart({
             );
           })}
         </div>
-        {ratings.length > 1 ? (
-          <svg
-            className="pointer-events-none absolute inset-0 h-full w-full"
-            viewBox="0 0 100 100"
-            preserveAspectRatio="none"
-            aria-hidden
-          >
-            <polyline
-              fill="none"
-              stroke={CHART.blue}
-              strokeWidth="1.8"
-              vectorEffect="non-scaling-stroke"
-              points={months
-                .map((month, index) => {
-                  if (month.avgRating === null || totals[index] === 0) return null;
-                  const x = months.length === 1 ? 50 : (index / (months.length - 1)) * 100;
-                  const y = ((ratingMax - month.avgRating) / span) * 78 + 8;
-                  return `${x},${y}`;
-                })
-                .filter((point): point is string => point !== null)
-                .join(" ")}
-            />
-          </svg>
-        ) : null}
       </div>
       <div className="mt-2 flex gap-1.5 sm:gap-2">
         {months.map((month) => (
@@ -293,14 +265,16 @@ export function MonthVolumeChart({
         <LegendDot color={CHART.green} label="4–5★" />
         <LegendDot color={CHART.amber} label="3★" />
         <LegendDot color={CHART.rose} label="1–2★" />
-        <LegendDot color={CHART.blue} label="Avg rating" line />
       </div>
       {(() => {
         const m = monthlySeriesMetrics(
           months.map((month) => ({
             ...month,
-            // X labels repeat every year; metric labels must not ("Dec ’24", not "Dec").
-            label: /^\d{4}-\d{2}/.test(month.key) ? `${month.label} ’${month.key.slice(2, 4)}` : month.label,
+            // X labels that are only the month name need the year ("Dec" → "Dec ’24").
+            label:
+              /^\d{4}-\d{2}/.test(month.key) && !month.label.includes(month.key.slice(2, 4))
+                ? `${month.label} ’${month.key.slice(2, 4)}`
+                : month.label,
           }))
         );
         if (m.total === 0) return null;

@@ -125,6 +125,19 @@ export function parseDateRange(
   return { key: "all", from: "", to: "", start: null, end: null, label: "All time" };
 }
 
+/**
+ * A month bar or alert can open one slice of reviews without replacing the
+ * navbar period. `focusFrom` / `focusTo` are whole UTC days. Absent or
+ * invalid values mean "use the navbar period."
+ */
+export function parseFocusWindow(params: { focusFrom?: unknown; focusTo?: unknown }): DateRange | null {
+  const from = str(params.focusFrom);
+  const to = str(params.focusTo);
+  if (!ISO_DAY.test(from) && !ISO_DAY.test(to)) return null;
+  const parsed = parseDateRange({ range: "custom", from, to }, "all");
+  return parsed.key === "custom" ? parsed : null;
+}
+
 /** The same-length window immediately before `range`, for "vs previous" comparisons. */
 export function previousDateRange(range: DateRange, now: Date = new Date()): { start: Date; end: Date } | null {
   if (!range.start) return null;

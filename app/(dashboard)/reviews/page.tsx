@@ -12,6 +12,7 @@ import { FreshMetrics } from "@/components/fresh-metrics";
 import { PendingRegion, TransitionScope } from "@/components/transition-scope";
 import { ReviewList } from "@/components/review-list";
 import { PaginationBar } from "@/components/pagination-bar";
+import Link from "next/link";
 import { Download, MessageSquareText } from "lucide-react";
 import {
   validatePage,
@@ -24,7 +25,7 @@ import {
   serializeParamValues,
   splitParamValues,
 } from "@/lib/review-filter-params";
-import { dateRangeParams, parseDateRange } from "@/lib/date-range";
+import { dateRangeParams, parseDateRange, parseFocusWindow } from "@/lib/date-range";
 import { overviewQueryKey } from "@/lib/overview-board";
 
 interface ReviewsPageProps {
@@ -48,6 +49,8 @@ export default async function ReviewsPage({ searchParams }: ReviewsPageProps) {
   const clientParam = resolved.clientId ?? "";
   const locationParam = resolved.locationId ?? "";
   const range = parseDateRange(params, "all");
+  const focus = parseFocusWindow(params);
+  const window = focus ?? range;
   const hasRange = range.key !== "all";
   const hasComment = params.comment === "1" || params.comment === "true";
   const textParam = params.text === "0" || params.text === "none" ? "none" : params.text === "1" || params.text === "has" ? "has" : "";
@@ -87,8 +90,8 @@ export default async function ReviewsPage({ searchParams }: ReviewsPageProps) {
       q: searchParam,
       clientId: clientParam,
       locationId: locationParam,
-      since: range.start?.toISOString() ?? null,
-      until: range.end?.toISOString() ?? null,
+      since: window.start?.toISOString() ?? null,
+      until: window.end?.toISOString() ?? null,
       hasComment: hasComment || textParam === "has" || undefined,
       text: textParam || undefined,
       languages: languageParams.length > 0 ? languageParams : undefined,
@@ -127,9 +130,15 @@ export default async function ReviewsPage({ searchParams }: ReviewsPageProps) {
     group: groupParam,
     sort: sortParam !== "newest" ? sortParam : "",
     ...dateRangeParams(range, "all"),
+    focusFrom: focus?.from ?? "",
+    focusTo: focus?.to ?? "",
   })) {
     if (v) queryForPagination.set(k, v);
   }
+  const periodQuery = new URLSearchParams(queryForPagination);
+  periodQuery.delete("focusFrom");
+  periodQuery.delete("focusTo");
+  const periodHref = periodQuery.size ? `/reviews?${periodQuery.toString()}` : "/reviews";
 
   const hasAnyFilter =
     statusParams.length > 0 ||
@@ -139,6 +148,7 @@ export default async function ReviewsPage({ searchParams }: ReviewsPageProps) {
     !!clientParam ||
     !!locationParam ||
     hasRange ||
+    focus !== null ||
     hasComment ||
     !!textParam ||
     languageParams.length > 0 ||
@@ -201,6 +211,15 @@ export default async function ReviewsPage({ searchParams }: ReviewsPageProps) {
             { key: "answered", label: "Any reply" },
           ]}
         />
+
+        {focus ? (
+          <p className="text-sm text-slate">
+            This list is {focus.label}. The date above stays {range.label}.{" "}
+            <Link href={periodHref} className="font-medium text-ink underline">
+              Show the whole period
+            </Link>
+          </p>
+        ) : null}
 
         <FreshMetrics
           rendered={overviewQueryKey((key) => (Array.isArray(params[key]) ? params[key][0] : params[key]))}

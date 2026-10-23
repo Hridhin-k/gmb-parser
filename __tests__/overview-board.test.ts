@@ -270,6 +270,8 @@ describe("buildOverviewBoard", () => {
     expect(board.kpis.avgResponseHours).toBe(20);
     expect(board.kpis.previousAvgResponseHours).toBe(10);
     expect(board.sentiment).toEqual({ positive: 8, negative: 5 });
+    expect(board.praiseThemes[0]).toMatchObject({ label: "Staff", count: 6, reviews: 5 });
+    expect(board.themes[0]).toMatchObject({ label: "Staff", count: 4, reviews: 3 });
     expect(board.themeMix[0]).toMatchObject({ label: "Staff", positive: 6, negative: 4, total: 10 });
     expect(board.themeMix[0]?.share).toBeCloseTo(10 / 13);
     expect(board.staff.map((row) => row.name)).toEqual(["Asha", "Ravi"]);
