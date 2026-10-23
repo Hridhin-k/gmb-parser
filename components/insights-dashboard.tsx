@@ -155,58 +155,73 @@ export function SentimentTrend({ byMonth }: { byMonth: ObservationAggregates["by
   );
 }
 
-interface ThemeRow {
+interface RankedTheme {
   topic: string;
-  positive: number;
-  negative: number;
+  count: number;
   reviews: number;
 }
 
-export function TopThemes({ aggregates, limit = 7 }: { aggregates: ObservationAggregates; limit?: number }) {
-  const byTopic = new Map<string, ThemeRow>();
-  for (const e of aggregates.positive) {
-    const row = byTopic.get(e.topic) ?? { topic: e.topic, positive: 0, negative: 0, reviews: 0 };
-    row.positive += e.count;
-    row.reviews += e.reviews;
-    byTopic.set(e.topic, row);
+function rankedThemes(entries: RankedTheme[], limit: number): RankedTheme[] {
+  const byTopic = new Map<string, RankedTheme>();
+  for (const entry of entries) {
+    if (entry.count <= 0 || entry.topic.length === 0) continue;
+    const row = byTopic.get(entry.topic) ?? { topic: entry.topic, count: 0, reviews: 0 };
+    row.count += entry.count;
+    row.reviews += entry.reviews;
+    byTopic.set(entry.topic, row);
   }
-  for (const e of aggregates.negative) {
-    const row = byTopic.get(e.topic) ?? { topic: e.topic, positive: 0, negative: 0, reviews: 0 };
-    row.negative += e.count;
-    byTopic.set(e.topic, row);
-  }
-  const allRows = [...byTopic.values()].map((r) => ({ ...r, total: r.positive + r.negative }));
-  // Share is of ALL theme mentions, not just the rows displayed below —
-  // otherwise the top themes' percentages would always sum to ~100%.
-  const totalMentions = allRows.reduce((s, r) => s + r.total, 0);
-  const rows = allRows.sort((a, b) => b.total - a.total).slice(0, limit);
-  if (rows.length === 0) return <p className="mt-3 text-sm text-slate">No themes yet.</p>;
-  const max = Math.max(1, ...rows.map((r) => r.total));
+  return [...byTopic.values()]
+    .sort((a, b) => b.count - a.count || a.topic.localeCompare(b.topic))
+    .slice(0, limit);
+}
+
+function ThemeRankList({
+  title,
+  rows,
+  tone,
+}: {
+  title: string;
+  rows: RankedTheme[];
+  tone: "praise" | "complaint";
+}) {
+  if (rows.length === 0) return null;
+  const max = Math.max(1, ...rows.map((row) => row.count));
+  const bar = tone === "praise" ? "bg-emerald-500" : "bg-rose-400";
+  const kind = tone === "praise" ? "praise" : "complaint";
   return (
-    <ul className="mt-3 space-y-3">
-      {rows.map((row, i) => (
-        <li key={row.topic}>
-          <div className="flex items-baseline justify-between gap-2 text-sm">
-            <span className="flex items-center gap-2 text-graphite">
-              <span className="flex h-5 w-5 items-center justify-center rounded-full bg-paper text-[10px] font-semibold text-slate">
-                {i + 1}
+    <div>
+      <p className="text-xs font-medium uppercase tracking-wide text-slate">{title}</p>
+      <ul className="mt-2 space-y-2.5">
+        {rows.map((row) => (
+          <li key={row.topic}>
+            <div className="flex items-baseline justify-between gap-2 text-sm">
+              <span className="capitalize text-graphite">{topicLabel(row.topic)}</span>
+              <span className="text-right text-xs text-slate">
+                {row.count.toLocaleString()} {kind} {row.count === 1 ? "mention" : "mentions"}
               </span>
-              <span className="capitalize">{topicLabel(row.topic)}</span>
-            </span>
-            <span className="text-xs text-slate">
-              {row.total.toLocaleString()} · {totalMentions > 0 ? Math.round((row.total / totalMentions) * 100) : 0}% of all mentions
-            </span>
-          </div>
-          <div className="mt-1 flex h-2 overflow-hidden rounded-full bg-paper" aria-hidden="true">
-            <div className="bg-emerald-500" style={{ width: `${(row.positive / max) * 100}%` }} />
-            <div className="bg-rose-400" style={{ width: `${(row.negative / max) * 100}%` }} />
-          </div>
-          <p className="mt-0.5 text-[11px] text-slate">
-            {row.positive.toLocaleString()} praise · {row.negative.toLocaleString()} complaints
-          </p>
-        </li>
-      ))}
-    </ul>
+            </div>
+            <div className="mt-1 h-1.5 overflow-hidden rounded-full bg-paper" aria-hidden="true">
+              <div className={`h-full ${bar}`} style={{ width: `${(row.count / max) * 100}%` }} />
+            </div>
+          </li>
+        ))}
+      </ul>
+    </div>
+  );
+}
+
+export function TopThemes({ aggregates, limit = 5 }: { aggregates: ObservationAggregates; limit?: number }) {
+  const praise = rankedThemes(aggregates.positive, limit);
+  const complaints = rankedThemes(aggregates.negative, limit);
+  if (praise.length === 0 && complaints.length === 0) return <p className="mt-3 text-sm text-slate">No themes yet.</p>;
+  return (
+    <div className="mt-3 space-y-4">
+      <ThemeRankList title="Most praised" rows={praise} tone="praise" />
+      <ThemeRankList title="Complaint themes" rows={complaints} tone="complaint" />
+      <p className="text-xs text-slate">
+        Ranked separately. Complaint counts match Analytics. A mention is one topic in analysed text, not a star rating.
+      </p>
+    </div>
   );
 }
 

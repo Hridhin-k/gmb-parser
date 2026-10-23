@@ -92,6 +92,8 @@ export function GlobalFilters({ catalog, showDate = true }: { catalog: ScopeCata
       locationId: shownRequest.locationId || null,
     });
     params.delete("page");
+    params.delete("focusFrom");
+    params.delete("focusTo");
     if (showDate) {
       params.delete("range");
       params.delete("from");

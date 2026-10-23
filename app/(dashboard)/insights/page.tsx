@@ -501,7 +501,7 @@ export default async function InsightsPage({ searchParams }: InsightsPageProps) 
           <SectionCard title="Sentiment trend" hint="observations per month" className="lg:col-span-2">
             <SentimentTrend byMonth={aggregates.byMonth} />
           </SectionCard>
-          <SectionCard title="Top review themes" hint="praise vs complaints">
+          <SectionCard title="Top review themes" hint="praise and complaints ranked separately">
             <TopThemes aggregates={aggregates} />
           </SectionCard>
           <SectionCard title="Location performance" hint="share of positive observations" className="lg:col-span-2">

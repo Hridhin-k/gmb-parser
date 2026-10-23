@@ -140,9 +140,8 @@ export default async function OverviewPage({ searchParams }: OverviewPageProps) 
         href: reviews({
           location: place.id,
           stars: "low",
-          range: "custom",
-          from: signals.recentNegative.fromDay,
-          to: signals.recentNegative.toDay,
+          focusFrom: signals.recentNegative.fromDay,
+          focusTo: signals.recentNegative.toDay,
         }),
       });
     }

@@ -4,7 +4,7 @@ import { formatHours } from "@/lib/analytics-metrics";
 import { HBarChart, MonthVolumeChart, STAR_COLORS } from "@/components/charts";
 import { SentimentDonut } from "@/components/insights-dashboard";
 import { formatFriendlyDateTime } from "@/lib/format-date";
-import type { OverviewBoard, OverviewInsightGlance, OverviewStoreRow } from "@/lib/overview-board";
+import type { OverviewBoard, OverviewInsightGlance, OverviewStoreRow, OverviewThemeBar } from "@/lib/overview-board";
 import { cn } from "@/lib/utils";
 
 const HEADING = { fontFamily: "var(--font-heading), sans-serif" };
@@ -343,7 +343,6 @@ function AiInsight({ board }: { board: OverviewBoard }) {
   const coverage = `${board.coverage.analysed.toLocaleString("en-US")} reviews analysed${
     board.coverage.ratingOnly > 0 ? `, ${board.coverage.ratingOnly.toLocaleString("en-US")} with no text` : ""
   }`;
-  const maxTheme = Math.max(1, ...board.themeMix.map((theme) => theme.total));
   const maxStaff = Math.max(1, ...board.staff.map((row) => row.count));
   return (
     <section className="rounded-xl border border-[#e6ebf2] bg-white p-4 shadow-[0_1px_2px_rgba(16,24,40,0.04)] sm:p-5">
@@ -465,36 +464,99 @@ function AiInsight({ board }: { board: OverviewBoard }) {
         </div>
       )}
 
-      {board.themeMix.length > 0 ? (
+      {board.praiseThemes.length > 0 || board.themes.length > 0 ? (
         <div className="mt-5 border-t border-[#eef2f7] pt-4">
           <h3 className="text-sm text-graphite" style={HEADING}>
             Themes in analysed reviews
           </h3>
-          <ul className="mt-3 space-y-3">
-            {board.themeMix.map((theme) => (
-              <li key={theme.label}>
-                <div className="flex items-baseline justify-between gap-2 text-sm">
-                  <span className="text-graphite">{theme.label}</span>
-                  <span className="text-xs text-slate">
-                    {theme.total.toLocaleString("en-US")} · {Math.round(theme.share * 100)}% of all mentions
-                  </span>
-                </div>
-                <div className="mt-1 flex h-2 overflow-hidden rounded-full bg-[#eef2f7]" aria-hidden="true">
-                  <div className="bg-emerald-500" style={{ width: `${(theme.positive / maxTheme) * 100}%` }} />
-                  <div className="bg-rose-400" style={{ width: `${(theme.negative / maxTheme) * 100}%` }} />
-                </div>
-                <p className="mt-0.5 text-[11px] text-slate">
-                  {theme.positive.toLocaleString("en-US")} praise · {theme.negative.toLocaleString("en-US")} complaints
-                </p>
-              </li>
-            ))}
-          </ul>
-          <p className="mt-3 text-xs text-slate">
-            Green is praise and red is complaints. Counts are mentions in analysed text, not star ratings. Shares include topics that are not in this list.
+          <p className="mt-1 text-xs text-slate">
+            Praise and complaints are ranked separately. A theme can lead praise and still be a smaller complaint. Complaint counts match Analytics.
           </p>
+          <div className="mt-4 grid gap-5 md:grid-cols-2">
+            <ThemeRank
+              title="Most praised"
+              themes={board.praiseThemes}
+              tone="praise"
+              empty="No praise mentions in analysed reviews."
+            />
+            <ThemeRank
+              title="Complaint themes"
+              themes={board.themes}
+              tone="complaint"
+              empty="No complaint mentions in analysed reviews."
+              action={
+                <Link href={complaintThemesHref(board.analyticsHref)} className="text-xs font-medium text-[#2563eb] hover:underline">
+                  All complaint themes
+                </Link>
+              }
+            />
+          </div>
         </div>
       ) : null}
     </section>
+  );
+}
+
+function complaintThemesHref(href: string): string {
+  const [path, query = ""] = href.split("?");
+  const params = new URLSearchParams(query);
+  params.set("section", "themes");
+  const qs = params.toString();
+  return qs ? `${path}?${qs}` : path;
+}
+
+function mentionLine(count: number, reviews: number, tone: "praise" | "complaint"): string {
+  const kind = tone === "praise" ? "praise" : "complaint";
+  const mentions = `${count.toLocaleString("en-US")} ${kind} ${count === 1 ? "mention" : "mentions"}`;
+  if (reviews > 0 && reviews !== count) {
+    return `${mentions} in ${reviews.toLocaleString("en-US")} ${reviews === 1 ? "review" : "reviews"}`;
+  }
+  return mentions;
+}
+
+function ThemeRank({
+  title,
+  themes,
+  tone,
+  empty,
+  action,
+}: {
+  title: string;
+  themes: OverviewThemeBar[];
+  tone: "praise" | "complaint";
+  empty: string;
+  action?: ReactNode;
+}) {
+  const max = Math.max(1, ...themes.map((theme) => theme.count));
+  const bar = tone === "praise" ? "bg-emerald-500" : "bg-rose-400";
+  return (
+    <div>
+      <div className="flex items-baseline justify-between gap-3">
+        <h4 className="text-sm text-graphite" style={HEADING}>
+          {title}
+        </h4>
+        {action}
+      </div>
+      {themes.length === 0 ? (
+        <p className="mt-3 text-sm text-slate">{empty}</p>
+      ) : (
+        <ul className="mt-3 space-y-3">
+          {themes.map((theme) => (
+            <li key={theme.label}>
+              <div className="flex items-baseline justify-between gap-2 text-sm">
+                <Link href={theme.href} className="text-graphite hover:underline">
+                  {theme.label}
+                </Link>
+                <span className="text-right text-xs text-slate">{mentionLine(theme.count, theme.reviews, tone)}</span>
+              </div>
+              <div className="mt-1 h-2 overflow-hidden rounded-full bg-[#eef2f7]" aria-hidden="true">
+                <div className={`h-full ${bar}`} style={{ width: `${(theme.count / max) * 100}%` }} />
+              </div>
+            </li>
+          ))}
+        </ul>
+      )}
+    </div>
   );
 }
 

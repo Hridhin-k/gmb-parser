@@ -386,7 +386,7 @@ function Performance({
       </div>
 
       <div className="grid gap-4 xl:grid-cols-[minmax(0,1.15fr)_minmax(16rem,0.85fr)]">
-        <ChartCard title="Reviews by month" hint="Stacked by star band. The line is average rating.">
+        <ChartCard title="Reviews by month" hint="Stacked by star band. Bar height is the number of reviews.">
           {facts.months.length === 0 || facts.reviews === 0 ? (
             <p className="text-sm text-slate">No reviews in this period.</p>
           ) : (
@@ -402,18 +402,7 @@ function Performance({
                   negative: month.negative,
                   avgRating: month.reviews ? month.ratingSum / month.reviews : null,
                   stars: month.stars,
-                  href: reviewDrillHref(
-                    {
-                      ...range,
-                      key: "custom",
-                      from: bounds.from,
-                      to: bounds.to,
-                      start: null,
-                      end: null,
-                      label: month.month,
-                    },
-                    scope
-                  ),
+                  href: reviewDrillHref(range, scope, { focusFrom: bounds.from, focusTo: bounds.to }),
                 };
               })}
             />
@@ -450,18 +439,7 @@ function Performance({
                 label: monthWithYear(month.month),
                 value: month.reviews,
                 color: CHART.blue,
-                href: reviewDrillHref(
-                  {
-                    ...range,
-                    key: "custom",
-                    from: bounds.from,
-                    to: bounds.to,
-                    start: null,
-                    end: null,
-                    label: month.month,
-                  },
-                  scope
-                ),
+                href: reviewDrillHref(range, scope, { focusFrom: bounds.from, focusTo: bounds.to }),
                 suffix: month.reviews ? `· ${(month.ratingSum / month.reviews).toFixed(2)}` : undefined,
                 stars: month.stars,
                 lines: ["Total reviews in this month"],
@@ -755,7 +733,7 @@ function Themes({
   return (
     <div className="space-y-4">
       <div className="grid items-stretch gap-4 lg:grid-cols-2">
-        <ChartCard title="Complaint themes" hint="Negative topics from analysed review text. Counts are mentions, not 1–3 star reviews.">
+        <ChartCard title="Complaint themes" hint="Complaint mentions in analysed text, largest first. Overview lists these same counts separately from praise. One review can mention a topic more than once.">
           {topics.length === 0 ? (
             <p className="text-sm text-slate">No negative topics in analysed reviews for this period.</p>
           ) : (
@@ -766,8 +744,8 @@ function Themes({
                 value: topic.count,
                 color: themeColors[index % themeColors.length],
                 href: insightsHref,
-                suffix: topic.reviews > 0 ? `· ${topic.reviews.toLocaleString("en-US")} reviews` : undefined,
-                lines: ["Negative mentions in analysed reviews"],
+                suffix: topic.reviews > 0 ? `mentions · ${topic.reviews.toLocaleString("en-US")} reviews` : "mentions",
+                lines: ["Complaint mentions in analysed reviews"],
               }))}
             />
           )}
