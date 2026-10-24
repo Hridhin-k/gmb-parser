@@ -5,6 +5,7 @@ import { canReceiveEscalation, canReassignEscalation, formatInTimezone, slaClock
 import { EscalationContactStore, EscalationService } from "@/lib/services/escalations";
 import { getActiveRole, getActiveWorkspace } from "@/lib/services/session";
 import { canApproveReplies, getWorkspaceRoster } from "@/lib/services/workspace";
+import { draftsWithAiOnly } from "@/lib/access";
 
 export default async function EscalationCasePage({
   params,
@@ -42,6 +43,7 @@ export default async function EscalationCasePage({
           item={stamped}
           contact={contact}
           canManage={canApproveReplies(role)}
+          aiOnly={draftsWithAiOnly(role)}
           canReassign={canReassignEscalation(role)}
           members={roster.members
             .filter((member) => member.accessEnabled)

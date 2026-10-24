@@ -12,7 +12,7 @@ import {
 } from "@/lib/validation";
 import { toUserMessage, toStatusCode } from "@/lib/errors";
 import { ensurePersonalWorkspace } from "@/lib/services/workspace";
-import { assertReviewAction } from "@/lib/services/access";
+import { assertCanEditReplyText, assertReviewAction } from "@/lib/services/access";
 import { assertSafePublicReply } from "@/lib/services/reply-checks";
 import { AppError } from "@/lib/errors";
 
@@ -51,6 +51,7 @@ export async function POST(request: Request, { params }: RouteParams) {
   const membership = await getWorkspace(user);
   if (!membership) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   try {
+    await assertCanEditReplyText(user.id, membership.workspace_id);
     await assertReviewAction({
       userId: user.id,
       workspaceId: membership.workspace_id,
@@ -147,6 +148,7 @@ export async function PUT(request: Request, { params }: RouteParams) {
   const membership = await getWorkspace(user);
   if (!membership) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   try {
+    await assertCanEditReplyText(user.id, membership.workspace_id);
     await assertReviewAction({
       userId: user.id,
       workspaceId: membership.workspace_id,
@@ -272,6 +274,14 @@ export async function DELETE(request: Request, { params }: RouteParams) {
     .single();
 
   if (!reply) return NextResponse.json({ error: "Reply not found" }, { status: 404 });
+  try {
+    if (reply.status === "approved") await assertCanEditReplyText(user.id, membership.workspace_id);
+  } catch (error) {
+    if (error instanceof AppError) {
+      return NextResponse.json({ error: error.message }, { status: error.statusCode });
+    }
+    throw error;
+  }
 
   if (reply.status === "published" || reply.status === "pending_publish") {
     return NextResponse.json(

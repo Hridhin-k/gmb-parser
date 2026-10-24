@@ -35,6 +35,7 @@ export function EscalationTicket({
   assignees,
   canManage,
   canReassign,
+  aiOnly = false,
 }: {
   item: EscalationQueueItem & { remaining: string | null; overdue: string | null; dueLabel: string };
   contact: ResolutionContact;
@@ -42,6 +43,7 @@ export function EscalationTicket({
   assignees: string[];
   canManage: boolean;
   canReassign: boolean;
+  aiOnly?: boolean;
 }) {
   const router = useRouter();
   const [error, setError] = useState<string | null>(null);
@@ -116,6 +118,7 @@ export function EscalationTicket({
               replyStatus={item.replyStatus}
               initialContent={item.replyContent}
               contact={contact}
+              aiOnly={aiOnly}
             />
           </section>
           {!open && (
@@ -379,12 +382,14 @@ function ResolutionReply({
   replyStatus,
   initialContent,
   contact,
+  aiOnly,
 }: {
   reviewId: string;
   replyId: string | null;
   replyStatus: string;
   initialContent: string;
   contact: ResolutionContact;
+  aiOnly: boolean;
 }) {
   const router = useRouter();
   const [content, setContent] = useState(initialContent);
@@ -461,6 +466,12 @@ function ResolutionReply({
         <button type="button" disabled={busy} onClick={() => void generate()} className="rounded-md border border-line px-3 py-1.5 text-sm disabled:opacity-50">
           {generating ? "Writing…" : content.trim() ? "Regenerate AI reply" : "Generate AI reply"}
         </button>
+        {aiOnly ? (
+          <p className="w-full text-xs text-slate">
+            Your reply is written by AI. A higher role approves it before it can be published.
+          </p>
+        ) : (
+          <>
         <button type="button" disabled={!contact.phone || busy} onClick={() => add("phone")} className="rounded-md border border-line px-3 py-1.5 text-sm disabled:opacity-50">
           Add phone
         </button>
@@ -470,8 +481,10 @@ function ResolutionReply({
         <button type="button" disabled={!contact.phone || !contact.email || busy} onClick={() => add("both")} className="rounded-md border border-line px-3 py-1.5 text-sm disabled:opacity-50">
           Add both
         </button>
+          </>
+        )}
       </div>
-      {!contact.phone && !contact.email ? (
+      {!aiOnly && !contact.phone && !contact.email ? (
         <p className="text-xs text-slate">
           <a href="/settings?section=sla" className="text-ink underline">
             Set a resolution phone or email in Settings
@@ -485,13 +498,16 @@ function ResolutionReply({
         rows={4}
         maxLength={4000}
         disabled={busy}
+        readOnly={aiOnly}
         aria-label="Public reply"
-        className="block w-full resize-y rounded-md border border-line px-2 py-1.5 text-sm text-ink"
+        className="block w-full resize-y rounded-md border border-line px-2 py-1.5 text-sm text-ink read-only:bg-paper"
       />
       {error ? <p className="text-sm text-red-700">{error}</p> : null}
+      {aiOnly ? null : (
       <button type="button" disabled={busy || !content.trim()} onClick={() => void save()} className="rounded-md bg-ink px-3 py-1.5 text-sm text-white disabled:opacity-50">
         {saving ? "Saving…" : "Save reply"}
       </button>
+      )}
     </div>
   );
 }

@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { AuditService } from "@/lib/services/audit";
+import { assertReviewAction } from "@/lib/services/access";
 import { assertSafePublicReply, replyContentHash } from "@/lib/services/reply-checks";
 import { ensurePersonalWorkspace } from "@/lib/services/workspace";
 import { AppError, toUserMessage } from "@/lib/errors";
@@ -46,6 +47,12 @@ export async function POST(
   }
 
   try {
+    await assertReviewAction({
+      userId: user.id,
+      workspaceId: membership.workspace_id,
+      reviewId,
+      action: "draft",
+    });
     await assertSafePublicReply({
       workspaceId: membership.workspace_id,
       userId: user.id,

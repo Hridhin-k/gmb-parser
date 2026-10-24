@@ -2,7 +2,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { AIReviewService } from "@/lib/services/ai-review";
 import { ReplyPublishingService } from "@/lib/services/reply-publishing";
 import { AuditService } from "@/lib/services/audit";
-import { assertReviewAction } from "@/lib/services/access";
+import { assertPublishAccess, assertReviewAction } from "@/lib/services/access";
 import { AppError } from "@/lib/errors";
 import { logger } from "@/lib/logger";
 import { mapPool } from "@/lib/pool";
@@ -132,14 +132,25 @@ export async function processBulkItem(input: {
     }
 
     // publish
-    const denied = await reviewAllowed(userId, workspaceId, reviewId, "publish");
-    if (denied) return { reviewId, ok: false, error: denied };
     const reply = await latestReply(admin, workspaceId, reviewId);
     if (!reply) return { reviewId, ok: false, error: "No draft/approved reply found" };
-    if (reply.status === "draft" || reply.status === "failed") {
+    let publishMode: "standard" | "member";
+    try {
+      publishMode = await assertPublishAccess({ userId, workspaceId, reviewId, replyStatus: reply.status });
+    } catch (error) {
+      const message = error instanceof AppError ? error.message : "You cannot publish this reply.";
+      return { reviewId, ok: false, error: message };
+    }
+    if (reply.status === "draft" || (reply.status === "failed" && publishMode === "standard")) {
       const approveDenied = await reviewAllowed(userId, workspaceId, reviewId, "approve");
       if (approveDenied) return { reviewId, ok: false, error: approveDenied };
       await approveReply(admin, reply.id, userId);
+    } else if (reply.status === "failed") {
+      await admin
+        .from("grm_review_replies")
+        .update({ status: "approved", last_error: null })
+        .eq("id", reply.id)
+        .eq("status", "failed");
     } else if (reply.status !== "approved") {
       return { reviewId, ok: false, error: "Reply cannot be published" };
     }

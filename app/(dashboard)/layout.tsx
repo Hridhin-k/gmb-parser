@@ -10,7 +10,9 @@ import { listAccessibleWorkspaces } from "@/lib/services/workspace";
 import { isSuperAdmin } from "@/lib/services/platform";
 import { timed } from "@/lib/timing";
 import { redirect } from "next/navigation";
+import { headers } from "next/headers";
 import type { Metadata } from "next";
+import { canOpenPath, homePath } from "@/lib/shell";
 
 async function activeWorkspaceOrGate() {
   try {
@@ -77,6 +79,8 @@ export default async function DashboardLayout({
       </main>
     );
   }
+  const path = (await headers()).get("x-grm-path") ?? "";
+  if (path && !canOpenPath(path, role)) redirect(homePath(role));
   const [allowedClientIds, locationIds] = await timed("layout.scope", () =>
     Promise.all([
       visibleClientIds(workspaceId, access?.scope),

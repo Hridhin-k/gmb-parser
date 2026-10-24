@@ -3,6 +3,7 @@ import { COMPLAINT_THEMES, REVIEW_LANGUAGES, type InboxSort } from "@/lib/review
 import { readPageScope } from "@/lib/services/scope-catalog";
 import { EscalationContactStore } from "@/lib/services/escalations";
 import { canApproveReplies, canSyncWorkspace, getWorkspaceRoster } from "@/lib/services/workspace";
+import { draftsWithAiOnly } from "@/lib/access";
 import { getActiveRole, getActiveWorkspace } from "@/lib/services/session";
 import { PageHeader } from "@/components/page-header";
 import { EmptyState } from "@/components/empty-state";
@@ -251,6 +252,7 @@ export default async function ReviewsPage({ searchParams }: ReviewsPageProps) {
                 reviews={data.reviews}
                 replies={data.replies}
                 canApprove={canApprove}
+                aiOnly={draftsWithAiOnly(role)}
                 contact={contact}
                 members={roster.members.map((member) => ({ id: member.userId, email: member.email }))}
               />

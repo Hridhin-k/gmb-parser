@@ -5,6 +5,7 @@ import { UNASSIGNED_CLIENT_MARKER } from "@/lib/services/unassigned-client";
 import { loadCatalogTables } from "@/lib/services/catalog-tables";
 import {
   canAct,
+  draftsWithAiOnly,
   isOrgScope,
   reviewPermission,
   type Permission,
@@ -153,6 +154,61 @@ export async function assertScoped(input: {
     permission: input.permission,
     resource,
   });
+}
+
+const MEMBER_PUBLISH_STATUSES = new Set(["approved", "pending_publish", "failed"]);
+
+/** Members work the reviews they are given. They do not hand a review to someone else. */
+export async function assertCanAssignReviews(userId: string, workspaceId: string): Promise<void> {
+  const access = await getMemberAccess(userId, workspaceId);
+  if (draftsWithAiOnly(access?.role)) {
+    throw new AuthorizationError("Members cannot assign a review to someone else.");
+  }
+}
+
+/** Members cannot type a reply. Saving, editing, and templates are closed for that role. */
+export async function assertCanEditReplyText(userId: string, workspaceId: string): Promise<void> {
+  const access = await getMemberAccess(userId, workspaceId);
+  if (draftsWithAiOnly(access?.role)) {
+    throw new AuthorizationError(
+      "Members draft replies with AI only. Typing or editing a reply is not available."
+    );
+  }
+}
+
+/**
+ * Higher roles publish through the normal permission.
+ * A member may publish only after a higher role has already approved the reply.
+ */
+export async function assertPublishAccess(input: {
+  userId: string;
+  workspaceId: string;
+  reviewId: string;
+  replyStatus: string;
+}): Promise<"standard" | "member"> {
+  try {
+    await assertReviewAction({
+      userId: input.userId,
+      workspaceId: input.workspaceId,
+      reviewId: input.reviewId,
+      action: "publish",
+    });
+    return "standard";
+  } catch (error) {
+    if (!(error instanceof AuthorizationError)) throw error;
+    const access = await getMemberAccess(input.userId, input.workspaceId);
+    if (!draftsWithAiOnly(access?.role)) throw error;
+    if (!MEMBER_PUBLISH_STATUSES.has(input.replyStatus)) {
+      throw new AuthorizationError("A member can publish a reply only after a higher role approves it.");
+    }
+    await assertReviewAction({
+      userId: input.userId,
+      workspaceId: input.workspaceId,
+      reviewId: input.reviewId,
+      action: "draft",
+    });
+    return "member";
+  }
 }
 
 export async function assertReviewAction(input: {

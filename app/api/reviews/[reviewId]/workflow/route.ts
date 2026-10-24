@@ -4,7 +4,7 @@ import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { AuditService } from "@/lib/services/audit";
 import { ensurePersonalWorkspace } from "@/lib/services/workspace";
-import { assertReviewAction } from "@/lib/services/access";
+import { assertCanAssignReviews, assertReviewAction } from "@/lib/services/access";
 import { AppError, toErrorCode, toStatusCode, toUserMessage } from "@/lib/errors";
 import { parseBody, validateId } from "@/lib/validation";
 
@@ -63,6 +63,7 @@ export async function POST(
     }
 
     if (body.action === "assign") {
+      await assertCanAssignReviews(user.id, membership.workspace_id);
       if (body.userId) {
         const member = await admin
           .from("grm_workspace_members")

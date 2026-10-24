@@ -170,6 +170,11 @@ export function allows(role: string | null | undefined, permission: Permission):
   return grantFor(role, permission) !== false;
 }
 
+/** Invited members write a public reply only by asking the model. */
+export function draftsWithAiOnly(role: string | null | undefined): boolean {
+  return role === "member";
+}
+
 /** Workspace-wide grant. A group manager's "own group" cell does not count. */
 export function workspaceGrant(role: string | null | undefined, permission: Permission): boolean {
   return grantFor(role, permission) === true;

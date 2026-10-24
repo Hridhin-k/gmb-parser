@@ -8,7 +8,7 @@ import { parseBody, validateId, publishReplyBodySchema } from "@/lib/validation"
 import { toUserMessage, toStatusCode } from "@/lib/errors";
 import { checkRateLimit, PUBLISH_LIMIT } from "@/lib/rate-limit";
 import { ensurePersonalWorkspace } from "@/lib/services/workspace";
-import { assertReviewAction } from "@/lib/services/access";
+import { assertPublishAccess } from "@/lib/services/access";
 
 interface RouteParams {
   params: Promise<{ reviewId: string }>;
@@ -57,20 +57,6 @@ export async function POST(request: Request, { params }: RouteParams) {
   const admin = createAdminClient();
   const membership = await ensurePersonalWorkspace(user);
 
-  try {
-    await assertReviewAction({
-      userId: user.id,
-      workspaceId: membership.workspace_id,
-      reviewId,
-      action: "publish",
-    });
-  } catch (error) {
-    if (error instanceof AppError) {
-      return NextResponse.json({ error: error.message }, { status: error.statusCode });
-    }
-    throw error;
-  }
-
   const { data: replyCheck } = await admin
     .from("grm_review_replies")
     .select("id, status")
@@ -81,6 +67,20 @@ export async function POST(request: Request, { params }: RouteParams) {
 
   if (!replyCheck) {
     return NextResponse.json({ error: "Reply not found" }, { status: 404 });
+  }
+
+  try {
+    await assertPublishAccess({
+      userId: user.id,
+      workspaceId: membership.workspace_id,
+      reviewId,
+      replyStatus: replyCheck.status,
+    });
+  } catch (error) {
+    if (error instanceof AppError) {
+      return NextResponse.json({ error: error.message }, { status: error.statusCode });
+    }
+    throw error;
   }
 
   if (replyCheck.status === "published") {

@@ -3,6 +3,7 @@ import {
   canAct,
   clampListScope,
   coerceAssignableRole,
+  draftsWithAiOnly,
   inScope,
   reviewPermission,
   roleScopeError,
@@ -138,5 +139,12 @@ describe("tenant and scope isolation", () => {
         actorWorkspaceId: ORG,
       })
     ).toBe(false);
+  });
+
+  it("lets only an invited member draft with AI", () => {
+    expect(draftsWithAiOnly("member")).toBe(true);
+    expect(draftsWithAiOnly("store_manager")).toBe(false);
+    expect(draftsWithAiOnly("agent")).toBe(false);
+    expect(draftsWithAiOnly("owner")).toBe(false);
   });
 });

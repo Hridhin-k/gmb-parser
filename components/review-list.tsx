@@ -64,6 +64,8 @@ interface ReviewListProps {
   reviews: ReviewItem[];
   replies: Record<string, ReplyItem>;
   canApprove: boolean;
+  /** Members generate with AI and publish only after approval. They cannot type the reply. */
+  aiOnly?: boolean;
   contact?: ResolutionContact;
   members?: Array<{ id: string; email: string }>;
 }
@@ -108,7 +110,7 @@ function ReplyStatusPill({ status, source }: { status: string; source?: string }
 
 type ReplyPatch = { status: string; reply: ReplyItem | null };
 
-export function ReviewList({ reviews, replies, canApprove, contact, members = [] }: ReviewListProps) {
+export function ReviewList({ reviews, replies, canApprove, aiOnly = false, contact, members = [] }: ReviewListProps) {
   const { pending: refreshing, refresh, settle } = useServerRefresh();
   useSettleWhenUpdated(refreshing, settle, reviews);
   const [selectedId, setSelectedId] = useState<string | null>(null);
@@ -372,7 +374,7 @@ export function ReviewList({ reviews, replies, canApprove, contact, members = []
             {bulkLoading === "publish" ? "Posting to Google…" : "Approve & publish"}
           </Button>
           ) : null}
-          {members.length > 0 ? (
+          {!aiOnly && members.length > 0 ? (
             <>
               <SelectField
                 label="Assign selected"
@@ -599,6 +601,7 @@ export function ReviewList({ reviews, replies, canApprove, contact, members = []
               review={panelReview}
               reply={panelReply}
               canApprove={canApprove}
+              aiOnly={aiOnly}
               contact={contact}
               members={members}
               onClose={() => setSelectedId(null)}

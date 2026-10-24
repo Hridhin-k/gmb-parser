@@ -8,7 +8,7 @@ import { getOnboardingGate } from "@/lib/services/onboarding";
 import { ensurePersonalWorkspace, getMemberRole } from "@/lib/services/workspace";
 import { tenantGateRedirect } from "@/lib/services/session";
 import { isSuperAdmin } from "@/lib/services/platform";
-import { isManager } from "@/lib/shell";
+import { homePath, isManager } from "@/lib/shell";
 
 interface LoginPageProps {
   searchParams: Promise<Record<string, string | string[] | undefined>>;
@@ -36,7 +36,7 @@ export default async function LoginPage({ searchParams }: LoginPageProps) {
       getOnboardingGate(membership.workspace_id),
     ]);
     if (isManager(role) && shouldEnterWizard(gate)) redirect("/onboarding");
-    redirect("/overview");
+    redirect(homePath(role));
   }
 
   const errorCode = typeof params.error === "string" ? params.error : null;

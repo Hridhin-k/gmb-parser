@@ -1,18 +1,9 @@
 import { describe, expect, it } from "vitest";
-import { canOpenPath, scopedHref, scopeMode, shellAlerts, visibleNav } from "@/lib/shell";
+import { canOpenPath, homePath, scopedHref, scopeMode, shellAlerts, visibleNav } from "@/lib/shell";
 
 describe("visibleNav", () => {
-  it("hides management and billing from members", () => {
-    expect(visibleNav("member")).toEqual([
-      "overview",
-      "inbox",
-      "escalations",
-      "analytics",
-      "insights",
-      "reports",
-      "requests",
-      "locations",
-    ]);
+  it("keeps members on the inbox and escalations", () => {
+    expect(visibleNav("member")).toEqual(["inbox", "escalations"]);
   });
 
   it("lets an admin see the portfolio and usage", () => {
@@ -34,7 +25,16 @@ describe("canOpenPath", () => {
     expect(canOpenPath("/audit", "member")).toBe(false);
     expect(canOpenPath("/dashboard", "member")).toBe(false);
     expect(canOpenPath("/reviews", "member")).toBe(true);
+    expect(canOpenPath("/reviews/abc", "member")).toBe(true);
     expect(canOpenPath("/escalations", "member")).toBe(true);
+    expect(canOpenPath("/m/escalations", "member")).toBe(true);
+    expect(canOpenPath("/overview", "member")).toBe(false);
+    expect(canOpenPath("/analytics", "member")).toBe(false);
+    expect(canOpenPath("/locations", "member")).toBe(false);
+    expect(canOpenPath("/m", "member")).toBe(false);
+    expect(canOpenPath("/m/approve", "member")).toBe(false);
+    expect(homePath("member")).toBe("/reviews");
+    expect(homePath("owner")).toBe("/overview");
   });
 });
 
