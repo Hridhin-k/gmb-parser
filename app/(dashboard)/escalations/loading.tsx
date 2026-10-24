@@ -1,9 +1,3 @@
-import { PageLoading } from "@/components/page-loading";
-import { PAGE_LOADING } from "@/lib/ui-status";
+import { createPageLoading } from "@/components/page-loading";
 
-export default function EscalationsLoading() {
-  const copy = PAGE_LOADING.escalations;
-  return (
-    <PageLoading variant="reviews" title={copy.title} detail={copy.detail} tone={copy.tone} />
-  );
-}
+export default createPageLoading("escalations", "reviews");

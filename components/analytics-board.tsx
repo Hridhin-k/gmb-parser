@@ -26,6 +26,7 @@ import { insightTopicLabel, type InsightDashboardData } from "@/lib/insight-dash
 import { themeLabel } from "@/lib/review-inbox";
 import type { DashboardContext, DashboardScope } from "@/lib/services/dashboard-metrics";
 import { formatFriendlyDate } from "@/lib/format-date";
+import { formatPercent as percent } from "@/lib/format";
 
 const HEADING = { fontFamily: "var(--font-heading), sans-serif" };
 
@@ -44,10 +45,6 @@ function insightsHref(query: string): string {
   for (const key of ["rankBy", "show", "compare", "section"]) params.delete(key);
   const text = params.toString();
   return text ? `/insights?${text}` : "/insights";
-}
-
-function percent(value: number | null) {
-  return value === null ? "—" : `${Math.round(value * 100)}%`;
 }
 
 function hours(value: number | null) {

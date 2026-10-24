@@ -5,7 +5,6 @@ import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import {
-  Star,
   X,
   Send,
   CheckCircle2,
@@ -14,6 +13,8 @@ import {
   Trash2,
   RotateCw,
 } from "lucide-react";
+import { StarRating } from "@/components/star-rating";
+import { formatFriendlyDateTime } from "@/lib/format-date";
 import { cn } from "@/lib/utils";
 import { ActivityStatus } from "@/components/activity-status";
 import { Spinner } from "@/components/ui/spinner";
@@ -87,38 +88,8 @@ interface ReviewDetailPanelProps {
 // Sub-components
 // ---------------------------------------------------------------------------
 
-function StarDisplay({ rating }: { rating: number }) {
-  return (
-    <div className="flex items-center gap-0.5" aria-label={`${rating} out of 5 stars`}>
-      {Array.from({ length: 5 }).map((_, i) => (
-        <Star
-          key={i}
-          className={cn(
-            "h-4 w-4",
-            i < rating
-              ? rating >= 4
-                ? "fill-green-500 text-green-500"
-                : rating === 3
-                  ? "fill-yellow-400 text-yellow-500"
-                  : "fill-red-500 text-red-500"
-              : "fill-silver text-silver"
-          )}
-          aria-hidden
-        />
-      ))}
-    </div>
-  );
-}
-
 function formatDate(iso: string | null): string {
-  if (!iso) return "";
-  return new Date(iso).toLocaleString("en-US", {
-    day: "numeric",
-    month: "short",
-    year: "numeric",
-    hour: "2-digit",
-    minute: "2-digit",
-  });
+  return formatFriendlyDateTime(iso, "2-digit");
 }
 
 const REPLY_STATUS_MAP: Record<
@@ -495,7 +466,7 @@ export function ReviewDetailPanel({
       <div className="flex-1 overflow-y-auto px-4 py-4 space-y-4">
         {/* Rating + date row */}
         <div className="flex items-center justify-between">
-          <StarDisplay rating={review.star_rating} />
+          <StarRating rating={review.star_rating} size="md" />
           <span className="text-[11px] text-slate">
             {formatDate(review.review_create_time)}
           </span>

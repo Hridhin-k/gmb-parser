@@ -1,5 +1,4 @@
 import { createAdminClient } from "@/lib/supabase/admin";
-import { logger } from "@/lib/logger";
 import { AuditService } from "@/lib/services/audit";
 import { assertScoped } from "@/lib/services/access";
 import { getMemberRole } from "@/lib/services/workspace";
@@ -382,17 +381,6 @@ export async function createAiConfigVersion(input: {
   });
 
   return mapConfig(inserted.data);
-}
-
-export async function listKnowledge(workspaceId: string): Promise<AiKnowledgeRow[]> {
-  const admin = createAdminClient();
-  const { data, error } = await admin
-    .from("grm_ai_knowledge")
-    .select("id, workspace_id, client_id, group_id, location_id, kind, title, body, enabled, metadata")
-    .eq("workspace_id", workspaceId)
-    .order("created_at", { ascending: false });
-  if (error) throw new AppError("Could not load saved instructions.", "DB_ERROR", 500);
-  return assertSameWorkspace((data ?? []).map(mapKnowledge), workspaceId);
 }
 
 export async function upsertKnowledge(input: {

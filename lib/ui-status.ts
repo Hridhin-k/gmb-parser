@@ -87,6 +87,12 @@ export const PAGE_LOADING = {
     short: "Loading setup…",
     tone: "work" as const,
   },
+  client: {
+    title: "Loading this business…",
+    detail: "Gathering locations, ratings, and recent reviews for the selected client.",
+    short: "Loading client…",
+    tone: "work" as const,
+  },
 } satisfies Record<string, StatusCopy>;
 
 /** Soft refresh while previous numbers stay hidden until the new scope matches. */

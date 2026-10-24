@@ -1,6 +1,5 @@
 "use client";
 
-import type { ReactNode } from "react";
 import { ActivityStatus } from "@/components/activity-status";
 import { Button } from "@/components/ui/button";
 import type { StatusCopy } from "@/lib/ui-status";
@@ -63,20 +62,5 @@ export function ScopeUpdating({ copy }: { copy: StatusCopy }) {
         Previous figures for another scope stay hidden so they are not mistaken for this selection.
       </p>
     </div>
-  );
-}
-
-/** Non-blocking note when displayed data may be stale after a failed refresh. */
-export function StaleNotice({ children, className }: { children: ReactNode; className?: string }) {
-  return (
-    <p
-      role="status"
-      className={cn(
-        "rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-900",
-        className
-      )}
-    >
-      {children}
-    </p>
   );
 }

@@ -549,12 +549,6 @@ function makeRunProcessor(
 }
 
 /**
- * Processes every pending review in bounded batches. Results are stored
- * immediately per batch; failed batches mark their reviews failed so a
- * later run retries exactly those. The run only reports "completed"
- * when every eligible review holds a current analysis.
- */
-/**
  * Atomically claims a running run whose worker has gone quiet, so exactly
  * one re-kick resumes it. Touching updated_at acts as the lease: concurrent
  * pollers lose the race and stand down.
@@ -571,47 +565,6 @@ export async function claimStaleAnalysisRun(runId: string, staleMs = 20_000): Pr
     .select("id")
     .maybeSingle();
   return Boolean(data);
-}
-
-/**
- * Processes every pending review in bounded batches. Results are stored
- * immediately per batch; failed batches mark their reviews failed so a
- * later run retries exactly those. The run only reports "completed"
- * when every eligible review holds a current analysis.
- */
-export async function processAnalysisRun(
-  runId: string,
-  workspaceId: string,
-  pendingReviews: ReviewForAnalysis[],
-  hooks?: { onProgress?: () => void | Promise<void> }
-): Promise<void> {
-  const processor = makeRunProcessor(runId, workspaceId, hooks);
-  processor.state.pendingTotal = pendingReviews.length;
-  await processor.process(pendingReviews);
-  await processor.finish();
-}
-
-/** Counts-only discovery for the insights page header. */
-export async function loadScopeAnalysisCounts(
-  workspaceId: string,
-  input: { locationIds: string[]; start: string | null; end: string | null }
-) {
-  const admin = createAdminClient();
-  let discovered = 0;
-  let eligible = 0;
-  let alreadyAnalysed = 0;
-  let ratingOnly = 0;
-  let pending = 0;
-  let failed = 0;
-  await streamScopeReviews(admin, workspaceId, input, async (page) => {
-    discovered += page.discovered.length;
-    eligible += page.eligible.length;
-    alreadyAnalysed += page.alreadyAnalysed;
-    ratingOnly += page.ratingOnly.length;
-    pending += page.pendingReviews.length;
-    failed += page.failedCount;
-  });
-  return { discovered, eligible, alreadyAnalysed, ratingOnly, pending, failed };
 }
 
 export async function getAnalysisRun(workspaceId: string, runId: string) {

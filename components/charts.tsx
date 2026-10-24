@@ -409,40 +409,6 @@ export function SentimentDonut({
   );
 }
 
-/** Compact rating score ring. */
-export function ScoreRing({ score, caption }: { score: number | null; caption: string }) {
-  const value = score ?? 0;
-  const radius = 40;
-  const circumference = 2 * Math.PI * radius;
-  const color = score === null ? CHART.slate : score >= 80 ? CHART.green : score >= 60 ? CHART.amber : CHART.rose;
-  return (
-    <div className="flex flex-col items-center">
-      <svg viewBox="0 0 120 120" className="size-32" role="img" aria-label={score === null ? "No score" : `Score ${score}`}>
-        <circle cx="60" cy="60" r={radius} fill="none" stroke={CHART.track} strokeWidth="10" />
-        <circle
-          cx="60"
-          cy="60"
-          r={radius}
-          fill="none"
-          stroke={color}
-          strokeWidth="10"
-          strokeLinecap="round"
-          strokeDasharray={circumference}
-          strokeDashoffset={score === null ? circumference : circumference - (value / 100) * circumference}
-          transform="rotate(-90 60 60)"
-        />
-        <text x="60" y="56" textAnchor="middle" fill="#1e293b" fontSize="24" fontFamily="var(--font-heading), sans-serif">
-          {score === null ? "—" : score}
-        </text>
-        <text x="60" y="74" textAnchor="middle" fill="#64748b" fontSize="11">
-          /100
-        </text>
-      </svg>
-      <p className="text-xs text-slate">{caption}</p>
-    </div>
-  );
-}
-
 /** Vertical bars for a short distribution such as reply time. */
 export function VBarChart({
   rows,

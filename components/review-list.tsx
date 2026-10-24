@@ -4,7 +4,6 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import {
-  Star,
   CheckCircle2,
   Pencil,
   AlertCircle,
@@ -12,6 +11,8 @@ import {
   MessageSquare,
   Sparkles,
 } from "lucide-react";
+import { StarRating } from "@/components/star-rating";
+import { formatFriendlyDateTime } from "@/lib/format-date";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { ActivityStatus } from "@/components/activity-status";
@@ -81,39 +82,6 @@ const ReviewDetailPanel = dynamic(
     ),
   }
 );
-
-function formatWhen(iso: string): string {
-  return new Date(iso).toLocaleString("en-US", {
-    month: "short",
-    day: "numeric",
-    year: "numeric",
-    hour: "numeric",
-    minute: "2-digit",
-  });
-}
-
-function StarRating({ rating }: { rating: number }) {
-  return (
-    <div className="flex items-center gap-px" aria-label={`${rating} out of 5 stars`}>
-      {Array.from({ length: 5 }).map((_, i) => (
-        <Star
-          key={i}
-          className={cn(
-            "h-3.5 w-3.5",
-            i < rating
-              ? rating >= 4
-                ? "fill-green-500 text-green-500"
-                : rating === 3
-                  ? "fill-yellow-400 text-yellow-500"
-                  : "fill-red-500 text-red-500"
-              : "fill-silver text-silver"
-          )}
-          aria-hidden
-        />
-      ))}
-    </div>
-  );
-}
 
 const STATUS_CONFIG: Record<string, { label: string; className: string; Icon: typeof CheckCircle2 }> = {
   published:       { label: "Published", className: "bg-paper text-ink",  Icon: CheckCircle2 },
@@ -556,7 +524,7 @@ export function ReviewList({ reviews, replies, canApprove, contact, members = []
                     </span>
                   </div>
                   <p className="mt-0.5 text-xs font-light text-slate">
-                    {formatWhen(review.review_create_time)}
+                    {formatFriendlyDateTime(review.review_create_time)}
                     {" · "}
                     {review.location_title}
                     {review.group_name ? ` · ${review.group_name}` : ""}

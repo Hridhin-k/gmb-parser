@@ -1,9 +1,3 @@
-import { PageLoading } from "@/components/page-loading";
-import { PAGE_LOADING } from "@/lib/ui-status";
+import { createPageLoading } from "@/components/page-loading";
 
-export default function ClientsHomeLoading() {
-  const copy = PAGE_LOADING.clients;
-  return (
-    <PageLoading variant="clients" title={copy.title} detail={copy.detail} tone={copy.tone} />
-  );
-}
+export default createPageLoading("clients", "clients");

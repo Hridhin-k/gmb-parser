@@ -358,61 +358,6 @@ export async function analyzeReview(
   }
 }
 
-/** Analyses every written review in scope that is not already current. Small parallel batches. */
-export async function analyzeScopeReviews(
-  workspaceId: string,
-  input: { locationIds: string[]; start: string | null; end: string | null; limit?: number }
-): Promise<{ analysed: number; reused: number; noText: number; failed: number }> {
-  const admin = createAdminClient();
-  const stats = { analysed: 0, reused: 0, noText: 0, failed: 0 };
-  if (input.locationIds.length === 0) return stats;
-
-  const ids: string[] = [];
-  const limit = input.limit ?? 5000;
-  for (let c = 0; c < input.locationIds.length && ids.length < limit; c += 80) {
-    const locationChunk = input.locationIds.slice(c, c + 80);
-    let from = 0;
-    while (ids.length < limit) {
-      let query = admin
-        .from("grm_reviews")
-        .select("id")
-        .eq("workspace_id", workspaceId)
-        .in("location_id", locationChunk)
-      .not("comment", "is", null)
-      .is("missing_on_google_at", null)
-      .order("review_create_time", { ascending: false })
-      .range(from, from + PAGE - 1);
-    if (input.start) query = query.gte("review_create_time", input.start);
-    if (input.end) query = query.lt("review_create_time", input.end);
-    const { data, error } = await query;
-    if (error) throw new Error(`Failed to list reviews for analysis: ${error.message}`);
-      const page = (data ?? []).map((row) => row.id as string);
-      ids.push(...page);
-      if (page.length < PAGE) break;
-      from += PAGE;
-    }
-  }
-
-  const CONCURRENCY = 3;
-  let next = 0;
-  async function worker(): Promise<void> {
-    while (next < ids.length) {
-      const reviewId = ids[next]!;
-      next += 1;
-      const outcome = await analyzeReview(admin, workspaceId, reviewId).catch(
-        (): AnalysisOutcome => ({ reviewId, status: "failed", error: "unexpected" })
-      );
-      if (outcome.status === "ready") {
-        if (outcome.reused) stats.reused += 1;
-        else stats.analysed += 1;
-      } else if (outcome.status === "no_text") stats.noText += 1;
-      else stats.failed += 1;
-    }
-  }
-  await Promise.all(Array.from({ length: Math.min(CONCURRENCY, ids.length) }, () => worker()));
-  return stats;
-}
-
 /**
  * Aggregates computed from current (ready) analyses only. Stale and failed
  * analyses are excluded; their observations remain stored for traceability.

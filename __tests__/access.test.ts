@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   canAct,
   clampListScope,
+  coerceAssignableRole,
   inScope,
   reviewPermission,
   roleScopeError,
@@ -117,6 +118,14 @@ describe("tenant and scope isolation", () => {
     expect(roleScopeError("brand_manager", { clientId: null, groupId: null, locationId: null })).toMatch(/brand/);
     expect(roleScopeError("store_manager", { clientId: null, groupId: null, locationId: LOCATION })).toBeNull();
     expect(roleScopeError("agent", { clientId: BRAND, groupId: GROUP, locationId: null })).toMatch(/one place/);
+  });
+
+  it("treats the older admin value as an organization admin", () => {
+    expect(coerceAssignableRole("admin")).toBe("org_admin");
+    expect(coerceAssignableRole({ value: "admin" })).toBe("org_admin");
+    expect(coerceAssignableRole("")).toBeUndefined();
+    expect(coerceAssignableRole("member")).toBe("member");
+    expect(coerceAssignableRole("auditor")).toBe("auditor");
   });
 
   it("denies a person whose access is turned off", () => {

@@ -130,10 +130,6 @@ export function parseDeliveryTime(value: string): { hour: number; minute: number
   return { hour: Number(match[1]), minute: Number(match[2]) };
 }
 
-export function isReportTimezone(value: string): value is EscalationTimezone {
-  return ESCALATION_TIMEZONES.some((item) => item.id === value);
-}
-
 interface ZonedParts {
   year: number;
   month: number;

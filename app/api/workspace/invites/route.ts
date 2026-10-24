@@ -3,7 +3,7 @@ import { z } from "zod";
 import { createClient } from "@/lib/supabase/server";
 import { AppError, toStatusCode, toUserMessage } from "@/lib/errors";
 import { parseBody } from "@/lib/validation";
-import { ASSIGNABLE_ROLES } from "@/lib/access";
+import { ASSIGNABLE_ROLES, coerceAssignableRole } from "@/lib/access";
 import {
   ensurePersonalWorkspace,
   inviteToWorkspace,
@@ -13,7 +13,7 @@ import {
 
 const createInviteSchema = z.object({
   email: z.string().trim().min(3).max(320),
-  role: z.enum(ASSIGNABLE_ROLES),
+  role: z.preprocess(coerceAssignableRole, z.enum(ASSIGNABLE_ROLES)),
   clientId: z.string().uuid().nullable().optional(),
   groupId: z.string().uuid().nullable().optional(),
   locationId: z.string().uuid().nullable().optional(),

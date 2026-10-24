@@ -9,6 +9,7 @@ import { renderTextPdf } from "@/lib/report-pdf";
 import { ValidationError } from "@/lib/errors";
 import { formatInTimezone, legalSafetyTerms } from "@/lib/escalations";
 import { average, reviewWindow, share } from "@/lib/metrics";
+import { formatPercent as percent } from "@/lib/format";
 import { themeLabel } from "@/lib/review-inbox";
 import { UNASSIGNED_CLIENT_MARKER } from "@/lib/services/unassigned-client";
 import { assertScopeTarget } from "@/lib/services/access";
@@ -124,10 +125,6 @@ function specFrom(input: {
     dayOfMonth: input.dayOfMonth,
     timezone: input.timezone,
   };
-}
-
-function percent(value: number | null): string {
-  return value === null ? "—" : `${Math.round(value * 100)}%`;
 }
 
 function rating(value: number | null): string {

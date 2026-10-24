@@ -1,9 +1,3 @@
-import { PageLoading } from "@/components/page-loading";
-import { PAGE_LOADING } from "@/lib/ui-status";
+import { createPageLoading } from "@/components/page-loading";
 
-export default function SettingsLoading() {
-  const copy = PAGE_LOADING.settings;
-  return (
-    <PageLoading variant="settings" title={copy.title} detail={copy.detail} tone={copy.tone} />
-  );
-}
+export default createPageLoading("settings", "settings");
