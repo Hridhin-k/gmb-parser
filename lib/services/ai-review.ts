@@ -2,6 +2,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { AuditService } from "./audit";
 import { AppError, ValidationError } from "@/lib/errors";
 import { logger } from "@/lib/logger";
+import { forgetReviewList } from "@/lib/services/dashboard";
 import { createHash } from "crypto";
 import {
   GEMINI_FAST_MODEL_ID,
@@ -758,6 +759,7 @@ export class AIReviewService {
       .from("grm_reviews")
       .update({ reply_status: "draft" })
       .eq("id", input.reviewId);
+    forgetReviewList(input.workspaceId);
 
     if (replyCreated) {
       await AuditService.log({

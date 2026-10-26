@@ -40,8 +40,10 @@ export async function proxy(request: NextRequest) {
     return NextResponse.next();
   }
 
+  const requestHeaders = new Headers(request.headers);
+  requestHeaders.set("x-grm-path", pathname);
   const response = NextResponse.next({
-    request: { headers: request.headers },
+    request: { headers: requestHeaders },
   });
 
   const supabase = createServerClient(

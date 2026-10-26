@@ -9,6 +9,7 @@ import Link from "next/link";
 import { SyncButton } from "@/components/sync-button";
 import { ActivityStatus } from "@/components/activity-status";
 import { locationDisplayName, readableStoreCode } from "@/lib/ui/location-place";
+import { formatFriendlyDate } from "@/lib/format-date";
 
 interface Location {
   id: string;
@@ -33,12 +34,7 @@ interface LocationTableProps {
 
 function formatSyncDate(iso: string | null): string {
   if (!iso) return "Never synced";
-  const d = new Date(iso);
-  return d.toLocaleDateString("en-US", {
-    month: "short",
-    day: "numeric",
-    year: "numeric",
-  });
+  return formatFriendlyDate(iso);
 }
 
 export function LocationTable({

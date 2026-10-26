@@ -5,7 +5,6 @@ import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import {
-  Star,
   X,
   Send,
   CheckCircle2,
@@ -14,6 +13,8 @@ import {
   Trash2,
   RotateCw,
 } from "lucide-react";
+import { StarRating } from "@/components/star-rating";
+import { formatFriendlyDateTime } from "@/lib/format-date";
 import { cn } from "@/lib/utils";
 import { ActivityStatus } from "@/components/activity-status";
 import { Spinner } from "@/components/ui/spinner";
@@ -74,6 +75,7 @@ interface ReviewDetailPanelProps {
   review: ReviewForPanel;
   reply: ReplyForPanel | null;
   canApprove: boolean;
+  aiOnly?: boolean;
   contact?: ResolutionContact;
   members?: Array<{ id: string; email: string }>;
   onClose: () => void;
@@ -87,38 +89,8 @@ interface ReviewDetailPanelProps {
 // Sub-components
 // ---------------------------------------------------------------------------
 
-function StarDisplay({ rating }: { rating: number }) {
-  return (
-    <div className="flex items-center gap-0.5" aria-label={`${rating} out of 5 stars`}>
-      {Array.from({ length: 5 }).map((_, i) => (
-        <Star
-          key={i}
-          className={cn(
-            "h-4 w-4",
-            i < rating
-              ? rating >= 4
-                ? "fill-green-500 text-green-500"
-                : rating === 3
-                  ? "fill-yellow-400 text-yellow-500"
-                  : "fill-red-500 text-red-500"
-              : "fill-silver text-silver"
-          )}
-          aria-hidden
-        />
-      ))}
-    </div>
-  );
-}
-
 function formatDate(iso: string | null): string {
-  if (!iso) return "";
-  return new Date(iso).toLocaleString("en-US", {
-    day: "numeric",
-    month: "short",
-    year: "numeric",
-    hour: "2-digit",
-    minute: "2-digit",
-  });
+  return formatFriendlyDateTime(iso, "2-digit");
 }
 
 const REPLY_STATUS_MAP: Record<
@@ -141,6 +113,7 @@ export function ReviewDetailPanel({
   review,
   reply: serverReply,
   canApprove,
+  aiOnly = false,
   contact = { phone: null, email: null },
   members = [],
   onClose,
@@ -495,7 +468,7 @@ export function ReviewDetailPanel({
       <div className="flex-1 overflow-y-auto px-4 py-4 space-y-4">
         {/* Rating + date row */}
         <div className="flex items-center justify-between">
-          <StarDisplay rating={review.star_rating} />
+          <StarRating rating={review.star_rating} size="md" />
           <span className="text-[11px] text-slate">
             {formatDate(review.review_create_time)}
           </span>
@@ -522,6 +495,13 @@ export function ReviewDetailPanel({
             .filter(Boolean)
             .join(" · ") || "No language or complaint theme on this review."}
         </p>
+        {aiOnly ? (
+          review.assigned_to ? (
+            <p className="text-xs text-slate">
+              Assigned to {members.find((member) => member.id === review.assigned_to)?.email ?? "a teammate"}
+            </p>
+          ) : null
+        ) : (
         <div className="flex flex-col gap-2 sm:flex-row sm:items-end">
           <SelectField
             label="Assigned to"
@@ -558,6 +538,7 @@ export function ReviewDetailPanel({
             {loading === "assign" ? "Saving…" : "Save assignment"}
           </Button>
         </div>
+        )}
         <div className="space-y-2">
           <p className="text-xs font-semibold uppercase tracking-[0.08em] text-slate">Internal notes</p>
           {(review.notes ?? []).length === 0 ? (
@@ -747,7 +728,9 @@ export function ReviewDetailPanel({
             <p className="text-xs font-medium text-red-800">Publishing failed</p>
             <p className="mt-0.5 text-xs text-red-600">{reply.last_error}</p>
             <p className="mt-1 text-[11px] text-red-500">
-              You can edit the reply and try publishing again.
+              {aiOnly
+                ? "You can try publishing again. Generating a new reply sends it back for approval."
+                : "You can edit the reply and try publishing again."}
             </p>
           </div>
         )}
@@ -755,7 +738,9 @@ export function ReviewDetailPanel({
         {/* ── No reply — show generate + manual options ────────────── */}
         {!reply && !isCreating && replyStatus === "none" && (
           <div className="space-y-3 pt-1">
-            <ResolutionContactActions contact={contact} disabled={loading !== null} onAdd={addContact} />
+            {aiOnly ? null : (
+              <ResolutionContactActions contact={contact} disabled={loading !== null} onAdd={addContact} />
+            )}
             <div className="flex flex-wrap gap-2">
               <Button
                 size="sm"
@@ -766,6 +751,11 @@ export function ReviewDetailPanel({
                 {loading !== "generate" ? <Sparkles className="h-3.5 w-3.5" aria-hidden /> : null}
                 {loading === "generate" ? "Generating reply…" : "Generate AI Response"}
               </Button>
+              {aiOnly ? (
+                <p className="w-full text-xs text-slate">
+                  Your reply is written by AI. A higher role approves it, and then you can publish it.
+                </p>
+              ) : (
               <Button
                 variant="outline"
                 size="sm"
@@ -776,12 +766,13 @@ export function ReviewDetailPanel({
                 <Pencil className="h-3.5 w-3.5" aria-hidden />
                 Write manually
               </Button>
+              )}
             </div>
             </div>
         )}
 
         {/* Create form */}
-        {isCreating && !reply && (
+        {isCreating && !reply && !aiOnly && (
           <div className="space-y-3">
             <label htmlFor="draft-reply" className="block text-xs font-medium text-slate">
               Draft reply
@@ -826,7 +817,7 @@ export function ReviewDetailPanel({
         {/* Existing reply — display or edit mode */}
         {reply && (
           <div className="space-y-3">
-            {isEditing ? (
+            {isEditing && !aiOnly ? (
               <>
                 <label htmlFor="edit-reply" className="block text-xs font-medium text-slate">
                   Edit reply
@@ -880,9 +871,11 @@ export function ReviewDetailPanel({
                     Generated reply. This is not a translation of the review.
                   </p>
                 )}
-                {review.star_rating <= 3 && reply.status !== "published" ? (
+                {review.star_rating <= 3 && reply.status === "draft" ? (
                   <p className="mb-1.5 text-[11px] text-slate">
-                    This 1–3 star review stays unpublished until an owner or admin approves it.
+                    {aiOnly
+                      ? "A higher role has to approve this draft before you can publish it."
+                      : "This 1–3 star review stays unpublished until an owner or admin approves it."}
                   </p>
                 ) : null}
                 {reply.approved_at && reply.status !== "draft" ? (
@@ -911,7 +904,9 @@ export function ReviewDetailPanel({
                   {reply.content}
                 </p>
                 <div className="mt-3">
-                  <ResolutionContactActions contact={contact} disabled={loading !== null} onAdd={addContact} />
+                  {aiOnly ? null : (
+                    <ResolutionContactActions contact={contact} disabled={loading !== null} onAdd={addContact} />
+                  )}
                 </div>
                 {/* Keep primary actions next to the draft so they are not clipped */}
                 {reply.status === "draft" && (
@@ -971,10 +966,13 @@ export function ReviewDetailPanel({
                           {loading === "submit" ? "Submitting…" : "Submit for approval"}
                         </Button>
                         <p className="w-full text-xs text-slate">
-                          An owner or admin needs to approve this draft before it can be published.
+                          {aiOnly
+                            ? "A higher role has to approve this draft. After that, you can publish it."
+                            : "An owner or admin needs to approve this draft before it can be published."}
                         </p>
                       </>
                     )}
+                    {aiOnly ? null : (
                     <Button
                       size="sm"
                       variant="outline"
@@ -988,6 +986,7 @@ export function ReviewDetailPanel({
                       <Pencil className="h-3.5 w-3.5" aria-hidden />
                       Edit
                     </Button>
+                    )}
                     <Button
                       size="sm"
                       variant="outline"
@@ -1030,6 +1029,8 @@ export function ReviewDetailPanel({
                     >
                       Rewrite
                     </Button>
+                    {aiOnly ? null : (
+                    <>
                     <SelectField
                       label="Template"
                       value={templateId}
@@ -1064,6 +1065,8 @@ export function ReviewDetailPanel({
                     >
                       Apply
                     </Button>
+                    </>
+                    )}
                     <Button
                       size="sm"
                       variant="ghost"
@@ -1078,7 +1081,7 @@ export function ReviewDetailPanel({
                 )}
                 {reply.status === "approved" && (
                   <div className="mt-3 flex flex-wrap gap-2">
-                    {canApprove ? (
+                    {canApprove || aiOnly ? (
                     <Button
                       size="sm"
                       onClick={handlePublish}
@@ -1095,6 +1098,8 @@ export function ReviewDetailPanel({
                     ) : (
                       <p className="w-full text-xs text-slate">An owner or admin publishes this reply.</p>
                     )}
+                    {aiOnly ? null : (
+                    <>
                     <Button
                       size="sm"
                       variant="outline"
@@ -1118,16 +1123,18 @@ export function ReviewDetailPanel({
                     >
                       <Trash2 className="h-3.5 w-3.5" aria-hidden />
                     </Button>
+                    </>
+                    )}
                   </div>
                 )}
-                {reply.status === "pending_publish" && canApprove ? (
+                {reply.status === "pending_publish" && (canApprove || aiOnly) ? (
                   <div className="mt-3">
                     <Button size="sm" variant="outline" onClick={handlePublish} disabled={loading !== null}>
                       {loading === "publish" ? "Checking Google…" : "Check whether Google has this reply"}
                     </Button>
                   </div>
                 ) : null}
-                {reply.status === "failed" && canApprove ? (
+                {reply.status === "failed" && (canApprove || aiOnly) ? (
                   <div className="mt-3 flex flex-wrap gap-2">
                     <Button
                       size="sm"
@@ -1142,6 +1149,23 @@ export function ReviewDetailPanel({
                       )}
                       {loading === "publish" ? "Posting to Google…" : "Retry publish"}
                     </Button>
+                    {aiOnly ? (
+                      <>
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={() => handleGenerateAI({ adjustment: "regenerate", replaceEdited: true })}
+                        disabled={loading !== null}
+                        className="gap-1.5"
+                      >
+                        {loading === "generate" ? <Spinner size="sm" /> : <RotateCw className="h-3.5 w-3.5" aria-hidden />}
+                        {loading === "generate" ? "Gemini is writing…" : "Regenerate"}
+                      </Button>
+                      <p className="w-full text-xs text-slate">
+                        Generating a new reply sends it back for approval.
+                      </p>
+                      </>
+                    ) : (
                     <Button
                       size="sm"
                       variant="outline"
@@ -1155,6 +1179,7 @@ export function ReviewDetailPanel({
                       <Pencil className="h-3.5 w-3.5" aria-hidden />
                       Edit
                     </Button>
+                    )}
                   </div>
                 ) : null}
               </div>

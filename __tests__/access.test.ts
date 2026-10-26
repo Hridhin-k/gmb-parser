@@ -2,6 +2,8 @@ import { describe, expect, it } from "vitest";
 import {
   canAct,
   clampListScope,
+  coerceAssignableRole,
+  draftsWithAiOnly,
   inScope,
   reviewPermission,
   roleScopeError,
@@ -119,6 +121,14 @@ describe("tenant and scope isolation", () => {
     expect(roleScopeError("agent", { clientId: BRAND, groupId: GROUP, locationId: null })).toMatch(/one place/);
   });
 
+  it("treats the older admin value as an organization admin", () => {
+    expect(coerceAssignableRole("admin")).toBe("org_admin");
+    expect(coerceAssignableRole({ value: "admin" })).toBe("org_admin");
+    expect(coerceAssignableRole("")).toBeUndefined();
+    expect(coerceAssignableRole("member")).toBe("member");
+    expect(coerceAssignableRole("auditor")).toBe("auditor");
+  });
+
   it("denies a person whose access is turned off", () => {
     expect(
       canAct({
@@ -129,5 +139,12 @@ describe("tenant and scope isolation", () => {
         actorWorkspaceId: ORG,
       })
     ).toBe(false);
+  });
+
+  it("lets only an invited member draft with AI", () => {
+    expect(draftsWithAiOnly("member")).toBe(true);
+    expect(draftsWithAiOnly("store_manager")).toBe(false);
+    expect(draftsWithAiOnly("agent")).toBe(false);
+    expect(draftsWithAiOnly("owner")).toBe(false);
   });
 });

@@ -4,15 +4,11 @@ import { formatHours } from "@/lib/analytics-metrics";
 import { HBarChart, MonthVolumeChart, STAR_COLORS } from "@/components/charts";
 import { SentimentDonut } from "@/components/insights-dashboard";
 import { formatFriendlyDateTime } from "@/lib/format-date";
+import { formatPercent as pct } from "@/lib/format";
 import type { OverviewBoard, OverviewInsightGlance, OverviewStoreRow, OverviewThemeBar } from "@/lib/overview-board";
 import { cn } from "@/lib/utils";
 
 const HEADING = { fontFamily: "var(--font-heading), sans-serif" };
-
-function pct(value: number | null): string {
-  if (value === null) return "—";
-  return `${Math.round(value * 100)}%`;
-}
 
 function points(current: number | null, previous: number | null): number | null {
   if (current === null || previous === null) return null;

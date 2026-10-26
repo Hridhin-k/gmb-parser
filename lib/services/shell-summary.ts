@@ -3,6 +3,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import type { ShellProfileAttention } from "@/lib/shell";
 import { mergeProfileAttention, parseShellProfileCounts } from "@/lib/shell-profile";
 import { listUnreadNotices, type ProfileNotice } from "@/lib/services/notifications";
+import { remember } from "@/lib/ttl-cache";
 
 export interface ShellSummary {
   unreplied: number;
@@ -70,12 +71,27 @@ async function profileAttention(workspaceId: string, locationIds: string[]): Pro
   return mergeProfileAttention(counts, names);
 }
 
+function scopeKey(ids: string[] | null): string {
+  if (!ids) return "*";
+  return ids.length < 2 ? (ids[0] ?? "") : [...ids].sort().join(",");
+}
+
 /** Counts for the sidebar and the bell. A location list limits both to those profiles. */
 export const getShellSummary = cache(async function getShellSummary(
   workspaceId: string,
   allowedClientIds: string[] | null = null,
   locationIds: string[] | null = null,
   userId: string | null = null
+): Promise<ShellSummary> {
+  const key = `shell:${userId ?? ""}:${workspaceId}:${scopeKey(allowedClientIds)}:${scopeKey(locationIds)}`;
+  return remember(key, 60_000, () => loadShellSummary(workspaceId, allowedClientIds, locationIds, userId));
+});
+
+async function loadShellSummary(
+  workspaceId: string,
+  allowedClientIds: string[] | null,
+  locationIds: string[] | null,
+  userId: string | null
 ): Promise<ShellSummary> {
   const admin = createAdminClient();
   const noticesPromise = userId ? listUnreadNotices(workspaceId, userId) : Promise.resolve([] as ProfileNotice[]);
@@ -150,4 +166,4 @@ export const getShellSummary = cache(async function getShellSummary(
   ]);
 
   return { unreplied, escalations, drafts, failed, expiredConnections, profiles: [], notices };
-});
+}

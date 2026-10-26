@@ -42,7 +42,16 @@ export function SelectField({
     <Select
       items={items.map((item) => ({ value: item.itemValue, label: item.label }))}
       value={items.some((item) => item.itemValue === current) ? current : null}
-      onValueChange={(next) => onValueChange(!next || next === EMPTY ? "" : next)}
+      onValueChange={(next, details) => {
+        // Opening the menu registers items one at a time. Until the current
+        // value is in that list, the select reports null. Keep the controlled value.
+        if (next == null) {
+          details.cancel()
+          return
+        }
+        const raw = typeof next === "string" ? next : ""
+        onValueChange(raw === EMPTY ? "" : raw)
+      }}
       disabled={disabled}
     >
       <SelectTrigger id={id} aria-label={label} size={size} className={cn("w-full", className)}>

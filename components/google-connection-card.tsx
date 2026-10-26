@@ -8,6 +8,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { ExternalLink, Unplug } from "lucide-react";
+import { formatFriendlyDate } from "@/lib/format-date";
 
 interface ConnectionInfo {
   id: string;
@@ -152,12 +153,7 @@ export function GoogleConnectionCard({
                   {conn.google_email}
                 </p>
                 <p className="text-xs font-light text-slate">
-                  Connected{" "}
-                  {new Date(conn.created_at).toLocaleDateString("en-US", {
-                    month: "short",
-                    day: "numeric",
-                    year: "numeric",
-                  })}
+                  Connected {formatFriendlyDate(conn.created_at)}
                 </p>
               </div>
               {getStatusBadge(conn.status)}

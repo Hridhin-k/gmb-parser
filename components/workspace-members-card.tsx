@@ -128,6 +128,8 @@ export function WorkspaceMembersCard({
   }
 
   async function handleRoleChange(member: MemberRow, nextRole: string) {
+    if (!nextRole || nextRole === member.role) return;
+    if (!(ASSIGNABLE_ROLES as readonly string[]).includes(nextRole)) return;
     setError(null);
     setBusyId(member.userId);
     try {

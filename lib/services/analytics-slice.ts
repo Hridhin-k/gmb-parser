@@ -1,6 +1,7 @@
 import { createAdminClient } from "@/lib/supabase/admin";
 import type { OnboardingComparison, SampleSummary } from "@/lib/analytics-metrics";
 import { sliceFromRpc } from "@/lib/analytics-slice";
+import { remember } from "@/lib/ttl-cache";
 
 export interface AnalyticsSlice {
   window: SampleSummary;
@@ -13,6 +14,17 @@ export interface AnalyticsSlice {
  * One RPC aggregates in Postgres; the page never downloads review rows.
  */
 export async function loadAnalyticsSlice(input: {
+  workspaceId: string;
+  locationIds: string[];
+  start: string | null;
+  end: string | null;
+}): Promise<AnalyticsSlice> {
+  const places = [...input.locationIds].sort().join(",");
+  const key = `slice:${input.workspaceId}:${input.start ?? ""}:${input.end ?? ""}:${places}`;
+  return remember(key, 45_000, () => fetchAnalyticsSlice(input));
+}
+
+async function fetchAnalyticsSlice(input: {
   workspaceId: string;
   locationIds: string[];
   start: string | null;

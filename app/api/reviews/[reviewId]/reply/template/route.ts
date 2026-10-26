@@ -4,6 +4,7 @@ import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { AuditService } from "@/lib/services/audit";
 import { assertSafePublicReply } from "@/lib/services/reply-checks";
+import { assertCanEditReplyText } from "@/lib/services/access";
 import { ensurePersonalWorkspace } from "@/lib/services/workspace";
 import { AppError, toStatusCode, toUserMessage } from "@/lib/errors";
 import { parseBody, validateId } from "@/lib/validation";
@@ -43,6 +44,12 @@ export async function POST(
   if (!template) return NextResponse.json({ error: "That template is not available." }, { status: 400 });
 
   const membership = await ensurePersonalWorkspace(user);
+  try {
+    await assertCanEditReplyText(user.id, membership.workspace_id);
+  } catch (error) {
+    const status = error instanceof AppError ? error.statusCode : 403;
+    return NextResponse.json({ error: toUserMessage(error) }, { status });
+  }
   const admin = createAdminClient();
   const review = await admin
     .from("grm_reviews")

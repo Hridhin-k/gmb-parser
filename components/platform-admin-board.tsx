@@ -9,6 +9,7 @@ import { Input } from "@/components/ui/input";
 import { ConfirmDialog } from "@/components/confirm-dialog";
 import { PaginationBar } from "@/components/pagination-bar";
 import type { PlatformInviteRow, TenantRow } from "@/lib/services/platform";
+import { formatFriendlyDate } from "@/lib/format-date";
 
 async function send(url: string, body: object) {
   const response = await fetch(url, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
@@ -18,7 +19,8 @@ async function send(url: string, body: object) {
 }
 
 function fmtDate(value: string | null) {
-  return value ? new Date(value).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" }) : "—";
+  if (!value) return "—";
+  return formatFriendlyDate(value);
 }
 
 type ConfirmState =

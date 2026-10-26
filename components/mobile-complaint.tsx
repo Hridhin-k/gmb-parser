@@ -20,7 +20,7 @@ async function errorText(response: Response): Promise<string> {
   return payload.error || "That did not save.";
 }
 
-export function MobileComplaintView({ data }: { data: MobileComplaint }) {
+export function MobileComplaintView({ data, aiOnly = false }: { data: MobileComplaint; aiOnly?: boolean }) {
   const router = useRouter();
   const { refresh } = useServerRefresh();
   const card = data.card;
@@ -116,29 +116,37 @@ export function MobileComplaintView({ data }: { data: MobileComplaint }) {
 
   async function sendForApproval() {
     if (!card || !content.trim()) {
-      setError("Write a reply before sending it for approval.");
+      setError(aiOnly ? "Generate an AI reply before sending it for approval." : "Write a reply before sending it for approval.");
       return;
     }
     setPending("submit");
     setError(null);
-    const saved = await fetch(`/api/reviews/${card.reviewId}/reply`, {
-      method: replyId ? "PUT" : "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(replyId ? { replyId, content } : { content }),
-    });
-    if (!saved.ok) {
-      setError(await errorText(saved));
-      setPending(null);
-      return;
+    let id = replyId;
+    if (!aiOnly) {
+      const saved = await fetch(`/api/reviews/${card.reviewId}/reply`, {
+        method: replyId ? "PUT" : "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(replyId ? { replyId, content } : { content }),
+      });
+      if (!saved.ok) {
+        setError(await errorText(saved));
+        setPending(null);
+        return;
+      }
+      const payload = (await saved.json()) as { id?: string };
+      id = payload.id ?? replyId;
+      if (!id) {
+        setError("The draft was not saved.");
+        setPending(null);
+        return;
+      }
+      setReplyId(id);
     }
-    const payload = (await saved.json()) as { id?: string };
-    const id = payload.id ?? replyId;
     if (!id) {
-      setError("The draft was not saved.");
+      setError("Generate an AI reply before sending it for approval.");
       setPending(null);
       return;
     }
-    setReplyId(id);
     const submitted = await fetch(`/api/reviews/${card.reviewId}/reply/submit`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -243,15 +251,21 @@ export function MobileComplaintView({ data }: { data: MobileComplaint }) {
             <label htmlFor="public-reply" className="text-sm font-medium text-ink">
               Public reply
             </label>
-            <p className="mt-1 text-sm text-slate">A person who can approve 1–3 star replies has to approve this before it can be posted.</p>
+            <p className="mt-1 text-sm text-slate">
+              {aiOnly
+                ? "The reply is written by AI. A higher role approves it, and then you can publish it from the inbox."
+                : "A person who can approve 1–3 star replies has to approve this before it can be posted."}
+            </p>
             <textarea
               id="public-reply"
               value={content}
               onChange={(event) => setContent(event.target.value)}
               disabled={!card.canDraft || pending !== null}
+              readOnly={aiOnly}
               rows={5}
-              className="mt-2 w-full resize-y rounded-xl border border-silver px-3 py-3 text-base leading-6 text-ink"
+              className="mt-2 w-full resize-y rounded-xl border border-silver px-3 py-3 text-base leading-6 text-ink read-only:bg-paper"
             />
+            {aiOnly ? null : (
             <ResolutionContactButtons
               phone={data.resolutionPhone}
               email={data.resolutionEmail}
@@ -265,6 +279,7 @@ export function MobileComplaintView({ data }: { data: MobileComplaint }) {
                 setContent((current) => insertResolutionContact(current, sentence));
               }}
             />
+            )}
             <p className="mt-2 text-sm text-slate">
               {content.trim().length === 0 ? "No reply yet." : violations.length === 0 ? "The reply checks passed." : violations[0]}
             </p>

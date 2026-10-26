@@ -7,6 +7,7 @@ import { hasUserConsent } from "./consent";
 import { ensurePersonalWorkspace, getMemberRole } from "./workspace";
 import { AppError } from "@/lib/errors";
 import { SUPPORT_TENANT_COOKIE } from "@/lib/platform-admin";
+import { peek, put } from "@/lib/ttl-cache";
 
 /** Where the invite-only gate sends each refusal. Returns null for other errors. */
 export function tenantGateRedirect(error: unknown): string | null {
@@ -32,17 +33,43 @@ export function tenantGateRedirect(error: unknown): string | null {
 // Wrapped in React `cache` so a layout and its page share one lookup per
 // request. Route handlers run outside a render and get no memoization.
 
+function userFromClaims(claims: Record<string, unknown> | null | undefined): User | null {
+  if (!claims || typeof claims.sub !== "string") return null;
+  const metadata = claims.user_metadata;
+  return {
+    id: claims.sub,
+    aud: typeof claims.aud === "string" ? claims.aud : "authenticated",
+    email: typeof claims.email === "string" ? claims.email : undefined,
+    phone: typeof claims.phone === "string" ? claims.phone : undefined,
+    app_metadata: {},
+    user_metadata: metadata && typeof metadata === "object" ? (metadata as User["user_metadata"]) : {},
+    created_at: typeof claims.iat === "number" ? new Date(claims.iat * 1000).toISOString() : new Date(0).toISOString(),
+  } as User;
+}
+
+/**
+ * Local JWT check. The proxy already verified this request, so page renders
+ * do not call the Auth server again. A missing email falls back to that call
+ * so an invite can still be matched.
+ */
 export const getCurrentUser = cache(async (): Promise<User | null> => {
   const supabase = await createClient();
+  const { data } = await supabase.auth.getClaims();
+  const fromClaims = userFromClaims(data?.claims as Record<string, unknown> | undefined);
+  if (fromClaims?.email) return fromClaims;
   const {
     data: { user },
   } = await supabase.auth.getUser();
   return user;
 });
 
-export const getUserConsent = cache(async (userId: string): Promise<boolean> =>
-  hasUserConsent(userId)
-);
+export const getUserConsent = cache(async (userId: string): Promise<boolean> => {
+  const key = `consent:${userId}`;
+  if (peek<boolean>(key) === true) return true;
+  const agreed = await hasUserConsent(userId);
+  if (agreed) put(key, true, 60_000);
+  return agreed;
+});
 
 /** Signed-in user who has accepted the terms. Redirects otherwise. */
 export const requireConsentedUser = cache(async (): Promise<User> => {

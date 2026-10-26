@@ -13,8 +13,6 @@ import { locationInGroup } from "@/lib/hierarchy";
  * `range`, `rating`, and `filter` are not scope.
  */
 
-export const SCOPE_PARAM_KEYS = ["client", "group", "location"] as const;
-
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 /** Sent to queries when the saved permission no longer points at a real place. */

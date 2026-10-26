@@ -12,6 +12,8 @@ import { replyActivityLabel } from "@/lib/reply-activity";
 import { orIlikeAny } from "@/lib/postgrest-search";
 import { statusOrFilter } from "@/lib/review-filter-params";
 import { groupIdsInScope } from "@/lib/hierarchy";
+import { loadCatalogTables } from "@/lib/services/catalog-tables";
+import { forgetPrefix, remember } from "@/lib/ttl-cache";
 
 export interface DashboardFilters {
   /** Selected status keys; empty = all statuses. */
@@ -118,7 +120,20 @@ const EMPTY_KPIS: DashboardKpis = {
   criticalReviews: 0,
 };
 
+export function forgetReviewList(workspaceId: string): void {
+  forgetPrefix(`inbox:${workspaceId}:`);
+}
+
 export async function getDashboardData(
+  workspaceId: string,
+  filters: DashboardFilters
+) {
+  return remember(`inbox:${workspaceId}:${JSON.stringify(filters)}`, 20_000, () =>
+    loadDashboardData(workspaceId, filters)
+  );
+}
+
+async function loadDashboardData(
   workspaceId: string,
   filters: DashboardFilters
 ) {
@@ -127,48 +142,28 @@ export async function getDashboardData(
   // next page (reports, clients) until the browser times out.
   scheduleReviewBackfill(admin, workspaceId);
 
-  const [
-    { data: allClients },
-    { data: allLocations },
-    { data: connections },
-    { data: unassignedClients },
-    { data: locationGroups },
-  ] = await Promise.all([
-    admin
-      .from("grm_clients")
-      .select("id, name, notes")
-      .eq("workspace_id", workspaceId)
-      .eq("is_active", true)
-      .or(`notes.is.null,notes.neq.${UNASSIGNED_CLIENT_MARKER}`)
-      .order("name"),
-    admin
-      .from("grm_google_locations")
-      .select(
-        `id, location_title, store_code, address_formatted, client_id, group_id, last_synced_at,
-         grm_clients(name, notes)`
-      )
-      .eq("workspace_id", workspaceId)
-      .eq("is_active", true)
-      .order("location_title"),
+  const [tables, connectionsResult] = await Promise.all([
+    loadCatalogTables(workspaceId),
     admin
       .from("grm_google_connections")
       .select("id")
       .eq("workspace_id", workspaceId)
       .eq("status", "active")
       .limit(1),
-    admin
-      .from("grm_clients")
-      .select("id")
-      .eq("workspace_id", workspaceId)
-      .eq("notes", UNASSIGNED_CLIENT_MARKER),
-    admin
-      .from("grm_groups")
-      .select("id, name, parent_id")
-      .eq("workspace_id", workspaceId)
-      .order("name"),
   ]);
-
-  const unassignedIds = new Set((unassignedClients ?? []).map((c) => c.id));
+  const connections = connectionsResult.data;
+  const clientById = new Map(tables.clients.map((client) => [client.id, client]));
+  const unassignedIds = new Set(
+    tables.clients.filter((client) => client.notes === UNASSIGNED_CLIENT_MARKER).map((client) => client.id)
+  );
+  const allClients = tables.clients.filter((client) => client.notes !== UNASSIGNED_CLIENT_MARKER);
+  const allLocations = tables.locations
+    .filter((location) => location.is_active)
+    .map((location) => ({
+      ...location,
+      grm_clients: location.client_id ? (clientById.get(location.client_id) ?? null) : null,
+    }));
+  const locationGroups = tables.groups;
 
   const locations = (allLocations ?? []).filter((l) => {
     if (!l.client_id || unassignedIds.has(l.client_id)) return false;

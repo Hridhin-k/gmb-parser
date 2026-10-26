@@ -9,7 +9,7 @@ import { logger } from "@/lib/logger";
 import { parseBody, bulkReviewsBodySchema } from "@/lib/validation";
 import { checkRateLimit, AI_GENERATE_LIMIT, PUBLISH_LIMIT, WORKSPACE_AI_LIMIT } from "@/lib/rate-limit";
 import { ensurePersonalWorkspace } from "@/lib/services/workspace";
-import { assertReviewAction } from "@/lib/services/access";
+import { assertCanAssignReviews, assertCanEditReplyText, assertPublishAccess, assertReviewAction } from "@/lib/services/access";
 import { assertSafePublicReply } from "@/lib/services/reply-checks";
 import { createBulkJob, processBulkJob } from "@/lib/services/bulk-jobs";
 
@@ -112,6 +112,14 @@ export async function POST(request: Request) {
   }
 
   if (body.action === "assign") {
+    try {
+      await assertCanAssignReviews(user.id, workspaceId);
+    } catch (error) {
+      return NextResponse.json(
+        { error: error instanceof AppError ? error.message : "You cannot assign these reviews." },
+        { status: error instanceof AppError ? error.statusCode : 403 }
+      );
+    }
     const assigneeId = body.assigneeId ?? null;
     if (assigneeId) {
       const member = await admin
@@ -233,31 +241,23 @@ export async function POST(request: Request) {
       }
 
       if (body.action === "publish") {
-        const denied = await reviewAllowed(reviewId, "publish");
-        if (denied) {
-          results.push({ reviewId, ok: false, error: denied });
+        let publishMode: "standard" | "member";
+        try {
+          publishMode = await assertPublishAccess({
+            userId,
+            workspaceId,
+            reviewId,
+            replyStatus: reply.status,
+          });
+        } catch (error) {
+          results.push({
+            reviewId,
+            ok: false,
+            error: error instanceof AppError ? error.message : "You cannot publish this reply.",
+          });
           continue;
         }
-        if (reply.status === "draft") {
-          const approveDenied = await reviewAllowed(reviewId, "approve");
-          if (approveDenied) {
-            results.push({ reviewId, ok: false, error: approveDenied });
-            continue;
-          }
-          await admin
-            .from("grm_review_replies")
-            .update({
-              status: "approved",
-              approved_at: new Date().toISOString(),
-              approved_by: user.id,
-            })
-            .eq("id", reply.id);
-        } else if (reply.status !== "approved" && reply.status !== "failed") {
-          results.push({ reviewId, ok: false, error: "Reply cannot be published" });
-          continue;
-        }
-
-        if (reply.status === "failed") {
+        if (reply.status === "draft" || (reply.status === "failed" && publishMode === "standard")) {
           const approveDenied = await reviewAllowed(reviewId, "approve");
           if (approveDenied) {
             results.push({ reviewId, ok: false, error: approveDenied });
@@ -272,6 +272,15 @@ export async function POST(request: Request) {
               last_error: null,
             })
             .eq("id", reply.id);
+        } else if (reply.status === "failed") {
+          await admin
+            .from("grm_review_replies")
+            .update({ status: "approved", last_error: null })
+            .eq("id", reply.id)
+            .eq("status", "failed");
+        } else if (reply.status !== "approved") {
+          results.push({ reviewId, ok: false, error: "Reply cannot be published" });
+          continue;
         }
 
         await ReplyPublishingService.publishReply(
@@ -293,6 +302,18 @@ export async function POST(request: Request) {
         if (reply.status === "published" || reply.status === "pending_publish") {
           results.push({ reviewId, ok: false, error: "Cannot discard a published reply" });
           continue;
+        }
+        if (reply.status === "approved") {
+          try {
+            await assertCanEditReplyText(user.id, workspaceId);
+          } catch (error) {
+            results.push({
+              reviewId,
+              ok: false,
+              error: error instanceof AppError ? error.message : "You cannot discard this reply.",
+            });
+            continue;
+          }
         }
         await admin.from("grm_review_replies").delete().eq("id", reply.id);
         await admin

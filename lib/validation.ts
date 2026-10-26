@@ -35,14 +35,6 @@ const pageSchema = z.coerce
   .max(1000)
   .default(1);
 
-/** Page size — constrained range. */
-const pageSizeSchema = z.coerce
-  .number()
-  .int()
-  .min(1)
-  .max(100)
-  .default(50);
-
 /** Safe filter string — no SQL wildcards, reasonable length. */
 const filterStringSchema = z
   .string()
@@ -71,18 +63,6 @@ export function validateId(value: unknown, fieldName = "id"): string {
 }
 
 /**
- * Validates reply/AI content. Returns trimmed, bounded string.
- */
-export function validateReplyContent(value: unknown): string {
-  const result = replyContentSchema.safeParse(value);
-  if (!result.success) {
-    const issue = result.error.issues[0];
-    throw new ValidationError(issue?.message ?? "Invalid reply content");
-  }
-  return result.data;
-}
-
-/**
  * Validates and coerces a page number from searchParams/query.
  */
 export function validatePage(value: unknown): number {
@@ -92,31 +72,12 @@ export function validatePage(value: unknown): number {
 }
 
 /**
- * Validates and coerces a page size.
- */
-export function validatePageSize(value: unknown, max = 50): number {
-  const result = pageSizeSchema.safeParse(value);
-  if (!result.success) return max;
-  return Math.min(result.data, max);
-}
-
-/**
  * Validates a filter/search string — strips, trims, bounds length.
  */
 export function validateFilterString(value: unknown): string {
   const result = filterStringSchema.safeParse(value);
   if (!result.success) return "";
   return result.data;
-}
-
-/**
- * Validates a star rating filter (1-5 or empty).
- */
-export function validateRatingFilter(value: unknown): number | undefined {
-  if (!value || value === "") return undefined;
-  const n = Number(value);
-  if (!Number.isInteger(n) || n < 1 || n > 5) return undefined;
-  return n;
 }
 
 // ---------------------------------------------------------------------------

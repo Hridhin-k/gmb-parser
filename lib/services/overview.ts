@@ -371,44 +371,6 @@ export async function getClientOverview(
   });
 }
 
-export interface NewestReviewCard {
-  id: string;
-  reviewer: string;
-  rating: number;
-  comment: string | null;
-  createdAt: string;
-  locationId: string;
-}
-
-/** Newest stored reviews for the locations already in scope. */
-export async function listNewestReviews(
-  workspaceId: string,
-  locationIds: string[],
-  range: { start: Date | null; end: Date | null },
-  limit = 6
-): Promise<NewestReviewCard[]> {
-  if (locationIds.length === 0) return [];
-  const admin = createAdminClient();
-  let query = admin
-    .from("grm_reviews")
-    .select("id, star_rating, comment, reviewer_display_name, review_create_time, location_id")
-    .eq("workspace_id", workspaceId)
-    .is("missing_on_google_at", null)
-    .in("location_id", locationIds);
-  if (range.start) query = query.gte("review_create_time", range.start.toISOString());
-  if (range.end) query = query.lt("review_create_time", range.end.toISOString());
-  const { data, error } = await query.order("review_create_time", { ascending: false }).limit(limit);
-  if (error) throw new Error(`Failed to load newest reviews: ${error.message}`);
-  return (data ?? []).map((row) => ({
-    id: row.id,
-    reviewer: row.reviewer_display_name,
-    rating: row.star_rating,
-    comment: row.comment,
-    createdAt: row.review_create_time,
-    locationId: row.location_id,
-  }));
-}
-
 export interface OverviewSignals {
   themes: Array<{ locationId: string; theme: string; count: number }>;
   themesTruncated: boolean;

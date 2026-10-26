@@ -1,6 +1,7 @@
 import type { ReactNode } from "react";
 import { ActivityStatus } from "@/components/activity-status";
 import { Skeleton } from "@/components/ui/skeleton";
+import { PAGE_LOADING } from "@/lib/ui-status";
 import { cn } from "@/lib/utils";
 
 type Variant = "clients" | "reviews" | "analytics" | "audit" | "settings" | "client" | "list";
@@ -170,6 +171,15 @@ function Body({ variant }: { variant: Variant }) {
     default:
       return <Rows count={4} />;
   }
+}
+
+export function createPageLoading(page: keyof typeof PAGE_LOADING, variant: Variant = "list") {
+  function Loading() {
+    const copy = PAGE_LOADING[page];
+    return <PageLoading variant={variant} title={copy.title} detail={copy.detail} tone={copy.tone} />;
+  }
+  Loading.displayName = `PageLoading(${page})`;
+  return Loading;
 }
 
 export function PageLoading({

@@ -5,6 +5,7 @@ import { AuditService } from "./audit";
 import { AppError, GoogleApiError, ValidationError } from "@/lib/errors";
 import { checkReplyGuardrails, negativeReviewNeedsApproval } from "@/lib/reply-guardrails";
 import { comparePublishedReply } from "@/lib/reply-adjustments";
+import { forgetReviewList } from "@/lib/services/dashboard";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -137,6 +138,7 @@ export class ReplyPublishingService {
     userId: string,
     options?: { automated?: boolean }
   ): Promise<PublishResult> {
+    forgetReviewList(workspaceId);
     const supabase = createAdminClient();
 
     // ── 1. Load reply with full relationship chain ────────────────────────

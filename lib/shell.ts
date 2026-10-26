@@ -1,4 +1,4 @@
-import { allows, workspaceGrant } from "@/lib/access";
+import { allows, draftsWithAiOnly, workspaceGrant } from "@/lib/access";
 import { parseDateRange, type DateRangeKey } from "@/lib/date-range";
 
 export type ShellRole = "owner" | "admin" | "member" | string | null | undefined;
@@ -177,7 +177,14 @@ const EVERYONE: ShellNavId[] = [
   "locations",
 ];
 
+const MEMBER_NAV: ShellNavId[] = ["inbox", "escalations"];
+
+export function homePath(role: ShellRole): string {
+  return draftsWithAiOnly(role) ? "/reviews" : "/overview";
+}
+
 export function visibleNav(role: ShellRole): ShellNavId[] {
+  if (draftsWithAiOnly(role)) return [...MEMBER_NAV];
   const items = [...EVERYONE];
   if (isManager(role)) items.push("clients");
   if (canOpenTeam(role)) items.push("team");
@@ -187,6 +194,16 @@ export function visibleNav(role: ShellRole): ShellNavId[] {
 }
 
 export function canOpenPath(pathname: string, role: ShellRole): boolean {
+  if (draftsWithAiOnly(role)) {
+    return (
+      pathname === "/reviews" ||
+      pathname.startsWith("/reviews/") ||
+      pathname === "/escalations" ||
+      pathname.startsWith("/escalations/") ||
+      pathname === "/m/escalations" ||
+      pathname.startsWith("/m/escalations/")
+    );
+  }
   if (pathname === "/team" || pathname.startsWith("/team/")) return canOpenTeam(role);
   if (pathname === "/settings" || pathname.startsWith("/settings/")) return canOpenSettings(role);
   if (pathname === "/audit" || pathname.startsWith("/audit/")) return canOpenTeam(role);

@@ -12,17 +12,12 @@ import { cn } from "@/lib/utils";
 import { parseDateRange } from "@/lib/date-range";
 import { PaginationBar } from "@/components/pagination-bar";
 import { validatePage } from "@/lib/validation";
+import { formatFriendlyDateTime } from "@/lib/format-date";
 
 const AUDIT_PAGE_SIZE = 50;
 
 function formatDate(iso: string): string {
-  return new Date(iso).toLocaleString("en-US", {
-    day: "numeric",
-    month: "short",
-    year: "numeric",
-    hour: "2-digit",
-    minute: "2-digit",
-  });
+  return formatFriendlyDateTime(iso, "2-digit");
 }
 
 type Tone = "good" | "bad" | "neutral" | "info";

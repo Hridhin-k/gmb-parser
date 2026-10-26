@@ -15,6 +15,21 @@ export const ASSIGNABLE_ROLES = [
 
 export type AssignableRole = (typeof ASSIGNABLE_ROLES)[number];
 
+/**
+ * The role form used to send "admin" for an organization admin, and a closed
+ * select can submit a blank value while its options are still registering.
+ * Both become a real assignable role, or no role, before validation.
+ */
+export function coerceAssignableRole(value: unknown): unknown {
+  const raw =
+    value && typeof value === "object" && "value" in value
+      ? (value as { value: unknown }).value
+      : value;
+  if (raw === "admin") return "org_admin";
+  if (raw === "") return undefined;
+  return raw;
+}
+
 export type Permission =
   | "view"
   | "draft"
@@ -124,8 +139,6 @@ export interface ResourceRef {
   locationId?: string | null;
 }
 
-export const EMPTY_SCOPE: ScopeIds = { clientId: null, groupId: null, locationId: null };
-
 export function roleLabel(role: string): string {
   switch (role) {
     case "owner":
@@ -155,6 +168,11 @@ export function grantFor(role: string | null | undefined, permission: Permission
 /** True when the role has the permission somewhere. Group-only edit counts for navigation. */
 export function allows(role: string | null | undefined, permission: Permission): boolean {
   return grantFor(role, permission) !== false;
+}
+
+/** Invited members write a public reply only by asking the model. */
+export function draftsWithAiOnly(role: string | null | undefined): boolean {
+  return role === "member";
 }
 
 /** Workspace-wide grant. A group manager's "own group" cell does not count. */

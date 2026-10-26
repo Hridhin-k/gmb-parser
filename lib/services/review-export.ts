@@ -1,4 +1,5 @@
 import { createAdminClient } from "@/lib/supabase/admin";
+import { remember } from "@/lib/ttl-cache";
 import { locationDisplayName } from "@/lib/ui/location-place";
 import { statusOrFilter } from "@/lib/review-filter-params";
 
@@ -88,6 +89,14 @@ async function exportLocationIds(
 
 /** How many reviews the CSV export would include for this client and period. */
 export async function countExportableReviews(
+  workspaceId: string,
+  filters: Pick<ReviewExportFilters, "clientId" | "groupId" | "locationId" | "since" | "until">
+): Promise<number> {
+  const key = `review-count:${workspaceId}:${filters.clientId ?? ""}:${filters.groupId ?? ""}:${filters.locationId ?? ""}:${filters.since ?? ""}:${filters.until ?? ""}`;
+  return remember(key, 45_000, () => countReviews(workspaceId, filters));
+}
+
+async function countReviews(
   workspaceId: string,
   filters: Pick<ReviewExportFilters, "clientId" | "groupId" | "locationId" | "since" | "until">
 ): Promise<number> {
