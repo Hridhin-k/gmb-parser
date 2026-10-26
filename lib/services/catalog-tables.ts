@@ -1,5 +1,6 @@
 import { cache } from "react";
 import { revalidateTag, unstable_cache } from "next/cache";
+import { forgetPrefix, remember } from "@/lib/ttl-cache";
 import { createAdminClient } from "@/lib/supabase/admin";
 
 export interface CatalogClientRow {
@@ -78,10 +79,11 @@ const getCachedCatalogTables = unstable_cache(fetchCatalogTables, ["catalog-tabl
 export const loadCatalogTables = cache(async function loadCatalogTables(
   workspaceId: string
 ): Promise<CatalogTables> {
-  return getCachedCatalogTables(workspaceId);
+  return remember(`catalog:${workspaceId}`, 60_000, () => getCachedCatalogTables(workspaceId));
 });
 
 /** Call after any mutation that changes clients, groups or locations. */
 export function bustCatalogCache(): void {
   revalidateTag("catalog", "max");
+  forgetPrefix("catalog:");
 }

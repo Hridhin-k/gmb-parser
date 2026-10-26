@@ -2,6 +2,7 @@ import { cache } from "react";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { inviteExpiresAt, isInviteExpired } from "@/lib/onboarding";
 import { AppError, AuthorizationError, ValidationError } from "@/lib/errors";
+import { forget, forgetUserNavigation, peek, put } from "@/lib/ttl-cache";
 import { AuditService } from "@/lib/services/audit";
 import { logger } from "@/lib/logger";
 import type { GrmMemberRole } from "@/lib/types";
@@ -403,6 +404,18 @@ export async function inspectTenantAccess(user: {
   id: string;
   email?: string | null;
 }): Promise<TenantAccess> {
+  const key = `tenant-access:${user.id}`;
+  const cached = peek<TenantAccess>(key);
+  if (cached?.kind === "allowed" && cached.workspaceId) return cached;
+  const access = await resolveTenantAccess(user);
+  if (access.kind === "allowed" && access.workspaceId) put(key, access, 20_000);
+  return access;
+}
+
+async function resolveTenantAccess(user: {
+  id: string;
+  email?: string | null;
+}): Promise<TenantAccess> {
   // Independent checks run together: one round-trip of latency, not two.
   const [blocked] = await Promise.all([isPlatformBlocked(user.email), acceptPendingInvites(user)]);
   if (blocked) {
@@ -648,6 +661,8 @@ export async function setActiveWorkspace(userId: string, workspaceId: string): P
       dbError: activated.error.message,
     });
   }
+  forgetUserNavigation(userId);
+  forget(`roster:${workspaceId}`);
 }
 
 export const listAccessibleWorkspaces = cache(async (userId: string): Promise<AccessibleWorkspace[]> => {
@@ -788,6 +803,8 @@ export async function changeMemberRole(input: {
     entityId: input.targetUserId,
     metadata: { role: input.role, previousRole: target.role } as Record<string, unknown>,
   });
+  forgetUserNavigation(input.targetUserId);
+  forget(`roster:${input.workspaceId}`);
 }
 
 export async function removeMember(input: {
@@ -840,6 +857,8 @@ export async function removeMember(input: {
     entityId: input.targetUserId,
     metadata: { role: target.role } as Record<string, unknown>,
   });
+  forgetUserNavigation(input.targetUserId);
+  forget(`roster:${input.workspaceId}`);
 }
 
 export async function inviteToWorkspace(input: {
@@ -1059,6 +1078,8 @@ export async function updateMemberAccess(input: {
     .eq("workspace_id", input.workspaceId)
     .eq("user_id", input.targetUserId);
   if (error) throw new AppError("Could not update that person.", "DB_ERROR", 500, { dbError: error.message });
+  forgetUserNavigation(input.targetUserId);
+  forget(`roster:${input.workspaceId}`);
   if (input.scope) {
     await AuditService.log({
       workspaceId: input.workspaceId,
@@ -1091,6 +1112,15 @@ export async function updateMemberAccess(input: {
 }
 
 export async function getWorkspaceRoster(workspaceId: string): Promise<{
+  name: string;
+  members: WorkspaceRosterMember[];
+  invites: WorkspaceRosterInvite[];
+}> {
+  const { remember } = await import("@/lib/ttl-cache");
+  return remember(`roster:${workspaceId}`, 60_000, () => loadWorkspaceRoster(workspaceId));
+}
+
+async function loadWorkspaceRoster(workspaceId: string): Promise<{
   name: string;
   members: WorkspaceRosterMember[];
   invites: WorkspaceRosterInvite[];

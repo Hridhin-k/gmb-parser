@@ -1,12 +1,6 @@
 import { AppShell } from "@/components/app-shell";
 import { ExitSupportButton } from "@/components/exit-support-button";
-import { listAgencyClients } from "@/lib/services/agency-home";
-import { loadScopeCatalog } from "@/lib/services/scope-catalog";
-import { getShellSummary } from "@/lib/services/shell-summary";
-import { getMemberAccess, visibleClientIds, visibleLocationIds } from "@/lib/services/access";
-import { loadAgencyBranding } from "@/lib/services/agency-branding";
-import { getActiveRole, getActiveWorkspace, getCurrentUser, tenantGateRedirect } from "@/lib/services/session";
-import { listAccessibleWorkspaces } from "@/lib/services/workspace";
+import { loadDashboardChrome } from "@/lib/services/dashboard-chrome";
 import { isSuperAdmin } from "@/lib/services/platform";
 import { timed } from "@/lib/timing";
 import { redirect } from "next/navigation";
@@ -14,28 +8,10 @@ import { headers } from "next/headers";
 import type { Metadata } from "next";
 import { canOpenPath, homePath } from "@/lib/shell";
 
-async function activeWorkspaceOrGate() {
-  try {
-    return await getActiveWorkspace();
-  } catch (error) {
-    const user = await getCurrentUser();
-    if (isSuperAdmin(user)) redirect("/admin");
-    const target = tenantGateRedirect(error);
-    if (target) redirect(target);
-    throw error;
-  }
-}
-
 export async function generateMetadata(): Promise<Metadata> {
-  const { user, workspaceId } = await activeWorkspaceOrGate();
-  const [branding, workspaces] = await timed("layout.metadata", () =>
-    Promise.all([
-      loadAgencyBranding(workspaceId),
-      listAccessibleWorkspaces(user.id),
-    ])
-  );
-  const name = workspaces.find((workspace) => workspace.id === workspaceId)?.name ?? "Workspace";
-  if (branding.hideProductName) return { title: name };
+  const chrome = await loadDashboardChrome();
+  const name = chrome.workspaceName;
+  if (chrome.branding.hideProductName) return { title: name };
   return { title: "RevuPilot — Google review management" };
 }
 
@@ -44,23 +20,8 @@ export default async function DashboardLayout({
 }: {
   children: React.ReactNode;
 }) {
-  const { user, workspaceId } = await timed("layout.workspace", () => activeWorkspaceOrGate());
-  const { getMaintenance, getActiveAnnouncement } = await import("@/lib/services/platform");
-  const { getSupportTenantId } = await import("@/lib/services/session");
-  // One parallel wave for everything that only needs the user/workspace:
-  // platform state (cross-request cached), access, role, workspaces, branding.
-  const [maintenance, announcement, supportTenantId, access, role, workspaces, branding] =
-    await timed("layout.context", () =>
-      Promise.all([
-        getMaintenance().catch(() => ({ enabled: false, message: null as string | null })),
-        getActiveAnnouncement().catch(() => null),
-        getSupportTenantId().catch(() => null),
-        getMemberAccess(user.id, workspaceId),
-        getActiveRole(),
-        listAccessibleWorkspaces(user.id),
-        loadAgencyBranding(workspaceId),
-      ])
-    );
+  const chrome = await timed("layout.chrome", () => loadDashboardChrome());
+  const { user, workspaceId, role, access, maintenance, announcement, supportTenantId } = chrome;
   if (maintenance.enabled && !isSuperAdmin(user)) {
     return (
       <main className="mx-auto max-w-lg px-6 py-16">
@@ -81,32 +42,12 @@ export default async function DashboardLayout({
   }
   const path = (await headers()).get("x-grm-path") ?? "";
   if (path && !canOpenPath(path, role)) redirect(homePath(role));
-  const [allowedClientIds, locationIds] = await timed("layout.scope", () =>
-    Promise.all([
-      visibleClientIds(workspaceId, access?.scope),
-      visibleLocationIds(workspaceId, access?.scope),
-    ])
-  );
-  const [summary, catalog] = await timed("layout.shell", () =>
-    Promise.all([
-      getShellSummary(workspaceId, allowedClientIds, locationIds, user.id),
-      loadScopeCatalog(user.id, workspaceId),
-    ])
-  );
-  // The scope catalog already loaded (and scope-filtered) the client list in
-  // this same request — reuse it instead of a second `grm_clients` round-trip.
-  const clients = catalog
-    ? catalog.clients.filter((client) => allowedClientIds === null || allowedClientIds.includes(client.id))
-    : await listAgencyClients(workspaceId, allowedClientIds);
-  const workspaceName =
-    workspaces.find((workspace) => workspace.id === workspaceId)?.name ??
-    (supportTenantId ? catalog?.workspaceName : null) ?? "Workspace";
 
   return (
     <>
       {supportTenantId ? (
         <div className="flex flex-wrap items-center justify-between gap-2 bg-amber-100 px-4 py-2 text-sm text-amber-900">
-          <span>Support view (read-only) — you are viewing <strong>{workspaceName}</strong> as a super admin. Changes are blocked.</span>
+          <span>Support view (read-only) — you are viewing <strong>{chrome.workspaceName}</strong> as a super admin. Changes are blocked.</span>
           <ExitSupportButton />
         </div>
       ) : null}
@@ -118,14 +59,14 @@ export default async function DashboardLayout({
     <AppShell
       user={user}
       role={role}
-      workspaceName={workspaceName}
-      workspaces={workspaces}
+      workspaceName={chrome.workspaceName}
+      workspaces={chrome.workspaces}
       activeWorkspaceId={workspaceId}
-      clients={clients}
-      catalog={catalog}
-      summary={summary}
-      logoUrl={branding.logoUrl}
-      productTitle={branding.hideProductName ? workspaceName : "RevuPilot"}
+      clients={chrome.clients}
+      catalog={chrome.catalog}
+      summary={chrome.summary}
+      logoUrl={chrome.branding.logoUrl}
+      productTitle={chrome.branding.hideProductName ? chrome.workspaceName : "RevuPilot"}
     >
       {children}
     </AppShell>

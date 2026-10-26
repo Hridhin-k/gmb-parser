@@ -1,12 +1,22 @@
 import { ANALYSIS_VERSION } from "@/lib/review-intelligence";
 import { emptyInsightDashboard, parseInsightDashboard, type InsightDashboardData } from "@/lib/insight-dashboard";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { remember } from "@/lib/ttl-cache";
 
 /**
  * Chart data and coverage counts for the insights page.
  * One database call. The page must not page through reviews or observations.
  */
 export async function loadInsightDashboard(
+  workspaceId: string,
+  input: { locationIds: string[]; start: string | null; end: string | null }
+): Promise<InsightDashboardData> {
+  const places = [...input.locationIds].sort().join(",");
+  const key = `insights:${workspaceId}:${input.start ?? ""}:${input.end ?? ""}:${places}`;
+  return remember(key, 45_000, () => fetchInsightDashboard(workspaceId, input));
+}
+
+async function fetchInsightDashboard(
   workspaceId: string,
   input: { locationIds: string[]; start: string | null; end: string | null }
 ): Promise<InsightDashboardData> {

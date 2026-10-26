@@ -6,6 +6,7 @@ import { applyStarBreakdown } from "@/lib/star-breakdown";
 import { loadStarBreakdown } from "@/lib/services/star-breakdown";
 import { UNASSIGNED_CLIENT_MARKER } from "@/lib/services/unassigned-client";
 import { loadCatalogTables } from "@/lib/services/catalog-tables";
+import { remember } from "@/lib/ttl-cache";
 import { locationDisplayName } from "@/lib/ui/location-place";
 
 export interface DashboardScope {
@@ -86,6 +87,23 @@ export async function getDashboardContext(
   range: DateRange,
   scope: DashboardScope
 ): Promise<DashboardContext> {
+  const key = [
+    "dashctx",
+    workspaceId,
+    scope.clientId ?? "",
+    scope.groupId ?? "",
+    scope.locationId ?? "",
+    range.start?.toISOString() ?? "",
+    range.end?.toISOString() ?? "",
+  ].join(":");
+  return remember(key, 45_000, () => loadDashboardContext(workspaceId, range, scope));
+}
+
+async function loadDashboardContext(
+  workspaceId: string,
+  range: DateRange,
+  scope: DashboardScope
+): Promise<DashboardContext> {
   const admin = createAdminClient();
   const previousWindow = previousDateRange(range);
   // Metrics RPCs do not depend on the catalog rows — start them with the default
@@ -93,6 +111,33 @@ export async function getDashboardContext(
   const defaultTimezone = "Asia/Kolkata";
   const startIso = range.start?.toISOString() ?? null;
   const endIso = range.end?.toISOString() ?? null;
+  const catalogPromise = loadCatalogTables(workspaceId);
+  const starsFor = (catalog: Awaited<ReturnType<typeof loadCatalogTables>>, timezone: string) => {
+    const names = new Map(
+      catalog.clients
+        .filter((client) => client.notes !== UNASSIGNED_CLIENT_MARKER)
+        .map((client) => [client.id, client.name])
+    );
+    const parents = new Map(catalog.groups.map((group) => [group.id, group.parent_id]));
+    const scoped = catalog.locations.filter((location) => {
+      if (!location.client_id || !names.has(location.client_id)) return false;
+      if (scope.locationId && location.id !== scope.locationId) return false;
+      if (scope.clientId && location.client_id !== scope.clientId) return false;
+      if (scope.groupId && location.group_id !== scope.groupId) {
+        const parent = location.group_id ? parents.get(location.group_id) ?? null : null;
+        if (parent !== scope.groupId) return false;
+      }
+      return true;
+    });
+    return loadStarBreakdown({
+      workspaceId,
+      locationIds: scoped.map((location) => location.id),
+      groupByLocation: new Map(scoped.map((location) => [location.id, location.group_id])),
+      start: startIso,
+      end: endIso,
+      timezone,
+    });
+  };
   const [
     policy,
     catalog,
@@ -100,6 +145,7 @@ export async function getDashboardContext(
     pausesResult,
     factsDefault,
     previousDefault,
+    starDefault,
   ] = await Promise.all([
     admin
       .from("grm_escalation_policies")
@@ -117,6 +163,7 @@ export async function getDashboardContext(
     previousWindow
       ? loadFacts(workspaceId, scope, previousWindow.start.toISOString(), previousWindow.end.toISOString(), defaultTimezone)
       : Promise.resolve(null),
+    catalogPromise.then((tables) => starsFor(tables, defaultTimezone)),
   ]);
 
   if (policy.error) throw new Error(`Failed to load dashboard settings: ${policy.error.message}`);
@@ -131,28 +178,9 @@ export async function getDashboardContext(
     .map((client) => ({ id: client.id, name: client.name }));
   const clientNames = new Map(clients.map((client) => [client.id, client.name]));
   const parentByGroup = new Map(catalog.groups.map((group) => [group.id, group.parent_id]));
-  const scopedLocations = catalog.locations.filter((location) => {
-    if (!location.client_id || !clientNames.has(location.client_id)) return false;
-    if (scope.locationId && location.id !== scope.locationId) return false;
-    if (scope.clientId && location.client_id !== scope.clientId) return false;
-    if (scope.groupId && location.group_id !== scope.groupId) {
-      const parent = location.group_id ? parentByGroup.get(location.group_id) ?? null : null;
-      if (parent !== scope.groupId) return false;
-    }
-    return true;
-  });
-  const starTask = loadStarBreakdown({
-    workspaceId,
-    locationIds: scopedLocations.map((location) => location.id),
-    groupByLocation: new Map(scopedLocations.map((location) => [location.id, location.group_id])),
-    start: startIso,
-    end: endIso,
-    timezone,
-  });
-
   const [factsBase, previous, starMaps] =
     timezone === defaultTimezone
-      ? [factsDefault, previousDefault, await starTask]
+      ? [factsDefault, previousDefault, starDefault]
       : await Promise.all([
           loadFacts(workspaceId, scope, startIso, endIso, timezone),
           previousWindow
@@ -164,7 +192,7 @@ export async function getDashboardContext(
                 timezone
               )
             : Promise.resolve(null),
-          starTask,
+          starsFor(catalog, timezone),
         ]);
   const facts = starMaps ? applyStarBreakdown(factsBase, starMaps) : factsBase;
   const locations: DashboardLocation[] = catalog.locations
