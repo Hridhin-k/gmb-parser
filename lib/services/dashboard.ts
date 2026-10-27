@@ -13,7 +13,8 @@ import { orIlikeAny } from "@/lib/postgrest-search";
 import { statusOrFilter } from "@/lib/review-filter-params";
 import { groupIdsInScope } from "@/lib/hierarchy";
 import { loadCatalogTables } from "@/lib/services/catalog-tables";
-import { forgetPrefix, remember } from "@/lib/ttl-cache";
+import { forgetWorkspaceDashboardCaches } from "@/lib/services/dashboard-cache";
+import { remember } from "@/lib/ttl-cache";
 
 export interface DashboardFilters {
   /** Selected status keys; empty = all statuses. */
@@ -120,8 +121,9 @@ const EMPTY_KPIS: DashboardKpis = {
   criticalReviews: 0,
 };
 
+/** After inbox-affecting writes, drop review-derived dashboard caches for this tenant only. */
 export function forgetReviewList(workspaceId: string): void {
-  forgetPrefix(`inbox:${workspaceId}:`);
+  forgetWorkspaceDashboardCaches(workspaceId);
 }
 
 export async function getDashboardData(

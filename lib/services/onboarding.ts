@@ -19,6 +19,7 @@ import {
   type SuggestedGroup,
   type ToneVoice,
 } from "@/lib/onboarding";
+import { remember } from "@/lib/ttl-cache";
 
 const STEPS: readonly string[] = ["connect", "import", "groups", "tone", "invite", "done"];
 const VOICES: readonly ToneVoice[] = ["warm", "professional", "brief"];
@@ -130,6 +131,10 @@ async function assertManager(userId: string, workspaceId: string): Promise<void>
 }
 
 export async function getOnboardingGate(workspaceId: string): Promise<OnboardingGate> {
+  return remember(`onboard-gate:${workspaceId}`, 60_000, () => loadOnboardingGate(workspaceId));
+}
+
+async function loadOnboardingGate(workspaceId: string): Promise<OnboardingGate> {
   const admin = createAdminClient();
   const [connections, locations, progress] = await Promise.all([
     admin

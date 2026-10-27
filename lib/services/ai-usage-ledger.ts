@@ -64,7 +64,11 @@ export async function recordAiUsage(
   }
 }
 
-export async function getAiBudget(admin: Admin, workspaceId: string): Promise<AiBudgetStatus> {
+export async function getAiBudget(
+  admin: Admin,
+  workspaceId: string,
+  options?: { untracked?: "open" | "closed" }
+): Promise<AiBudgetStatus> {
   // A super-admin per-tenant cap (grm_workspaces.ai_monthly_budget_usd) wins over the platform default.
   let budgetUsd = monthlyBudgetUsd();
   try {
@@ -84,6 +88,9 @@ export async function getAiBudget(admin: Admin, workspaceId: string): Promise<Ai
     return { spentUsd, budgetUsd, exceeded: spentUsd >= budgetUsd, tracked: true };
   } catch (error) {
     logger.warn("ai_usage.budget_unavailable", { message: error instanceof Error ? error.message : "budget unavailable" });
-    return { spentUsd: 0, budgetUsd, exceeded: false, tracked: false };
+    // Extraction and synthesis close the gate when the ledger cannot be read.
+    // Reply drafts keep the previous fail-open behaviour unless the caller asks to close.
+    const closed = options?.untracked === "closed";
+    return { spentUsd: 0, budgetUsd, exceeded: closed, tracked: false };
   }
 }
