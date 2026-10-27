@@ -52,10 +52,10 @@ describe("isBenchDiagEnabled", () => {
 
 describe("bench diag store", () => {
   it("stores a snapshot by id when enabled (React cache may be absent in vitest)", () => {
-    const prev = { ...process.env };
+    const prevDiag = process.env.REVUPILOT_APP_DIAG;
+    const prevUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
     process.env.REVUPILOT_APP_DIAG = "1";
     process.env.NEXT_PUBLIC_SUPABASE_URL = `https://${STAGING_SUPABASE_REF}.supabase.co`;
-    process.env.NODE_ENV = "development";
     try {
       enterBenchDiagFromHeadersSync("benchtestid01");
       const peek = peekBenchDiag("benchtestid01");
@@ -72,9 +72,10 @@ describe("bench diag store", () => {
       recordCacheEvent("hit");
       recordRpc("x", 1, true);
     } finally {
-      process.env.REVUPILOT_APP_DIAG = prev.REVUPILOT_APP_DIAG;
-      process.env.NEXT_PUBLIC_SUPABASE_URL = prev.NEXT_PUBLIC_SUPABASE_URL;
-      process.env.NODE_ENV = prev.NODE_ENV;
+      if (prevDiag === undefined) delete process.env.REVUPILOT_APP_DIAG;
+      else process.env.REVUPILOT_APP_DIAG = prevDiag;
+      if (prevUrl === undefined) delete process.env.NEXT_PUBLIC_SUPABASE_URL;
+      else process.env.NEXT_PUBLIC_SUPABASE_URL = prevUrl;
     }
   });
 });
