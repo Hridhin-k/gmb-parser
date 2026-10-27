@@ -8,7 +8,7 @@ All five generation paths use AI SDK Core and its direct OpenAI/Google provider 
 
 Migrated callers: reply drafts, settings previews, single-review extraction, batched review extraction and report synthesis. The old Gemini HTTP helper, implicit model defaults, key setting and automatic model escalation have been removed. Provider-specific options stay inside the registry; business services use task names and schemas.
 
-The Postgres/NextAuth/worker replacement remains a separate proposal in [DATABASE_ARCHITECTURE_V2.md](DATABASE_ARCHITECTURE_V2.md). This branch retains the current Supabase database/auth and background execution paths.
+Postgres and NextAuth now replace Supabase. Server services connect directly through `pg`, and the fresh baseline lives in `db/migrations`. The persistent worker, time-based rollups, Redis, and budget-reservation design remain proposed in [DATABASE_ARCHITECTURE_V2.md](DATABASE_ARCHITECTURE_V2.md). Background execution otherwise keeps the current application paths.
 
 ## Configuration
 
@@ -62,7 +62,7 @@ Errors returned to callers and logs use safe messages/codes rather than raw prov
 
 ## Usage, prices and database migration
 
-Apply `supabase/migrations/20261027001_ai_provider_usage.sql` before enabling AI in an existing database. It adds restricted per-attempt history and an atomic RPC that inserts each event once and increments monthly totals without lost updates. It also enables accounting for previews and report synthesis. The RPC is restricted to the service role; anonymous/authenticated users cannot invoke it or read call events directly.
+Run `npm run db:migrate` before enabling AI on a fresh database. The native Postgres baseline includes per-attempt history and an atomic function that inserts each event once and increments monthly totals without lost updates. It accounts for previews and report synthesis too. Public function execution is revoked; only the private server runtime role is granted access.
 
 Every generated attempt records its operation, provider-qualified model, input/output counts, outcome, usage-known flag and estimated charge. Usage is recorded before downstream validation/persistence, including valid provider responses that later fail a schema or guardrail. Reasoning tokens are already included in SDK output totals and are not added twice.
 

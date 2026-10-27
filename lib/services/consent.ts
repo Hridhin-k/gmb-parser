@@ -1,4 +1,4 @@
-import { createAdminClient } from "@/lib/supabase/admin";
+import { createAdminClient } from "@/lib/db/client";
 import { AppError } from "@/lib/errors";
 
 function isMissingConsentTable(error: { code?: string; message?: string }): boolean {

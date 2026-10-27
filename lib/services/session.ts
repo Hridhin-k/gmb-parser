@@ -1,7 +1,7 @@
 import { cache } from "react";
 import { redirect } from "next/navigation";
-import type { User } from "@supabase/supabase-js";
-import { createClient } from "@/lib/supabase/server";
+import type { User } from "@/lib/auth/types";
+import { getCurrentUser } from "@/lib/auth/server";
 import type { GrmMemberRole } from "@/lib/types";
 import { hasUserConsent } from "./consent";
 import { ensurePersonalWorkspace, getMemberRole } from "./workspace";
@@ -33,35 +33,7 @@ export function tenantGateRedirect(error: unknown): string | null {
 // Wrapped in React `cache` so a layout and its page share one lookup per
 // request. Route handlers run outside a render and get no memoization.
 
-function userFromClaims(claims: Record<string, unknown> | null | undefined): User | null {
-  if (!claims || typeof claims.sub !== "string") return null;
-  const metadata = claims.user_metadata;
-  return {
-    id: claims.sub,
-    aud: typeof claims.aud === "string" ? claims.aud : "authenticated",
-    email: typeof claims.email === "string" ? claims.email : undefined,
-    phone: typeof claims.phone === "string" ? claims.phone : undefined,
-    app_metadata: {},
-    user_metadata: metadata && typeof metadata === "object" ? (metadata as User["user_metadata"]) : {},
-    created_at: typeof claims.iat === "number" ? new Date(claims.iat * 1000).toISOString() : new Date(0).toISOString(),
-  } as User;
-}
-
-/**
- * Local JWT check. The proxy already verified this request, so page renders
- * do not call the Auth server again. A missing email falls back to that call
- * so an invite can still be matched.
- */
-export const getCurrentUser = cache(async (): Promise<User | null> => {
-  const supabase = await createClient();
-  const { data } = await supabase.auth.getClaims();
-  const fromClaims = userFromClaims(data?.claims as Record<string, unknown> | undefined);
-  if (fromClaims?.email) return fromClaims;
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  return user;
-});
+export { getCurrentUser };
 
 export const getUserConsent = cache(async (userId: string): Promise<boolean> => {
   const key = `consent:${userId}`;
@@ -99,7 +71,7 @@ export const getActiveWorkspace = cache(async (): Promise<ActiveWorkspace> => {
   const user = await requireConsentedUser();
   const supportTenantId = await getSupportTenantId();
   if (supportTenantId) {
-    const { createAdminClient } = await import("@/lib/supabase/admin");
+    const { createAdminClient } = await import("@/lib/db/client");
     const admin = createAdminClient();
     const { data } = await admin.from("grm_workspaces").select("id, status").eq("id", supportTenantId).maybeSingle();
     if (data && data.status !== "deleted") return { user, workspaceId: supportTenantId };

@@ -1,4 +1,4 @@
-import { createAdminClient } from "@/lib/supabase/admin";
+import { createAdminClient } from "@/lib/db/client";
 import { AuditService } from "./audit";
 import { AppError, ValidationError } from "@/lib/errors";
 import { logger } from "@/lib/logger";
@@ -7,7 +7,7 @@ import { createHash } from "crypto";
 import { generateAi } from "@/lib/ai/service";
 import { assertAiCredentials, resolveAiRoute } from "@/lib/ai/config";
 import { splitGoogleTranslation } from "@/lib/review-text";
-import type { Json } from "@/lib/types/supabase";
+import type { Json } from "@/lib/types/database-schema";
 import { toneInstruction, type ToneVoice } from "@/lib/onboarding";
 import { draftsPausedForLocation, resolvedToneForLocation } from "@/lib/services/hierarchy";
 import { adjustmentInstruction, type DraftAdjustment } from "@/lib/reply-adjustments";

@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
-import { createAdminClient } from "@/lib/supabase/admin";
+import { createAdminClient } from "@/lib/db/client";
 import { allows, workspaceGrant } from "@/lib/access";
 import { authMethodsFromEnv } from "@/lib/auth-methods";
 import { SettingsBoard } from "@/components/settings-board";

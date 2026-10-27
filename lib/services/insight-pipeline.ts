@@ -1,6 +1,6 @@
 import { generateAi } from "@/lib/ai/service";
 import { batchExtractionSchema } from "@/lib/ai/schemas";
-import { createAdminClient } from "@/lib/supabase/admin";
+import { createAdminClient } from "@/lib/db/client";
 
 import {
   ANALYSIS_VERSION,

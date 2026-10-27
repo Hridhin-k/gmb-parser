@@ -7,14 +7,17 @@
     "build": "next build",
     "start": "next start",
     "lint": "eslint",
-    "test": "vitest run"
+    "test": "vitest run",
+    "db:local": "node scripts/local-db.mjs",
+    "db:migrate": "node scripts/db-migrate.mjs",
+    "db:seed:local": "node scripts/db-seed-local.mjs",
+    "db:metadata": "node scripts/db-metadata.mjs"
   },
   "dependencies": {
     "@ai-sdk/google": "^4.0.106",
     "@ai-sdk/openai": "^4.0.103",
+    "@auth/pg-adapter": "1.11.3",
     "@base-ui/react": "^1.7.0",
-    "@supabase/ssr": "^0.12.4",
-    "@supabase/supabase-js": "^2.112.3",
     "ai": "^7.0.154",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
@@ -22,6 +25,8 @@
     "google-auth-library": "^11.0.2",
     "lucide-react": "^1.32.0",
     "next": "16.3.1",
+    "next-auth": "5.0.0-beta.32",
+    "pg": "^8.23.1",
     "qrcode": "^1.5.4",
     "react": "19.2.8",
     "react-day-picker": "^10.0.2",
@@ -32,8 +37,10 @@
     "zod": "^4.4.3"
   },
   "devDependencies": {
+    "@supabase/postgrest-js": "^2.118.0",
     "@tailwindcss/postcss": "^4",
     "@types/node": "^20",
+    "@types/pg": "^8.23.1",
     "@types/qrcode": "^1.5.6",
     "@types/react": "^19",
     "@types/react-dom": "^19",

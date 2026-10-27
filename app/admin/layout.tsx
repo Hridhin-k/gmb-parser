@@ -1,3 +1,4 @@
+import { SignOutButton } from "@/components/sign-out-button";
 import { redirect } from "next/navigation";
 import Link from "next/link";
 import { getCurrentUser } from "@/lib/services/session";
@@ -24,7 +25,7 @@ export default async function AdminLayout({ children }: { children: React.ReactN
             <Link href="/admin/health" className="text-ink underline underline-offset-4">Health</Link>
             <Link href="/admin/users" className="text-ink underline underline-offset-4">Users</Link>
             <Link href="/admin/ops" className="text-ink underline underline-offset-4">Ops</Link>
-            <a href="/api/auth/signout" className="text-ink underline underline-offset-4">Sign out</a>
+            <SignOutButton className="text-ink underline underline-offset-4" />
           </div>
         </div>
       </header>

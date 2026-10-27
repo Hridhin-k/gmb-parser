@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
-import { createClient } from "@/lib/supabase/server";
-import { createAdminClient } from "@/lib/supabase/admin";
+import { getCurrentUser } from "@/lib/auth/server";
+import { createAdminClient } from "@/lib/db/client";
 import { AuditService } from "@/lib/services/audit";
 import { logger } from "@/lib/logger";
 import {
@@ -30,8 +30,7 @@ async function getWorkspace(user: { id: string; email?: string | null }) {
  */
 export async function POST(request: Request, { params }: RouteParams) {
   const { reviewId: rawReviewId } = await params;
-  const supabase = await createClient();
-  const { data: { user } } = await supabase.auth.getUser();
+  const user = await getCurrentUser();
   if (!user) return NextResponse.json({ error: "Not authenticated" }, { status: 401 });
 
   let reviewId: string;
@@ -127,8 +126,7 @@ export async function POST(request: Request, { params }: RouteParams) {
  */
 export async function PUT(request: Request, { params }: RouteParams) {
   const { reviewId: rawReviewId } = await params;
-  const supabase = await createClient();
-  const { data: { user } } = await supabase.auth.getUser();
+  const user = await getCurrentUser();
   if (!user) return NextResponse.json({ error: "Not authenticated" }, { status: 401 });
 
   let reviewId: string;
@@ -229,8 +227,7 @@ export async function PUT(request: Request, { params }: RouteParams) {
  */
 export async function DELETE(request: Request, { params }: RouteParams) {
   const { reviewId: rawReviewId } = await params;
-  const supabase = await createClient();
-  const { data: { user } } = await supabase.auth.getUser();
+  const user = await getCurrentUser();
   if (!user) return NextResponse.json({ error: "Not authenticated" }, { status: 401 });
 
   let reviewId: string;

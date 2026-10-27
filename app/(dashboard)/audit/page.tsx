@@ -1,5 +1,5 @@
 import { redirect } from "next/navigation";
-import { createAdminClient } from "@/lib/supabase/admin";
+import { createAdminClient } from "@/lib/db/client";
 import { getActiveRole, getActiveWorkspace } from "@/lib/services/session";
 import { canOpenPath } from "@/lib/shell";
 import { getWorkspaceRoster } from "@/lib/services/workspace";

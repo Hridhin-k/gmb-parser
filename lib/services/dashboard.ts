@@ -1,6 +1,6 @@
 import { after } from "next/server";
-import { createAdminClient } from "@/lib/supabase/admin";
-import { rpcLocationReviewStats } from "@/lib/supabase/rpc";
+import { createAdminClient } from "@/lib/db/client";
+import { rpcLocationReviewStats } from "@/lib/db/rpc";
 import { UNASSIGNED_CLIENT_MARKER } from "@/lib/services/unassigned-client";
 import { formatLocationOption, locationDisplayName } from "@/lib/ui/location-place";
 import {

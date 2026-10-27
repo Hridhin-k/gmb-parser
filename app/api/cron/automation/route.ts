@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { createAdminClient } from "@/lib/supabase/admin";
+import { createAdminClient } from "@/lib/db/client";
 import { runAutomation } from "@/lib/services/reply-settings";
 import { logger } from "@/lib/logger";
 import { mapPool } from "@/lib/pool";

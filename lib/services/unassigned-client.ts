@@ -1,4 +1,4 @@
-import { createAdminClient } from "@/lib/supabase/admin";
+import { createAdminClient } from "@/lib/db/client";
 import { AppError } from "@/lib/errors";
 import { logger } from "@/lib/logger";
 
@@ -13,9 +13,9 @@ export const UNASSIGNED_CLIENT_MARKER = "grm:system:unassigned";
 export async function ensureUnassignedClient(
   workspaceId: string
 ): Promise<{ id: string }> {
-  const supabase = createAdminClient();
+  const db = createAdminClient();
 
-  const { data: rows, error: listError } = await supabase
+  const { data: rows, error: listError } = await db
     .from("grm_clients")
     .select("id, created_at, is_active")
     .eq("workspace_id", workspaceId)
@@ -38,13 +38,13 @@ export async function ensureUnassignedClient(
       const dupIds = duplicates.map((d) => d.id);
 
       // Move any locations pointing at duplicates onto the canonical pool
-      await supabase
+      await db
         .from("grm_google_locations")
         .update({ client_id: canonical.id })
         .eq("workspace_id", workspaceId)
         .in("client_id", dupIds);
 
-      await supabase
+      await db
         .from("grm_clients")
         .update({ is_active: false, name: "Unassigned (deprecated)" })
         .in("id", dupIds);
@@ -57,7 +57,7 @@ export async function ensureUnassignedClient(
     }
 
     if (!canonical.is_active) {
-      await supabase
+      await db
         .from("grm_clients")
         .update({ is_active: true, name: "Unassigned" })
         .eq("id", canonical.id);
@@ -66,7 +66,7 @@ export async function ensureUnassignedClient(
     return { id: canonical.id };
   }
 
-  const { data: created, error } = await supabase
+  const { data: created, error } = await db
     .from("grm_clients")
     .insert({
       workspace_id: workspaceId,
@@ -79,7 +79,7 @@ export async function ensureUnassignedClient(
 
   if (error || !created) {
     // Race: another request may have created it
-    const { data: raced } = await supabase
+    const { data: raced } = await db
       .from("grm_clients")
       .select("id")
       .eq("workspace_id", workspaceId)
@@ -106,8 +106,8 @@ export function isUnassignedClient(notes: string | null | undefined): boolean {
 export async function listUnassignedClientIds(
   workspaceId: string
 ): Promise<string[]> {
-  const supabase = createAdminClient();
-  const { data } = await supabase
+  const db = createAdminClient();
+  const { data } = await db
     .from("grm_clients")
     .select("id")
     .eq("workspace_id", workspaceId)

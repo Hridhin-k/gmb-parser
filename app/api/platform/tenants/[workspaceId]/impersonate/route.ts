@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
-import { createClient } from "@/lib/supabase/server";
-import { createAdminClient } from "@/lib/supabase/admin";
+import { getCurrentUser } from "@/lib/auth/server";
+import { createAdminClient } from "@/lib/db/client";
 import { AppError } from "@/lib/errors";
 import { validateId } from "@/lib/validation";
 import { requireSuperAdmin } from "@/lib/services/platform";
@@ -11,8 +11,7 @@ interface RouteParams { params: Promise<{ workspaceId: string }> }
 
 /** POST: enter read-only support view of a tenant. DELETE: exit it. */
 export async function POST(_request: Request, { params }: RouteParams) {
-  const supabase = await createClient();
-  const { data: { user } } = await supabase.auth.getUser();
+  const user = await getCurrentUser();
   if (!user) return NextResponse.json({ error: "Not authenticated" }, { status: 401 });
   const { workspaceId: raw } = await params;
   let workspaceId: string;

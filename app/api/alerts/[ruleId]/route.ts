@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { createClient } from "@/lib/supabase/server";
+import { getCurrentUser } from "@/lib/auth/server";
 import { AppError, toStatusCode, toUserMessage } from "@/lib/errors";
 import { getWorkspaceRoster } from "@/lib/services/workspace";
 import { actingUser, AlertService, guardReport } from "@/lib/services/reporting";
@@ -11,10 +11,7 @@ async function idFrom(params: Promise<{ ruleId: string }>): Promise<string> {
 }
 
 export async function PATCH(request: Request, { params }: { params: Promise<{ ruleId: string }> }) {
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  const user = await getCurrentUser();
   if (!user) return NextResponse.json({ error: "Not authenticated" }, { status: 401 });
   let ruleId: string;
   try {
@@ -55,10 +52,7 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ ru
 }
 
 export async function DELETE(_request: Request, { params }: { params: Promise<{ ruleId: string }> }) {
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  const user = await getCurrentUser();
   if (!user) return NextResponse.json({ error: "Not authenticated" }, { status: 401 });
   let ruleId: string;
   try {

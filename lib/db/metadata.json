@@ -1,0 +1,4445 @@
+{
+  "tables": {
+    "grm_access_requests": {
+      "columns": {
+        "id": "uuid",
+        "email": "text",
+        "user_id": "uuid",
+        "company": "text",
+        "message": "text",
+        "status": "text",
+        "decided_by": "uuid",
+        "decided_at": "timestamptz",
+        "created_at": "timestamptz"
+      },
+      "relations": []
+    },
+    "grm_agency_branding": {
+      "columns": {
+        "workspace_id": "uuid",
+        "logo_url": "text",
+        "hide_product_name": "bool",
+        "custom_domain": "text",
+        "domain_token": "text",
+        "domain_verified_at": "timestamptz",
+        "sender_email": "text",
+        "updated_at": "timestamptz"
+      },
+      "relations": [
+        {
+          "name": "grm_agency_branding_workspace_id_fkey",
+          "table": "grm_workspaces",
+          "columns": [
+            "workspace_id"
+          ],
+          "references": [
+            "id"
+          ],
+          "many": false
+        }
+      ]
+    },
+    "grm_ai_call_events": {
+      "columns": {
+        "id": "uuid",
+        "workspace_id": "uuid",
+        "operation": "text",
+        "model": "text",
+        "input_tokens": "int8",
+        "output_tokens": "int8",
+        "estimated_usd": "numeric",
+        "usage_known": "bool",
+        "status": "text",
+        "created_at": "timestamptz"
+      },
+      "relations": [
+        {
+          "name": "grm_ai_call_events_workspace_id_fkey",
+          "table": "grm_workspaces",
+          "columns": [
+            "workspace_id"
+          ],
+          "references": [
+            "id"
+          ],
+          "many": false
+        }
+      ]
+    },
+    "grm_ai_configs": {
+      "columns": {
+        "id": "uuid",
+        "workspace_id": "uuid",
+        "version": "int4",
+        "status": "text",
+        "label": "text",
+        "snapshot": "jsonb",
+        "created_by": "uuid",
+        "created_at": "timestamptz",
+        "updated_at": "timestamptz"
+      },
+      "relations": [
+        {
+          "name": "grm_ai_configs_workspace_id_fkey",
+          "table": "grm_workspaces",
+          "columns": [
+            "workspace_id"
+          ],
+          "references": [
+            "id"
+          ],
+          "many": false
+        }
+      ]
+    },
+    "grm_ai_generation_jobs": {
+      "columns": {
+        "id": "uuid",
+        "workspace_id": "uuid",
+        "user_id": "uuid",
+        "kind": "text",
+        "review_id": "uuid",
+        "location_id": "uuid",
+        "scope_kind": "text",
+        "scope_id": "uuid",
+        "model": "text",
+        "route": "text",
+        "content": "text",
+        "payload": "jsonb",
+        "status": "text",
+        "attempts": "int4",
+        "last_error": "text",
+        "draft_id": "uuid",
+        "reply_id": "uuid",
+        "created_at": "timestamptz",
+        "updated_at": "timestamptz"
+      },
+      "relations": [
+        {
+          "name": "grm_ai_generation_jobs_location_id_fkey",
+          "table": "grm_google_locations",
+          "columns": [
+            "location_id"
+          ],
+          "references": [
+            "id"
+          ],
+          "many": false
+        },
+        {
+          "name": "grm_ai_generation_jobs_review_id_fkey",
+          "table": "grm_reviews",
+          "columns": [
+            "review_id"
+          ],
+          "references": [
+            "id"
+          ],
+          "many": false
+        },
+        {
+          "name": "grm_ai_generation_jobs_workspace_id_fkey",
+          "table": "grm_workspaces",
+          "columns": [
+            "workspace_id"
+          ],
+          "references": [
+            "id"
+          ],
+          "many": false
+        },
+        {
+          "name": "grm_review_ai_drafts_generation_id_fkey",
+          "table": "grm_review_ai_drafts",
+          "columns": [
+            "id"
+          ],
+          "references": [
+            "generation_id"
+          ],
+          "many": true
+        }
+      ]
+    },
+    "grm_ai_knowledge": {
+      "columns": {
+        "id": "uuid",
+        "workspace_id": "uuid",
+        "client_id": "uuid",
+        "group_id": "uuid",
+        "location_id": "uuid",
+        "kind": "text",
+        "title": "text",
+        "body": "text",
+        "metadata": "jsonb",
+        "enabled": "bool",
+        "created_by": "uuid",
+        "created_at": "timestamptz",
+        "updated_at": "timestamptz"
+      },
+      "relations": [
+        {
+          "name": "grm_ai_knowledge_client_id_fkey",
+          "table": "grm_clients",
+          "columns": [
+            "client_id"
+          ],
+          "references": [
+            "id"
+          ],
+          "many": false
+        },
+        {
+          "name": "grm_ai_knowledge_location_id_fkey",
+          "table": "grm_google_locations",
+          "columns": [
+            "location_id"
+          ],
+          "references": [
+            "id"
+          ],
+          "many": false
+        },
+        {
+          "name": "grm_ai_knowledge_workspace_id_fkey",
+          "table": "grm_workspaces",
+          "columns": [
+            "workspace_id"
+          ],
+          "references": [
+            "id"
+          ],
+          "many": false
+        }
+      ]
+    },
+    "grm_ai_usage_monthly": {
+      "columns": {
+        "workspace_id": "uuid",
+        "month": "text",
+        "operation": "text",
+        "calls": "int4",
+        "input_tokens": "int8",
+        "output_tokens": "int8",
+        "estimated_usd": "numeric",
+        "updated_at": "timestamptz"
+      },
+      "relations": [
+        {
+          "name": "grm_ai_usage_monthly_workspace_id_fkey",
+          "table": "grm_workspaces",
+          "columns": [
+            "workspace_id"
+          ],
+          "references": [
+            "id"
+          ],
+          "many": false
+        }
+      ]
+    },
+    "grm_alert_deliveries": {
+      "columns": {
+        "id": "uuid",
+        "event_id": "uuid",
+        "workspace_id": "uuid",
+        "channel": "text",
+        "recipient": "text",
+        "status": "text",
+        "detail": "text",
+        "created_at": "timestamptz"
+      },
+      "relations": [
+        {
+          "name": "grm_alert_deliveries_event_id_fkey",
+          "table": "grm_alert_events",
+          "columns": [
+            "event_id"
+          ],
+          "references": [
+            "id"
+          ],
+          "many": false
+        },
+        {
+          "name": "grm_alert_deliveries_workspace_id_fkey",
+          "table": "grm_workspaces",
+          "columns": [
+            "workspace_id"
+          ],
+          "references": [
+            "id"
+          ],
+          "many": false
+        }
+      ]
+    },
+    "grm_alert_events": {
+      "columns": {
+        "id": "uuid",
+        "workspace_id": "uuid",
+        "rule_id": "uuid",
+        "summary": "text",
+        "fingerprint": "text",
+        "delivery": "text",
+        "dedupe_key": "text",
+        "location_id": "uuid",
+        "evidence": "jsonb",
+        "triggered_at": "timestamptz"
+      },
+      "relations": [
+        {
+          "name": "grm_alert_deliveries_event_id_fkey",
+          "table": "grm_alert_deliveries",
+          "columns": [
+            "id"
+          ],
+          "references": [
+            "event_id"
+          ],
+          "many": true
+        },
+        {
+          "name": "grm_alert_events_location_id_fkey",
+          "table": "grm_google_locations",
+          "columns": [
+            "location_id"
+          ],
+          "references": [
+            "id"
+          ],
+          "many": false
+        },
+        {
+          "name": "grm_alert_events_rule_id_fkey",
+          "table": "grm_alert_rules",
+          "columns": [
+            "rule_id"
+          ],
+          "references": [
+            "id"
+          ],
+          "many": false
+        },
+        {
+          "name": "grm_alert_events_workspace_id_fkey",
+          "table": "grm_workspaces",
+          "columns": [
+            "workspace_id"
+          ],
+          "references": [
+            "id"
+          ],
+          "many": false
+        }
+      ]
+    },
+    "grm_alert_rules": {
+      "columns": {
+        "id": "uuid",
+        "workspace_id": "uuid",
+        "name": "text",
+        "enabled": "bool",
+        "channel": "text",
+        "scope_label": "text",
+        "notify_label": "text",
+        "created_at": "timestamptz",
+        "kind": "text",
+        "client_id": "uuid",
+        "group_id": "uuid",
+        "location_id": "uuid",
+        "recipient_emails": "_text",
+        "channels": "_text",
+        "threshold": "int4",
+        "window_days": "int4",
+        "min_reviews": "int4",
+        "drop_points": "numeric",
+        "multiplier": "numeric",
+        "updated_at": "timestamptz",
+        "created_by": "uuid"
+      },
+      "relations": [
+        {
+          "name": "grm_alert_events_rule_id_fkey",
+          "table": "grm_alert_events",
+          "columns": [
+            "id"
+          ],
+          "references": [
+            "rule_id"
+          ],
+          "many": true
+        },
+        {
+          "name": "grm_alert_rules_client_id_fkey",
+          "table": "grm_clients",
+          "columns": [
+            "client_id"
+          ],
+          "references": [
+            "id"
+          ],
+          "many": false
+        },
+        {
+          "name": "grm_alert_rules_group_id_fkey",
+          "table": "grm_groups",
+          "columns": [
+            "group_id"
+          ],
+          "references": [
+            "id"
+          ],
+          "many": false
+        },
+        {
+          "name": "grm_alert_rules_location_id_fkey",
+          "table": "grm_google_locations",
+          "columns": [
+            "location_id"
+          ],
+          "references": [
+            "id"
+          ],
+          "many": false
+        },
+        {
+          "name": "grm_alert_rules_workspace_id_fkey",
+          "table": "grm_workspaces",
+          "columns": [
+            "workspace_id"
+          ],
+          "references": [
+            "id"
+          ],
+          "many": false
+        }
+      ]
+    },
+    "grm_analysis_runs": {
+      "columns": {
+        "id": "uuid",
+        "workspace_id": "uuid",
+        "requested_by": "uuid",
+        "client_id": "uuid",
+        "group_id": "uuid",
+        "location_id": "uuid",
+        "range_start": "timestamptz",
+        "range_end": "timestamptz",
+        "status": "text",
+        "discovered": "int4",
+        "eligible": "int4",
+        "already_analysed": "int4",
+        "newly_analysed": "int4",
+        "pending": "int4",
+        "failed": "int4",
+        "batches_total": "int4",
+        "batches_completed": "int4",
+        "retries": "int4",
+        "input_tokens": "int4",
+        "output_tokens": "int4",
+        "error": "text",
+        "started_at": "timestamptz",
+        "finished_at": "timestamptz",
+        "created_at": "timestamptz",
+        "updated_at": "timestamptz"
+      },
+      "relations": [
+        {
+          "name": "grm_analysis_runs_client_id_fkey",
+          "table": "grm_clients",
+          "columns": [
+            "client_id"
+          ],
+          "references": [
+            "id"
+          ],
+          "many": false
+        },
+        {
+          "name": "grm_analysis_runs_group_id_fkey",
+          "table": "grm_groups",
+          "columns": [
+            "group_id"
+          ],
+          "references": [
+            "id"
+          ],
+          "many": false
+        },
+        {
+          "name": "grm_analysis_runs_location_id_fkey",
+          "table": "grm_google_locations",
+          "columns": [
+            "location_id"
+          ],
+          "references": [
+            "id"
+          ],
+          "many": false
+        },
+        {
+          "name": "grm_analysis_runs_workspace_id_fkey",
+          "table": "grm_workspaces",
+          "columns": [
+            "workspace_id"
+          ],
+          "references": [
+            "id"
+          ],
+          "many": false
+        }
+      ]
+    },
+    "grm_audit_logs": {
+      "columns": {
+        "id": "uuid",
+        "workspace_id": "uuid",
+        "user_id": "uuid",
+        "action": "text",
+        "entity_type": "text",
+        "entity_id": "text",
+        "metadata": "jsonb",
+        "ip_address": "inet",
+        "user_agent": "text",
+        "created_at": "timestamptz"
+      },
+      "relations": [
+        {
+          "name": "grm_audit_logs_workspace_id_fkey",
+          "table": "grm_workspaces",
+          "columns": [
+            "workspace_id"
+          ],
+          "references": [
+            "id"
+          ],
+          "many": false
+        }
+      ]
+    },
+    "grm_autoreply_pauses": {
+      "columns": {
+        "id": "uuid",
+        "workspace_id": "uuid",
+        "scope": "text",
+        "client_id": "uuid",
+        "location_id": "uuid",
+        "paused_by": "uuid",
+        "paused_at": "timestamptz",
+        "cleared_at": "timestamptz"
+      },
+      "relations": [
+        {
+          "name": "grm_autoreply_pauses_client_id_fkey",
+          "table": "grm_clients",
+          "columns": [
+            "client_id"
+          ],
+          "references": [
+            "id"
+          ],
+          "many": false
+        },
+        {
+          "name": "grm_autoreply_pauses_location_id_fkey",
+          "table": "grm_google_locations",
+          "columns": [
+            "location_id"
+          ],
+          "references": [
+            "id"
+          ],
+          "many": false
+        },
+        {
+          "name": "grm_autoreply_pauses_workspace_id_fkey",
+          "table": "grm_workspaces",
+          "columns": [
+            "workspace_id"
+          ],
+          "references": [
+            "id"
+          ],
+          "many": false
+        }
+      ]
+    },
+    "grm_brands": {
+      "columns": {
+        "id": "uuid",
+        "workspace_id": "uuid",
+        "client_id": "uuid",
+        "name": "text"
+      },
+      "relations": [
+        {
+          "name": "grm_brands_client_id_fkey",
+          "table": "grm_clients",
+          "columns": [
+            "client_id"
+          ],
+          "references": [
+            "id"
+          ],
+          "many": false
+        },
+        {
+          "name": "grm_brands_workspace_id_fkey",
+          "table": "grm_workspaces",
+          "columns": [
+            "workspace_id"
+          ],
+          "references": [
+            "id"
+          ],
+          "many": false
+        },
+        {
+          "name": "grm_google_locations_brand_id_fkey",
+          "table": "grm_google_locations",
+          "columns": [
+            "id"
+          ],
+          "references": [
+            "brand_id"
+          ],
+          "many": true
+        },
+        {
+          "name": "grm_groups_brand_id_fkey",
+          "table": "grm_groups",
+          "columns": [
+            "id"
+          ],
+          "references": [
+            "brand_id"
+          ],
+          "many": true
+        }
+      ]
+    },
+    "grm_bulk_jobs": {
+      "columns": {
+        "id": "uuid",
+        "workspace_id": "uuid",
+        "user_id": "uuid",
+        "action": "text",
+        "review_ids": "jsonb",
+        "results": "jsonb",
+        "status": "text",
+        "succeeded": "int4",
+        "failed": "int4",
+        "last_error": "text",
+        "created_at": "timestamptz",
+        "updated_at": "timestamptz"
+      },
+      "relations": [
+        {
+          "name": "grm_bulk_jobs_workspace_id_fkey",
+          "table": "grm_workspaces",
+          "columns": [
+            "workspace_id"
+          ],
+          "references": [
+            "id"
+          ],
+          "many": false
+        }
+      ]
+    },
+    "grm_client_onboarding": {
+      "columns": {
+        "id": "uuid",
+        "workspace_id": "uuid",
+        "client_id": "uuid",
+        "token_hash": "text",
+        "expires_at": "timestamptz",
+        "used_at": "timestamptz",
+        "created_by": "uuid",
+        "created_at": "timestamptz"
+      },
+      "relations": [
+        {
+          "name": "grm_client_onboarding_client_id_fkey",
+          "table": "grm_clients",
+          "columns": [
+            "client_id"
+          ],
+          "references": [
+            "id"
+          ],
+          "many": false
+        },
+        {
+          "name": "grm_client_onboarding_workspace_id_fkey",
+          "table": "grm_workspaces",
+          "columns": [
+            "workspace_id"
+          ],
+          "references": [
+            "id"
+          ],
+          "many": false
+        }
+      ]
+    },
+    "grm_clients": {
+      "columns": {
+        "id": "uuid",
+        "workspace_id": "uuid",
+        "name": "text",
+        "notes": "text",
+        "is_active": "bool",
+        "created_by": "uuid",
+        "created_at": "timestamptz",
+        "updated_at": "timestamptz",
+        "contact_email": "text",
+        "website": "text",
+        "account_manager_user_id": "uuid",
+        "brand_name": "text",
+        "logo_url": "text"
+      },
+      "relations": [
+        {
+          "name": "grm_ai_knowledge_client_id_fkey",
+          "table": "grm_ai_knowledge",
+          "columns": [
+            "id"
+          ],
+          "references": [
+            "client_id"
+          ],
+          "many": true
+        },
+        {
+          "name": "grm_alert_rules_client_id_fkey",
+          "table": "grm_alert_rules",
+          "columns": [
+            "id"
+          ],
+          "references": [
+            "client_id"
+          ],
+          "many": true
+        },
+        {
+          "name": "grm_analysis_runs_client_id_fkey",
+          "table": "grm_analysis_runs",
+          "columns": [
+            "id"
+          ],
+          "references": [
+            "client_id"
+          ],
+          "many": true
+        },
+        {
+          "name": "grm_autoreply_pauses_client_id_fkey",
+          "table": "grm_autoreply_pauses",
+          "columns": [
+            "id"
+          ],
+          "references": [
+            "client_id"
+          ],
+          "many": true
+        },
+        {
+          "name": "grm_brands_client_id_fkey",
+          "table": "grm_brands",
+          "columns": [
+            "id"
+          ],
+          "references": [
+            "client_id"
+          ],
+          "many": true
+        },
+        {
+          "name": "grm_client_onboarding_client_id_fkey",
+          "table": "grm_client_onboarding",
+          "columns": [
+            "id"
+          ],
+          "references": [
+            "client_id"
+          ],
+          "many": true
+        },
+        {
+          "name": "grm_clients_workspace_id_fkey",
+          "table": "grm_workspaces",
+          "columns": [
+            "workspace_id"
+          ],
+          "references": [
+            "id"
+          ],
+          "many": false
+        },
+        {
+          "name": "grm_google_connections_client_id_fkey",
+          "table": "grm_google_connections",
+          "columns": [
+            "id"
+          ],
+          "references": [
+            "client_id"
+          ],
+          "many": true
+        },
+        {
+          "name": "grm_google_locations_client_id_fkey",
+          "table": "grm_google_locations",
+          "columns": [
+            "id"
+          ],
+          "references": [
+            "client_id"
+          ],
+          "many": true
+        },
+        {
+          "name": "grm_groups_client_id_fkey",
+          "table": "grm_groups",
+          "columns": [
+            "id"
+          ],
+          "references": [
+            "client_id"
+          ],
+          "many": true
+        },
+        {
+          "name": "grm_insight_reports_client_id_fkey",
+          "table": "grm_insight_reports",
+          "columns": [
+            "id"
+          ],
+          "references": [
+            "client_id"
+          ],
+          "many": true
+        },
+        {
+          "name": "grm_location_groups_client_id_fkey",
+          "table": "grm_location_groups",
+          "columns": [
+            "id"
+          ],
+          "references": [
+            "client_id"
+          ],
+          "many": true
+        },
+        {
+          "name": "grm_reply_templates_client_id_fkey",
+          "table": "grm_reply_templates",
+          "columns": [
+            "id"
+          ],
+          "references": [
+            "client_id"
+          ],
+          "many": true
+        },
+        {
+          "name": "grm_report_schedules_client_id_fkey",
+          "table": "grm_report_schedules",
+          "columns": [
+            "id"
+          ],
+          "references": [
+            "client_id"
+          ],
+          "many": true
+        },
+        {
+          "name": "grm_reports_client_id_fkey",
+          "table": "grm_reports",
+          "columns": [
+            "id"
+          ],
+          "references": [
+            "client_id"
+          ],
+          "many": true
+        },
+        {
+          "name": "grm_review_observations_client_id_fkey",
+          "table": "grm_review_observations",
+          "columns": [
+            "id"
+          ],
+          "references": [
+            "client_id"
+          ],
+          "many": true
+        },
+        {
+          "name": "grm_scope_settings_client_id_fkey",
+          "table": "grm_scope_settings",
+          "columns": [
+            "id"
+          ],
+          "references": [
+            "client_id"
+          ],
+          "many": true
+        },
+        {
+          "name": "grm_usage_events_client_id_fkey",
+          "table": "grm_usage_events",
+          "columns": [
+            "id"
+          ],
+          "references": [
+            "client_id"
+          ],
+          "many": true
+        },
+        {
+          "name": "grm_workspace_invites_scope_client_id_fkey",
+          "table": "grm_workspace_invites",
+          "columns": [
+            "id"
+          ],
+          "references": [
+            "scope_client_id"
+          ],
+          "many": true
+        },
+        {
+          "name": "grm_workspace_members_scope_client_id_fkey",
+          "table": "grm_workspace_members",
+          "columns": [
+            "id"
+          ],
+          "references": [
+            "scope_client_id"
+          ],
+          "many": true
+        }
+      ]
+    },
+    "grm_escalation_events": {
+      "columns": {
+        "id": "uuid",
+        "workspace_id": "uuid",
+        "escalation_id": "uuid",
+        "kind": "text",
+        "body": "text",
+        "created_at": "timestamptz",
+        "actor_id": "uuid",
+        "metadata": "jsonb"
+      },
+      "relations": [
+        {
+          "name": "grm_escalation_events_escalation_id_fkey",
+          "table": "grm_escalations",
+          "columns": [
+            "escalation_id"
+          ],
+          "references": [
+            "id"
+          ],
+          "many": false
+        },
+        {
+          "name": "grm_escalation_events_workspace_id_fkey",
+          "table": "grm_workspaces",
+          "columns": [
+            "workspace_id"
+          ],
+          "references": [
+            "id"
+          ],
+          "many": false
+        }
+      ]
+    },
+    "grm_escalation_policies": {
+      "columns": {
+        "workspace_id": "uuid",
+        "max_stars": "int4",
+        "flag_profanity": "bool",
+        "flag_legal_safety": "bool",
+        "extra_keywords": "_text",
+        "reminder_hours": "_int4",
+        "due_hours": "int4",
+        "timezone": "text",
+        "updated_at": "timestamptz",
+        "resolution_phone": "text",
+        "resolution_email": "text"
+      },
+      "relations": [
+        {
+          "name": "grm_escalation_policies_workspace_id_fkey",
+          "table": "grm_workspaces",
+          "columns": [
+            "workspace_id"
+          ],
+          "references": [
+            "id"
+          ],
+          "many": false
+        }
+      ]
+    },
+    "grm_escalation_reminders": {
+      "columns": {
+        "id": "uuid",
+        "workspace_id": "uuid",
+        "escalation_id": "uuid",
+        "kind": "text",
+        "due_at": "timestamptz",
+        "sent_at": "timestamptz",
+        "attempts": "int4",
+        "last_error": "text"
+      },
+      "relations": [
+        {
+          "name": "grm_escalation_reminders_escalation_id_fkey",
+          "table": "grm_escalations",
+          "columns": [
+            "escalation_id"
+          ],
+          "references": [
+            "id"
+          ],
+          "many": false
+        },
+        {
+          "name": "grm_escalation_reminders_workspace_id_fkey",
+          "table": "grm_workspaces",
+          "columns": [
+            "workspace_id"
+          ],
+          "references": [
+            "id"
+          ],
+          "many": false
+        }
+      ]
+    },
+    "grm_escalations": {
+      "columns": {
+        "id": "uuid",
+        "workspace_id": "uuid",
+        "review_id": "uuid",
+        "location_id": "uuid",
+        "status": "text",
+        "theme": "text",
+        "assignee_user_id": "uuid",
+        "opened_at": "timestamptz",
+        "due_at": "timestamptz",
+        "resolved_at": "timestamptz",
+        "resolution_code": "text",
+        "internal_note": "text",
+        "created_at": "timestamptz",
+        "updated_at": "timestamptz",
+        "level": "text",
+        "resolved_by": "uuid",
+        "trigger_reasons": "_text",
+        "trigger_key": "text",
+        "responsible_user_id": "uuid",
+        "ownership": "text",
+        "assignment_reason": "text",
+        "assignment_decided_at": "timestamptz",
+        "sla_advanced_at": "timestamptz",
+        "ticket_no": "int4"
+      },
+      "relations": [
+        {
+          "name": "grm_escalation_events_escalation_id_fkey",
+          "table": "grm_escalation_events",
+          "columns": [
+            "id"
+          ],
+          "references": [
+            "escalation_id"
+          ],
+          "many": true
+        },
+        {
+          "name": "grm_escalation_reminders_escalation_id_fkey",
+          "table": "grm_escalation_reminders",
+          "columns": [
+            "id"
+          ],
+          "references": [
+            "escalation_id"
+          ],
+          "many": true
+        },
+        {
+          "name": "grm_escalations_location_id_fkey",
+          "table": "grm_google_locations",
+          "columns": [
+            "location_id"
+          ],
+          "references": [
+            "id"
+          ],
+          "many": false
+        },
+        {
+          "name": "grm_escalations_review_id_fkey",
+          "table": "grm_reviews",
+          "columns": [
+            "review_id"
+          ],
+          "references": [
+            "id"
+          ],
+          "many": false
+        },
+        {
+          "name": "grm_escalations_workspace_id_fkey",
+          "table": "grm_workspaces",
+          "columns": [
+            "workspace_id"
+          ],
+          "references": [
+            "id"
+          ],
+          "many": false
+        }
+      ]
+    },
+    "grm_google_accounts": {
+      "columns": {
+        "id": "uuid",
+        "workspace_id": "uuid",
+        "connection_id": "uuid",
+        "google_account_name": "text",
+        "account_display_name": "text",
+        "account_type": "text",
+        "verification_state": "text",
+        "created_at": "timestamptz",
+        "updated_at": "timestamptz"
+      },
+      "relations": [
+        {
+          "name": "grm_google_accounts_connection_id_fkey",
+          "table": "grm_google_connections",
+          "columns": [
+            "connection_id"
+          ],
+          "references": [
+            "id"
+          ],
+          "many": false
+        },
+        {
+          "name": "grm_google_accounts_workspace_id_fkey",
+          "table": "grm_workspaces",
+          "columns": [
+            "workspace_id"
+          ],
+          "references": [
+            "id"
+          ],
+          "many": false
+        },
+        {
+          "name": "grm_google_locations_google_account_id_fkey",
+          "table": "grm_google_locations",
+          "columns": [
+            "id"
+          ],
+          "references": [
+            "google_account_id"
+          ],
+          "many": true
+        }
+      ]
+    },
+    "grm_google_connections": {
+      "columns": {
+        "id": "uuid",
+        "workspace_id": "uuid",
+        "authorized_by_user_id": "uuid",
+        "google_email": "text",
+        "access_token_enc": "text",
+        "refresh_token_enc": "text",
+        "token_expires_at": "timestamptz",
+        "scopes": "_text",
+        "status": "grm_connection_status",
+        "last_refreshed_at": "timestamptz",
+        "created_at": "timestamptz",
+        "updated_at": "timestamptz",
+        "client_id": "uuid"
+      },
+      "relations": [
+        {
+          "name": "grm_google_accounts_connection_id_fkey",
+          "table": "grm_google_accounts",
+          "columns": [
+            "id"
+          ],
+          "references": [
+            "connection_id"
+          ],
+          "many": true
+        },
+        {
+          "name": "grm_google_connections_client_id_fkey",
+          "table": "grm_clients",
+          "columns": [
+            "client_id"
+          ],
+          "references": [
+            "id"
+          ],
+          "many": false
+        },
+        {
+          "name": "grm_google_connections_workspace_id_fkey",
+          "table": "grm_workspaces",
+          "columns": [
+            "workspace_id"
+          ],
+          "references": [
+            "id"
+          ],
+          "many": false
+        }
+      ]
+    },
+    "grm_google_locations": {
+      "columns": {
+        "id": "uuid",
+        "workspace_id": "uuid",
+        "client_id": "uuid",
+        "google_account_id": "uuid",
+        "google_location_name": "text",
+        "location_title": "text",
+        "store_code": "text",
+        "address_formatted": "text",
+        "primary_phone": "text",
+        "website_uri": "text",
+        "place_id": "text",
+        "is_active": "bool",
+        "last_synced_at": "timestamptz",
+        "sync_cursor": "text",
+        "total_review_count": "int4",
+        "average_rating": "numeric",
+        "created_at": "timestamptz",
+        "updated_at": "timestamptz",
+        "group_id": "uuid",
+        "voice_of_merchant": "bool",
+        "google_duplicate_of": "text",
+        "hold_reason": "text",
+        "sync_status": "grm_sync_status",
+        "sync_started_at": "timestamptz",
+        "sync_completed_at": "timestamptz",
+        "sync_error": "text",
+        "reviews_full_synced_at": "timestamptz",
+        "brand_id": "uuid",
+        "manager_user_id": "uuid",
+        "onboarding_group_id": "uuid"
+      },
+      "relations": [
+        {
+          "name": "grm_ai_generation_jobs_location_id_fkey",
+          "table": "grm_ai_generation_jobs",
+          "columns": [
+            "id"
+          ],
+          "references": [
+            "location_id"
+          ],
+          "many": true
+        },
+        {
+          "name": "grm_ai_knowledge_location_id_fkey",
+          "table": "grm_ai_knowledge",
+          "columns": [
+            "id"
+          ],
+          "references": [
+            "location_id"
+          ],
+          "many": true
+        },
+        {
+          "name": "grm_alert_events_location_id_fkey",
+          "table": "grm_alert_events",
+          "columns": [
+            "id"
+          ],
+          "references": [
+            "location_id"
+          ],
+          "many": true
+        },
+        {
+          "name": "grm_alert_rules_location_id_fkey",
+          "table": "grm_alert_rules",
+          "columns": [
+            "id"
+          ],
+          "references": [
+            "location_id"
+          ],
+          "many": true
+        },
+        {
+          "name": "grm_analysis_runs_location_id_fkey",
+          "table": "grm_analysis_runs",
+          "columns": [
+            "id"
+          ],
+          "references": [
+            "location_id"
+          ],
+          "many": true
+        },
+        {
+          "name": "grm_autoreply_pauses_location_id_fkey",
+          "table": "grm_autoreply_pauses",
+          "columns": [
+            "id"
+          ],
+          "references": [
+            "location_id"
+          ],
+          "many": true
+        },
+        {
+          "name": "grm_escalations_location_id_fkey",
+          "table": "grm_escalations",
+          "columns": [
+            "id"
+          ],
+          "references": [
+            "location_id"
+          ],
+          "many": true
+        },
+        {
+          "name": "grm_google_locations_brand_id_fkey",
+          "table": "grm_brands",
+          "columns": [
+            "brand_id"
+          ],
+          "references": [
+            "id"
+          ],
+          "many": false
+        },
+        {
+          "name": "grm_google_locations_client_id_fkey",
+          "table": "grm_clients",
+          "columns": [
+            "client_id"
+          ],
+          "references": [
+            "id"
+          ],
+          "many": false
+        },
+        {
+          "name": "grm_google_locations_google_account_id_fkey",
+          "table": "grm_google_accounts",
+          "columns": [
+            "google_account_id"
+          ],
+          "references": [
+            "id"
+          ],
+          "many": false
+        },
+        {
+          "name": "grm_google_locations_group_id_fkey",
+          "table": "grm_groups",
+          "columns": [
+            "group_id"
+          ],
+          "references": [
+            "id"
+          ],
+          "many": false
+        },
+        {
+          "name": "grm_google_locations_onboarding_group_id_fkey",
+          "table": "grm_location_groups",
+          "columns": [
+            "onboarding_group_id"
+          ],
+          "references": [
+            "id"
+          ],
+          "many": false
+        },
+        {
+          "name": "grm_google_locations_workspace_id_fkey",
+          "table": "grm_workspaces",
+          "columns": [
+            "workspace_id"
+          ],
+          "references": [
+            "id"
+          ],
+          "many": false
+        },
+        {
+          "name": "grm_insight_reports_location_id_fkey",
+          "table": "grm_insight_reports",
+          "columns": [
+            "id"
+          ],
+          "references": [
+            "location_id"
+          ],
+          "many": true
+        },
+        {
+          "name": "grm_location_managers_location_id_fkey",
+          "table": "grm_location_managers",
+          "columns": [
+            "id"
+          ],
+          "references": [
+            "location_id"
+          ],
+          "many": false
+        },
+        {
+          "name": "grm_location_tag_links_location_id_fkey",
+          "table": "grm_location_tag_links",
+          "columns": [
+            "id"
+          ],
+          "references": [
+            "location_id"
+          ],
+          "many": true
+        },
+        {
+          "name": "grm_notifications_location_id_fkey",
+          "table": "grm_notifications",
+          "columns": [
+            "id"
+          ],
+          "references": [
+            "location_id"
+          ],
+          "many": true
+        },
+        {
+          "name": "grm_reply_templates_location_id_fkey",
+          "table": "grm_reply_templates",
+          "columns": [
+            "id"
+          ],
+          "references": [
+            "location_id"
+          ],
+          "many": true
+        },
+        {
+          "name": "grm_report_schedules_location_id_fkey",
+          "table": "grm_report_schedules",
+          "columns": [
+            "id"
+          ],
+          "references": [
+            "location_id"
+          ],
+          "many": true
+        },
+        {
+          "name": "grm_reports_location_id_fkey",
+          "table": "grm_reports",
+          "columns": [
+            "id"
+          ],
+          "references": [
+            "location_id"
+          ],
+          "many": true
+        },
+        {
+          "name": "grm_request_campaign_locations_location_id_fkey",
+          "table": "grm_request_campaign_locations",
+          "columns": [
+            "id"
+          ],
+          "references": [
+            "location_id"
+          ],
+          "many": true
+        },
+        {
+          "name": "grm_request_customers_location_id_fkey",
+          "table": "grm_request_customers",
+          "columns": [
+            "id"
+          ],
+          "references": [
+            "location_id"
+          ],
+          "many": true
+        },
+        {
+          "name": "grm_request_feedback_location_id_fkey",
+          "table": "grm_request_feedback",
+          "columns": [
+            "id"
+          ],
+          "references": [
+            "location_id"
+          ],
+          "many": true
+        },
+        {
+          "name": "grm_request_messages_location_id_fkey",
+          "table": "grm_request_messages",
+          "columns": [
+            "id"
+          ],
+          "references": [
+            "location_id"
+          ],
+          "many": true
+        },
+        {
+          "name": "grm_request_qr_location_id_fkey",
+          "table": "grm_request_qr",
+          "columns": [
+            "id"
+          ],
+          "references": [
+            "location_id"
+          ],
+          "many": true
+        },
+        {
+          "name": "grm_request_recipients_location_id_fkey",
+          "table": "grm_request_recipients",
+          "columns": [
+            "id"
+          ],
+          "references": [
+            "location_id"
+          ],
+          "many": true
+        },
+        {
+          "name": "grm_review_analyses_location_id_fkey",
+          "table": "grm_review_analyses",
+          "columns": [
+            "id"
+          ],
+          "references": [
+            "location_id"
+          ],
+          "many": true
+        },
+        {
+          "name": "grm_review_observations_location_id_fkey",
+          "table": "grm_review_observations",
+          "columns": [
+            "id"
+          ],
+          "references": [
+            "location_id"
+          ],
+          "many": true
+        },
+        {
+          "name": "grm_reviews_location_id_fkey",
+          "table": "grm_reviews",
+          "columns": [
+            "id"
+          ],
+          "references": [
+            "location_id"
+          ],
+          "many": true
+        },
+        {
+          "name": "grm_scope_settings_location_id_fkey",
+          "table": "grm_scope_settings",
+          "columns": [
+            "id"
+          ],
+          "references": [
+            "location_id"
+          ],
+          "many": true
+        },
+        {
+          "name": "grm_workspace_invites_scope_location_id_fkey",
+          "table": "grm_workspace_invites",
+          "columns": [
+            "id"
+          ],
+          "references": [
+            "scope_location_id"
+          ],
+          "many": true
+        },
+        {
+          "name": "grm_workspace_members_scope_location_id_fkey",
+          "table": "grm_workspace_members",
+          "columns": [
+            "id"
+          ],
+          "references": [
+            "scope_location_id"
+          ],
+          "many": true
+        }
+      ]
+    },
+    "grm_groups": {
+      "columns": {
+        "id": "uuid",
+        "workspace_id": "uuid",
+        "client_id": "uuid",
+        "brand_id": "uuid",
+        "parent_id": "uuid",
+        "name": "text",
+        "kind": "text",
+        "sort_order": "int4"
+      },
+      "relations": [
+        {
+          "name": "grm_alert_rules_group_id_fkey",
+          "table": "grm_alert_rules",
+          "columns": [
+            "id"
+          ],
+          "references": [
+            "group_id"
+          ],
+          "many": true
+        },
+        {
+          "name": "grm_analysis_runs_group_id_fkey",
+          "table": "grm_analysis_runs",
+          "columns": [
+            "id"
+          ],
+          "references": [
+            "group_id"
+          ],
+          "many": true
+        },
+        {
+          "name": "grm_google_locations_group_id_fkey",
+          "table": "grm_google_locations",
+          "columns": [
+            "id"
+          ],
+          "references": [
+            "group_id"
+          ],
+          "many": true
+        },
+        {
+          "name": "grm_groups_brand_id_fkey",
+          "table": "grm_brands",
+          "columns": [
+            "brand_id"
+          ],
+          "references": [
+            "id"
+          ],
+          "many": false
+        },
+        {
+          "name": "grm_groups_client_id_fkey",
+          "table": "grm_clients",
+          "columns": [
+            "client_id"
+          ],
+          "references": [
+            "id"
+          ],
+          "many": false
+        },
+        {
+          "name": "grm_groups_parent_id_fkey",
+          "table": "grm_groups",
+          "columns": [
+            "parent_id"
+          ],
+          "references": [
+            "id"
+          ],
+          "many": false
+        },
+        {
+          "name": "grm_groups_parent_id_fkey",
+          "table": "grm_groups",
+          "columns": [
+            "id"
+          ],
+          "references": [
+            "parent_id"
+          ],
+          "many": true
+        },
+        {
+          "name": "grm_groups_workspace_id_fkey",
+          "table": "grm_workspaces",
+          "columns": [
+            "workspace_id"
+          ],
+          "references": [
+            "id"
+          ],
+          "many": false
+        },
+        {
+          "name": "grm_insight_reports_group_id_fkey",
+          "table": "grm_insight_reports",
+          "columns": [
+            "id"
+          ],
+          "references": [
+            "group_id"
+          ],
+          "many": true
+        },
+        {
+          "name": "grm_reply_templates_group_id_fkey",
+          "table": "grm_reply_templates",
+          "columns": [
+            "id"
+          ],
+          "references": [
+            "group_id"
+          ],
+          "many": true
+        },
+        {
+          "name": "grm_report_schedules_group_id_fkey",
+          "table": "grm_report_schedules",
+          "columns": [
+            "id"
+          ],
+          "references": [
+            "group_id"
+          ],
+          "many": true
+        },
+        {
+          "name": "grm_reports_group_id_fkey",
+          "table": "grm_reports",
+          "columns": [
+            "id"
+          ],
+          "references": [
+            "group_id"
+          ],
+          "many": true
+        },
+        {
+          "name": "grm_review_observations_group_id_fkey",
+          "table": "grm_review_observations",
+          "columns": [
+            "id"
+          ],
+          "references": [
+            "group_id"
+          ],
+          "many": true
+        },
+        {
+          "name": "grm_scope_settings_group_id_fkey",
+          "table": "grm_scope_settings",
+          "columns": [
+            "id"
+          ],
+          "references": [
+            "group_id"
+          ],
+          "many": true
+        },
+        {
+          "name": "grm_workspace_invites_scope_group_id_fkey",
+          "table": "grm_workspace_invites",
+          "columns": [
+            "id"
+          ],
+          "references": [
+            "scope_group_id"
+          ],
+          "many": true
+        },
+        {
+          "name": "grm_workspace_members_scope_group_id_fkey",
+          "table": "grm_workspace_members",
+          "columns": [
+            "id"
+          ],
+          "references": [
+            "scope_group_id"
+          ],
+          "many": true
+        }
+      ]
+    },
+    "grm_insight_reports": {
+      "columns": {
+        "id": "uuid",
+        "workspace_id": "uuid",
+        "cache_key": "text",
+        "requested_by": "uuid",
+        "client_id": "uuid",
+        "group_id": "uuid",
+        "location_id": "uuid",
+        "location_ids": "jsonb",
+        "range_start": "timestamptz",
+        "range_end": "timestamptz",
+        "status": "text",
+        "phase": "text",
+        "insights": "jsonb",
+        "evidence_summary": "jsonb",
+        "limitations": "jsonb",
+        "data_fingerprint": "text",
+        "analysis_version": "text",
+        "prompt_version": "text",
+        "model": "text",
+        "discovered_count": "int4",
+        "eligible_count": "int4",
+        "analysed_count": "int4",
+        "failed_count": "int4",
+        "pending_count": "int4",
+        "failed_review_ids": "jsonb",
+        "input_tokens": "int4",
+        "output_tokens": "int4",
+        "error": "text",
+        "started_at": "timestamptz",
+        "finished_at": "timestamptz",
+        "created_at": "timestamptz",
+        "updated_at": "timestamptz"
+      },
+      "relations": [
+        {
+          "name": "grm_insight_reports_client_id_fkey",
+          "table": "grm_clients",
+          "columns": [
+            "client_id"
+          ],
+          "references": [
+            "id"
+          ],
+          "many": false
+        },
+        {
+          "name": "grm_insight_reports_group_id_fkey",
+          "table": "grm_groups",
+          "columns": [
+            "group_id"
+          ],
+          "references": [
+            "id"
+          ],
+          "many": false
+        },
+        {
+          "name": "grm_insight_reports_location_id_fkey",
+          "table": "grm_google_locations",
+          "columns": [
+            "location_id"
+          ],
+          "references": [
+            "id"
+          ],
+          "many": false
+        },
+        {
+          "name": "grm_insight_reports_workspace_id_fkey",
+          "table": "grm_workspaces",
+          "columns": [
+            "workspace_id"
+          ],
+          "references": [
+            "id"
+          ],
+          "many": false
+        }
+      ]
+    },
+    "grm_location_groups": {
+      "columns": {
+        "id": "uuid",
+        "workspace_id": "uuid",
+        "name": "text",
+        "source": "text",
+        "created_at": "timestamptz",
+        "updated_at": "timestamptz",
+        "client_id": "uuid",
+        "parent_id": "uuid",
+        "kind": "text"
+      },
+      "relations": [
+        {
+          "name": "grm_google_locations_onboarding_group_id_fkey",
+          "table": "grm_google_locations",
+          "columns": [
+            "id"
+          ],
+          "references": [
+            "onboarding_group_id"
+          ],
+          "many": true
+        },
+        {
+          "name": "grm_location_groups_client_id_fkey",
+          "table": "grm_clients",
+          "columns": [
+            "client_id"
+          ],
+          "references": [
+            "id"
+          ],
+          "many": false
+        },
+        {
+          "name": "grm_location_groups_parent_id_fkey",
+          "table": "grm_location_groups",
+          "columns": [
+            "parent_id"
+          ],
+          "references": [
+            "id"
+          ],
+          "many": false
+        },
+        {
+          "name": "grm_location_groups_parent_id_fkey",
+          "table": "grm_location_groups",
+          "columns": [
+            "id"
+          ],
+          "references": [
+            "parent_id"
+          ],
+          "many": true
+        },
+        {
+          "name": "grm_location_groups_workspace_id_fkey",
+          "table": "grm_workspaces",
+          "columns": [
+            "workspace_id"
+          ],
+          "references": [
+            "id"
+          ],
+          "many": false
+        }
+      ]
+    },
+    "grm_location_managers": {
+      "columns": {
+        "location_id": "uuid",
+        "workspace_id": "uuid",
+        "user_id": "uuid"
+      },
+      "relations": [
+        {
+          "name": "grm_location_managers_location_id_fkey",
+          "table": "grm_google_locations",
+          "columns": [
+            "location_id"
+          ],
+          "references": [
+            "id"
+          ],
+          "many": false
+        },
+        {
+          "name": "grm_location_managers_workspace_id_fkey",
+          "table": "grm_workspaces",
+          "columns": [
+            "workspace_id"
+          ],
+          "references": [
+            "id"
+          ],
+          "many": false
+        }
+      ]
+    },
+    "grm_location_tag_links": {
+      "columns": {
+        "location_id": "uuid",
+        "tag_id": "uuid"
+      },
+      "relations": [
+        {
+          "name": "grm_location_tag_links_location_id_fkey",
+          "table": "grm_google_locations",
+          "columns": [
+            "location_id"
+          ],
+          "references": [
+            "id"
+          ],
+          "many": false
+        },
+        {
+          "name": "grm_location_tag_links_tag_id_fkey",
+          "table": "grm_location_tags",
+          "columns": [
+            "tag_id"
+          ],
+          "references": [
+            "id"
+          ],
+          "many": false
+        }
+      ]
+    },
+    "grm_location_tags": {
+      "columns": {
+        "id": "uuid",
+        "workspace_id": "uuid",
+        "name": "text",
+        "created_at": "timestamptz"
+      },
+      "relations": [
+        {
+          "name": "grm_location_tag_links_tag_id_fkey",
+          "table": "grm_location_tag_links",
+          "columns": [
+            "id"
+          ],
+          "references": [
+            "tag_id"
+          ],
+          "many": true
+        },
+        {
+          "name": "grm_location_tags_workspace_id_fkey",
+          "table": "grm_workspaces",
+          "columns": [
+            "workspace_id"
+          ],
+          "references": [
+            "id"
+          ],
+          "many": false
+        }
+      ]
+    },
+    "grm_notifications": {
+      "columns": {
+        "id": "uuid",
+        "workspace_id": "uuid",
+        "user_id": "uuid",
+        "location_id": "uuid",
+        "kind": "text",
+        "title": "text",
+        "href": "text",
+        "dedupe_key": "text",
+        "read_at": "timestamptz",
+        "created_at": "timestamptz"
+      },
+      "relations": [
+        {
+          "name": "grm_notifications_location_id_fkey",
+          "table": "grm_google_locations",
+          "columns": [
+            "location_id"
+          ],
+          "references": [
+            "id"
+          ],
+          "many": false
+        },
+        {
+          "name": "grm_notifications_workspace_id_fkey",
+          "table": "grm_workspaces",
+          "columns": [
+            "workspace_id"
+          ],
+          "references": [
+            "id"
+          ],
+          "many": false
+        }
+      ]
+    },
+    "grm_onboarding": {
+      "columns": {
+        "workspace_id": "uuid",
+        "step": "text",
+        "grouping": "text",
+        "tone_voice": "text",
+        "tone_note": "text",
+        "completed_at": "timestamptz",
+        "created_at": "timestamptz",
+        "updated_at": "timestamptz"
+      },
+      "relations": [
+        {
+          "name": "grm_onboarding_workspace_id_fkey",
+          "table": "grm_workspaces",
+          "columns": [
+            "workspace_id"
+          ],
+          "references": [
+            "id"
+          ],
+          "many": false
+        }
+      ]
+    },
+    "grm_platform_announcements": {
+      "columns": {
+        "id": "uuid",
+        "title": "text",
+        "body": "text",
+        "tone": "text",
+        "active": "bool",
+        "created_by": "uuid",
+        "created_at": "timestamptz"
+      },
+      "relations": []
+    },
+    "grm_platform_blocked_users": {
+      "columns": {
+        "email": "text",
+        "user_id": "uuid",
+        "reason": "text",
+        "blocked_by": "uuid",
+        "created_at": "timestamptz"
+      },
+      "relations": []
+    },
+    "grm_platform_invites": {
+      "columns": {
+        "id": "uuid",
+        "email": "text",
+        "invited_by": "uuid",
+        "status": "text",
+        "workspace_id": "uuid",
+        "accepted_user_id": "uuid",
+        "note": "text",
+        "expires_at": "timestamptz",
+        "accepted_at": "timestamptz",
+        "created_at": "timestamptz",
+        "updated_at": "timestamptz"
+      },
+      "relations": [
+        {
+          "name": "grm_platform_invites_workspace_id_fkey",
+          "table": "grm_workspaces",
+          "columns": [
+            "workspace_id"
+          ],
+          "references": [
+            "id"
+          ],
+          "many": false
+        }
+      ]
+    },
+    "grm_platform_settings": {
+      "columns": {
+        "key": "text",
+        "value": "jsonb",
+        "updated_by": "uuid",
+        "updated_at": "timestamptz"
+      },
+      "relations": []
+    },
+    "grm_reply_settings": {
+      "columns": {
+        "workspace_id": "uuid",
+        "tone": "jsonb",
+        "automation": "jsonb",
+        "updated_at": "timestamptz"
+      },
+      "relations": [
+        {
+          "name": "grm_reply_settings_workspace_id_fkey",
+          "table": "grm_workspaces",
+          "columns": [
+            "workspace_id"
+          ],
+          "references": [
+            "id"
+          ],
+          "many": false
+        }
+      ]
+    },
+    "grm_reply_templates": {
+      "columns": {
+        "id": "uuid",
+        "workspace_id": "uuid",
+        "name": "text",
+        "body": "text",
+        "client_id": "uuid",
+        "group_id": "uuid",
+        "location_id": "uuid",
+        "created_at": "timestamptz"
+      },
+      "relations": [
+        {
+          "name": "grm_reply_templates_client_id_fkey",
+          "table": "grm_clients",
+          "columns": [
+            "client_id"
+          ],
+          "references": [
+            "id"
+          ],
+          "many": false
+        },
+        {
+          "name": "grm_reply_templates_group_id_fkey",
+          "table": "grm_groups",
+          "columns": [
+            "group_id"
+          ],
+          "references": [
+            "id"
+          ],
+          "many": false
+        },
+        {
+          "name": "grm_reply_templates_location_id_fkey",
+          "table": "grm_google_locations",
+          "columns": [
+            "location_id"
+          ],
+          "references": [
+            "id"
+          ],
+          "many": false
+        },
+        {
+          "name": "grm_reply_templates_workspace_id_fkey",
+          "table": "grm_workspaces",
+          "columns": [
+            "workspace_id"
+          ],
+          "references": [
+            "id"
+          ],
+          "many": false
+        }
+      ]
+    },
+    "grm_report_deliveries": {
+      "columns": {
+        "id": "uuid",
+        "run_id": "uuid",
+        "workspace_id": "uuid",
+        "channel": "text",
+        "recipient": "text",
+        "status": "text",
+        "detail": "text",
+        "created_at": "timestamptz"
+      },
+      "relations": [
+        {
+          "name": "grm_report_deliveries_run_id_fkey",
+          "table": "grm_report_runs",
+          "columns": [
+            "run_id"
+          ],
+          "references": [
+            "id"
+          ],
+          "many": false
+        },
+        {
+          "name": "grm_report_deliveries_workspace_id_fkey",
+          "table": "grm_workspaces",
+          "columns": [
+            "workspace_id"
+          ],
+          "references": [
+            "id"
+          ],
+          "many": false
+        }
+      ]
+    },
+    "grm_report_runs": {
+      "columns": {
+        "id": "uuid",
+        "workspace_id": "uuid",
+        "schedule_id": "uuid",
+        "trigger": "text",
+        "slot": "timestamptz",
+        "status": "text",
+        "attempts": "int4",
+        "period_start": "timestamptz",
+        "period_end": "timestamptz",
+        "summary": "text",
+        "snapshot": "jsonb",
+        "error": "text",
+        "started_at": "timestamptz",
+        "finished_at": "timestamptz"
+      },
+      "relations": [
+        {
+          "name": "grm_report_deliveries_run_id_fkey",
+          "table": "grm_report_deliveries",
+          "columns": [
+            "id"
+          ],
+          "references": [
+            "run_id"
+          ],
+          "many": true
+        },
+        {
+          "name": "grm_report_runs_schedule_id_fkey",
+          "table": "grm_report_schedules",
+          "columns": [
+            "schedule_id"
+          ],
+          "references": [
+            "id"
+          ],
+          "many": false
+        },
+        {
+          "name": "grm_report_runs_workspace_id_fkey",
+          "table": "grm_workspaces",
+          "columns": [
+            "workspace_id"
+          ],
+          "references": [
+            "id"
+          ],
+          "many": false
+        }
+      ]
+    },
+    "grm_report_schedules": {
+      "columns": {
+        "id": "uuid",
+        "workspace_id": "uuid",
+        "name": "text",
+        "frequency": "text",
+        "recipients": "text",
+        "channel": "text",
+        "scope_label": "text",
+        "include_scorecard": "bool",
+        "include_leaderboard": "bool",
+        "include_themes": "bool",
+        "created_at": "timestamptz",
+        "client_id": "uuid",
+        "group_id": "uuid",
+        "location_id": "uuid",
+        "sections": "_text",
+        "delivery_time": "text",
+        "timezone": "text",
+        "weekday": "int2",
+        "day_of_month": "int2",
+        "recipient_emails": "_text",
+        "channels": "_text",
+        "enabled": "bool",
+        "next_run_at": "timestamptz",
+        "updated_at": "timestamptz",
+        "created_by": "uuid"
+      },
+      "relations": [
+        {
+          "name": "grm_report_runs_schedule_id_fkey",
+          "table": "grm_report_runs",
+          "columns": [
+            "id"
+          ],
+          "references": [
+            "schedule_id"
+          ],
+          "many": true
+        },
+        {
+          "name": "grm_report_schedules_client_id_fkey",
+          "table": "grm_clients",
+          "columns": [
+            "client_id"
+          ],
+          "references": [
+            "id"
+          ],
+          "many": false
+        },
+        {
+          "name": "grm_report_schedules_group_id_fkey",
+          "table": "grm_groups",
+          "columns": [
+            "group_id"
+          ],
+          "references": [
+            "id"
+          ],
+          "many": false
+        },
+        {
+          "name": "grm_report_schedules_location_id_fkey",
+          "table": "grm_google_locations",
+          "columns": [
+            "location_id"
+          ],
+          "references": [
+            "id"
+          ],
+          "many": false
+        },
+        {
+          "name": "grm_report_schedules_workspace_id_fkey",
+          "table": "grm_workspaces",
+          "columns": [
+            "workspace_id"
+          ],
+          "references": [
+            "id"
+          ],
+          "many": false
+        }
+      ]
+    },
+    "grm_reports": {
+      "columns": {
+        "id": "uuid",
+        "workspace_id": "uuid",
+        "name": "text",
+        "client_id": "uuid",
+        "group_id": "uuid",
+        "location_id": "uuid",
+        "sections": "_text",
+        "created_by": "uuid",
+        "created_at": "timestamptz",
+        "updated_at": "timestamptz"
+      },
+      "relations": [
+        {
+          "name": "grm_reports_client_id_fkey",
+          "table": "grm_clients",
+          "columns": [
+            "client_id"
+          ],
+          "references": [
+            "id"
+          ],
+          "many": false
+        },
+        {
+          "name": "grm_reports_group_id_fkey",
+          "table": "grm_groups",
+          "columns": [
+            "group_id"
+          ],
+          "references": [
+            "id"
+          ],
+          "many": false
+        },
+        {
+          "name": "grm_reports_location_id_fkey",
+          "table": "grm_google_locations",
+          "columns": [
+            "location_id"
+          ],
+          "references": [
+            "id"
+          ],
+          "many": false
+        },
+        {
+          "name": "grm_reports_workspace_id_fkey",
+          "table": "grm_workspaces",
+          "columns": [
+            "workspace_id"
+          ],
+          "references": [
+            "id"
+          ],
+          "many": false
+        }
+      ]
+    },
+    "grm_request_campaign_locations": {
+      "columns": {
+        "campaign_id": "uuid",
+        "location_id": "uuid"
+      },
+      "relations": [
+        {
+          "name": "grm_request_campaign_locations_campaign_id_fkey",
+          "table": "grm_request_campaigns",
+          "columns": [
+            "campaign_id"
+          ],
+          "references": [
+            "id"
+          ],
+          "many": false
+        },
+        {
+          "name": "grm_request_campaign_locations_location_id_fkey",
+          "table": "grm_google_locations",
+          "columns": [
+            "location_id"
+          ],
+          "references": [
+            "id"
+          ],
+          "many": false
+        }
+      ]
+    },
+    "grm_request_campaigns": {
+      "columns": {
+        "id": "uuid",
+        "workspace_id": "uuid",
+        "name": "text",
+        "channel": "text",
+        "language": "text",
+        "template": "text",
+        "reminder_enabled": "bool",
+        "reminder_after_days": "int4",
+        "status": "text",
+        "source": "text",
+        "preview_eligible": "int4",
+        "preview_suppressed": "int4",
+        "preview_opted_out": "int4",
+        "preview_missing_contact": "int4",
+        "preview_unknown_store": "int4",
+        "preview_duplicates": "int4",
+        "created_by": "uuid",
+        "created_at": "timestamptz",
+        "updated_at": "timestamptz",
+        "sent_at": "timestamptz"
+      },
+      "relations": [
+        {
+          "name": "grm_request_campaign_locations_campaign_id_fkey",
+          "table": "grm_request_campaign_locations",
+          "columns": [
+            "id"
+          ],
+          "references": [
+            "campaign_id"
+          ],
+          "many": true
+        },
+        {
+          "name": "grm_request_campaigns_workspace_id_fkey",
+          "table": "grm_workspaces",
+          "columns": [
+            "workspace_id"
+          ],
+          "references": [
+            "id"
+          ],
+          "many": false
+        },
+        {
+          "name": "grm_request_messages_campaign_id_fkey",
+          "table": "grm_request_messages",
+          "columns": [
+            "id"
+          ],
+          "references": [
+            "campaign_id"
+          ],
+          "many": true
+        },
+        {
+          "name": "grm_request_recipients_campaign_id_fkey",
+          "table": "grm_request_recipients",
+          "columns": [
+            "id"
+          ],
+          "references": [
+            "campaign_id"
+          ],
+          "many": true
+        }
+      ]
+    },
+    "grm_request_customers": {
+      "columns": {
+        "id": "uuid",
+        "workspace_id": "uuid",
+        "name": "text",
+        "email": "text",
+        "phone": "text",
+        "phone_key": "text",
+        "location_id": "uuid",
+        "dedupe_key": "text",
+        "opted_out_at": "timestamptz",
+        "created_at": "timestamptz"
+      },
+      "relations": [
+        {
+          "name": "grm_request_customers_location_id_fkey",
+          "table": "grm_google_locations",
+          "columns": [
+            "location_id"
+          ],
+          "references": [
+            "id"
+          ],
+          "many": false
+        },
+        {
+          "name": "grm_request_customers_workspace_id_fkey",
+          "table": "grm_workspaces",
+          "columns": [
+            "workspace_id"
+          ],
+          "references": [
+            "id"
+          ],
+          "many": false
+        },
+        {
+          "name": "grm_request_messages_customer_id_fkey",
+          "table": "grm_request_messages",
+          "columns": [
+            "id"
+          ],
+          "references": [
+            "customer_id"
+          ],
+          "many": true
+        },
+        {
+          "name": "grm_request_recipients_customer_id_fkey",
+          "table": "grm_request_recipients",
+          "columns": [
+            "id"
+          ],
+          "references": [
+            "customer_id"
+          ],
+          "many": true
+        }
+      ]
+    },
+    "grm_request_events": {
+      "columns": {
+        "id": "uuid",
+        "workspace_id": "uuid",
+        "message_id": "uuid",
+        "qr_id": "uuid",
+        "kind": "text",
+        "detail": "text",
+        "created_at": "timestamptz"
+      },
+      "relations": [
+        {
+          "name": "grm_request_events_message_id_fkey",
+          "table": "grm_request_messages",
+          "columns": [
+            "message_id"
+          ],
+          "references": [
+            "id"
+          ],
+          "many": false
+        },
+        {
+          "name": "grm_request_events_qr_id_fkey",
+          "table": "grm_request_qr",
+          "columns": [
+            "qr_id"
+          ],
+          "references": [
+            "id"
+          ],
+          "many": false
+        },
+        {
+          "name": "grm_request_events_workspace_id_fkey",
+          "table": "grm_workspaces",
+          "columns": [
+            "workspace_id"
+          ],
+          "references": [
+            "id"
+          ],
+          "many": false
+        }
+      ]
+    },
+    "grm_request_feedback": {
+      "columns": {
+        "id": "uuid",
+        "workspace_id": "uuid",
+        "location_id": "uuid",
+        "message_id": "uuid",
+        "qr_id": "uuid",
+        "body": "text",
+        "created_at": "timestamptz"
+      },
+      "relations": [
+        {
+          "name": "grm_request_feedback_location_id_fkey",
+          "table": "grm_google_locations",
+          "columns": [
+            "location_id"
+          ],
+          "references": [
+            "id"
+          ],
+          "many": false
+        },
+        {
+          "name": "grm_request_feedback_message_id_fkey",
+          "table": "grm_request_messages",
+          "columns": [
+            "message_id"
+          ],
+          "references": [
+            "id"
+          ],
+          "many": false
+        },
+        {
+          "name": "grm_request_feedback_qr_id_fkey",
+          "table": "grm_request_qr",
+          "columns": [
+            "qr_id"
+          ],
+          "references": [
+            "id"
+          ],
+          "many": false
+        },
+        {
+          "name": "grm_request_feedback_workspace_id_fkey",
+          "table": "grm_workspaces",
+          "columns": [
+            "workspace_id"
+          ],
+          "references": [
+            "id"
+          ],
+          "many": false
+        }
+      ]
+    },
+    "grm_request_messages": {
+      "columns": {
+        "id": "uuid",
+        "workspace_id": "uuid",
+        "campaign_id": "uuid",
+        "customer_id": "uuid",
+        "location_id": "uuid",
+        "channel": "text",
+        "token": "text",
+        "status": "text",
+        "is_test": "bool",
+        "is_reminder": "bool",
+        "reminder_of": "uuid",
+        "attempts": "int4",
+        "retryable": "bool",
+        "provider_ref": "text",
+        "error": "text",
+        "queued_at": "timestamptz",
+        "accepted_at": "timestamptz",
+        "delivered_at": "timestamptz",
+        "opened_at": "timestamptz",
+        "clicked_at": "timestamptz",
+        "google_clicked_at": "timestamptz",
+        "next_attempt_at": "timestamptz",
+        "created_at": "timestamptz"
+      },
+      "relations": [
+        {
+          "name": "grm_request_events_message_id_fkey",
+          "table": "grm_request_events",
+          "columns": [
+            "id"
+          ],
+          "references": [
+            "message_id"
+          ],
+          "many": true
+        },
+        {
+          "name": "grm_request_feedback_message_id_fkey",
+          "table": "grm_request_feedback",
+          "columns": [
+            "id"
+          ],
+          "references": [
+            "message_id"
+          ],
+          "many": true
+        },
+        {
+          "name": "grm_request_messages_campaign_id_fkey",
+          "table": "grm_request_campaigns",
+          "columns": [
+            "campaign_id"
+          ],
+          "references": [
+            "id"
+          ],
+          "many": false
+        },
+        {
+          "name": "grm_request_messages_customer_id_fkey",
+          "table": "grm_request_customers",
+          "columns": [
+            "customer_id"
+          ],
+          "references": [
+            "id"
+          ],
+          "many": false
+        },
+        {
+          "name": "grm_request_messages_location_id_fkey",
+          "table": "grm_google_locations",
+          "columns": [
+            "location_id"
+          ],
+          "references": [
+            "id"
+          ],
+          "many": false
+        },
+        {
+          "name": "grm_request_messages_reminder_of_fkey",
+          "table": "grm_request_messages",
+          "columns": [
+            "reminder_of"
+          ],
+          "references": [
+            "id"
+          ],
+          "many": false
+        },
+        {
+          "name": "grm_request_messages_reminder_of_fkey",
+          "table": "grm_request_messages",
+          "columns": [
+            "id"
+          ],
+          "references": [
+            "reminder_of"
+          ],
+          "many": true
+        },
+        {
+          "name": "grm_request_messages_workspace_id_fkey",
+          "table": "grm_workspaces",
+          "columns": [
+            "workspace_id"
+          ],
+          "references": [
+            "id"
+          ],
+          "many": false
+        }
+      ]
+    },
+    "grm_request_policies": {
+      "columns": {
+        "workspace_id": "uuid",
+        "cooldown_days": "int4",
+        "updated_at": "timestamptz"
+      },
+      "relations": [
+        {
+          "name": "grm_request_policies_workspace_id_fkey",
+          "table": "grm_workspaces",
+          "columns": [
+            "workspace_id"
+          ],
+          "references": [
+            "id"
+          ],
+          "many": false
+        }
+      ]
+    },
+    "grm_request_qr": {
+      "columns": {
+        "id": "uuid",
+        "workspace_id": "uuid",
+        "location_id": "uuid",
+        "token": "text",
+        "language": "text",
+        "created_at": "timestamptz"
+      },
+      "relations": [
+        {
+          "name": "grm_request_events_qr_id_fkey",
+          "table": "grm_request_events",
+          "columns": [
+            "id"
+          ],
+          "references": [
+            "qr_id"
+          ],
+          "many": true
+        },
+        {
+          "name": "grm_request_feedback_qr_id_fkey",
+          "table": "grm_request_feedback",
+          "columns": [
+            "id"
+          ],
+          "references": [
+            "qr_id"
+          ],
+          "many": true
+        },
+        {
+          "name": "grm_request_qr_location_id_fkey",
+          "table": "grm_google_locations",
+          "columns": [
+            "location_id"
+          ],
+          "references": [
+            "id"
+          ],
+          "many": false
+        },
+        {
+          "name": "grm_request_qr_workspace_id_fkey",
+          "table": "grm_workspaces",
+          "columns": [
+            "workspace_id"
+          ],
+          "references": [
+            "id"
+          ],
+          "many": false
+        }
+      ]
+    },
+    "grm_request_recipients": {
+      "columns": {
+        "campaign_id": "uuid",
+        "customer_id": "uuid",
+        "location_id": "uuid",
+        "decision": "text"
+      },
+      "relations": [
+        {
+          "name": "grm_request_recipients_campaign_id_fkey",
+          "table": "grm_request_campaigns",
+          "columns": [
+            "campaign_id"
+          ],
+          "references": [
+            "id"
+          ],
+          "many": false
+        },
+        {
+          "name": "grm_request_recipients_customer_id_fkey",
+          "table": "grm_request_customers",
+          "columns": [
+            "customer_id"
+          ],
+          "references": [
+            "id"
+          ],
+          "many": false
+        },
+        {
+          "name": "grm_request_recipients_location_id_fkey",
+          "table": "grm_google_locations",
+          "columns": [
+            "location_id"
+          ],
+          "references": [
+            "id"
+          ],
+          "many": false
+        }
+      ]
+    },
+    "grm_review_ai_drafts": {
+      "columns": {
+        "id": "uuid",
+        "workspace_id": "uuid",
+        "review_id": "uuid",
+        "content": "text",
+        "ai_model": "text",
+        "ai_prompt_hash": "text",
+        "prompt_version": "text",
+        "generation_params": "jsonb",
+        "status": "grm_ai_draft_status",
+        "edited_content": "text",
+        "edited_at": "timestamptz",
+        "edited_by": "uuid",
+        "generated_by": "uuid",
+        "created_at": "timestamptz",
+        "updated_at": "timestamptz",
+        "ai_config_version": "int4",
+        "generation_id": "uuid"
+      },
+      "relations": [
+        {
+          "name": "grm_review_ai_drafts_generation_id_fkey",
+          "table": "grm_ai_generation_jobs",
+          "columns": [
+            "generation_id"
+          ],
+          "references": [
+            "id"
+          ],
+          "many": false
+        },
+        {
+          "name": "grm_review_ai_drafts_review_id_fkey",
+          "table": "grm_reviews",
+          "columns": [
+            "review_id"
+          ],
+          "references": [
+            "id"
+          ],
+          "many": false
+        },
+        {
+          "name": "grm_review_ai_drafts_workspace_id_fkey",
+          "table": "grm_workspaces",
+          "columns": [
+            "workspace_id"
+          ],
+          "references": [
+            "id"
+          ],
+          "many": false
+        },
+        {
+          "name": "grm_review_replies_ai_draft_id_fkey",
+          "table": "grm_review_replies",
+          "columns": [
+            "id"
+          ],
+          "references": [
+            "ai_draft_id"
+          ],
+          "many": true
+        }
+      ]
+    },
+    "grm_review_analyses": {
+      "columns": {
+        "id": "uuid",
+        "workspace_id": "uuid",
+        "review_id": "uuid",
+        "location_id": "uuid",
+        "analysis_version": "text",
+        "content_fingerprint": "text",
+        "status": "text",
+        "model": "text",
+        "observation_count": "int4",
+        "error": "text",
+        "processed_at": "timestamptz",
+        "created_at": "timestamptz",
+        "updated_at": "timestamptz"
+      },
+      "relations": [
+        {
+          "name": "grm_review_analyses_location_id_fkey",
+          "table": "grm_google_locations",
+          "columns": [
+            "location_id"
+          ],
+          "references": [
+            "id"
+          ],
+          "many": false
+        },
+        {
+          "name": "grm_review_analyses_review_id_fkey",
+          "table": "grm_reviews",
+          "columns": [
+            "review_id"
+          ],
+          "references": [
+            "id"
+          ],
+          "many": false
+        },
+        {
+          "name": "grm_review_analyses_workspace_id_fkey",
+          "table": "grm_workspaces",
+          "columns": [
+            "workspace_id"
+          ],
+          "references": [
+            "id"
+          ],
+          "many": false
+        },
+        {
+          "name": "grm_review_observations_analysis_id_fkey",
+          "table": "grm_review_observations",
+          "columns": [
+            "id"
+          ],
+          "references": [
+            "analysis_id"
+          ],
+          "many": true
+        }
+      ]
+    },
+    "grm_review_notes": {
+      "columns": {
+        "id": "uuid",
+        "workspace_id": "uuid",
+        "review_id": "uuid",
+        "author_id": "uuid",
+        "body": "text",
+        "created_at": "timestamptz"
+      },
+      "relations": [
+        {
+          "name": "grm_review_notes_review_id_fkey",
+          "table": "grm_reviews",
+          "columns": [
+            "review_id"
+          ],
+          "references": [
+            "id"
+          ],
+          "many": false
+        },
+        {
+          "name": "grm_review_notes_workspace_id_fkey",
+          "table": "grm_workspaces",
+          "columns": [
+            "workspace_id"
+          ],
+          "references": [
+            "id"
+          ],
+          "many": false
+        }
+      ]
+    },
+    "grm_review_observations": {
+      "columns": {
+        "id": "uuid",
+        "workspace_id": "uuid",
+        "analysis_id": "uuid",
+        "review_id": "uuid",
+        "location_id": "uuid",
+        "client_id": "uuid",
+        "group_id": "uuid",
+        "review_create_time": "timestamptz",
+        "star_rating": "int2",
+        "language": "text",
+        "topic": "text",
+        "subtopic": "text",
+        "sentiment": "text",
+        "detail": "text",
+        "entity_type": "text",
+        "entity_name": "text",
+        "severity": "int2",
+        "severity_rationale": "text",
+        "evidence_excerpt": "text",
+        "evidence_start": "int4",
+        "evidence_end": "int4",
+        "basis": "text",
+        "confidence": "numeric",
+        "is_ambiguous": "bool",
+        "dedupe_key": "text",
+        "created_at": "timestamptz"
+      },
+      "relations": [
+        {
+          "name": "grm_review_observations_analysis_id_fkey",
+          "table": "grm_review_analyses",
+          "columns": [
+            "analysis_id"
+          ],
+          "references": [
+            "id"
+          ],
+          "many": false
+        },
+        {
+          "name": "grm_review_observations_client_id_fkey",
+          "table": "grm_clients",
+          "columns": [
+            "client_id"
+          ],
+          "references": [
+            "id"
+          ],
+          "many": false
+        },
+        {
+          "name": "grm_review_observations_group_id_fkey",
+          "table": "grm_groups",
+          "columns": [
+            "group_id"
+          ],
+          "references": [
+            "id"
+          ],
+          "many": false
+        },
+        {
+          "name": "grm_review_observations_location_id_fkey",
+          "table": "grm_google_locations",
+          "columns": [
+            "location_id"
+          ],
+          "references": [
+            "id"
+          ],
+          "many": false
+        },
+        {
+          "name": "grm_review_observations_review_id_fkey",
+          "table": "grm_reviews",
+          "columns": [
+            "review_id"
+          ],
+          "references": [
+            "id"
+          ],
+          "many": false
+        },
+        {
+          "name": "grm_review_observations_workspace_id_fkey",
+          "table": "grm_workspaces",
+          "columns": [
+            "workspace_id"
+          ],
+          "references": [
+            "id"
+          ],
+          "many": false
+        }
+      ]
+    },
+    "grm_review_replies": {
+      "columns": {
+        "id": "uuid",
+        "workspace_id": "uuid",
+        "review_id": "uuid",
+        "ai_draft_id": "uuid",
+        "content": "text",
+        "source": "grm_reply_source",
+        "status": "grm_reply_pub_status",
+        "approved_at": "timestamptz",
+        "approved_by": "uuid",
+        "published_at": "timestamptz",
+        "published_by": "uuid",
+        "last_error": "text",
+        "failure_count": "int2",
+        "created_by": "uuid",
+        "created_at": "timestamptz",
+        "updated_at": "timestamptz",
+        "publish_result": "jsonb",
+        "client_approval": "text"
+      },
+      "relations": [
+        {
+          "name": "grm_review_replies_ai_draft_id_fkey",
+          "table": "grm_review_ai_drafts",
+          "columns": [
+            "ai_draft_id"
+          ],
+          "references": [
+            "id"
+          ],
+          "many": false
+        },
+        {
+          "name": "grm_review_replies_review_id_fkey",
+          "table": "grm_reviews",
+          "columns": [
+            "review_id"
+          ],
+          "references": [
+            "id"
+          ],
+          "many": false
+        },
+        {
+          "name": "grm_review_replies_workspace_id_fkey",
+          "table": "grm_workspaces",
+          "columns": [
+            "workspace_id"
+          ],
+          "references": [
+            "id"
+          ],
+          "many": false
+        }
+      ]
+    },
+    "grm_reviews": {
+      "columns": {
+        "id": "uuid",
+        "workspace_id": "uuid",
+        "location_id": "uuid",
+        "google_review_name": "text",
+        "google_review_id": "text",
+        "reviewer_display_name": "text",
+        "reviewer_profile_url": "text",
+        "reviewer_is_anonymous": "bool",
+        "star_rating": "int2",
+        "comment": "text",
+        "review_create_time": "timestamptz",
+        "review_update_time": "timestamptz",
+        "google_reply_comment": "text",
+        "google_reply_update_time": "timestamptz",
+        "review_url": "text",
+        "reply_status": "grm_reply_status",
+        "first_synced_at": "timestamptz",
+        "last_synced_at": "timestamptz",
+        "sync_hash": "text",
+        "created_at": "timestamptz",
+        "updated_at": "timestamptz",
+        "review_language": "text",
+        "complaint_theme": "text",
+        "assigned_to": "uuid",
+        "reopened_at": "timestamptz",
+        "content_fingerprint": "text",
+        "response_fingerprint": "text",
+        "missing_on_google_at": "timestamptz",
+        "downstream_stale_at": "timestamptz"
+      },
+      "relations": [
+        {
+          "name": "grm_ai_generation_jobs_review_id_fkey",
+          "table": "grm_ai_generation_jobs",
+          "columns": [
+            "id"
+          ],
+          "references": [
+            "review_id"
+          ],
+          "many": true
+        },
+        {
+          "name": "grm_escalations_review_id_fkey",
+          "table": "grm_escalations",
+          "columns": [
+            "id"
+          ],
+          "references": [
+            "review_id"
+          ],
+          "many": true
+        },
+        {
+          "name": "grm_review_ai_drafts_review_id_fkey",
+          "table": "grm_review_ai_drafts",
+          "columns": [
+            "id"
+          ],
+          "references": [
+            "review_id"
+          ],
+          "many": true
+        },
+        {
+          "name": "grm_review_analyses_review_id_fkey",
+          "table": "grm_review_analyses",
+          "columns": [
+            "id"
+          ],
+          "references": [
+            "review_id"
+          ],
+          "many": true
+        },
+        {
+          "name": "grm_review_notes_review_id_fkey",
+          "table": "grm_review_notes",
+          "columns": [
+            "id"
+          ],
+          "references": [
+            "review_id"
+          ],
+          "many": true
+        },
+        {
+          "name": "grm_review_observations_review_id_fkey",
+          "table": "grm_review_observations",
+          "columns": [
+            "id"
+          ],
+          "references": [
+            "review_id"
+          ],
+          "many": true
+        },
+        {
+          "name": "grm_review_replies_review_id_fkey",
+          "table": "grm_review_replies",
+          "columns": [
+            "id"
+          ],
+          "references": [
+            "review_id"
+          ],
+          "many": true
+        },
+        {
+          "name": "grm_reviews_location_id_fkey",
+          "table": "grm_google_locations",
+          "columns": [
+            "location_id"
+          ],
+          "references": [
+            "id"
+          ],
+          "many": false
+        },
+        {
+          "name": "grm_reviews_workspace_id_fkey",
+          "table": "grm_workspaces",
+          "columns": [
+            "workspace_id"
+          ],
+          "references": [
+            "id"
+          ],
+          "many": false
+        }
+      ]
+    },
+    "grm_scope_settings": {
+      "columns": {
+        "id": "uuid",
+        "workspace_id": "uuid",
+        "scope": "text",
+        "client_id": "uuid",
+        "group_id": "uuid",
+        "location_id": "uuid",
+        "tone_voice": "text",
+        "tone_note": "text",
+        "sla_hours": "int4",
+        "routing_level": "text",
+        "drafts_paused": "bool",
+        "updated_at": "timestamptz",
+        "tone": "jsonb",
+        "automation": "jsonb"
+      },
+      "relations": [
+        {
+          "name": "grm_scope_settings_client_id_fkey",
+          "table": "grm_clients",
+          "columns": [
+            "client_id"
+          ],
+          "references": [
+            "id"
+          ],
+          "many": false
+        },
+        {
+          "name": "grm_scope_settings_group_id_fkey",
+          "table": "grm_groups",
+          "columns": [
+            "group_id"
+          ],
+          "references": [
+            "id"
+          ],
+          "many": false
+        },
+        {
+          "name": "grm_scope_settings_location_id_fkey",
+          "table": "grm_google_locations",
+          "columns": [
+            "location_id"
+          ],
+          "references": [
+            "id"
+          ],
+          "many": false
+        },
+        {
+          "name": "grm_scope_settings_workspace_id_fkey",
+          "table": "grm_workspaces",
+          "columns": [
+            "workspace_id"
+          ],
+          "references": [
+            "id"
+          ],
+          "many": false
+        }
+      ]
+    },
+    "grm_usage_events": {
+      "columns": {
+        "id": "uuid",
+        "workspace_id": "uuid",
+        "client_id": "uuid",
+        "kind": "text",
+        "source_id": "text",
+        "occurred_at": "timestamptz"
+      },
+      "relations": [
+        {
+          "name": "grm_usage_events_client_id_fkey",
+          "table": "grm_clients",
+          "columns": [
+            "client_id"
+          ],
+          "references": [
+            "id"
+          ],
+          "many": false
+        },
+        {
+          "name": "grm_usage_events_workspace_id_fkey",
+          "table": "grm_workspaces",
+          "columns": [
+            "workspace_id"
+          ],
+          "references": [
+            "id"
+          ],
+          "many": false
+        }
+      ]
+    },
+    "grm_user_consents": {
+      "columns": {
+        "user_id": "uuid",
+        "terms_accepted_at": "timestamptz",
+        "ai_accepted_at": "timestamptz",
+        "created_at": "timestamptz"
+      },
+      "relations": []
+    },
+    "grm_workspace_invites": {
+      "columns": {
+        "id": "uuid",
+        "workspace_id": "uuid",
+        "email": "text",
+        "role": "grm_member_role",
+        "invited_by": "uuid",
+        "status": "text",
+        "created_at": "timestamptz",
+        "accepted_at": "timestamptz",
+        "expires_at": "timestamptz",
+        "scope_client_id": "uuid",
+        "scope_group_id": "uuid",
+        "scope_location_id": "uuid"
+      },
+      "relations": [
+        {
+          "name": "grm_workspace_invites_scope_client_id_fkey",
+          "table": "grm_clients",
+          "columns": [
+            "scope_client_id"
+          ],
+          "references": [
+            "id"
+          ],
+          "many": false
+        },
+        {
+          "name": "grm_workspace_invites_scope_group_id_fkey",
+          "table": "grm_groups",
+          "columns": [
+            "scope_group_id"
+          ],
+          "references": [
+            "id"
+          ],
+          "many": false
+        },
+        {
+          "name": "grm_workspace_invites_scope_location_id_fkey",
+          "table": "grm_google_locations",
+          "columns": [
+            "scope_location_id"
+          ],
+          "references": [
+            "id"
+          ],
+          "many": false
+        },
+        {
+          "name": "grm_workspace_invites_workspace_id_fkey",
+          "table": "grm_workspaces",
+          "columns": [
+            "workspace_id"
+          ],
+          "references": [
+            "id"
+          ],
+          "many": false
+        }
+      ]
+    },
+    "grm_workspace_members": {
+      "columns": {
+        "id": "uuid",
+        "workspace_id": "uuid",
+        "user_id": "uuid",
+        "role": "grm_member_role",
+        "invited_by": "uuid",
+        "joined_at": "timestamptz",
+        "created_at": "timestamptz",
+        "active": "bool",
+        "access_enabled": "bool",
+        "scope_client_id": "uuid",
+        "scope_group_id": "uuid",
+        "scope_location_id": "uuid",
+        "alert_email": "bool",
+        "alert_in_app": "bool"
+      },
+      "relations": [
+        {
+          "name": "grm_workspace_members_scope_client_id_fkey",
+          "table": "grm_clients",
+          "columns": [
+            "scope_client_id"
+          ],
+          "references": [
+            "id"
+          ],
+          "many": false
+        },
+        {
+          "name": "grm_workspace_members_scope_group_id_fkey",
+          "table": "grm_groups",
+          "columns": [
+            "scope_group_id"
+          ],
+          "references": [
+            "id"
+          ],
+          "many": false
+        },
+        {
+          "name": "grm_workspace_members_scope_location_id_fkey",
+          "table": "grm_google_locations",
+          "columns": [
+            "scope_location_id"
+          ],
+          "references": [
+            "id"
+          ],
+          "many": false
+        },
+        {
+          "name": "grm_workspace_members_workspace_id_fkey",
+          "table": "grm_workspaces",
+          "columns": [
+            "workspace_id"
+          ],
+          "references": [
+            "id"
+          ],
+          "many": false
+        }
+      ]
+    },
+    "grm_workspaces": {
+      "columns": {
+        "id": "uuid",
+        "name": "text",
+        "slug": "text",
+        "created_at": "timestamptz",
+        "updated_at": "timestamptz",
+        "status": "text",
+        "suspended_at": "timestamptz",
+        "deleted_at": "timestamptz",
+        "plan": "text",
+        "plan_expires_at": "timestamptz",
+        "ai_monthly_budget_usd": "numeric",
+        "max_locations": "int4",
+        "max_members": "int4",
+        "admin_note": "text",
+        "feature_flags": "jsonb"
+      },
+      "relations": [
+        {
+          "name": "grm_agency_branding_workspace_id_fkey",
+          "table": "grm_agency_branding",
+          "columns": [
+            "id"
+          ],
+          "references": [
+            "workspace_id"
+          ],
+          "many": false
+        },
+        {
+          "name": "grm_ai_call_events_workspace_id_fkey",
+          "table": "grm_ai_call_events",
+          "columns": [
+            "id"
+          ],
+          "references": [
+            "workspace_id"
+          ],
+          "many": true
+        },
+        {
+          "name": "grm_ai_configs_workspace_id_fkey",
+          "table": "grm_ai_configs",
+          "columns": [
+            "id"
+          ],
+          "references": [
+            "workspace_id"
+          ],
+          "many": true
+        },
+        {
+          "name": "grm_ai_generation_jobs_workspace_id_fkey",
+          "table": "grm_ai_generation_jobs",
+          "columns": [
+            "id"
+          ],
+          "references": [
+            "workspace_id"
+          ],
+          "many": true
+        },
+        {
+          "name": "grm_ai_knowledge_workspace_id_fkey",
+          "table": "grm_ai_knowledge",
+          "columns": [
+            "id"
+          ],
+          "references": [
+            "workspace_id"
+          ],
+          "many": true
+        },
+        {
+          "name": "grm_ai_usage_monthly_workspace_id_fkey",
+          "table": "grm_ai_usage_monthly",
+          "columns": [
+            "id"
+          ],
+          "references": [
+            "workspace_id"
+          ],
+          "many": true
+        },
+        {
+          "name": "grm_alert_deliveries_workspace_id_fkey",
+          "table": "grm_alert_deliveries",
+          "columns": [
+            "id"
+          ],
+          "references": [
+            "workspace_id"
+          ],
+          "many": true
+        },
+        {
+          "name": "grm_alert_events_workspace_id_fkey",
+          "table": "grm_alert_events",
+          "columns": [
+            "id"
+          ],
+          "references": [
+            "workspace_id"
+          ],
+          "many": true
+        },
+        {
+          "name": "grm_alert_rules_workspace_id_fkey",
+          "table": "grm_alert_rules",
+          "columns": [
+            "id"
+          ],
+          "references": [
+            "workspace_id"
+          ],
+          "many": true
+        },
+        {
+          "name": "grm_analysis_runs_workspace_id_fkey",
+          "table": "grm_analysis_runs",
+          "columns": [
+            "id"
+          ],
+          "references": [
+            "workspace_id"
+          ],
+          "many": true
+        },
+        {
+          "name": "grm_audit_logs_workspace_id_fkey",
+          "table": "grm_audit_logs",
+          "columns": [
+            "id"
+          ],
+          "references": [
+            "workspace_id"
+          ],
+          "many": true
+        },
+        {
+          "name": "grm_autoreply_pauses_workspace_id_fkey",
+          "table": "grm_autoreply_pauses",
+          "columns": [
+            "id"
+          ],
+          "references": [
+            "workspace_id"
+          ],
+          "many": true
+        },
+        {
+          "name": "grm_brands_workspace_id_fkey",
+          "table": "grm_brands",
+          "columns": [
+            "id"
+          ],
+          "references": [
+            "workspace_id"
+          ],
+          "many": true
+        },
+        {
+          "name": "grm_bulk_jobs_workspace_id_fkey",
+          "table": "grm_bulk_jobs",
+          "columns": [
+            "id"
+          ],
+          "references": [
+            "workspace_id"
+          ],
+          "many": true
+        },
+        {
+          "name": "grm_client_onboarding_workspace_id_fkey",
+          "table": "grm_client_onboarding",
+          "columns": [
+            "id"
+          ],
+          "references": [
+            "workspace_id"
+          ],
+          "many": true
+        },
+        {
+          "name": "grm_clients_workspace_id_fkey",
+          "table": "grm_clients",
+          "columns": [
+            "id"
+          ],
+          "references": [
+            "workspace_id"
+          ],
+          "many": true
+        },
+        {
+          "name": "grm_escalation_events_workspace_id_fkey",
+          "table": "grm_escalation_events",
+          "columns": [
+            "id"
+          ],
+          "references": [
+            "workspace_id"
+          ],
+          "many": true
+        },
+        {
+          "name": "grm_escalation_policies_workspace_id_fkey",
+          "table": "grm_escalation_policies",
+          "columns": [
+            "id"
+          ],
+          "references": [
+            "workspace_id"
+          ],
+          "many": false
+        },
+        {
+          "name": "grm_escalation_reminders_workspace_id_fkey",
+          "table": "grm_escalation_reminders",
+          "columns": [
+            "id"
+          ],
+          "references": [
+            "workspace_id"
+          ],
+          "many": true
+        },
+        {
+          "name": "grm_escalations_workspace_id_fkey",
+          "table": "grm_escalations",
+          "columns": [
+            "id"
+          ],
+          "references": [
+            "workspace_id"
+          ],
+          "many": true
+        },
+        {
+          "name": "grm_google_accounts_workspace_id_fkey",
+          "table": "grm_google_accounts",
+          "columns": [
+            "id"
+          ],
+          "references": [
+            "workspace_id"
+          ],
+          "many": true
+        },
+        {
+          "name": "grm_google_connections_workspace_id_fkey",
+          "table": "grm_google_connections",
+          "columns": [
+            "id"
+          ],
+          "references": [
+            "workspace_id"
+          ],
+          "many": true
+        },
+        {
+          "name": "grm_google_locations_workspace_id_fkey",
+          "table": "grm_google_locations",
+          "columns": [
+            "id"
+          ],
+          "references": [
+            "workspace_id"
+          ],
+          "many": true
+        },
+        {
+          "name": "grm_groups_workspace_id_fkey",
+          "table": "grm_groups",
+          "columns": [
+            "id"
+          ],
+          "references": [
+            "workspace_id"
+          ],
+          "many": true
+        },
+        {
+          "name": "grm_insight_reports_workspace_id_fkey",
+          "table": "grm_insight_reports",
+          "columns": [
+            "id"
+          ],
+          "references": [
+            "workspace_id"
+          ],
+          "many": true
+        },
+        {
+          "name": "grm_location_groups_workspace_id_fkey",
+          "table": "grm_location_groups",
+          "columns": [
+            "id"
+          ],
+          "references": [
+            "workspace_id"
+          ],
+          "many": true
+        },
+        {
+          "name": "grm_location_managers_workspace_id_fkey",
+          "table": "grm_location_managers",
+          "columns": [
+            "id"
+          ],
+          "references": [
+            "workspace_id"
+          ],
+          "many": true
+        },
+        {
+          "name": "grm_location_tags_workspace_id_fkey",
+          "table": "grm_location_tags",
+          "columns": [
+            "id"
+          ],
+          "references": [
+            "workspace_id"
+          ],
+          "many": true
+        },
+        {
+          "name": "grm_notifications_workspace_id_fkey",
+          "table": "grm_notifications",
+          "columns": [
+            "id"
+          ],
+          "references": [
+            "workspace_id"
+          ],
+          "many": true
+        },
+        {
+          "name": "grm_onboarding_workspace_id_fkey",
+          "table": "grm_onboarding",
+          "columns": [
+            "id"
+          ],
+          "references": [
+            "workspace_id"
+          ],
+          "many": false
+        },
+        {
+          "name": "grm_platform_invites_workspace_id_fkey",
+          "table": "grm_platform_invites",
+          "columns": [
+            "id"
+          ],
+          "references": [
+            "workspace_id"
+          ],
+          "many": true
+        },
+        {
+          "name": "grm_reply_settings_workspace_id_fkey",
+          "table": "grm_reply_settings",
+          "columns": [
+            "id"
+          ],
+          "references": [
+            "workspace_id"
+          ],
+          "many": false
+        },
+        {
+          "name": "grm_reply_templates_workspace_id_fkey",
+          "table": "grm_reply_templates",
+          "columns": [
+            "id"
+          ],
+          "references": [
+            "workspace_id"
+          ],
+          "many": true
+        },
+        {
+          "name": "grm_report_deliveries_workspace_id_fkey",
+          "table": "grm_report_deliveries",
+          "columns": [
+            "id"
+          ],
+          "references": [
+            "workspace_id"
+          ],
+          "many": true
+        },
+        {
+          "name": "grm_report_runs_workspace_id_fkey",
+          "table": "grm_report_runs",
+          "columns": [
+            "id"
+          ],
+          "references": [
+            "workspace_id"
+          ],
+          "many": true
+        },
+        {
+          "name": "grm_report_schedules_workspace_id_fkey",
+          "table": "grm_report_schedules",
+          "columns": [
+            "id"
+          ],
+          "references": [
+            "workspace_id"
+          ],
+          "many": true
+        },
+        {
+          "name": "grm_reports_workspace_id_fkey",
+          "table": "grm_reports",
+          "columns": [
+            "id"
+          ],
+          "references": [
+            "workspace_id"
+          ],
+          "many": true
+        },
+        {
+          "name": "grm_request_campaigns_workspace_id_fkey",
+          "table": "grm_request_campaigns",
+          "columns": [
+            "id"
+          ],
+          "references": [
+            "workspace_id"
+          ],
+          "many": true
+        },
+        {
+          "name": "grm_request_customers_workspace_id_fkey",
+          "table": "grm_request_customers",
+          "columns": [
+            "id"
+          ],
+          "references": [
+            "workspace_id"
+          ],
+          "many": true
+        },
+        {
+          "name": "grm_request_events_workspace_id_fkey",
+          "table": "grm_request_events",
+          "columns": [
+            "id"
+          ],
+          "references": [
+            "workspace_id"
+          ],
+          "many": true
+        },
+        {
+          "name": "grm_request_feedback_workspace_id_fkey",
+          "table": "grm_request_feedback",
+          "columns": [
+            "id"
+          ],
+          "references": [
+            "workspace_id"
+          ],
+          "many": true
+        },
+        {
+          "name": "grm_request_messages_workspace_id_fkey",
+          "table": "grm_request_messages",
+          "columns": [
+            "id"
+          ],
+          "references": [
+            "workspace_id"
+          ],
+          "many": true
+        },
+        {
+          "name": "grm_request_policies_workspace_id_fkey",
+          "table": "grm_request_policies",
+          "columns": [
+            "id"
+          ],
+          "references": [
+            "workspace_id"
+          ],
+          "many": false
+        },
+        {
+          "name": "grm_request_qr_workspace_id_fkey",
+          "table": "grm_request_qr",
+          "columns": [
+            "id"
+          ],
+          "references": [
+            "workspace_id"
+          ],
+          "many": true
+        },
+        {
+          "name": "grm_review_ai_drafts_workspace_id_fkey",
+          "table": "grm_review_ai_drafts",
+          "columns": [
+            "id"
+          ],
+          "references": [
+            "workspace_id"
+          ],
+          "many": true
+        },
+        {
+          "name": "grm_review_analyses_workspace_id_fkey",
+          "table": "grm_review_analyses",
+          "columns": [
+            "id"
+          ],
+          "references": [
+            "workspace_id"
+          ],
+          "many": true
+        },
+        {
+          "name": "grm_review_notes_workspace_id_fkey",
+          "table": "grm_review_notes",
+          "columns": [
+            "id"
+          ],
+          "references": [
+            "workspace_id"
+          ],
+          "many": true
+        },
+        {
+          "name": "grm_review_observations_workspace_id_fkey",
+          "table": "grm_review_observations",
+          "columns": [
+            "id"
+          ],
+          "references": [
+            "workspace_id"
+          ],
+          "many": true
+        },
+        {
+          "name": "grm_review_replies_workspace_id_fkey",
+          "table": "grm_review_replies",
+          "columns": [
+            "id"
+          ],
+          "references": [
+            "workspace_id"
+          ],
+          "many": true
+        },
+        {
+          "name": "grm_reviews_workspace_id_fkey",
+          "table": "grm_reviews",
+          "columns": [
+            "id"
+          ],
+          "references": [
+            "workspace_id"
+          ],
+          "many": true
+        },
+        {
+          "name": "grm_scope_settings_workspace_id_fkey",
+          "table": "grm_scope_settings",
+          "columns": [
+            "id"
+          ],
+          "references": [
+            "workspace_id"
+          ],
+          "many": true
+        },
+        {
+          "name": "grm_usage_events_workspace_id_fkey",
+          "table": "grm_usage_events",
+          "columns": [
+            "id"
+          ],
+          "references": [
+            "workspace_id"
+          ],
+          "many": true
+        },
+        {
+          "name": "grm_workspace_invites_workspace_id_fkey",
+          "table": "grm_workspace_invites",
+          "columns": [
+            "id"
+          ],
+          "references": [
+            "workspace_id"
+          ],
+          "many": true
+        },
+        {
+          "name": "grm_workspace_members_workspace_id_fkey",
+          "table": "grm_workspace_members",
+          "columns": [
+            "id"
+          ],
+          "references": [
+            "workspace_id"
+          ],
+          "many": true
+        }
+      ]
+    }
+  },
+  "functions": {
+    "grm_agency_counts": {
+      "set": false,
+      "type": "jsonb",
+      "args": [
+        "p_workspace_id",
+        "p_start",
+        "p_end"
+      ]
+    },
+    "grm_alert_keyword_reviews": {
+      "set": false,
+      "type": "jsonb",
+      "args": [
+        "p_workspace_id",
+        "p_client_id",
+        "p_group_id",
+        "p_location_id",
+        "p_start",
+        "p_end",
+        "p_keywords"
+      ]
+    },
+    "grm_alert_location_window": {
+      "set": false,
+      "type": "jsonb",
+      "args": [
+        "p_workspace_id",
+        "p_client_id",
+        "p_group_id",
+        "p_location_id",
+        "p_start",
+        "p_end"
+      ]
+    },
+    "grm_analytics_slice": {
+      "set": false,
+      "type": "jsonb",
+      "args": [
+        "p_workspace_id",
+        "p_location_ids",
+        "p_start",
+        "p_end",
+        "p_onboarding_completed_at"
+      ]
+    },
+    "grm_analytics_summary": {
+      "set": false,
+      "type": "jsonb",
+      "args": [
+        "p_workspace_id",
+        "p_location_ids",
+        "p_start",
+        "p_end",
+        "p_include_auto"
+      ]
+    },
+    "grm_dashboard_bundle": {
+      "set": false,
+      "type": "jsonb",
+      "args": [
+        "p_workspace_id",
+        "p_client_id",
+        "p_group_id",
+        "p_location_id",
+        "p_start",
+        "p_end",
+        "p_timezone"
+      ]
+    },
+    "grm_insight_dashboard": {
+      "set": false,
+      "type": "jsonb",
+      "args": [
+        "p_workspace_id",
+        "p_location_ids",
+        "p_start",
+        "p_end",
+        "p_analysis_version"
+      ]
+    },
+    "grm_location_in_group": {
+      "set": false,
+      "type": "bool",
+      "args": [
+        "p_group_id",
+        "p_selected"
+      ]
+    },
+    "grm_location_review_counts": {
+      "set": true,
+      "type": "record",
+      "args": [
+        "p_workspace_id",
+        "p_start",
+        "p_end"
+      ]
+    },
+    "grm_location_review_stats": {
+      "set": true,
+      "type": "record",
+      "args": [
+        "p_workspace_id"
+      ]
+    },
+    "grm_overview_signals": {
+      "set": false,
+      "type": "jsonb",
+      "args": [
+        "p_workspace_id",
+        "p_location_ids",
+        "p_start",
+        "p_end",
+        "p_recent_start",
+        "p_recent_end",
+        "p_now"
+      ]
+    },
+    "grm_record_ai_usage": {
+      "set": false,
+      "type": "void",
+      "args": [
+        "p_event_id",
+        "p_workspace_id",
+        "p_month",
+        "p_operation",
+        "p_model",
+        "p_input_tokens",
+        "p_output_tokens",
+        "p_estimated_usd",
+        "p_usage_known",
+        "p_status",
+        "p_calls"
+      ]
+    },
+    "grm_request_board": {
+      "set": false,
+      "type": "jsonb",
+      "args": [
+        "p_workspace"
+      ]
+    },
+    "grm_review_trends": {
+      "set": true,
+      "type": "record",
+      "args": [
+        "p_workspace_id",
+        "p_months",
+        "p_client_id",
+        "p_location_id",
+        "p_start",
+        "p_end"
+      ]
+    },
+    "grm_shell_profile_attention": {
+      "set": false,
+      "type": "jsonb",
+      "args": [
+        "p_workspace_id",
+        "p_location_ids"
+      ]
+    },
+    "grm_star_breakdown": {
+      "set": true,
+      "type": "record",
+      "args": [
+        "p_workspace_id",
+        "p_location_ids",
+        "p_start",
+        "p_end",
+        "p_timezone"
+      ]
+    }
+  }
+}

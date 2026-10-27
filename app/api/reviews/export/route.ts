@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { createClient } from "@/lib/supabase/server";
+import { getCurrentUser } from "@/lib/auth/server";
 import { ensurePersonalWorkspace } from "@/lib/services/workspace";
 import { readPageScope } from "@/lib/services/scope-catalog";
 import { reviewCsvLines, type ReviewExportFilters } from "@/lib/services/review-export";
@@ -36,10 +36,7 @@ function parseFilters(params: URLSearchParams): ReviewExportFilters {
 
 /** GET /api/reviews/export — CSV of reviews matching the same filters as the inbox. */
 export async function GET(request: Request) {
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  const user = await getCurrentUser();
   if (!user) {
     return NextResponse.json({ error: "Not authenticated" }, { status: 401 });
   }

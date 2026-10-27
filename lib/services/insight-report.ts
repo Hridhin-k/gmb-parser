@@ -1,7 +1,7 @@
 import { aiRouteIdentity } from "@/lib/ai/config";
 import { generateAi } from "@/lib/ai/service";
 import { insightSchema } from "@/lib/ai/schemas";
-import { createAdminClient } from "@/lib/supabase/admin";
+import { createAdminClient } from "@/lib/db/client";
 
 import { ANALYSIS_VERSION, withRetry } from "@/lib/review-intelligence";
 import {
@@ -28,7 +28,7 @@ import {
   loadObservationAggregates,
 } from "@/lib/services/review-observations";
 import { logger } from "@/lib/logger";
-import type { Database } from "@/lib/types/supabase";
+import type { Database } from "@/lib/types/database-schema";
 
 type ReportUpdate = Database["public"]["Tables"]["grm_insight_reports"]["Update"];
 

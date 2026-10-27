@@ -1,6 +1,6 @@
 import { generateAi } from "@/lib/ai/service";
 import { extractionSchema } from "@/lib/ai/schemas";
-import { createAdminClient } from "@/lib/supabase/admin";
+import { createAdminClient } from "@/lib/db/client";
 
 import { logger } from "@/lib/logger";
 import { contentFingerprint } from "@/lib/review-version";

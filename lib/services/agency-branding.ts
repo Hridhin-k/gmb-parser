@@ -1,7 +1,7 @@
 import { cache } from "react";
 import { revalidateTag, unstable_cache } from "next/cache";
 import { resolveTxt } from "node:dns/promises";
-import { createAdminClient } from "@/lib/supabase/admin";
+import { createAdminClient } from "@/lib/db/client";
 import { contactEmailError, createDomainToken, domainError, httpsUrlError } from "@/lib/agency-portal";
 import { workspaceGrant } from "@/lib/access";
 import { AppError, AuthorizationError, ValidationError } from "@/lib/errors";

@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
-import { createClient } from "@/lib/supabase/server";
-import { createAdminClient } from "@/lib/supabase/admin";
+import { getCurrentUser } from "@/lib/auth/server";
+import { createAdminClient } from "@/lib/db/client";
 import { ReplyPublishingService } from "@/lib/services/reply-publishing";
 import { AppError } from "@/lib/errors";
 import { logger } from "@/lib/logger";
@@ -27,8 +27,7 @@ interface RouteParams {
  */
 export async function POST(request: Request, { params }: RouteParams) {
   const { reviewId: rawReviewId } = await params;
-  const supabase = await createClient();
-  const { data: { user } } = await supabase.auth.getUser();
+  const user = await getCurrentUser();
   if (!user) return NextResponse.json({ error: "Not authenticated" }, { status: 401 });
 
   let reviewId: string;

@@ -13,7 +13,7 @@ import { getWorkspaceRoster } from "@/lib/services/workspace";
 import { getMemberAccess, visibleClientIds, visibleLocationIds } from "@/lib/services/access";
 import { readPageScope } from "@/lib/services/scope-catalog";
 import { workspaceGrant } from "@/lib/access";
-import { createAdminClient } from "@/lib/supabase/admin";
+import { createAdminClient } from "@/lib/db/client";
 import { overviewQueryKey } from "@/lib/overview-board";
 import { isManager, scopedHref, shellAlerts } from "@/lib/shell";
 

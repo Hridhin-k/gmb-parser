@@ -28,7 +28,7 @@ vi.mock("google-auth-library", () => ({
 }));
 
 const mockSupabaseFrom = vi.fn();
-vi.mock("@/lib/supabase/admin", () => ({
+vi.mock("@/lib/db/client", () => ({
   createAdminClient: vi.fn(() => ({
     from: mockSupabaseFrom,
   })),

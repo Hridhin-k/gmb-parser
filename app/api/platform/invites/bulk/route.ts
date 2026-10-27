@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
-import { createClient } from "@/lib/supabase/server";
+import { getCurrentUser } from "@/lib/auth/server";
 import { AppError, toStatusCode, toUserMessage } from "@/lib/errors";
 import { parseBody } from "@/lib/validation";
 import { bulkCreatePlatformInvites } from "@/lib/services/platform";
@@ -9,8 +9,7 @@ const schema = z.object({ emails: z.array(z.string().trim().min(3).max(320)).min
 
 /** POST /api/platform/invites/bulk — invite many tenant owners at once (paste or CSV-derived list). */
 export async function POST(request: Request) {
-  const supabase = await createClient();
-  const { data: { user } } = await supabase.auth.getUser();
+  const user = await getCurrentUser();
   if (!user) return NextResponse.json({ error: "Not authenticated" }, { status: 401 });
   let body: z.infer<typeof schema>;
   try { body = await parseBody(request, schema); } catch (error) {

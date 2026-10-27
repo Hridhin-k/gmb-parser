@@ -1,5 +1,5 @@
 import { NextResponse, after } from "next/server";
-import { createClient } from "@/lib/supabase/server";
+import { getCurrentUser } from "@/lib/auth/server";
 import { ensurePersonalWorkspace } from "@/lib/services/workspace";
 import { readPageScope } from "@/lib/services/scope-catalog";
 import {
@@ -24,10 +24,7 @@ const NO_STORE = { "Cache-Control": "no-store" };
  * keeps the page open.
  */
 export async function GET(request: Request) {
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  const user = await getCurrentUser();
   if (!user) return NextResponse.json({ error: "Not authenticated" }, { status: 401 });
 
   const runId = new URL(request.url).searchParams.get("runId");

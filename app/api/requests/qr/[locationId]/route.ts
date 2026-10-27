@@ -1,15 +1,12 @@
 import { NextResponse } from "next/server";
-import { createClient } from "@/lib/supabase/server";
+import { getCurrentUser } from "@/lib/auth/server";
 import { AppError, toStatusCode, toUserMessage } from "@/lib/errors";
 import { actingUser } from "@/lib/services/reporting";
 import { qrDownload } from "@/lib/services/request-campaigns";
 import { validateId } from "@/lib/validation";
 
 export async function GET(request: Request, { params }: { params: Promise<{ locationId: string }> }) {
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  const user = await getCurrentUser();
   if (!user) return NextResponse.json({ error: "Not authenticated" }, { status: 401 });
   let locationId: string;
   try {

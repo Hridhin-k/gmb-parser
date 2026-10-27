@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { createClient } from "@/lib/supabase/server";
+import { getCurrentUser } from "@/lib/auth/server";
 import { GoogleBusinessProfileService } from "@/lib/services/google-business-profile";
 import { AuditService } from "@/lib/services/audit";
 import { AppError } from "@/lib/errors";
@@ -12,10 +12,7 @@ import { bustCatalogCache } from "@/lib/services/catalog-tables";
  * Moves all locations back into the Unassigned pool.
  */
 export async function POST() {
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  const user = await getCurrentUser();
 
   if (!user) {
     return NextResponse.json({ error: "Not authenticated" }, { status: 401 });

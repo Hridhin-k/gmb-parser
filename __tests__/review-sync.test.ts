@@ -23,7 +23,7 @@ const upsertCalls: unknown[] = [];
 const updateCalls: unknown[] = [];
 
 // Mock Supabase admin client
-vi.mock("@/lib/supabase/admin", () => {
+vi.mock("@/lib/db/client", () => {
   const buildChain = (table: string) => ({
     select: vi.fn().mockReturnValue({
       eq: vi.fn().mockReturnValue({

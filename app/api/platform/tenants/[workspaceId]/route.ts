@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
-import { createClient } from "@/lib/supabase/server";
+import { getCurrentUser } from "@/lib/auth/server";
 import { AppError, toStatusCode, toUserMessage } from "@/lib/errors";
 import { parseBody, validateId } from "@/lib/validation";
 import { actOnTenant, updateTenantSettings } from "@/lib/services/platform";
@@ -10,8 +10,7 @@ const schema = z.object({ action: z.enum(["suspend", "reactivate", "delete", "re
 
 /** POST /api/platform/tenants/[workspaceId] — suspend / reactivate / soft-delete / restore a tenant. */
 export async function POST(request: Request, { params }: RouteParams) {
-  const supabase = await createClient();
-  const { data: { user } } = await supabase.auth.getUser();
+  const user = await getCurrentUser();
   if (!user) return NextResponse.json({ error: "Not authenticated" }, { status: 401 });
   const { workspaceId: raw } = await params;
   let workspaceId: string;
@@ -41,8 +40,7 @@ const settingsSchema = z.object({
 
 /** PATCH /api/platform/tenants/[workspaceId] — plan, limits, note, feature flags. */
 export async function PATCH(request: Request, { params }: RouteParams) {
-  const supabase = await createClient();
-  const { data: { user } } = await supabase.auth.getUser();
+  const user = await getCurrentUser();
   if (!user) return NextResponse.json({ error: "Not authenticated" }, { status: 401 });
   const { workspaceId: raw } = await params;
   let workspaceId: string;

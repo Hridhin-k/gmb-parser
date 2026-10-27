@@ -1,5 +1,6 @@
+import { getAuthUserById, findAuthUserIdByEmail } from "@/lib/auth/users";
 import { cache } from "react";
-import { createAdminClient } from "@/lib/supabase/admin";
+import { createAdminClient } from "@/lib/db/client";
 import { inviteExpiresAt, isInviteExpired } from "@/lib/onboarding";
 import { AppError, AuthorizationError, ValidationError } from "@/lib/errors";
 import { forget, forgetUserNavigation, peek, put } from "@/lib/ttl-cache";
@@ -679,29 +680,7 @@ export const listAccessibleWorkspaces = cache(async (userId: string): Promise<Ac
 });
 
 async function findUserIdByEmail(email: string): Promise<string | null> {
-  const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
-  const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
-  if (!url || !key) return null;
-
-  const response = await fetch(
-    `${url}/auth/v1/admin/users?filter=${encodeURIComponent(email)}`,
-    {
-      headers: {
-        Authorization: `Bearer ${key}`,
-        apikey: key,
-      },
-      cache: "no-store",
-      signal: AbortSignal.timeout(10_000),
-    }
-  );
-
-  if (!response.ok) return null;
-
-  const body = (await response.json()) as {
-    users?: Array<{ id: string; email?: string | null }>;
-  };
-  const match = body.users?.find((user) => user.email?.toLowerCase() === email);
-  return match?.id ?? null;
+  return findAuthUserIdByEmail(email);
 }
 
 async function requireManager(
@@ -906,7 +885,7 @@ export async function inviteToWorkspace(input: {
   }
 
   const admin = createAdminClient();
-  const { data: inviter } = await admin.auth.admin.getUserById(input.inviterId);
+  const { data: inviter } = await getAuthUserById(input.inviterId);
   if (inviter.user?.email && normalizeInviteEmail(inviter.user.email) === email) {
     throw new ValidationError("You are already in this workspace.");
   }

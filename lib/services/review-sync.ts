@@ -1,5 +1,5 @@
 import crypto from "crypto";
-import { createAdminClient } from "@/lib/supabase/admin";
+import { createAdminClient } from "@/lib/db/client";
 import { GoogleReviewService, classifyReviewError } from "./google-reviews";
 import { GoogleOAuthService } from "./google-oauth";
 import { AuditService } from "./audit";
@@ -9,7 +9,7 @@ import type { GoogleReview } from "@/lib/types/google";
 import { detectComplaintTheme, detectReviewLanguage, shouldReopenReview } from "@/lib/review-inbox";
 import { absenceIsConfirmed, planReviewVersion, reviewsConfirmedMissing } from "@/lib/review-version";
 import { isFreshReview } from "@/lib/services/notifications";
-import type { Database } from "@/lib/types/supabase";
+import type { Database } from "@/lib/types/database-schema";
 
 type ReviewInsert = Database["public"]["Tables"]["grm_reviews"]["Insert"];
 
@@ -132,10 +132,10 @@ function priorVersion(row: {
  * on Google. Their rows stay; listings exclude them while missing.
  */
 async function markConfirmedAbsences(
-  supabase: ReturnType<typeof createAdminClient>,
+  db: ReturnType<typeof createAdminClient>,
   input: { workspaceId: string; locationId: string; seenNames: readonly string[]; now: string }
 ): Promise<number> {
-  const { data, error } = await supabase
+  const { data, error } = await db
     .from("grm_reviews")
     .select("id, google_review_name, missing_on_google_at")
     .eq("workspace_id", input.workspaceId)
@@ -150,7 +150,7 @@ async function markConfirmedAbsences(
     new Set(input.seenNames)
   );
   for (const row of missing) {
-    const { error: updateError } = await supabase
+    const { error: updateError } = await db
       .from("grm_reviews")
       .update({ missing_on_google_at: input.now, downstream_stale_at: input.now })
       .eq("id", row.id)
@@ -188,11 +188,11 @@ export class ReviewSyncService {
     userId: string,
     options: SyncLocationOptions = {}
   ): Promise<LocationSyncResult> {
-    const supabase = createAdminClient();
+    const db = createAdminClient();
     const syncStarted = new Date().toISOString();
 
     // --- 1. Fetch location record ---
-    const { data: location, error: locError } = await supabase
+    const { data: location, error: locError } = await db
       .from("grm_google_locations")
       .select("id, google_location_name, workspace_id, last_synced_at, reviews_full_synced_at")
       .eq("id", locationId)
@@ -204,7 +204,7 @@ export class ReviewSyncService {
     }
 
     // --- 2. Mark sync as started ---
-    await supabase
+    await db
       .from("grm_google_locations")
       .update({
         sync_status: "syncing",
@@ -228,7 +228,7 @@ export class ReviewSyncService {
       accessToken = await GoogleOAuthService.getValidAccessToken(connectionId);
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : "Unknown auth error";
-      await this.markLocationFailed(supabase, locationId, workspaceId, userId, "failed", errorMessage);
+      await this.markLocationFailed(db, locationId, workspaceId, userId, "failed", errorMessage);
       throw error;
     }
 
@@ -303,7 +303,7 @@ export class ReviewSyncService {
       const pageReviews = pageResult.reviews ?? [];
       for (const review of pageReviews) seenNames.add(review.name);
       const pageUpdated = await this.upsertReviewPage(
-        supabase,
+        db,
         pageReviews,
         locationId,
         workspaceId
@@ -341,7 +341,7 @@ export class ReviewSyncService {
 
     if (absenceIsConfirmed({ mode, providerFailed: abortSync, truncated })) {
       try {
-        await markConfirmedAbsences(supabase, {
+        await markConfirmedAbsences(db, {
           workspaceId,
           locationId,
           seenNames: [...seenNames],
@@ -364,7 +364,7 @@ export class ReviewSyncService {
     const completedFullCrawl =
       mode === "full" && !abortSync && !truncated;
 
-    await supabase
+    await db
       .from("grm_google_locations")
       .update({
         sync_status: finalStatus,
@@ -436,7 +436,7 @@ export class ReviewSyncService {
     userId: string,
     options: SyncLocationOptions = {}
   ): Promise<BulkSyncResult> {
-    const supabase = createAdminClient();
+    const db = createAdminClient();
 
     // Ensure clients exist for any unassigned profiles (DB only — no Google quota)
     const { autoProvisionClientsFromLocations } = await import(
@@ -453,7 +453,7 @@ export class ReviewSyncService {
     const unassignedIds = new Set(await listUnassignedClientIds(workspaceId));
 
     // Fetch locations that belong to real clients only
-    const { data: locations, error } = await supabase
+    const { data: locations, error } = await db
       .from("grm_google_locations")
       .select(
         `id, google_location_name, workspace_id, client_id,
@@ -535,7 +535,7 @@ export class ReviewSyncService {
    * Unchanged hashes are skipped entirely (no last_synced_at stampede).
    */
   private static async upsertReviewPage(
-    supabase: ReturnType<typeof createAdminClient>,
+    db: ReturnType<typeof createAdminClient>,
     reviews: GoogleReview[],
     locationId: string,
     workspaceId: string
@@ -545,7 +545,7 @@ export class ReviewSyncService {
   > {
     if (reviews.length === 0) return { written: 0, fresh: 0, failed: false };
 
-    const { data: existingRows, error: existingError } = await supabase
+    const { data: existingRows, error: existingError } = await db
       .from("grm_reviews")
       .select(
         "id, google_review_name, sync_hash, reply_status, comment, star_rating, review_create_time, google_reply_comment, content_fingerprint, response_fingerprint, missing_on_google_at, reopened_at, downstream_stale_at"
@@ -663,7 +663,7 @@ export class ReviewSyncService {
 
     if (payloads.length === 0) return { written: 0, fresh: 0, failed: false };
 
-    const { error } = await supabase.from("grm_reviews").upsert(payloads, {
+    const { error } = await db.from("grm_reviews").upsert(payloads, {
       onConflict: "workspace_id,google_review_name",
       ignoreDuplicates: false,
     });
@@ -684,7 +684,7 @@ export class ReviewSyncService {
   // ---------------------------------------------------------------------------
 
   private static async markLocationFailed(
-    supabase: ReturnType<typeof createAdminClient>,
+    db: ReturnType<typeof createAdminClient>,
     locationId: string,
     workspaceId: string,
     userId: string,
@@ -693,7 +693,7 @@ export class ReviewSyncService {
   ): Promise<void> {
     const now = new Date().toISOString();
 
-    await supabase
+    await db
       .from("grm_google_locations")
       .update({
         sync_status: status,

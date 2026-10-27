@@ -1,6 +1,6 @@
 import { NextResponse, after } from "next/server";
-import { createClient } from "@/lib/supabase/server";
-import { createAdminClient } from "@/lib/supabase/admin";
+import { getCurrentUser } from "@/lib/auth/server";
+import { createAdminClient } from "@/lib/db/client";
 import { getAiGenerationJob } from "@/lib/services/ai-generation-jobs";
 import { persistAiGenerationJob } from "@/lib/services/ai-generation-persist";
 
@@ -22,10 +22,7 @@ async function loadOwnedJob(jobId: string, userId: string) {
 /** GET /api/ai-generations/[jobId] — poll background save status. Self-heals stale jobs. */
 export async function GET(_request: Request, { params }: RouteParams) {
   const { jobId } = await params;
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  const user = await getCurrentUser();
   if (!user) return NextResponse.json({ error: "Not authenticated" }, { status: 401 });
 
   const { job, error } = await loadOwnedJob(jobId, user.id);
@@ -51,10 +48,7 @@ export async function GET(_request: Request, { params }: RouteParams) {
 /** POST /api/ai-generations/[jobId] — retry a failed background save. No model call. */
 export async function POST(_request: Request, { params }: RouteParams) {
   const { jobId } = await params;
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  const user = await getCurrentUser();
   if (!user) return NextResponse.json({ error: "Not authenticated" }, { status: 401 });
 
   const { job, error } = await loadOwnedJob(jobId, user.id);

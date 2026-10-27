@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
-import { createClient } from "@/lib/supabase/server";
+import { getCurrentUser } from "@/lib/auth/server";
 import { AppError, toStatusCode, toUserMessage } from "@/lib/errors";
 import { parseBody, validateId } from "@/lib/validation";
 import { decideAccessRequest } from "@/lib/services/platform";
@@ -10,8 +10,7 @@ const schema = z.object({ approve: z.boolean() });
 
 /** POST /api/platform/access-requests/[requestId] — approve (creates tenant invite) or deny. */
 export async function POST(request: Request, { params }: RouteParams) {
-  const supabase = await createClient();
-  const { data: { user } } = await supabase.auth.getUser();
+  const user = await getCurrentUser();
   if (!user) return NextResponse.json({ error: "Not authenticated" }, { status: 401 });
   const { requestId: raw } = await params;
   let requestId: string;

@@ -1,6 +1,6 @@
-import { createAdminClient } from "@/lib/supabase/admin";
+import { createAdminClient } from "@/lib/db/client";
 import { logger } from "@/lib/logger";
-import type { Json } from "@/lib/types/supabase";
+import type { Json } from "@/lib/types/database-schema";
 
 export type AiGenerationKind = "reply";
 export type AiGenerationStatus = "generated" | "persisting" | "saved" | "failed" | "superseded";

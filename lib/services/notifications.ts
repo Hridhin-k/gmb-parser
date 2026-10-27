@@ -1,4 +1,4 @@
-import { createAdminClient } from "@/lib/supabase/admin";
+import { createAdminClient } from "@/lib/db/client";
 import { inScope, type ResourceRef, type ScopeIds } from "@/lib/access";
 import { logger } from "@/lib/logger";
 

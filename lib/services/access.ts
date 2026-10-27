@@ -1,5 +1,5 @@
 import { cache } from "react";
-import { createAdminClient } from "@/lib/supabase/admin";
+import { createAdminClient } from "@/lib/db/client";
 import { AuthorizationError, ValidationError } from "@/lib/errors";
 import { UNASSIGNED_CLIENT_MARKER } from "@/lib/services/unassigned-client";
 import { loadCatalogTables } from "@/lib/services/catalog-tables";

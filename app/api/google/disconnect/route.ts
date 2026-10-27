@@ -1,8 +1,8 @@
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
 import { z } from "zod";
-import { createClient } from "@/lib/supabase/server";
-import { createAdminClient } from "@/lib/supabase/admin";
+import { getCurrentUser } from "@/lib/auth/server";
+import { createAdminClient } from "@/lib/db/client";
 import { GoogleOAuthService } from "@/lib/services/google-oauth";
 import { AppError } from "@/lib/errors";
 import { parseBody } from "@/lib/validation";
@@ -10,10 +10,7 @@ import { parseBody } from "@/lib/validation";
 const disconnectSchema = z.object({ connectionId: z.string().uuid("Invalid connectionId") });
 
 export async function POST(request: NextRequest) {
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  const user = await getCurrentUser();
 
   if (!user) {
     return NextResponse.json({ error: "Not authenticated" }, { status: 401 });

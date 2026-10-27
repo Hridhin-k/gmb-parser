@@ -1,4 +1,4 @@
-import { createAdminClient } from "@/lib/supabase/admin";
+import { getAuthUserById } from "@/lib/auth/users";
 
 export interface AuthProfile {
   email: string;
@@ -10,9 +10,9 @@ const TTL_MS = 5 * 60 * 1000;
 const cache = new Map<string, { profile: AuthProfile; at: number }>();
 
 /**
- * Auth admin lookups are one HTTP call per person. Pages that render a roster
- * were firing all of them at once, which stalled the next navigation.
- * Results are reused for a few minutes and fetched a few at a time.
+ * Auth profiles come from the private Postgres auth schema. Results are reused
+ * for a few minutes and uncached lookups are bounded. Provider MFA state is
+ * unavailable here; it must not be presented as disabled.
  */
 export async function loadAuthProfiles(userIds: string[]): Promise<Map<string, AuthProfile>> {
   const now = Date.now();
@@ -26,13 +26,12 @@ export async function loadAuthProfiles(userIds: string[]): Promise<Map<string, A
     else missing.push(id);
   }
 
-  const admin = createAdminClient();
   const concurrency = 4;
   for (let index = 0; index < missing.length; index += concurrency) {
     const slice = missing.slice(index, index + concurrency);
     const loaded = await Promise.all(
       slice.map(async (userId) => {
-        const { data } = await admin.auth.admin.getUserById(userId);
+        const { data } = await getAuthUserById(userId);
         const authUser = data.user as
           | { email?: string | null; last_sign_in_at?: string | null; factors?: Array<{ status?: string }> }
           | undefined;

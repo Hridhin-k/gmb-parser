@@ -33,15 +33,7 @@ import { formatPercent as percent } from "@/lib/format";
 
 const HEADING = { fontFamily: "var(--font-heading), sans-serif" };
 
-export const ANALYTICS_SECTIONS = [
-  { id: "performance", label: "Performance" },
-  { id: "themes", label: "Themes" },
-  { id: "profile", label: "Google profile" },
-  { id: "automation", label: "Automation health" },
-  { id: "team", label: "Team" },
-] as const;
-
-export type AnalyticsSection = (typeof ANALYTICS_SECTIONS)[number]["id"];
+import { ANALYTICS_SECTIONS, type AnalyticsSection } from "@/lib/analytics-sections";
 
 function insightsHref(query: string): string {
   const params = new URLSearchParams(query);

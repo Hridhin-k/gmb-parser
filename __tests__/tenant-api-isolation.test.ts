@@ -18,13 +18,11 @@ const {
   saveReplySettings: vi.fn(),
 }));
 
-vi.mock("@/lib/supabase/server", () => ({
-  createClient: vi.fn(async () => ({
-    auth: { getUser: getUserMock },
-  })),
+vi.mock("@/lib/auth/server", () => ({
+  getCurrentUser: vi.fn(async () => (await getUserMock()).data.user),
 }));
 
-vi.mock("@/lib/supabase/admin", () => ({
+vi.mock("@/lib/db/client", () => ({
   createAdminClient: vi.fn(() => ({ from: fromMock })),
 }));
 

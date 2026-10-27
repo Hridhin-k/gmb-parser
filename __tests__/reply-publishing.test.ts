@@ -39,7 +39,7 @@ const mockFrom = vi.fn(() => {
   return chain;
 });
 
-vi.mock("@/lib/supabase/admin", () => ({
+vi.mock("@/lib/db/client", () => ({
   createAdminClient: () => ({ from: mockFrom }),
 }));
 

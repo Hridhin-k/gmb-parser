@@ -1,4 +1,4 @@
-// Re-export the generated Supabase types as the canonical database types.
+// Re-export the database schema types as the canonical database types.
 // All application code should import GRM domain types from here.
 export type {
   GrmWorkspace,
@@ -19,7 +19,7 @@ export type {
   GrmReplySource,
   GrmAiDraftStatus,
   GrmSyncStatus,
-} from "@/lib/types/supabase";
+} from "@/lib/types/database-schema";
 
 // ---------------------------------------------------------------------------
 // Audit action literals — typed set of allowed audit log action values.

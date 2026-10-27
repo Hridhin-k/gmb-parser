@@ -1,6 +1,6 @@
 import { NextResponse, after } from "next/server";
-import { createClient } from "@/lib/supabase/server";
-import { createAdminClient } from "@/lib/supabase/admin";
+import { getCurrentUser } from "@/lib/auth/server";
+import { createAdminClient } from "@/lib/db/client";
 import { AIReviewService } from "@/lib/services/ai-review";
 import { ReplyPublishingService } from "@/lib/services/reply-publishing";
 import { AuditService } from "@/lib/services/audit";
@@ -22,10 +22,7 @@ type BulkAction = "generate" | "approve" | "publish" | "discard" | "assign";
  * Body: { action: generate|approve|publish|discard, reviewIds: string[] }
  */
 export async function POST(request: Request) {
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  const user = await getCurrentUser();
   if (!user) {
     return NextResponse.json({ error: "Not authenticated" }, { status: 401 });
   }

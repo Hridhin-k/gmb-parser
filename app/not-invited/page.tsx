@@ -1,3 +1,4 @@
+import { SignOutButton } from "@/components/sign-out-button";
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { getCurrentUser } from "@/lib/services/session";
@@ -39,7 +40,7 @@ export default async function NotInvitedPage({ searchParams }: PageProps) {
         {user.email ? <p className="mt-4 text-sm text-graphite">Signed in as <span className="font-medium">{user.email}</span></p> : null}
         {!reason ? <RequestAccessForm /> : null}
         <div className="mt-6 flex flex-wrap gap-2">
-          <a href="/api/auth/signout" className="inline-flex h-9 items-center rounded-md bg-ink px-4 text-sm font-medium text-white">Sign out</a>
+          <SignOutButton className="inline-flex h-9 items-center rounded-md bg-ink px-4 text-sm font-medium text-white" />
           <Link href="/login" className="inline-flex h-9 items-center rounded-md border border-line px-4 text-sm text-graphite">Try another account</Link>
         </div>
       </div>

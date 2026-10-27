@@ -1,7 +1,7 @@
 import { cache } from "react";
 import { revalidateTag, unstable_cache } from "next/cache";
 import { forgetPrefix, remember } from "@/lib/ttl-cache";
-import { createAdminClient } from "@/lib/supabase/admin";
+import { createAdminClient } from "@/lib/db/client";
 
 export interface CatalogClientRow {
   id: string;

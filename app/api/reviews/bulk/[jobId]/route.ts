@@ -1,5 +1,5 @@
 import { NextResponse, after } from "next/server";
-import { createClient } from "@/lib/supabase/server";
+import { getCurrentUser } from "@/lib/auth/server";
 import { getBulkJob, processBulkJob } from "@/lib/services/bulk-jobs";
 
 const NO_STORE = { "Cache-Control": "no-store" };
@@ -11,10 +11,7 @@ interface RouteParams {
 /** GET /api/reviews/bulk/[jobId] — poll a queued bulk generate/publish job. Self-heals a stalled queue. */
 export async function GET(_request: Request, { params }: RouteParams) {
   const { jobId } = await params;
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  const user = await getCurrentUser();
   if (!user) return NextResponse.json({ error: "Not authenticated" }, { status: 401 });
 
   const job = await getBulkJob(jobId);

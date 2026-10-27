@@ -1,4 +1,5 @@
-import { createAdminClient } from "@/lib/supabase/admin";
+import { getAuthUserById } from "@/lib/auth/users";
+import { createAdminClient } from "@/lib/db/client";
 import { canAct, reviewPermission, type ResourceRef } from "@/lib/access";
 import { ESCALATION_LEVELS } from "@/lib/escalations";
 import { reviewWindow } from "@/lib/metrics";
@@ -253,10 +254,8 @@ async function sameNameCount(workspaceId: string, locationIds: string[], name: s
 }
 
 async function evidenceBucket(): Promise<boolean> {
-  const admin = createAdminClient();
-  const { data, error } = await admin.storage.listBuckets();
-  if (error || !data) return false;
-  return data.some((bucket) => bucket.name === "evidence" || bucket.name === "review-evidence");
+  // Evidence uploads have no native storage backend configured yet.
+  return false;
 }
 
 export async function loadMobileOverview(input: {
@@ -701,7 +700,7 @@ export async function loadMobileComplaint(input: {
     let assigneeLabel = "No one is assigned";
     if (current.assignee_user_id === input.userId) assigneeLabel = "Assigned to you";
     else if (current.assignee_user_id) {
-      const user = await admin.auth.admin.getUserById(current.assignee_user_id).catch(() => null);
+      const user = await getAuthUserById(current.assignee_user_id).catch(() => null);
       assigneeLabel = user?.data.user?.email
         ? `Assigned to ${user.data.user.email}`
         : "Assigned to a workspace member";

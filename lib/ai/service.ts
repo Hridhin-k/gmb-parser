@@ -1,7 +1,7 @@
 import { APICallError, NoObjectGeneratedError, Output, generateText, type LanguageModelUsage } from "ai";
 import type { z } from "zod";
 import { AppError } from "@/lib/errors";
-import { createAdminClient } from "@/lib/supabase/admin";
+import { createAdminClient } from "@/lib/db/client";
 import { getAiBudget, recordAiUsage } from "@/lib/services/ai-usage-ledger";
 import { resolveAiPrice, type AiOperation } from "@/lib/ai-usage";
 import { logger } from "@/lib/logger";

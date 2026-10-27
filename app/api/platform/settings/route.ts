@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
-import { createClient } from "@/lib/supabase/server";
+import { getCurrentUser } from "@/lib/auth/server";
 import { AppError, toStatusCode, toUserMessage } from "@/lib/errors";
 import { parseBody } from "@/lib/validation";
 import { setMaintenance } from "@/lib/services/platform";
@@ -9,8 +9,7 @@ const schema = z.object({ enabled: z.boolean(), message: z.string().trim().max(5
 
 /** POST /api/platform/settings — maintenance mode for the tenant app (super admins unaffected). */
 export async function POST(request: Request) {
-  const supabase = await createClient();
-  const { data: { user } } = await supabase.auth.getUser();
+  const user = await getCurrentUser();
   if (!user) return NextResponse.json({ error: "Not authenticated" }, { status: 401 });
   let body: z.infer<typeof schema>;
   try { body = await parseBody(request, schema); } catch (error) {

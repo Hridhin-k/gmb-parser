@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { createClient } from "@/lib/supabase/server";
+import { getCurrentUser } from "@/lib/auth/server";
 import { ensurePersonalWorkspace } from "@/lib/services/workspace";
 import { getAgencyHome } from "@/lib/services/agency-home";
 import { AGENCY_DEFAULT_RANGE, parseDateRange } from "@/lib/date-range";
@@ -18,10 +18,7 @@ const UUID =
 
 /** GET /api/usage/export — CSV of location and review volume for invoicing. */
 export async function GET(request: Request) {
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  const user = await getCurrentUser();
   if (!user) {
     return NextResponse.json({ error: "Not authenticated" }, { status: 401 });
   }

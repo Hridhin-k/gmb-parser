@@ -1,5 +1,5 @@
 import { OAuth2Client } from "google-auth-library";
-import { createAdminClient } from "@/lib/supabase/admin";
+import { createAdminClient } from "@/lib/db/client";
 import { AuditService } from "./audit";
 import { AppError } from "@/lib/errors";
 import crypto from "crypto";
@@ -297,8 +297,8 @@ export class GoogleOAuthService {
     const accessTokenEnc = encryptToken(accessToken);
     const refreshTokenEnc = encryptToken(refreshToken);
 
-    const supabase = createAdminClient();
-    const { error: upsertError } = await supabase
+    const db = createAdminClient();
+    const { error: upsertError } = await db
       .from("grm_google_connections")
       .upsert(
         {
@@ -341,9 +341,9 @@ export class GoogleOAuthService {
    * Automatically refreshes if expired or about to expire.
    */
   static async getValidAccessToken(connectionId: string): Promise<string> {
-    const supabase = createAdminClient();
+    const db = createAdminClient();
 
-    const { data: connection, error } = await supabase
+    const { data: connection, error } = await db
       .from("grm_google_connections")
       .select("id, access_token_enc, refresh_token_enc, token_expires_at, status, workspace_id")
       .eq("id", connectionId)
@@ -384,7 +384,7 @@ export class GoogleOAuthService {
     const client = getOAuthClient();
     client.setCredentials({ refresh_token: refreshToken });
 
-    const supabase = createAdminClient();
+    const db = createAdminClient();
 
     try {
       const { credentials } = await client.refreshAccessToken();
@@ -395,7 +395,7 @@ export class GoogleOAuthService {
 
       const newAccessTokenEnc = encryptToken(credentials.access_token);
 
-      await supabase
+      await db
         .from("grm_google_connections")
         .update({
           access_token_enc: newAccessTokenEnc,
@@ -413,7 +413,7 @@ export class GoogleOAuthService {
 
       // invalid_grant means the refresh token is no longer valid
       if (message.includes("invalid_grant")) {
-        await supabase
+        await db
           .from("grm_google_connections")
           .update({ status: "revoked" })
           .eq("id", connectionId);
@@ -426,7 +426,7 @@ export class GoogleOAuthService {
       }
 
       // Mark as expired so the UI can prompt re-auth
-      await supabase
+      await db
         .from("grm_google_connections")
         .update({ status: "expired" })
         .eq("id", connectionId);
@@ -448,9 +448,9 @@ export class GoogleOAuthService {
     workspaceId: string,
     userId: string
   ): Promise<void> {
-    const supabase = createAdminClient();
+    const db = createAdminClient();
 
-    const { data: connection, error } = await supabase
+    const { data: connection, error } = await db
       .from("grm_google_connections")
       .select("id, access_token_enc, google_email")
       .eq("id", connectionId)
@@ -470,7 +470,7 @@ export class GoogleOAuthService {
       // Google revocation is best-effort; the token may already be invalid
     }
 
-    await supabase
+    await db
       .from("grm_google_connections")
       .update({ status: "revoked" })
       .eq("id", connectionId);
@@ -523,9 +523,9 @@ export class GoogleOAuthService {
    * Gets all active connections for a workspace (safe — no token columns).
    */
   static async getWorkspaceConnections(workspaceId: string) {
-    const supabase = createAdminClient();
+    const db = createAdminClient();
 
-    const { data, error } = await supabase
+    const { data, error } = await db
       .from("grm_google_connections")
       .select(
         "id, workspace_id, authorized_by_user_id, google_email, scopes, status, last_refreshed_at, created_at, updated_at, token_expires_at"

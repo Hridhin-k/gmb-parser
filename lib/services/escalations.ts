@@ -1,5 +1,6 @@
+import { getAuthUserById } from "@/lib/auth/users";
 import { createHash } from "crypto";
-import { createAdminClient } from "@/lib/supabase/admin";
+import { createAdminClient } from "@/lib/db/client";
 import { AuditService } from "@/lib/services/audit";
 import { deliverMessage } from "@/lib/delivery";
 import { readDeliveryEnv } from "@/lib/reporting";
@@ -22,7 +23,7 @@ import {
   type EscalationTimezone,
   type ResolutionCode,
 } from "@/lib/escalations";
-import type { Json } from "@/lib/types/supabase";
+import type { Json } from "@/lib/types/database-schema";
 import { escapeOrSearchValue, orIlikeAny } from "@/lib/postgrest-search";
 import { escalationTiming, scopedGroupIds } from "@/lib/services/hierarchy";
 import { logger } from "@/lib/logger";
@@ -603,7 +604,7 @@ export class EscalationService {
     fallback: boolean
   ): Promise<void> {
     const admin = createAdminClient();
-    const user = await admin.auth.admin.getUserById(member.userId).catch(() => null);
+    const user = await getAuthUserById(member.userId).catch(() => null);
     const email = user?.data.user?.email ?? null;
     const subject = "Escalation assigned to you";
     const body = fallback

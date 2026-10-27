@@ -1,4 +1,4 @@
-import { createAdminClient } from "@/lib/supabase/admin";
+import { createAdminClient } from "@/lib/db/client";
 import type { OnboardingComparison, SampleSummary } from "@/lib/analytics-metrics";
 import { sliceFromRpc } from "@/lib/analytics-slice";
 import { remember } from "@/lib/ttl-cache";

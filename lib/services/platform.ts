@@ -1,6 +1,7 @@
+import { listAuthUsers } from "@/lib/auth/users";
 import { revalidateTag, unstable_cache } from "next/cache";
-import { createAdminClient } from "@/lib/supabase/admin";
-import type { Database } from "@/lib/types/supabase";
+import { createAdminClient } from "@/lib/db/client";
+import type { Database } from "@/lib/types/database-schema";
 import { AppError, AuthorizationError, ValidationError } from "@/lib/errors";
 import {
   isPlatformInviteExpired,
@@ -548,7 +549,7 @@ export const USER_PAGE_SIZE = 25;
 /**
  * Global users, paginated by the auth API itself (`page`/`perPage` + total).
  * Search stays server-side: with a needle we page through the filtered auth
- * list using GoTrue's `filter` parameter instead of downloading 200 users
+ * list with an indexed, parameterized Postgres query instead of downloading users
  * and filtering in the browser.
  */
 export async function listGlobalUsers(
@@ -561,30 +562,8 @@ export async function listGlobalUsers(
   const needle = query.trim().toLowerCase();
   const currentPage = Math.max(1, page);
 
-  let authUsers: Array<{ id: string; email: string; lastSignInAt: string | null }> = [];
-  let total = 0;
-  if (!needle) {
-    const { data, error } = await admin.auth.admin.listUsers({ page: currentPage, perPage: USER_PAGE_SIZE });
-    if (error) throw new AppError("Could not list users.", "DB_ERROR", 500, { dbError: error.message });
-    total = data.total ?? (data.users ?? []).length;
-    authUsers = (data.users ?? []).map((u) => ({ id: u.id, email: u.email ?? "Unknown", lastSignInAt: (u as { last_sign_in_at?: string | null }).last_sign_in_at ?? null }));
-  } else {
-    // GoTrue's admin list supports a `filter` term (email/name search) but
-    // supabase-js does not expose it, so page the REST endpoint directly.
-    const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
-    const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
-    if (!url || !key) throw new AppError("Could not list users.", "DB_ERROR", 500);
-    const response = await fetch(
-      `${url}/auth/v1/admin/users?filter=${encodeURIComponent(needle)}&page=${currentPage}&per_page=${USER_PAGE_SIZE}`,
-      { headers: { Authorization: `Bearer ${key}`, apikey: key }, cache: "no-store", signal: AbortSignal.timeout(10_000) }
-    );
-    if (!response.ok) throw new AppError("Could not list users.", "DB_ERROR", 500);
-    total = Number(response.headers.get("x-total-count") ?? 0) || 0;
-    const body = (await response.json()) as { users?: Array<{ id: string; email?: string | null; last_sign_in_at?: string | null }> };
-    authUsers = (body.users ?? [])
-      .map((u) => ({ id: u.id, email: u.email ?? "Unknown", lastSignInAt: u.last_sign_in_at ?? null }))
-      .filter((u) => u.email.toLowerCase().includes(needle));
-  }
+  const { users: authRecords, total } = await listAuthUsers(currentPage, USER_PAGE_SIZE, needle);
+  const authUsers = authRecords.map((user) => ({ id: user.id, email: user.email || "Unknown", lastSignInAt: user.last_sign_in_at || null }));
 
   const ids = authUsers.map((u) => u.id);
   const [memberRows, blockedRows] = await Promise.all([

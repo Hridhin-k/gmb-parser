@@ -7,7 +7,7 @@ import { languageModel } from "@/lib/ai/registry";
 import { getAiBudget, recordAiUsage } from "@/lib/services/ai-usage-ledger";
 
 vi.mock("@/lib/ai/registry", async (original) => ({ ...await original<typeof import("@/lib/ai/registry")>(), languageModel: vi.fn() }));
-vi.mock("@/lib/supabase/admin", () => ({ createAdminClient: () => ({}) }));
+vi.mock("@/lib/db/client", () => ({ createAdminClient: () => ({}) }));
 vi.mock("@/lib/services/ai-usage-ledger", () => ({ getAiBudget: vi.fn(), recordAiUsage: vi.fn(async () => undefined) }));
 
 const input = { workspaceId: "ws", task: "reply" as const, operation: "reply_draft" as const, prompt: "Reply", maxOutputTokens: 1000, timeoutMs: 1000 };

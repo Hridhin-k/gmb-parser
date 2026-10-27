@@ -1,4 +1,4 @@
-import { createAdminClient } from "@/lib/supabase/admin";
+import { createAdminClient } from "@/lib/db/client";
 import { AuditService } from "@/lib/services/audit";
 import { getMemberRole } from "@/lib/services/workspace";
 import {
@@ -96,7 +96,7 @@ function isMissingSchema(error: { code?: string; message?: string } | null): boo
 
 function schemaError(): AppError {
   return new AppError(
-    "Setup is not available until the onboarding migration is applied (supabase/migrations/20261016001_onboarding.sql).",
+    "Setup is not available until the database migrations are applied (npm run db:migrate).",
     "DB_ERROR",
     500
   );
@@ -268,7 +268,7 @@ export async function getOnboardingView(workspaceId: string): Promise<Onboarding
     admin
       .from("grm_google_locations")
       .select(
-        "id, location_title, address_formatted, place_id, voice_of_merchant, google_duplicate_of, hold_reason, group_id, google_account_id, client_id"
+        "id, location_title, address_formatted, place_id, voice_of_merchant, google_duplicate_of, hold_reason, onboarding_group_id, google_account_id, client_id"
       )
       .eq("workspace_id", workspaceId)
       .eq("is_active", true)
@@ -301,8 +301,8 @@ export async function getOnboardingView(workspaceId: string): Promise<Onboarding
   const groupById = new Map((groups.data ?? []).map((group) => [group.id, group.name]));
   const counts = new Map<string, number>();
   for (const location of locations.data ?? []) {
-    if (!location.group_id) continue;
-    counts.set(location.group_id, (counts.get(location.group_id) ?? 0) + 1);
+    if (!location.onboarding_group_id) continue;
+    counts.set(location.onboarding_group_id, (counts.get(location.onboarding_group_id) ?? 0) + 1);
   }
 
   const pendingInvites: OnboardingInvite[] = [];
@@ -346,8 +346,8 @@ export async function getOnboardingView(workspaceId: string): Promise<Onboarding
         voiceOfMerchant: location.voice_of_merchant,
         holdReason: asHold(location.hold_reason),
         googleDuplicateOf: location.google_duplicate_of,
-        groupId: location.group_id,
-        groupName: location.group_id ? groupById.get(location.group_id) ?? null : null,
+        groupId: location.onboarding_group_id,
+        groupName: location.onboarding_group_id ? groupById.get(location.onboarding_group_id) ?? null : null,
         clientName: location.client_id ? clientById.get(location.client_id) ?? null : null,
       };
     }),
@@ -432,7 +432,7 @@ async function replaceGroups(
       const slice = group.locationIds.slice(index, index + 80);
       const assigned = await admin
         .from("grm_google_locations")
-        .update({ group_id: created.data.id })
+        .update({ onboarding_group_id: created.data.id })
         .eq("workspace_id", workspaceId)
         .in("id", slice);
       if (assigned.error) throw new AppError("Could not place locations into groups.", "DB_ERROR", 500);
@@ -607,9 +607,9 @@ export async function mergeLocationGroups(input: {
 
   const moved = await admin
     .from("grm_google_locations")
-    .update({ group_id: input.targetId })
+    .update({ onboarding_group_id: input.targetId })
     .eq("workspace_id", input.workspaceId)
-    .eq("group_id", input.sourceId);
+    .eq("onboarding_group_id", input.sourceId);
   if (moved.error) throw new AppError("Could not move locations into the group.", "DB_ERROR", 500);
 
   const removed = await admin
@@ -672,7 +672,7 @@ export async function moveLocationToGroup(input: {
 
   const { error } = await admin
     .from("grm_google_locations")
-    .update({ group_id: input.groupId })
+    .update({ onboarding_group_id: input.groupId })
     .eq("id", input.locationId)
     .eq("workspace_id", input.workspaceId);
   if (error) throw new AppError("Could not move the location.", "DB_ERROR", 500);

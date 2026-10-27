@@ -1,4 +1,4 @@
-import { createAdminClient } from "@/lib/supabase/admin";
+import { createAdminClient } from "@/lib/db/client";
 import { previousDateRange, type DateRange } from "@/lib/date-range";
 import { ESCALATION_TIMEZONES } from "@/lib/escalations";
 import { parseDashboardFacts, type DashboardFacts } from "@/lib/metrics";

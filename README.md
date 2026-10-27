@@ -1,72 +1,121 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# RevuPilot
 
-## Getting Started
+Google review management with Next.js 16, self-hosted PostgreSQL 18, NextAuth v5,
+and the AI SDK. Node.js 22 or newer is required.
 
-First, run the development server:
+## Local setup
 
-```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
+Install dependencies with `npm ci`. Keep secrets in the ignored `.env.local`;
+[`config/local.env.example`](config/local.env.example) and
+[`config/ai.env.example`](config/ai.env.example) list the settings.
+
+With Homebrew PostgreSQL 18 installed:
+
+```sh
+npm run db:local
+npm run db:migrate
+npm run db:seed:local
+npm run dev -- --port 3001 --hostname localhost
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+Open [localhost:3001/login](http://localhost:3001/login) and select **Open local test
+workspace**. The seed creates an empty workspace and a local tester, without
+inventing reviews or importing production data. Accept the consent screen to
+continue. Google Business Profile can be connected through Settings.
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+`db:local` creates a dedicated cluster under ignored `.local/postgres`, listens
+only on `127.0.0.1:55432`, and writes generated credentials and an auth secret to
+`.env.local` with mode 600. It never manages another project's database or the
+Homebrew service. Override `POSTGRES_BIN` and `LOCAL_POSTGRES_PORT` if needed.
+Stop this cluster with `npm run db:local -- stop`. Run the same start command to
+reuse it. Keep `.local` to preserve your local data.
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+For an existing PostgreSQL server, set `DATABASE_URL` to the application role and
+`DATABASE_MIGRATION_URL` to its schema owner, then run `npm run db:migrate`.
+Use a **new, dedicated database**: the baseline replaces the old Supabase history;
+it does not import an existing Supabase database. Migrations are transactional,
+checksum-checked, and serialized with an advisory lock. The runner grants data
+access to the runtime role; it must already exist and must not be a superuser.
+The runtime does not need the owner's credentials. PostgreSQL 18 is the tested
+version.
 
-## Learn More
+## Authentication
 
-To learn more about Next.js, take a look at the following resources:
+Google login uses NextAuth's `/api/auth/callback/google`. Register
+`http://localhost:3001/api/auth/callback/google` as an authorized redirect URI in
+the Google OAuth client. Business Profile authorization is a separate flow and
+still needs `http://localhost:3001/api/google/callback`, matching
+`GOOGLE_REDIRECT_URI`. Set `AUTH_URL` and `NEXT_PUBLIC_APP_URL` to the app's origin.
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+Production uses opaque, revocable database sessions and Google OAuth. Login
+requires verified Google email; workspace membership, invites, consent,
+suspension, and scoped permissions remain enforced by the application. Set
+`SUPER_ADMIN_EMAILS` for the platform administrators who issue new tenant invites.
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+The local helper requires development mode, `AUTH_DEV_LOGIN=true`, a loopback
+`AUTH_URL`, and a generated `AUTH_DEV_LOGIN_TOKEN`. Its secret stays server-side.
+It uses a seeded tester and JWT sessions only during this explicit local mode.
+It is disabled in production even if the flags are copied. Password recovery,
+SMS OTP, enterprise SSO, and evidence storage are not configured; their former
+Supabase methods are no longer advertised by the login UI.
 
-## Deploy on Vercel
+## Database access
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+Server services use a parameterized SQL query layer over a bounded `pg` pool.
+Embedded relations compile to SQL JSON projections; analytics call PostgreSQL
+functions directly. There is no Supabase service, PostgREST server, HTTP database
+gateway, browser database client, or service-role key.
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+`@supabase/postgrest-js` is a **development-only type dependency** for the existing
+service layer's selection inference. It is imported with `import type` and is
+never instantiated or included in runtime database access. Schema types live in
+`lib/types/database-schema.ts`; regenerate the checked SQL metadata after schema
+changes with `npm run db:metadata`.
+
+Tenant authorization lives in the server services. Composite tenant foreign keys
+also reject cross-workspace child relationships in PostgreSQL. The database is
+private to the server; it is not a browser-accessible API. The application role
+can access domain and auth data, while schema migrations use the owner role.
+
+The migration retains the product's current domain tables and analytics.
+Onboarding import buckets have their own location FK, separate from the editable
+region/city hierarchy. Daily/weekly insight rollups, a persistent worker, shared
+Redis rate limits/caches, separate auth runtime credentials, and transactional AI
+budget reservations remain the next architecture phase described in
+[`docs/DATABASE_ARCHITECTURE_V2.md`](docs/DATABASE_ARCHITECTURE_V2.md).
 
 ## AI provider configuration
 
-Use Node.js 22 or newer (required by AI SDK 7).
-
-All generation uses the AI SDK with direct provider connections. Copy the settings in
-[`config/ai.env.example`](config/ai.env.example) into your ignored `.env.local`:
+All generation uses direct AI SDK provider connections. For Gemini:
 
 ```dotenv
-AI_PROVIDER="openai"
-AI_MODEL="gpt-6-luna"
-OPENAI_API_KEY="your-key"
+AI_PROVIDER="google"
+AI_MODEL="gemini-3.8-flash"
+GOOGLE_GENERATIVE_AI_API_KEY="your-key"
 ```
 
-`AI_PROVIDER` is `openai` or `google`. Google routes require
-`GOOGLE_GENERATIVE_AI_API_KEY`. There are no implicit Gemini defaults and the old
-`GEMINI_API_KEY` setting is no longer read. Optional paired `AI_EXTRACT_*`,
-`AI_REPLY_*`, `AI_REPLY_FAST_*` and `AI_INSIGHT_*` settings override the default.
-Set both provider and model for an override. Restart the server after env changes.
+To switch, set `AI_PROVIDER="openai"`, `AI_MODEL="gpt-6-luna"`, and
+`OPENAI_API_KEY`. Optional paired `AI_EXTRACT_*`, `AI_REPLY_*`, `AI_REPLY_FAST_*`,
+and `AI_INSIGHT_*` settings override the default. Restart after env changes.
+No Vercel account or AI Gateway is needed. `GEMINI_API_KEY` is no longer read.
 
-Fallback is disabled unless both `AI_FALLBACK_PROVIDER` and `AI_FALLBACK_MODEL` are
-set. Models without a built-in estimate require `AI_PRICES_JSON`, keyed by
-`provider:model`, with `input` and `output` USD per million tokens. All keys stay
-server-side. The SDK connects directly; no Vercel account or AI Gateway is needed.
+Fallback is disabled unless both `AI_FALLBACK_PROVIDER` and `AI_FALLBACK_MODEL`
+are set. Unknown model prices require `AI_PRICES_JSON` with input/output USD per
+million tokens. The Postgres baseline includes per-attempt history and atomic,
+idempotent monthly usage increments. Budget checks remain best effort and do not
+reserve spend atomically. Unknown provider outcomes are recorded as unknown.
+See [`docs/AI_PROVIDER_ARCHITECTURE.md`](docs/AI_PROVIDER_ARCHITECTURE.md).
 
-Apply `supabase/migrations/20261027001_ai_provider_usage.sql` to an existing database
-before enabling AI. It adds attempt history and atomic usage increments, including
-previews and insight synthesis. This branch retains the current database/auth;
-the Postgres/NextAuth replacement is described in `docs/DATABASE_ARCHITECTURE_V2.md`.
-Budget checks use recorded estimates and remain best effort; they do not reserve
-budget atomically for concurrent calls. Provider usage with an unknown outcome is
-recorded as unknown, not confirmed free usage.
+## Verification
 
-Run `npm test`, `npx next typegen && npx tsc --noEmit`, and `npm run build` to verify
-changes without calling a paid AI API. See `docs/AI_PROVIDER_ARCHITECTURE.md` for the
-routing contract and the larger worker/budget design.
+```sh
+npm test
+npx next typegen && npx tsc --noEmit
+npm run build
+RUN_DATABASE_TESTS=1 npm test -- --run __tests__/postgres.integration.test.ts
+```
+
+The integration suite requires the dedicated loopback database on port 55432,
+creates isolated fixtures, and removes them afterward. Ordinary tests make no
+paid AI calls. Add `RUN_AI_SMOKE=1` to the integration command only to make one
+small real generation and verify its usage record.

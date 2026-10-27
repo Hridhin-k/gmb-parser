@@ -1,4 +1,4 @@
-import { createAdminClient } from "@/lib/supabase/admin";
+import { createAdminClient } from "@/lib/db/client";
 import { AIReviewService } from "@/lib/services/ai-review";
 import { ReplyPublishingService } from "@/lib/services/reply-publishing";
 import { AuditService } from "@/lib/services/audit";
@@ -6,7 +6,7 @@ import { assertPublishAccess, assertReviewAction } from "@/lib/services/access";
 import { AppError } from "@/lib/errors";
 import { logger } from "@/lib/logger";
 import { mapPool } from "@/lib/pool";
-import type { Json } from "@/lib/types/supabase";
+import type { Json } from "@/lib/types/database-schema";
 
 export type BulkJobAction = "generate" | "publish";
 export type BulkJobStatus = "queued" | "running" | "done" | "failed";

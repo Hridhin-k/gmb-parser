@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
-import { createServerClient } from "@supabase/ssr";
+import { auth } from "@/auth";
 import { serverTimingHeader } from "@/lib/timing";
 
 const PUBLIC_PATHS = [
@@ -36,7 +36,7 @@ export async function proxy(request: NextRequest) {
     );
   }
 
-  if (pathname === "/" || PUBLIC_PATHS.some((p) => pathname.startsWith(p))) {
+  if (pathname === "/" || PUBLIC_PATHS.some((p) => p.endsWith("/") ? pathname.startsWith(p) : pathname === p || pathname.startsWith(`${p}/`))) {
     return NextResponse.next();
   }
 
@@ -46,32 +46,10 @@ export async function proxy(request: NextRequest) {
     request: { headers: requestHeaders },
   });
 
-  const supabase = createServerClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
-    {
-      cookies: {
-        getAll() {
-          return request.cookies.getAll();
-        },
-        setAll(cookiesToSet) {
-          cookiesToSet.forEach(({ name, value, options }) => {
-            request.cookies.set(name, value);
-            response.cookies.set(name, value, options);
-          });
-        },
-      },
-    }
-  );
-
-  // Local JWT verification against the project's JWKS (ES256 asymmetric
-  // keys, cached globally) instead of an Auth-server round trip per request.
-  // getClaims falls back to server verification automatically if needed.
   const authStart = performance.now();
-  const { data: claimsData } = await supabase.auth.getClaims();
+  const session = await auth();
   const authMs = performance.now() - authStart;
-  const claims = claimsData?.claims ?? null;
-  const user = claims ? { id: claims.sub, email: claims.email ?? null } : null;
+  const user = session?.user ?? null;
   const timing = serverTimingHeader([
     ["proxy-auth", authMs],
     ["proxy", performance.now() - authStart],
@@ -79,6 +57,7 @@ export async function proxy(request: NextRequest) {
   response.headers.set("Server-Timing", timing);
 
   if (!user && !pathname.startsWith("/login")) {
+    if (pathname.startsWith("/api/")) return NextResponse.json({ error: "Not authenticated" }, { status: 401 });
     const loginUrl = new URL("/login", request.url);
     loginUrl.searchParams.set("redirect", pathname);
     const redirectResponse = NextResponse.redirect(loginUrl);

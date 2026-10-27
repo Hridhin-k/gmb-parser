@@ -1,5 +1,5 @@
 import { cache } from "react";
-import { createAdminClient } from "@/lib/supabase/admin";
+import { createAdminClient } from "@/lib/db/client";
 import type { ShellProfileAttention } from "@/lib/shell";
 import { mergeProfileAttention, parseShellProfileCounts } from "@/lib/shell-profile";
 import { listUnreadNotices, type ProfileNotice } from "@/lib/services/notifications";

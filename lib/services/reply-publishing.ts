@@ -1,4 +1,4 @@
-import { createAdminClient } from "@/lib/supabase/admin";
+import { createAdminClient } from "@/lib/db/client";
 import { GoogleReviewService } from "./google-reviews";
 import { GoogleOAuthService } from "./google-oauth";
 import { AuditService } from "./audit";
@@ -139,10 +139,10 @@ export class ReplyPublishingService {
     options?: { automated?: boolean }
   ): Promise<PublishResult> {
     forgetReviewList(workspaceId);
-    const supabase = createAdminClient();
+    const db = createAdminClient();
 
     // ── 1. Load reply with full relationship chain ────────────────────────
-    const { data: reply, error: replyError } = await supabase
+    const { data: reply, error: replyError } = await db
       .from("grm_review_replies")
       .select(`
         id, content, status, failure_count, review_id, workspace_id, approved_by, published_at,
@@ -278,7 +278,7 @@ export class ReplyPublishingService {
     // ── 4. Transition to `pending_publish` — acts as a distributed lock ───
     //    Use conditional update: only succeed if status is still `approved`.
     //    This prevents two simultaneous requests from both proceeding.
-    const { data: locked, error: lockError } = await supabase
+    const { data: locked, error: lockError } = await db
       .from("grm_review_replies")
       .update({ status: "pending_publish" })
       .eq("id", replyId)
@@ -296,7 +296,7 @@ export class ReplyPublishingService {
     }
 
     // Update review status to reflect in-progress
-    await supabase
+    await db
       .from("grm_reviews")
       .update({ reply_status: "pending_publish" })
       .eq("id", reviewId);
@@ -321,11 +321,11 @@ export class ReplyPublishingService {
       accessToken = await GoogleOAuthService.getValidAccessToken(connectionId);
     } catch (tokenError) {
       // Token acquisition failed — revert to `approved` so user can retry
-      await supabase
+      await db
         .from("grm_review_replies")
         .update({ status: "approved" })
         .eq("id", replyId);
-      await supabase
+      await db
         .from("grm_reviews")
         .update({ reply_status: "approved" })
         .eq("id", reviewId);
@@ -339,11 +339,11 @@ export class ReplyPublishingService {
     } catch (googleError) {
       if (publishOutcomeUncertain(googleError)) {
         const message = "Google did not confirm whether this reply was published. It has not been marked as published.";
-        await supabase
+        await db
           .from("grm_review_replies")
           .update({ status: "pending_publish", last_error: message })
           .eq("id", replyId);
-        await supabase
+        await db
           .from("grm_reviews")
           .update({ reply_status: "pending_publish" })
           .eq("id", reviewId);
@@ -361,7 +361,7 @@ export class ReplyPublishingService {
       const classified = classifyPublishError(googleError);
 
       // Mark as failed — store safe error info, never tokens
-      await supabase
+      await db
         .from("grm_review_replies")
         .update({
           status: "failed",
@@ -370,7 +370,7 @@ export class ReplyPublishingService {
         })
         .eq("id", replyId);
 
-      await supabase
+      await db
         .from("grm_reviews")
         .update({ reply_status: "failed" })
         .eq("id", reviewId);
@@ -405,7 +405,7 @@ export class ReplyPublishingService {
     const outcome = comparePublishedReply(reply.content, googleReply.comment);
     if (outcome !== "matched") {
       const message = "Google returned a different reply from the one that was approved. It was not marked as published.";
-      await supabase
+      await db
         .from("grm_review_replies")
         .update({
           status: "pending_publish",
@@ -427,7 +427,7 @@ export class ReplyPublishingService {
     // ── 8. Google confirmed the same reply — mark as published ────────────
     const publishedAt = googleReply.updateTime ?? new Date().toISOString();
 
-    await supabase
+    await db
       .from("grm_review_replies")
       .update({
         status: "published",
@@ -447,7 +447,7 @@ export class ReplyPublishingService {
       occurredAt: publishedAt,
     });
 
-    await supabase
+    await db
       .from("grm_reviews")
       .update({
         reply_status: "published",
@@ -485,8 +485,8 @@ export class ReplyPublishingService {
     workspaceId: string,
     userId: string
   ): Promise<PublishResult> {
-    const supabase = createAdminClient();
-    const { data: reply, error } = await supabase
+    const db = createAdminClient();
+    const { data: reply, error } = await db
       .from("grm_review_replies")
       .select(`
         id, content, status,
@@ -551,7 +551,7 @@ export class ReplyPublishingService {
     const compared = comparePublishedReply(reply.content, remoteComment);
     if (compared === "matched") {
       const publishedAt = remoteTime ?? new Date().toISOString();
-      await supabase
+      await db
         .from("grm_review_replies")
         .update({
           status: "published",
@@ -562,7 +562,7 @@ export class ReplyPublishingService {
         })
         .eq("id", replyId)
         .eq("status", "pending_publish");
-      await supabase
+      await db
         .from("grm_reviews")
         .update({
           reply_status: "published",
@@ -583,12 +583,12 @@ export class ReplyPublishingService {
     }
 
     if (compared === "absent") {
-      await supabase
+      await db
         .from("grm_review_replies")
         .update({ status: "approved", last_error: null })
         .eq("id", replyId)
         .eq("status", "pending_publish");
-      await supabase.from("grm_reviews").update({ reply_status: "approved" }).eq("id", reviewId);
+      await db.from("grm_reviews").update({ reply_status: "approved" }).eq("id", reviewId);
       throw new AppError(
         "Google does not have this reply. It was not published. You can try again.",
         "PUBLISH_NOT_SENT",
@@ -612,9 +612,9 @@ export class ReplyPublishingService {
     reviewId: string,
     workspaceId: string
   ): Promise<void> {
-    const supabase = createAdminClient();
+    const db = createAdminClient();
 
-    const { error } = await supabase
+    const { error } = await db
       .from("grm_review_replies")
       .update({ status: "approved", last_error: null })
       .eq("id", replyId)
@@ -626,7 +626,7 @@ export class ReplyPublishingService {
       throw new AppError("Failed to reset reply status", "DB_ERROR", 500);
     }
 
-    await supabase
+    await db
       .from("grm_reviews")
       .update({ reply_status: "approved" })
       .eq("id", reviewId);
@@ -642,9 +642,9 @@ export class ReplyPublishingService {
     workspaceId: string,
     userId: string
   ): Promise<void> {
-    const supabase = createAdminClient();
+    const db = createAdminClient();
 
-    const { data: reply, error } = await supabase
+    const { data: reply, error } = await db
       .from("grm_review_replies")
       .select(`
         id, status,
@@ -691,12 +691,12 @@ export class ReplyPublishingService {
     await GoogleReviewService.deleteReply(accessToken, googleReviewName);
 
     // Mark reply as draft (retracted) in the DB
-    await supabase
+    await db
       .from("grm_review_replies")
       .update({ status: "draft", published_at: null, published_by: null })
       .eq("id", replyId);
 
-    await supabase
+    await db
       .from("grm_reviews")
       .update({ reply_status: "draft" })
       .eq("id", reviewId);

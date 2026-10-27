@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
-import { createClient } from "@/lib/supabase/server";
-import { createAdminClient } from "@/lib/supabase/admin";
+import { getCurrentUser } from "@/lib/auth/server";
+import { createAdminClient } from "@/lib/db/client";
 import { AuditService } from "@/lib/services/audit";
 import { assertReviewAction } from "@/lib/services/access";
 import { assertSafePublicReply, replyContentHash } from "@/lib/services/reply-checks";
@@ -12,10 +12,7 @@ export async function POST(
   request: Request,
   { params }: { params: Promise<{ reviewId: string }> }
 ) {
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  const user = await getCurrentUser();
   if (!user) return NextResponse.json({ error: "Not authenticated" }, { status: 401 });
 
   let reviewId: string;

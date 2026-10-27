@@ -1,4 +1,4 @@
-import { createAdminClient } from "@/lib/supabase/admin";
+import { createAdminClient } from "@/lib/db/client";
 import { remember } from "@/lib/ttl-cache";
 import { locationDisplayName } from "@/lib/ui/location-place";
 import { statusOrFilter } from "@/lib/review-filter-params";

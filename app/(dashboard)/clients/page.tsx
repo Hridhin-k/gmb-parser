@@ -1,4 +1,4 @@
-import { createAdminClient } from "@/lib/supabase/admin";
+import { createAdminClient } from "@/lib/db/client";
 import { GoogleBusinessProfileService } from "@/lib/services/google-business-profile";
 import { getMemberAccess, visibleClientIds } from "@/lib/services/access";
 import { getActiveRole, getActiveWorkspace } from "@/lib/services/session";

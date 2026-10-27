@@ -1,5 +1,5 @@
 import { randomBytes } from "node:crypto";
-import { createAdminClient } from "@/lib/supabase/admin";
+import { createAdminClient } from "@/lib/db/client";
 import { AuditService } from "@/lib/services/audit";
 import { sendRequestMessage } from "@/lib/request-delivery";
 import { renderQrPdf, qrSvg } from "@/lib/request-qr";

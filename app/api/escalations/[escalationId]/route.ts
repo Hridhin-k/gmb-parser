@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
-import { createClient } from "@/lib/supabase/server";
+import { getCurrentUser } from "@/lib/auth/server";
 import { EscalationService } from "@/lib/services/escalations";
 import { ensurePersonalWorkspace } from "@/lib/services/workspace";
 import { assertEscalationAction } from "@/lib/services/access";
@@ -49,10 +49,7 @@ export async function POST(
   request: Request,
   { params }: { params: Promise<{ escalationId: string }> }
 ) {
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  const user = await getCurrentUser();
   if (!user) return NextResponse.json({ error: "Not authenticated" }, { status: 401 });
 
   let escalationId: string;

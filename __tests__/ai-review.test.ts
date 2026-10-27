@@ -58,7 +58,7 @@ mockUpdate.mockReturnValue({
   eq: vi.fn(() => ({ error: null })),
 });
 
-vi.mock("@/lib/supabase/admin", () => ({
+vi.mock("@/lib/db/client", () => ({
   createAdminClient: () => ({ from: mockFrom, rpc: vi.fn(async () => ({ error: null })) }),
 }));
 

@@ -1,5 +1,5 @@
 import { NextResponse, after } from "next/server";
-import { createClient } from "@/lib/supabase/server";
+import { getCurrentUser } from "@/lib/auth/server";
 import { AIReviewService } from "@/lib/services/ai-review";
 import { AppError } from "@/lib/errors";
 import { logger } from "@/lib/logger";
@@ -29,8 +29,7 @@ const generateBodySchema = z.object({
 
 export async function POST(request: Request, { params }: RouteParams) {
   const { reviewId: rawReviewId } = await params;
-  const supabase = await createClient();
-  const { data: { user } } = await supabase.auth.getUser();
+  const user = await getCurrentUser();
   if (!user) return NextResponse.json({ error: "Not authenticated" }, { status: 401 });
 
   let reviewId: string;

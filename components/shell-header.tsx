@@ -2,7 +2,7 @@
 
 import { useEffect, useState, type FormEvent } from "react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
-import type { User } from "@supabase/supabase-js";
+import type { User } from "@/lib/auth/types";
 import { Bell, ChevronDown, LogOut, Menu, Search } from "lucide-react";
 import { ActivityStatus } from "@/components/activity-status";
 import { GlobalFilters } from "@/components/global-filters";
@@ -17,7 +17,7 @@ import {
 import type { ScopeCatalog } from "@/lib/scope";
 import type { ShellSummary } from "@/lib/services/shell-summary";
 import { scopedHref, shellAlerts } from "@/lib/shell";
-import { createClient } from "@/lib/supabase/client";
+import { signOut } from "next-auth/react";
 
 interface ShellHeaderProps {
   user: User;
@@ -147,10 +147,7 @@ export function ShellHeader({ user, role, catalog, summary, onOpenMenu }: ShellH
                 disabled={signingOut}
                 onClick={() => {
                   setSigningOut(true);
-                  const supabase = createClient();
-                  void supabase.auth.signOut().then(() => {
-                    window.location.assign("/login");
-                  });
+                  void signOut({ redirectTo: "/login" });
                 }}
               >
                 <LogOut className="mr-1.5 h-3.5 w-3.5" />

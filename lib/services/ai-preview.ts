@@ -1,4 +1,4 @@
-import { createAdminClient } from "@/lib/supabase/admin";
+import { createAdminClient } from "@/lib/db/client";
 import { AppError, ValidationError } from "@/lib/errors";
 import { logger } from "@/lib/logger";
 import { generateAi } from "@/lib/ai/service";

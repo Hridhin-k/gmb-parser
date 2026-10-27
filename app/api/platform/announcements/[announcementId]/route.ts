@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
-import { createClient } from "@/lib/supabase/server";
+import { getCurrentUser } from "@/lib/auth/server";
 import { AppError, toStatusCode, toUserMessage } from "@/lib/errors";
 import { parseBody, validateId } from "@/lib/validation";
 import { setAnnouncementActive } from "@/lib/services/platform";
@@ -9,8 +9,7 @@ interface RouteParams { params: Promise<{ announcementId: string }> }
 const schema = z.object({ active: z.boolean() });
 
 export async function POST(request: Request, { params }: RouteParams) {
-  const supabase = await createClient();
-  const { data: { user } } = await supabase.auth.getUser();
+  const user = await getCurrentUser();
   if (!user) return NextResponse.json({ error: "Not authenticated" }, { status: 401 });
   const { announcementId: raw } = await params;
   let id: string;

@@ -1,10 +1,10 @@
-import { createAdminClient } from "@/lib/supabase/admin";
+import { createAdminClient } from "@/lib/db/client";
 import { AuditService } from "@/lib/services/audit";
 import { assertScoped } from "@/lib/services/access";
 import { getMemberRole } from "@/lib/services/workspace";
 import { workspaceGrant } from "@/lib/access";
 import { AppError, AuthorizationError, ValidationError } from "@/lib/errors";
-import type { Json } from "@/lib/types/supabase";
+import type { Json } from "@/lib/types/database-schema";
 import {
   AI_KNOWLEDGE_KINDS,
   assertSameWorkspace,

@@ -1,4 +1,4 @@
-import type { createAdminClient } from "@/lib/supabase/admin";
+import type { createAdminClient } from "@/lib/db/client";
 import { estimateCostUsd, monthKey, monthlyBudgetUsd, type AiOperation } from "@/lib/ai-usage";
 import { logger } from "@/lib/logger";
 

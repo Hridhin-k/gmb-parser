@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { createClient } from "@/lib/supabase/server";
+import { getCurrentUser } from "@/lib/auth/server";
 import { AppError, toStatusCode, toUserMessage } from "@/lib/errors";
 import { getWorkspaceRoster } from "@/lib/services/workspace";
 import { actingUser, guardReport, ReportService } from "@/lib/services/reporting";
@@ -7,10 +7,7 @@ import { assertChannels, normalizeRecipients, readDeliveryEnv, reportBodySchema,
 import { parseBody, validateId } from "@/lib/validation";
 
 export async function PATCH(request: Request, { params }: { params: Promise<{ reportId: string }> }) {
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  const user = await getCurrentUser();
   if (!user) return NextResponse.json({ error: "Not authenticated" }, { status: 401 });
 
   let reportId: string;
@@ -55,10 +52,7 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ re
 }
 
 export async function DELETE(_request: Request, { params }: { params: Promise<{ reportId: string }> }) {
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  const user = await getCurrentUser();
   if (!user) return NextResponse.json({ error: "Not authenticated" }, { status: 401 });
   let reportId: string;
   try {

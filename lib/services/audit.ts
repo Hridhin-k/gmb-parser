@@ -1,6 +1,6 @@
-import { createAdminClient } from "@/lib/supabase/admin";
+import { createAdminClient } from "@/lib/db/client";
 import type { AuditAction } from "@/lib/types";
-import type { Json } from "@/lib/types/supabase";
+import type { Json } from "@/lib/types/database-schema";
 
 interface AuditLogEntry {
   workspaceId: string;
@@ -15,9 +15,9 @@ interface AuditLogEntry {
 
 export class AuditService {
   static async log(entry: AuditLogEntry): Promise<void> {
-    const supabase = createAdminClient();
+    const db = createAdminClient();
 
-    const { error } = await supabase.from("grm_audit_logs").insert({
+    const { error } = await db.from("grm_audit_logs").insert({
       workspace_id: entry.workspaceId,
       user_id: entry.userId,
       action: entry.action,

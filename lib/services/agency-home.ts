@@ -1,5 +1,5 @@
-import { createAdminClient } from "@/lib/supabase/admin";
-import { rpcLocationReviewStats } from "@/lib/supabase/rpc";
+import { createAdminClient } from "@/lib/db/client";
+import { rpcLocationReviewStats } from "@/lib/db/rpc";
 import { loadAuthProfiles } from "@/lib/services/auth-profiles";
 import { UNASSIGNED_CLIENT_MARKER } from "@/lib/services/unassigned-client";
 import type { DateRange } from "@/lib/date-range";

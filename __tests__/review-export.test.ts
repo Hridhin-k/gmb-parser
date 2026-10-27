@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 
-vi.mock("@/lib/supabase/admin", () => ({ createAdminClient: vi.fn() }));
+vi.mock("@/lib/db/client", () => ({ createAdminClient: vi.fn() }));
 
 import { csvCell, csvRow } from "@/lib/services/review-export";
 

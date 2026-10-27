@@ -1,3 +1,5 @@
+> Historical audit of the former Supabase implementation. Its deployment and migration paths are superseded by README and `db/migrations` on Launch.
+
 # RevuPilot implementation audit
 
 Date: 19 October 2026.

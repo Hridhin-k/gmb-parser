@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
-import { createClient } from "@/lib/supabase/server";
+import { getCurrentUser } from "@/lib/auth/server";
 import { AppError, toStatusCode, toUserMessage } from "@/lib/errors";
 import { parseBody, validateId } from "@/lib/validation";
 import { resendPlatformInvite, revokePlatformInvite } from "@/lib/services/platform";
@@ -10,8 +10,7 @@ const schema = z.object({ action: z.enum(["resend", "revoke"]) });
 
 /** POST /api/platform/invites/[inviteId] — resend (new 7 days) or revoke a tenant invite. */
 export async function POST(request: Request, { params }: RouteParams) {
-  const supabase = await createClient();
-  const { data: { user } } = await supabase.auth.getUser();
+  const user = await getCurrentUser();
   if (!user) return NextResponse.json({ error: "Not authenticated" }, { status: 401 });
   const { inviteId: raw } = await params;
   let inviteId: string;

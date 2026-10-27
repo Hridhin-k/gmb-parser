@@ -1,4 +1,4 @@
-import { createAdminClient } from "@/lib/supabase/admin";
+import { createAdminClient } from "@/lib/db/client";
 import { logger } from "@/lib/logger";
 
 export async function recordUsageEvent(input: {

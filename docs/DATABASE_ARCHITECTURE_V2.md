@@ -1,6 +1,8 @@
 # Database architecture v2
 
-Design proposal · 27 October 2026 · Not applied to a database
+Implementation status (27 October 2026): native Postgres, NextAuth, fresh migrations, parameterized queries, and composite tenant foreign keys are implemented on Launch. The current domain model is retained for this migration; this document's schema reorganization, persistent workers, time rollups, Redis, separate auth role, and budget reservations remain a proposed next phase. See README for the runnable setup.
+
+Design proposal · 27 October 2026 · Broader redesign pending
 
 ## Decisions
 

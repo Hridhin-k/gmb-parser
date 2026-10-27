@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
-import { createClient } from "@/lib/supabase/server";
-import { createAdminClient } from "@/lib/supabase/admin";
+import { getCurrentUser } from "@/lib/auth/server";
+import { createAdminClient } from "@/lib/db/client";
 import { ReviewSyncService } from "@/lib/services/review-sync";
 import { AppError, GoogleApiError } from "@/lib/errors";
 import { logger } from "@/lib/logger";
@@ -19,8 +19,7 @@ export const maxDuration = 60;
  *   { all: false; locationId: string; connectionId: string } — sync one location
  */
 export async function POST(request: Request) {
-  const supabase = await createClient();
-  const { data: { user } } = await supabase.auth.getUser();
+  const user = await getCurrentUser();
 
   if (!user) {
     return NextResponse.json({ error: "Not authenticated" }, { status: 401 });

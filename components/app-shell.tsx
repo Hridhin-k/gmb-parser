@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { Suspense, useState, useEffect, useCallback, useTransition } from "react";
-import type { User } from "@supabase/supabase-js";
+import type { User } from "@/lib/auth/types";
 import { cn } from "@/lib/utils";
 import {
   AlertTriangle,

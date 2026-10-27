@@ -1,6 +1,6 @@
 import { ANALYSIS_VERSION } from "@/lib/review-intelligence";
 import { emptyInsightDashboard, parseInsightDashboard, type InsightDashboardData } from "@/lib/insight-dashboard";
-import { createAdminClient } from "@/lib/supabase/admin";
+import { createAdminClient } from "@/lib/db/client";
 import { remember } from "@/lib/ttl-cache";
 
 /**

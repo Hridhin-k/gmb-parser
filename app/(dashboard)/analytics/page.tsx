@@ -1,5 +1,6 @@
 import { Download } from "lucide-react";
-import { AnalyticsBoard, ANALYTICS_SECTIONS, type AnalyticsSection } from "@/components/analytics-board";
+import { AnalyticsBoard } from "@/components/analytics-board";
+import { ANALYTICS_SECTIONS, type AnalyticsSection } from "@/lib/analytics-sections";
 import { FreshMetrics } from "@/components/fresh-metrics";
 import { PageHeader } from "@/components/page-header";
 import { PendingRegion, TransitionScope } from "@/components/transition-scope";

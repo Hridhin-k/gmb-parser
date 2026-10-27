@@ -1,4 +1,4 @@
-import type { User } from "@supabase/supabase-js";
+import type { User } from "@/lib/auth/types";
 import { remember } from "@/lib/ttl-cache";
 import type { GrmMemberRole } from "@/lib/types";
 import { getMemberAccess, visibleClientIds, visibleLocationIds, type MemberAccess } from "@/lib/services/access";

@@ -1,4 +1,4 @@
-import { createAdminClient } from "@/lib/supabase/admin";
+import { createAdminClient } from "@/lib/db/client";
 import { GoogleApiError, AppError } from "@/lib/errors";
 import { GoogleOAuthService } from "./google-oauth";
 import { logger } from "@/lib/logger";
@@ -223,13 +223,13 @@ export class GoogleBusinessProfileService {
     locationsLinked: number;
     skippedGoogleFetch: boolean;
   }> {
-    const supabase = createAdminClient();
+    const db = createAdminClient();
     const force = options.force === true;
 
     // Quota guard: reuse DB state if locations were synced recently
     const COOLDOWN_MS = 10 * 60 * 1000;
     if (!force) {
-      const { data: recent } = await supabase
+      const { data: recent } = await db
         .from("grm_google_locations")
         .select("last_synced_at")
         .eq("workspace_id", workspaceId)
@@ -294,7 +294,7 @@ export class GoogleBusinessProfileService {
       const normalized = normalizeAccount(rawAccount);
 
       // Upsert account — idempotent on (workspace_id, google_account_name)
-      const { data: accountRow, error: accountError } = await supabase
+      const { data: accountRow, error: accountError } = await db
         .from("grm_google_accounts")
         .upsert(
           {
@@ -380,7 +380,7 @@ export class GoogleBusinessProfileService {
     // one upsert per chunk — instead of a select + insert/update per location.
     const existingByName = new Map<string, { id: string; client_id: string | null }>();
     {
-      const { data: existingRows } = await supabase
+      const { data: existingRows } = await db
         .from("grm_google_locations")
         .select("id, client_id, google_location_name")
         .eq("workspace_id", workspaceId);
@@ -424,7 +424,7 @@ export class GoogleBusinessProfileService {
     const UPSERT_CHUNK = 500;
     for (let i = 0; i < payloads.length; i += UPSERT_CHUNK) {
       const chunkRows = payloads.slice(i, i + UPSERT_CHUNK);
-      const { error: locError } = await supabase
+      const { error: locError } = await db
         .from("grm_google_locations")
         .upsert(chunkRows as never, { onConflict: "workspace_id,google_location_name" });
       if (locError) {
@@ -460,8 +460,8 @@ export class GoogleBusinessProfileService {
     workspaceId: string,
     clientId?: string
   ) {
-    const supabase = createAdminClient();
-    let query = supabase
+    const db = createAdminClient();
+    let query = db
       .from("grm_google_locations")
       .select(
         `id, workspace_id, google_account_id, google_location_name,
@@ -495,17 +495,17 @@ export class GoogleBusinessProfileService {
     clientId: string,
     workspaceId: string
   ): Promise<void> {
-    const supabase = createAdminClient();
+    const db = createAdminClient();
 
     // Verify both belong to the same workspace
     const [{ data: location }, { data: client }] = await Promise.all([
-      supabase
+      db
         .from("grm_google_locations")
         .select("id")
         .eq("id", locationId)
         .eq("workspace_id", workspaceId)
         .single(),
-      supabase
+      db
         .from("grm_clients")
         .select("id")
         .eq("id", clientId)
@@ -520,7 +520,7 @@ export class GoogleBusinessProfileService {
       throw new AppError("Client not found", "NOT_FOUND", 404);
     }
 
-    const { error } = await supabase
+    const { error } = await db
       .from("grm_google_locations")
       .update({ client_id: clientId })
       .eq("id", locationId)
@@ -538,10 +538,10 @@ export class GoogleBusinessProfileService {
     locationId: string,
     workspaceId: string
   ): Promise<void> {
-    const supabase = createAdminClient();
+    const db = createAdminClient();
     const unassigned = await ensureUnassignedClient(workspaceId);
 
-    const { error } = await supabase
+    const { error } = await db
       .from("grm_google_locations")
       .update({ client_id: unassigned.id })
       .eq("id", locationId)
@@ -557,9 +557,9 @@ export class GoogleBusinessProfileService {
    * Excludes the system Unassigned holding client.
    */
   static async getWorkspaceClients(workspaceId: string) {
-    const supabase = createAdminClient();
+    const db = createAdminClient();
 
-    const { data, error } = await supabase
+    const { data, error } = await db
       .from("grm_clients")
       .select(
         `id, name, notes, is_active, created_at,
@@ -581,12 +581,12 @@ export class GoogleBusinessProfileService {
    * Gets unlinked locations (in the Unassigned pool, or client_id null).
    */
   static async getUnlinkedLocations(workspaceId: string) {
-    const supabase = createAdminClient();
+    const db = createAdminClient();
     const unassigned = await ensureUnassignedClient(workspaceId);
     const unassignedIds = await listUnassignedClientIds(workspaceId);
     const ids = unassignedIds.length ? unassignedIds : [unassigned.id];
 
-    const { data, error } = await supabase
+    const { data, error } = await db
       .from("grm_google_locations")
       .select(
         `id, google_location_name, location_title, address_formatted,
@@ -610,10 +610,10 @@ export class GoogleBusinessProfileService {
    * Used once to recover from the old "auto-assign to first client" behavior.
    */
   static async resetAllLocationsToUnassigned(workspaceId: string): Promise<number> {
-    const supabase = createAdminClient();
+    const db = createAdminClient();
     const unassigned = await ensureUnassignedClient(workspaceId);
 
-    const { data, error } = await supabase
+    const { data, error } = await db
       .from("grm_google_locations")
       .update({ client_id: unassigned.id })
       .eq("workspace_id", workspaceId)

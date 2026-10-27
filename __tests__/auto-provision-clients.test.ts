@@ -8,7 +8,7 @@ const { fromMock, createAdminClient } = vi.hoisted(() => {
   };
 });
 
-vi.mock("@/lib/supabase/admin", () => ({ createAdminClient }));
+vi.mock("@/lib/db/client", () => ({ createAdminClient }));
 
 vi.mock("@/lib/services/unassigned-client", () => ({
   UNASSIGNED_CLIENT_MARKER: "grm:system:unassigned",

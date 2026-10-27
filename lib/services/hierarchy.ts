@@ -1,4 +1,4 @@
-import { createAdminClient } from "@/lib/supabase/admin";
+import { createAdminClient } from "@/lib/db/client";
 import { AuditService } from "@/lib/services/audit";
 import { loadAuthProfiles } from "@/lib/services/auth-profiles";
 import { getWorkspaceTone } from "@/lib/services/onboarding";

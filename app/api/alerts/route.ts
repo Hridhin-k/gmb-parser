@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { createClient } from "@/lib/supabase/server";
+import { getCurrentUser } from "@/lib/auth/server";
 import { AppError, toStatusCode, toUserMessage } from "@/lib/errors";
 import { getWorkspaceRoster } from "@/lib/services/workspace";
 import { actingUser, AlertService, guardReport } from "@/lib/services/reporting";
@@ -7,10 +7,7 @@ import { alertBodySchema, assertChannels, normalizeRecipients, readDeliveryEnv, 
 import { parseBody } from "@/lib/validation";
 
 export async function POST(request: Request) {
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  const user = await getCurrentUser();
   if (!user) return NextResponse.json({ error: "Not authenticated" }, { status: 401 });
   try {
     const body = await parseBody(request, alertBodySchema);

@@ -1,5 +1,6 @@
 import { redirect } from "next/navigation";
-import { createClient } from "@/lib/supabase/server";
+import { getCurrentUser } from "@/lib/auth/server";
+import { devLoginEnabled } from "@/lib/auth/dev-login";
 import { LoginForm } from "@/components/login-form";
 import { authMethodsFromEnv } from "@/lib/auth-methods";
 import { loginErrorMessage, shouldEnterWizard } from "@/lib/onboarding";
@@ -15,10 +16,7 @@ interface LoginPageProps {
 }
 
 export default async function LoginPage({ searchParams }: LoginPageProps) {
-  const [params, supabase] = await Promise.all([searchParams, createClient()]);
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  const [params, user] = await Promise.all([searchParams, getCurrentUser()]);
 
   if (user) {
     if (isSuperAdmin(user)) redirect("/admin");
@@ -46,6 +44,7 @@ export default async function LoginPage({ searchParams }: LoginPageProps) {
     <div className="flex min-h-dvh items-center justify-center bg-paper px-4 py-10">
       <LoginForm
         methods={authMethodsFromEnv()}
+        localLogin={devLoginEnabled()}
         initialError={loginErrorMessage(errorCode, errorReason)}
       />
     </div>

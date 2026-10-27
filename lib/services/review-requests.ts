@@ -1,4 +1,4 @@
-import { createAdminClient } from "@/lib/supabase/admin";
+import { createAdminClient } from "@/lib/db/client";
 import { locationDisplayName } from "@/lib/ui/location-place";
 
 export interface ReviewRequestLocation {

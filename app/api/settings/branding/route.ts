@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
-import { createClient } from "@/lib/supabase/server";
+import { getCurrentUser } from "@/lib/auth/server";
 import { saveAgencyBranding, verifyAgencyDomain } from "@/lib/services/agency-branding";
 import { ensurePersonalWorkspace } from "@/lib/services/workspace";
 import { AppError, toStatusCode, toUserMessage } from "@/lib/errors";
@@ -18,10 +18,7 @@ const schema = z.discriminatedUnion("action", [
 ]);
 
 export async function POST(request: Request) {
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  const user = await getCurrentUser();
   if (!user) return NextResponse.json({ error: "Not authenticated" }, { status: 401 });
   try {
     const body = await parseBody(request, schema);

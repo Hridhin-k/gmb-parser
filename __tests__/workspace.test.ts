@@ -8,7 +8,7 @@ const { fromMock, createAdminClient } = vi.hoisted(() => {
   };
 });
 
-vi.mock("@/lib/supabase/admin", () => ({ createAdminClient }));
+vi.mock("@/lib/db/client", () => ({ createAdminClient }));
 vi.mock("@/lib/logger", () => ({
   logger: { info: vi.fn(), warn: vi.fn(), error: vi.fn() },
 }));

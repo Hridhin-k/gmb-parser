@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
-import { createClient } from "@/lib/supabase/server";
+import { getCurrentUser } from "@/lib/auth/server";
 import { issueOnboardingLink, setClientApproval, updateAgencyClient } from "@/lib/services/agency-clients";
 import { ensurePersonalWorkspace } from "@/lib/services/workspace";
 import { AppError, toStatusCode, toUserMessage } from "@/lib/errors";
@@ -30,10 +30,7 @@ export async function POST(
   request: Request,
   context: { params: Promise<{ clientId: string }> }
 ) {
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  const user = await getCurrentUser();
   if (!user) return NextResponse.json({ error: "Not authenticated" }, { status: 401 });
   const { clientId } = await context.params;
   try {

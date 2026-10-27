@@ -1,4 +1,4 @@
-import { createAdminClient } from "@/lib/supabase/admin";
+import { createAdminClient } from "@/lib/db/client";
 import { AppError } from "@/lib/errors";
 import { logger } from "@/lib/logger";
 import {
@@ -92,11 +92,11 @@ export async function autoProvisionClientsFromLocations(
   workspaceId: string,
   userId: string
 ): Promise<AutoProvisionResult> {
-  const supabase = createAdminClient();
+  const db = createAdminClient();
   await ensureUnassignedClient(workspaceId);
   const unassignedIds = new Set(await listUnassignedClientIds(workspaceId));
 
-  const { data: locations, error: locError } = await supabase
+  const { data: locations, error: locError } = await db
     .from("grm_google_locations")
     .select(
       "id, google_location_name, location_title, store_code, client_id, is_active, hold_reason"
@@ -112,7 +112,7 @@ export async function autoProvisionClientsFromLocations(
     );
   }
 
-  const { data: existingClients, error: clientError } = await supabase
+  const { data: existingClients, error: clientError } = await db
     .from("grm_clients")
     .select("id, name, notes")
     .eq("workspace_id", workspaceId)
@@ -163,7 +163,7 @@ export async function autoProvisionClientsFromLocations(
       clientsReused += 1;
       const existing = clientById.get(clientId);
       if (existing && !isAutoOrgMarker(existing.notes)) {
-        await supabase
+        await db
           .from("grm_clients")
           .update({ notes: marker })
           .eq("id", clientId)
@@ -172,7 +172,7 @@ export async function autoProvisionClientsFromLocations(
         byOrgMarker.set(marker, clientId);
       }
     } else {
-      const { data: created, error: createError } = await supabase
+      const { data: created, error: createError } = await db
         .from("grm_clients")
         .insert({
           workspace_id: workspaceId,
@@ -185,7 +185,7 @@ export async function autoProvisionClientsFromLocations(
         .single();
 
       if (createError || !created) {
-        const { data: raced } = await supabase
+        const { data: raced } = await db
           .from("grm_clients")
           .select("id")
           .eq("workspace_id", workspaceId)
@@ -216,7 +216,7 @@ export async function autoProvisionClientsFromLocations(
       emptiedClientIds.add(loc.client_id);
     }
 
-    const { error: linkError } = await supabase
+    const { error: linkError } = await db
       .from("grm_google_locations")
       .update({ client_id: clientId })
       .eq("id", loc.id)
@@ -240,7 +240,7 @@ export async function autoProvisionClientsFromLocations(
   });
 
   if (leftoverAutoLoc.length > 0) {
-    await supabase
+    await db
       .from("grm_clients")
       .update({ is_active: false })
       .eq("workspace_id", workspaceId)

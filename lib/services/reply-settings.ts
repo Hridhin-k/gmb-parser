@@ -1,10 +1,10 @@
 import { aiConfigured } from "@/lib/ai/config";
-import { createAdminClient } from "@/lib/supabase/admin";
+import { createAdminClient } from "@/lib/db/client";
 import { AuditService } from "@/lib/services/audit";
 import { EscalationService } from "@/lib/services/escalations";
 import { assertScoped } from "@/lib/services/access";
 import { draftsPausedForLocation } from "@/lib/services/hierarchy";
-import type { Json } from "@/lib/types/supabase";
+import type { Json } from "@/lib/types/database-schema";
 import { AppError, AuthorizationError, ValidationError } from "@/lib/errors";
 import { UNASSIGNED_CLIENT_MARKER } from "@/lib/services/unassigned-client";
 import { loadCatalogTables } from "@/lib/services/catalog-tables";

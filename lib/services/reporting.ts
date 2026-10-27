@@ -1,5 +1,5 @@
-import { createAdminClient } from "@/lib/supabase/admin";
-import type { Json } from "@/lib/types/supabase";
+import { createAdminClient } from "@/lib/db/client";
+import type { Json } from "@/lib/types/database-schema";
 import { AuditService } from "@/lib/services/audit";
 import { getDashboardContext } from "@/lib/services/dashboard-metrics";
 import { workspaceGrant } from "@/lib/access";

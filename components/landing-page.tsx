@@ -1,3 +1,4 @@
+import { SignOutButton } from "@/components/sign-out-button";
 import type { ComponentType } from "react";
 import Link from "next/link";
 import {
@@ -130,9 +131,7 @@ export function LandingPage({ signedIn }: { signedIn: boolean }) {
 
             <div className="flex items-center gap-4">
               {signedIn ? (
-                <a href="/api/auth/signout" className="hidden text-body-sm text-graphite hover:text-ink sm:inline">
-                  Sign out
-                </a>
+                <SignOutButton className="hidden text-body-sm text-graphite hover:text-ink sm:inline" />
               ) : (
                 <Link href="/login" className="hidden text-body-sm text-graphite hover:text-ink sm:inline">
                   Sign in

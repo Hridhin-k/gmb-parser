@@ -88,7 +88,7 @@ function buildChain() {
   });
 }
 
-vi.mock("@/lib/supabase/admin", () => ({
+vi.mock("@/lib/db/client", () => ({
   createAdminClient: vi.fn(() => ({
     from: vi.fn().mockReturnValue({
       select: mockSelect,
