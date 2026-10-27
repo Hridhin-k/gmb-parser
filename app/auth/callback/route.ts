@@ -3,6 +3,8 @@ import { cookies } from "next/headers";
 import { NextResponse } from "next/server";
 import type { Database } from "@/lib/types/supabase";
 import { logger } from "@/lib/logger";
+import { clearSupabaseAuthCookies } from "@/lib/supabase/clear-auth-cookies";
+import { getSupabasePublicConfig } from "@/lib/supabase/config";
 
 function appOrigin(request: Request): string {
   const url = new URL(request.url);
@@ -46,9 +48,10 @@ export async function GET(request: Request) {
   const cookieStore = await cookies();
   const redirectTo = NextResponse.redirect(`${origin}${next}`);
 
+  const { url: supabaseUrl, anonKey, projectRef } = getSupabasePublicConfig();
   const supabase = createServerClient<Database>(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+    supabaseUrl,
+    anonKey,
     {
       cookies: {
         getAll() {
@@ -79,5 +82,8 @@ export async function GET(request: Request) {
     return NextResponse.redirect(login);
   }
 
+  // Drop leftover sb-* cookies from other local projects so the next request
+  // does not hit HTTP 431 from an oversized Cookie header. Keep this project's session.
+  clearSupabaseAuthCookies(cookieStore, redirectTo, projectRef);
   return redirectTo;
 }
