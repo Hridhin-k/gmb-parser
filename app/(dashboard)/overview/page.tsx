@@ -34,10 +34,12 @@ export default async function OverviewPage({ searchParams }: OverviewPageProps) 
   ]);
   const [resolved, gate] = await Promise.all([
     readPageScope(user.id, workspaceId, params),
-    getOnboardingGate(workspaceId),
+    // Setup banner is manager-only; skip three count queries for everyone else.
+    isManager(role) ? getOnboardingGate(workspaceId) : Promise.resolve(null),
   ]);
-  const showSetup =
-    isManager(role) && !gate.completed && (gate.started || (gate.connections === 0 && gate.locations === 0));
+  const showSetup = gate
+    ? !gate.completed && (gate.started || (gate.connections === 0 && gate.locations === 0))
+    : false;
   const clientId = resolved.clientId;
   const groupId = resolved.groupId;
   const locationId = resolved.locationId;
@@ -53,23 +55,32 @@ export default async function OverviewPage({ searchParams }: OverviewPageProps) 
     start,
     end,
   };
-  const [loaded, signals, insights, exactReport, latestReport] = await Promise.all([
+  const [loaded, signals, insights, exactReport] = await Promise.all([
     getDashboardContext(workspaceId, range, scope),
     loadOverviewSignals(workspaceId, resolved.locationIds, range),
     loadInsightDashboard(workspaceId, { locationIds: resolved.locationIds, start, end }),
     getReportByCacheKey(workspaceId, reportCacheKey(workspaceId, insightScope)),
-    getLatestReportForScope(workspaceId, {
-      clientId,
-      groupId,
-      locationId,
-      locationIds: resolved.locationIds,
-      rangeStart: start,
-      rangeEnd: end,
-    }),
   ]);
-  const savedReport = [exactReport, latestReport].find(
-    (row) => row && (row.status === "completed" || row.status === "partial")
-  );
+  // Exact cache-key hit is enough; the scoped fallback is a second query only on miss.
+  const exactUsable =
+    exactReport && (exactReport.status === "completed" || exactReport.status === "partial")
+      ? exactReport
+      : null;
+  const latestReport = exactUsable
+    ? null
+    : await getLatestReportForScope(workspaceId, {
+        clientId,
+        groupId,
+        locationId,
+        locationIds: resolved.locationIds,
+        rangeStart: start,
+        rangeEnd: end,
+      });
+  const savedReport =
+    exactUsable ??
+    (latestReport && (latestReport.status === "completed" || latestReport.status === "partial")
+      ? latestReport
+      : null);
   const severeLead = insights.severeIncidents[0];
 
   const places = new Map(loaded.locations.map((location) => [location.id, location]));

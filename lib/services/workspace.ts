@@ -1,5 +1,6 @@
 import { cache } from "react";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { getSupabaseAdminConfig } from "@/lib/supabase/config";
 import { inviteExpiresAt, isInviteExpired } from "@/lib/onboarding";
 import { AppError, AuthorizationError, ValidationError } from "@/lib/errors";
 import { forget, forgetUserNavigation, peek, put } from "@/lib/ttl-cache";
@@ -679,9 +680,15 @@ export const listAccessibleWorkspaces = cache(async (userId: string): Promise<Ac
 });
 
 async function findUserIdByEmail(email: string): Promise<string | null> {
-  const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
-  const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
-  if (!url || !key) return null;
+  let url: string;
+  let key: string;
+  try {
+    const config = getSupabaseAdminConfig();
+    url = config.url;
+    key = config.serviceRoleKey;
+  } catch {
+    return null;
+  }
 
   const response = await fetch(
     `${url}/auth/v1/admin/users?filter=${encodeURIComponent(email)}`,

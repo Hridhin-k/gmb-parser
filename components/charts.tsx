@@ -202,11 +202,13 @@ export function MonthVolumeChart({
 }) {
   const totals = months.map((month) => month.positive + month.neutral + month.negative);
   const max = Math.max(1, ...totals);
+  // Long all-time series keep every month; tighten gaps so bars stay readable.
+  const gapClass = months.length > 36 ? "gap-px" : months.length > 18 ? "gap-1" : "gap-1.5 sm:gap-2";
 
   return (
     <div>
       <div className="relative h-64">
-        <div className="flex h-full items-end gap-1.5 sm:gap-2" role="img" aria-label="Reviews by month. Bar height is review count.">
+        <div className={`flex h-full items-end ${gapClass}`} role="img" aria-label="Reviews by month. Bar height is review count.">
           {months.map((month, index) => {
             const total = month.positive + month.neutral + month.negative;
             const height = total === 0 ? 0 : Math.max(8, (total / max) * 62);
@@ -254,12 +256,20 @@ export function MonthVolumeChart({
           })}
         </div>
       </div>
-      <div className="mt-2 flex gap-1.5 sm:gap-2">
-        {months.map((month) => (
-          <span key={month.key} className="min-w-0 flex-1 truncate text-center text-[10px] text-slate">
-            {month.label}
-          </span>
-        ))}
+      <div className={`mt-2 flex ${gapClass}`}>
+        {months.map((month, index) => {
+          // Label ends / yearly ticks on long histories so labels stay legible.
+          const showLabel =
+            months.length <= 18 ||
+            index === 0 ||
+            index === months.length - 1 ||
+            (months.length <= 36 ? index % 3 === 0 : month.label.startsWith("Jan") || index % 6 === 0);
+          return (
+            <span key={month.key} className="min-w-0 flex-1 truncate text-center text-[10px] text-slate">
+              {showLabel ? month.label : ""}
+            </span>
+          );
+        })}
       </div>
       <div className="mt-3 flex flex-wrap gap-3 text-xs text-slate">
         <LegendDot color={CHART.green} label="4–5★" />

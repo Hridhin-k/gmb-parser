@@ -1,5 +1,6 @@
 import { revalidateTag, unstable_cache } from "next/cache";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { getSupabaseAdminConfig } from "@/lib/supabase/config";
 import type { Database } from "@/lib/types/supabase";
 import { AppError, AuthorizationError, ValidationError } from "@/lib/errors";
 import {
@@ -571,9 +572,15 @@ export async function listGlobalUsers(
   } else {
     // GoTrue's admin list supports a `filter` term (email/name search) but
     // supabase-js does not expose it, so page the REST endpoint directly.
-    const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
-    const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
-    if (!url || !key) throw new AppError("Could not list users.", "DB_ERROR", 500);
+    let url: string;
+    let key: string;
+    try {
+      const config = getSupabaseAdminConfig();
+      url = config.url;
+      key = config.serviceRoleKey;
+    } catch {
+      throw new AppError("Could not list users.", "DB_ERROR", 500);
+    }
     const response = await fetch(
       `${url}/auth/v1/admin/users?filter=${encodeURIComponent(needle)}&page=${currentPage}&per_page=${USER_PAGE_SIZE}`,
       { headers: { Authorization: `Bearer ${key}`, apikey: key }, cache: "no-store", signal: AbortSignal.timeout(10_000) }

@@ -8,7 +8,7 @@ import {
   geminiGenerateUrl,
   usageFromResponse,
 } from "@/lib/gemini";
-import { recordAiUsage } from "@/lib/services/ai-usage-ledger";
+import { recordAiUsage, getAiBudget } from "@/lib/services/ai-usage-ledger";
 import {
   ANALYSIS_VERSION,
   batchExtractionPrompt,
@@ -305,6 +305,14 @@ export async function executeAnalysisRun(
 ): Promise<void> {
   const admin = createAdminClient();
   try {
+    const budget = await getAiBudget(admin, workspaceId, { untracked: "closed" });
+    if (budget.exceeded) {
+      throw new Error(
+        budget.tracked
+          ? "Monthly AI budget is exhausted. Completed review analyses are kept."
+          : "AI budget could not be read. Analysis did not start."
+      );
+    }
     const processor = makeRunProcessor(runId, workspaceId, hooks, {
       deadlineAt: options?.sliceMs ? Date.now() + options.sliceMs : undefined,
     });

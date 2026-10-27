@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase/admin";
-import { ReviewSyncService } from "@/lib/services/review-sync";
+import { ReviewSyncService, SYNC_LEASE_MS } from "@/lib/services/review-sync";
 import { EscalationService } from "@/lib/services/escalations";
 import { logger } from "@/lib/logger";
 import { mapPool } from "@/lib/pool";
@@ -19,6 +19,19 @@ export async function GET(request: Request) {
   }
 
   const admin = createAdminClient();
+  const leaseCutoff = new Date(Date.now() - SYNC_LEASE_MS).toISOString();
+  const { error: leaseError } = await admin
+    .from("grm_google_locations")
+    .update({
+      sync_status: "partial",
+      sync_error: "Interrupted. The next sync resumes from the saved page.",
+    })
+    .eq("sync_status", "syncing")
+    .lt("sync_started_at", leaseCutoff);
+  if (leaseError) {
+    logger.error("cron.reviews_sync.lease_reset_failed", { message: leaseError.message });
+  }
+
   const { data: connections, error } = await admin
     .from("grm_google_connections")
     .select("workspace_id, authorized_by_user_id")

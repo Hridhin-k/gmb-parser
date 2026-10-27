@@ -1,5 +1,15 @@
 import type { ObservationAggregates, TopicCount } from "@/lib/review-intelligence";
 
+/**
+ * Months for the Insights sentiment trend in the selected range.
+ * All-time must keep every bucket — never silently take latest-N.
+ */
+export function insightTrendMonths(
+  byMonth: ObservationAggregates["byMonth"]
+): ObservationAggregates["byMonth"] {
+  return [...byMonth].sort((a, b) => a.month.localeCompare(b.month));
+}
+
 export interface InsightScopeCounts {
   discovered: number;
   eligible: number;

@@ -9,6 +9,7 @@ import type { GoogleReview } from "@/lib/types/google";
 import { detectComplaintTheme, detectReviewLanguage, shouldReopenReview } from "@/lib/review-inbox";
 import { absenceIsConfirmed, planReviewVersion, reviewsConfirmedMissing } from "@/lib/review-version";
 import { isFreshReview } from "@/lib/services/notifications";
+import { forgetWorkspaceDashboardCaches } from "@/lib/services/dashboard-cache";
 import type { Database } from "@/lib/types/supabase";
 
 type ReviewInsert = Database["public"]["Tables"]["grm_reviews"]["Insert"];
@@ -23,7 +24,31 @@ const STAR_RATING_MAP: Record<string, number> = {
 // Auth/permission failures are NOT retried — they require user intervention.
 // ---------------------------------------------------------------------------
 const MAX_TRANSIENT_RETRIES = 2;
-const RETRY_DELAY_MS = 1500;
+/** A second sync for the same location waits until this lease expires. */
+export const SYNC_LEASE_MS = 10 * 60 * 1000;
+const ABSENCE_PAGE = 1000;
+
+/** True when this caller may take the location. A fresh `syncing` row belongs to the other run. */
+export function syncLeaseOpen(
+  status: string | null | undefined,
+  startedAt: string | null | undefined,
+  now = Date.now()
+): boolean {
+  if (status !== "syncing") return true;
+  const started = startedAt ? Date.parse(startedAt) : Number.NaN;
+  if (Number.isNaN(started)) return true;
+  return now - started >= SYNC_LEASE_MS;
+}
+
+/**
+ * Exponential delay with caller-supplied jitter. Quota waits longer than a dropped connection.
+ * `attempt` is 1 for the first retry.
+ */
+export function retryDelayMs(attempt: number, errorClass: string, jitterMs: number): number {
+  const base = errorClass === "quota" || errorClass === "rate_limit" ? 1_000 : 300;
+  const exp = base * 2 ** Math.max(0, attempt - 1);
+  return Math.min(exp + Math.max(0, jitterMs), 20_000);
+}
 /** Stop incremental sync after this many newest-first pages with no changes. */
 const UNCHANGED_PAGES_TO_STOP = 2;
 /** Safety cap if incremental never hits two unchanged pages (e.g. hash mismatch). */
@@ -135,32 +160,43 @@ async function markConfirmedAbsences(
   supabase: ReturnType<typeof createAdminClient>,
   input: { workspaceId: string; locationId: string; seenNames: readonly string[]; now: string }
 ): Promise<number> {
-  const { data, error } = await supabase
-    .from("grm_reviews")
-    .select("id, google_review_name, missing_on_google_at")
-    .eq("workspace_id", input.workspaceId)
-    .eq("location_id", input.locationId);
-  if (error || !Array.isArray(data)) return 0;
-  const missing = reviewsConfirmedMissing(
-    data.map((row) => ({
-      id: row.id,
-      googleReviewName: row.google_review_name,
-      missingOnGoogleAt: row.missing_on_google_at,
-    })),
-    new Set(input.seenNames)
-  );
-  for (const row of missing) {
-    const { error: updateError } = await supabase
+  const seen = new Set(input.seenNames);
+  let marked = 0;
+  let from = 0;
+  while (true) {
+    const { data, error } = await supabase
       .from("grm_reviews")
-      .update({ missing_on_google_at: input.now, downstream_stale_at: input.now })
-      .eq("id", row.id)
+      .select("id, google_review_name, missing_on_google_at")
       .eq("workspace_id", input.workspaceId)
-      .is("missing_on_google_at", null);
-    if (updateError) {
-      logger.error("review_sync.absence_mark_failed", { reviewId: row.id, message: updateError.message });
+      .eq("location_id", input.locationId)
+      .order("id", { ascending: true })
+      .range(from, from + ABSENCE_PAGE - 1);
+    if (error || !Array.isArray(data)) return marked;
+    const missing = reviewsConfirmedMissing(
+      data.map((row) => ({
+        id: row.id,
+        googleReviewName: row.google_review_name,
+        missingOnGoogleAt: row.missing_on_google_at,
+      })),
+      seen
+    );
+    for (const row of missing) {
+      const { error: updateError } = await supabase
+        .from("grm_reviews")
+        .update({ missing_on_google_at: input.now, downstream_stale_at: input.now })
+        .eq("id", row.id)
+        .eq("workspace_id", input.workspaceId)
+        .is("missing_on_google_at", null);
+      if (updateError) {
+        logger.error("review_sync.absence_mark_failed", { reviewId: row.id, message: updateError.message });
+      } else {
+        marked += 1;
+      }
     }
+    if (data.length < ABSENCE_PAGE) break;
+    from += ABSENCE_PAGE;
   }
-  return missing.length;
+  return marked;
 }
 
 // ---------------------------------------------------------------------------
@@ -194,13 +230,21 @@ export class ReviewSyncService {
     // --- 1. Fetch location record ---
     const { data: location, error: locError } = await supabase
       .from("grm_google_locations")
-      .select("id, google_location_name, workspace_id, last_synced_at, reviews_full_synced_at")
+      .select("id, google_location_name, workspace_id, last_synced_at, reviews_full_synced_at, sync_status, sync_started_at, sync_cursor")
       .eq("id", locationId)
       .eq("workspace_id", workspaceId)
       .single();
 
     if (locError || !location) {
       throw new AppError("Location not found", "NOT_FOUND", 404);
+    }
+
+    if (!syncLeaseOpen(location.sync_status, location.sync_started_at)) {
+      throw new AppError(
+        "A sync is already running for this location.",
+        "SYNC_IN_PROGRESS",
+        409
+      );
     }
 
     // --- 2. Mark sync as started ---
@@ -251,7 +295,10 @@ export class ReviewSyncService {
     let truncated = false;
     let errorClass: string | null = null;
     let errorMessage: string | null = null;
-    let pageToken: string | undefined;
+    let pageToken: string | undefined =
+      mode === "full" && !location.reviews_full_synced_at
+        ? location.sync_cursor ?? undefined
+        : undefined;
     let abortSync = false;
     let googleTotalReviewCount: number | null = null;
     let googleAverageRating: number | null = null;
@@ -287,7 +334,7 @@ export class ReviewSyncService {
             break;
           }
 
-          await sleep(RETRY_DELAY_MS * retries);
+          await sleep(retryDelayMs(retries, cls, Math.floor(Math.random() * 250)));
         }
       }
 
@@ -377,7 +424,8 @@ export class ReviewSyncService {
         ...(googleAverageRating !== null
           ? { average_rating: googleAverageRating }
           : {}),
-        ...(completedFullCrawl ? { reviews_full_synced_at: now } : {}),
+        ...(completedFullCrawl ? { reviews_full_synced_at: now, sync_cursor: null } : {}),
+        ...(mode === "full" && !completedFullCrawl ? { sync_cursor: pageToken ?? null } : {}),
       })
       .eq("id", locationId);
 
@@ -413,6 +461,10 @@ export class ReviewSyncService {
         errorMessage,
       } as Record<string, unknown>,
     });
+
+    if (reviewsSynced > 0 || reviewsUpdated > 0) {
+      forgetWorkspaceDashboardCaches(workspaceId);
+    }
 
     return {
       locationId,
@@ -520,6 +572,15 @@ export class ReviewSyncService {
         });
       }
     });
+
+    // Only after the sync work finishes: bust this tenant's short-lived
+    // dashboard caches when at least one location wrote review rows.
+    // Failed-only runs leave TTLs in place so we do not treat a failed sync
+    // as a successful data update.
+    const wroteReviews = results.some(
+      (result) => result.reviewsSynced > 0 || result.reviewsUpdated > 0
+    );
+    if (wroteReviews) forgetWorkspaceDashboardCaches(workspaceId);
 
     return {
       locationsAttempted: eligible.length,

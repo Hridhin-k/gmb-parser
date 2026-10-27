@@ -134,36 +134,29 @@ async function loadShellSummary(
     if (scopedLocationIds.length === 0) return { ...EMPTY, notices: await noticesPromise };
   }
 
-  const reviews = admin.from("grm_reviews").select("id", { count: "exact", head: true }).eq("workspace_id", workspaceId).is("missing_on_google_at", null);
+  const reviewsPromise = admin.rpc("grm_location_review_stats", { p_workspace_id: workspaceId });
   const escalationsQuery = admin
     .from("grm_escalations")
     .select("id", { count: "exact", head: true })
     .eq("workspace_id", workspaceId)
     .neq("status", "resolved");
-  const draftQuery = admin
-    .from("grm_reviews")
-    .select("id", { count: "exact", head: true })
-    .eq("workspace_id", workspaceId)
-    .is("missing_on_google_at", null)
-    .eq("reply_status", "draft");
-  const failedQuery = admin
-    .from("grm_reviews")
-    .select("id", { count: "exact", head: true })
-    .eq("workspace_id", workspaceId)
-    .is("missing_on_google_at", null)
-    .eq("reply_status", "failed");
-  const [unreplied, escalations, drafts, failed, expiredConnections, notices] = await Promise.all([
-    count(
-      scopedLocationIds
-        ? reviews.eq("reply_status", "none").in("location_id", scopedLocationIds)
-        : reviews.eq("reply_status", "none")
-    ),
+  const [statsResult, escalations, expiredConnections, notices] = await Promise.all([
+    reviewsPromise,
     count(scopedLocationIds ? escalationsQuery.in("location_id", scopedLocationIds) : escalationsQuery),
-    count(scopedLocationIds ? draftQuery.in("location_id", scopedLocationIds) : draftQuery),
-    count(scopedLocationIds ? failedQuery.in("location_id", scopedLocationIds) : failedQuery),
     count(allowedClientIds ? connections.in("client_id", allowedClientIds) : connections),
     noticesPromise,
   ]);
+  if (statsResult.error) throw new Error(`Failed to load navigation counts: ${statsResult.error.message}`);
+  const allowed = scopedLocationIds ? new Set(scopedLocationIds) : null;
+  let unreplied = 0;
+  let drafts = 0;
+  let failed = 0;
+  for (const row of statsResult.data ?? []) {
+    if (allowed && !allowed.has(row.location_id)) continue;
+    unreplied += row.unanswered ?? 0;
+    drafts += row.drafts ?? 0;
+    failed += row.failed ?? 0;
+  }
 
   return { unreplied, escalations, drafts, failed, expiredConnections, profiles: [], notices };
 }

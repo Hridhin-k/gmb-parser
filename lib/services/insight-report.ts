@@ -9,6 +9,7 @@ import {
   usageFromResponse,
 } from "@/lib/gemini";
 import { ANALYSIS_VERSION, withRetry } from "@/lib/review-intelligence";
+import { getAiBudget, recordAiUsage } from "@/lib/services/ai-usage-ledger";
 import {
   INSIGHT_PROMPT_VERSION,
   assembleInsights,
@@ -63,6 +64,8 @@ export function reportCacheKey(workspaceId: string, input: AnalysisRunScope): st
 
 export async function getReportByCacheKey(workspaceId: string, cacheKey: string) {
   const admin = createAdminClient();
+  // Full row: Overview needs insights/status; Insights/generation need phase,
+  // limitations, and version counters. Narrowing broke Insights typing/usage.
   const { data } = await admin
     .from("grm_insight_reports")
     .select("*")
@@ -389,7 +392,15 @@ export async function generateReport(
     let model: string | null = null;
     let inputTokens = 0;
     let outputTokens = 0;
-    if (items.length > 0) {
+    const limitations: string[] = [];
+    const budget = await getAiBudget(admin, workspaceId, { untracked: "closed" });
+    if (items.length > 0 && budget.exceeded) {
+      limitations.push(
+        budget.tracked
+          ? "Synthesis was skipped because the monthly AI budget is exhausted. Stored observations are unchanged."
+          : "Synthesis was skipped because the AI budget could not be read."
+      );
+    } else if (items.length > 0) {
       const result = await withRetry(
         () => callSynthesis(synthesisPrompt(items, input.scopeLabel)),
         { attempts: 2, baseDelayMs: 1000 }
@@ -398,14 +409,25 @@ export async function generateReport(
       inputTokens = result.usage.inputTokens;
       outputTokens = result.usage.outputTokens;
       insights = assembleInsights(items, parseSynthesisResponse(result.text), cacheKey);
+      await recordAiUsage(admin, {
+        workspaceId,
+        operation: "insight_prose",
+        model,
+        inputTokens,
+        outputTokens,
+      });
     }
 
     const failedReviewIds = scope.pendingReviews.slice(0, 500).map((r) => r.id);
     const coverageComplete = scope.pendingReviews.length === 0;
-    const limitations: string[] = [];
     if (!coverageComplete) {
       limitations.push(
         `${scope.pendingReviews.length} eligible written reviews could not be analysed and are excluded from this report. Retry analysis to complete coverage.`
+      );
+    }
+    if (samples.length >= SAMPLE_LIMIT) {
+      limitations.push(
+        `Evidence excerpts for synthesis were capped at ${SAMPLE_LIMIT} observations (ordered by severity). Topic and outlet aggregates still cover every analysed review in this scope and range.`
       );
     }
     if (items.length === 0) {

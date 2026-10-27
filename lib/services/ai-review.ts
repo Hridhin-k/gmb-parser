@@ -391,8 +391,8 @@ export class AIReviewService {
     // full model is skipped. Deterministic features are unaffected.
     let budgetExceeded = false;
     if (modelId !== GEMINI_FAST_MODEL_ID) {
-      const budget = await getAiBudget(admin, params.workspaceId);
-      if (budget.exceeded) {
+      const budget = await getAiBudget(admin, params.workspaceId, { untracked: "closed" });
+      if (budget.exceeded || !budget.tracked) {
         modelId = GEMINI_FAST_MODEL_ID;
         budgetExceeded = true;
       }
