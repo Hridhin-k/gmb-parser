@@ -19,7 +19,7 @@ interface RouteParams {
  * POST /api/reviews/[reviewId]/generate
  *
  * Generate an AI draft response for a review.
- * Server-only — Gemini API key never reaches the browser.
+ * Server-only — AI API key never reaches the browser.
  */
 const generateBodySchema = z.object({
   adjustment: z.enum(["regenerate", "shorter", "warmer", "formal"]).optional(),

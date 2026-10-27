@@ -81,13 +81,13 @@ export default function TermsPage() {
         </h2>
         <p className="mt-3">
           When you choose AI draft, GRM sends the relevant review text to
-          Google Gemini and stores the result. That result is a suggestion
+          the configured AI provider and stores the result. That result is a suggestion
           inside GRM. It is not sent to Google until a person approves and
           publishes it as a reply.
         </p>
         <ul>
           <li>
-            A person must read it before it is approved or published. Gemini
+            A person must read it before it is approved or published. AI
             can miss the point of a review, invent a detail, or use the wrong
             tone.
           </li>

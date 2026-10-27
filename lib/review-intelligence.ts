@@ -1,4 +1,5 @@
 import { createHash } from "crypto";
+import { AppError } from "@/lib/errors";
 
 /**
  * Review-level intelligence. One written review yields any number of
@@ -525,6 +526,9 @@ export async function withRetry<T>(
       return await fn(attempt);
     } catch (error) {
       lastError = error;
+      // Configuration, refusal, invalid output and unknown paid outcomes are not retryable.
+      if (error && typeof error === "object" && "retryable" in error && error.retryable === false) throw error;
+      if (error instanceof AppError && !["AI_QUOTA", "AI_UNAVAILABLE"].includes(error.code)) throw error;
       if (attempt >= attempts) break;
       input.onRetry?.(attempt, error);
       await sleep(baseDelayMs * 2 ** (attempt - 1));

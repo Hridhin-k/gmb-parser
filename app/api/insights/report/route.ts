@@ -7,7 +7,7 @@ import { parseDateRange, previousDateRange } from "@/lib/date-range";
 import { generateReport, requestReport } from "@/lib/services/insight-report";
 import { logger } from "@/lib/logger";
 
-// Synthesis for a large scope is one long Gemini call (100s+). The route
+// Synthesis for a large scope is one long AI call (100s+). The route
 // needs a ceiling well above that or the platform kills generation
 // mid-synthesis; progress is saved on the report row either way and the
 // status poll resumes a stalled report.
@@ -19,7 +19,7 @@ export const maxDuration = 300;
  * Requests an insight report for the caller's resolved scope and range.
  * The scope is re-resolved on the server; the report row is keyed by a
  * normalised cache identity, so identical filters with unchanged data
- * reuse the saved report without new Gemini calls. Generation (missing
+ * reuse the saved report without new AI calls. Generation (missing
  * review analysis, then synthesis) runs in `after()`; poll the status
  * route for progress.
  */

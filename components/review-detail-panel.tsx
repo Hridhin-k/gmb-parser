@@ -649,7 +649,7 @@ export function ReviewDetailPanel({
 
         {loading === "generate" ? (
           <ActivityStatus
-            tone="gemini"
+            tone="ai"
             title={ACTION_STATUS.aiDraft.title}
             detail={ACTION_STATUS.aiDraft.detail}
           />
@@ -709,14 +709,14 @@ export function ReviewDetailPanel({
         {error && (
           <div className="rounded-md border border-red-200 bg-red-50 px-3 py-2.5 text-sm text-red-700" role="alert">
             <p className="font-medium">
-              {/generat|gemini|ai reply/i.test(error)
+              {/generat|ai reply/i.test(error)
                 ? "Your AI reply couldn't be generated"
                 : /publish|submit/i.test(error)
                   ? "The reply couldn't be submitted"
                   : "Action failed"}
             </p>
             <p className="mt-0.5 text-[13px]">{error}</p>
-            {/generat|gemini|ai reply/i.test(error) ? (
+            {/generat|ai reply/i.test(error) ? (
               <p className="mt-1 text-[11px] text-red-600">Your existing draft has been preserved.</p>
             ) : null}
           </div>
@@ -999,7 +999,7 @@ export function ReviewDetailPanel({
                       ) : (
                         <RotateCw className="h-3.5 w-3.5" aria-hidden />
                       )}
-                      {loading === "generate" ? "Gemini is writing…" : "Regenerate"}
+                      {loading === "generate" ? "AI is writing…" : "Regenerate"}
                     </Button>
                     {(["shorter", "warmer", "formal"] as const).map((kind) => (
                       <Button
@@ -1159,7 +1159,7 @@ export function ReviewDetailPanel({
                         className="gap-1.5"
                       >
                         {loading === "generate" ? <Spinner size="sm" /> : <RotateCw className="h-3.5 w-3.5" aria-hidden />}
-                        {loading === "generate" ? "Gemini is writing…" : "Regenerate"}
+                        {loading === "generate" ? "AI is writing…" : "Regenerate"}
                       </Button>
                       <p className="w-full text-xs text-slate">
                         Generating a new reply sends it back for approval.

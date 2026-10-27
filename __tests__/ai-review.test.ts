@@ -1,6 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
-import { alternateDraftModel, classifyGeminiError, draftModelRoute } from "@/lib/services/ai-review";
-import { GEMINI_FAST_MODEL_ID, GEMINI_MODEL_ID } from "@/lib/gemini";
+import { draftModelRoute } from "@/lib/services/ai-review";
 
 // ---------------------------------------------------------------------------
 // Mock Supabase admin
@@ -60,7 +59,7 @@ mockUpdate.mockReturnValue({
 });
 
 vi.mock("@/lib/supabase/admin", () => ({
-  createAdminClient: () => ({ from: mockFrom }),
+  createAdminClient: () => ({ from: mockFrom, rpc: vi.fn(async () => ({ error: null })) }),
 }));
 
 vi.mock("@/lib/services/audit", () => ({
@@ -104,66 +103,6 @@ vi.mock("@/lib/services/ai-config", () => ({
 // Tests
 // ---------------------------------------------------------------------------
 
-describe("classifyGeminiError", () => {
-  it("classifies 429 as quota", () => {
-    const result = classifyGeminiError(429, "");
-    expect(result.type).toBe("quota");
-  });
-
-  it("classifies 503 as unavailable", () => {
-    const result = classifyGeminiError(503, "");
-    expect(result.type).toBe("unavailable");
-  });
-
-  it("classifies 502 as unavailable", () => {
-    const result = classifyGeminiError(502, "");
-    expect(result.type).toBe("unavailable");
-  });
-
-  it("classifies SAFETY content as safety_blocked", () => {
-    const result = classifyGeminiError(400, 'SAFETY block triggered');
-    expect(result.type).toBe("safety_blocked");
-  });
-
-  it("classifies 4xx as invalid_response", () => {
-    const result = classifyGeminiError(400, "bad request");
-    expect(result.type).toBe("invalid_response");
-  });
-
-  it("classifies a retired model as config", () => {
-    const result = classifyGeminiError(
-      404,
-      "This model models/gemini-2.0-flash is no longer available."
-    );
-    expect(result.type).toBe("config");
-    expect(result.message).toMatch(/no longer available/i);
-  });
-
-  it("classifies unknown errors", () => {
-    const result = classifyGeminiError(500, "");
-    expect(result.type).toBe("unknown");
-  });
-
-  it("classifies null status as unknown", () => {
-    const result = classifyGeminiError(null, "");
-    expect(result.type).toBe("unknown");
-  });
-
-  it("returns user-friendly messages for all types", () => {
-    const types = [
-      classifyGeminiError(429, ""),
-      classifyGeminiError(503, ""),
-      classifyGeminiError(400, "SAFETY"),
-      classifyGeminiError(400, "bad"),
-      classifyGeminiError(500, ""),
-    ];
-    for (const t of types) {
-      expect(t.message).toBeTruthy();
-      expect(t.message.length).toBeGreaterThan(10);
-    }
-  });
-});
-
 describe("draftModelRoute", () => {
   it("uses the fast route for rating-only and short positive reviews", () => {
     expect(draftModelRoute({ starRating: 5, comment: null })).toBe("fast");
@@ -187,23 +126,12 @@ describe("draftModelRoute", () => {
   });
 });
 
-describe("alternateDraftModel", () => {
-  it("switches to the other model when the first is overloaded", () => {
-    expect(alternateDraftModel(GEMINI_FAST_MODEL_ID, false)).toBe(GEMINI_MODEL_ID);
-    expect(alternateDraftModel(GEMINI_MODEL_ID, false)).toBe(GEMINI_FAST_MODEL_ID);
-  });
-
-  it("stays off the full model once the monthly budget is used", () => {
-    expect(alternateDraftModel(GEMINI_FAST_MODEL_ID, true)).toBeNull();
-  });
-});
-
 describe("AIReviewService.generateDraft", () => {
   const originalEnv = process.env;
 
   beforeEach(() => {
     vi.resetModules();
-    process.env = { ...originalEnv, GEMINI_API_KEY: "test-key" };
+    process.env = { ...originalEnv, AI_PROVIDER: "google", AI_MODEL: "gemini-3.8-flash", GOOGLE_GENERATIVE_AI_API_KEY: "test-key" };
     vi.clearAllMocks();
     mockSelectData = null;
     mockSelectError = null;
@@ -217,8 +145,8 @@ describe("AIReviewService.generateDraft", () => {
     vi.restoreAllMocks();
   });
 
-  it("throws CONFIG_ERROR when GEMINI_API_KEY is missing", async () => {
-    delete process.env.GEMINI_API_KEY;
+  it("throws CONFIG_ERROR when GOOGLE_GENERATIVE_AI_API_KEY is missing", async () => {
+    delete process.env.GOOGLE_GENERATIVE_AI_API_KEY;
     const { AIReviewService } = await import("@/lib/services/ai-review");
     await expect(
       AIReviewService.generateDraft({
@@ -226,7 +154,7 @@ describe("AIReviewService.generateDraft", () => {
         workspaceId: "ws-1",
         userId: "user-1",
       })
-    ).rejects.toThrow("Gemini API key not configured");
+    ).rejects.toThrow("GOOGLE_GENERATIVE_AI_API_KEY is not configured");
   });
 
   it("throws NOT_FOUND when review does not exist", async () => {
@@ -263,14 +191,11 @@ describe("AIReviewService.generateDraft", () => {
     const mockFetch = vi.spyOn(globalThis, "fetch").mockResolvedValueOnce(
       new Response(
         JSON.stringify({
-          candidates: [{ content: { parts: [{ text: "Thank you, John!" }] } }],
+          candidates: [{ finishReason: "STOP", content: { parts: [{ text: "Thank you, John!" }] } }],
         }),
         { status: 200 }
       )
     );
-
-    // The usage ledger records the draft call before persistence.
-    mockInsert.mockReturnValueOnce({ error: null });
 
     // Mock draft insert
     const draftInsertSingle = vi.fn().mockReturnValue({ data: { id: "draft-1" }, error: null });
@@ -300,10 +225,10 @@ describe("AIReviewService.generateDraft", () => {
     expect(result.draftId).toBe("draft-1");
     expect(result.replyId).toBe("reply-1");
 
-    // Verify Gemini was called with correct URL (server-side, key in query)
+    // The SDK sends credentials in a header, never in browser code or the URL.
     const fetchCall = mockFetch.mock.calls[0];
     expect(fetchCall[0]).toContain("generativelanguage.googleapis.com");
-    expect(fetchCall[0]).toContain("key=test-key");
+    expect(fetchCall[1]?.headers).toMatchObject({ "x-goog-api-key": "test-key" });
 
     mockFetch.mockRestore();
   });
@@ -385,7 +310,7 @@ describe("AIReviewService.generateDraft Gemini output handling", () => {
 
   beforeEach(() => {
     vi.resetModules();
-    process.env = { ...originalEnv, GEMINI_API_KEY: "test-key" };
+    process.env = { ...originalEnv, AI_PROVIDER: "google", AI_MODEL: "gemini-3.8-flash", GOOGLE_GENERATIVE_AI_API_KEY: "test-key" };
     vi.clearAllMocks();
   });
 
@@ -426,27 +351,6 @@ describe("AIReviewService.generateDraft Gemini output handling", () => {
   it("reports safety blocks", async () => {
     const { promise } = await run({ candidates: [{ finishReason: "SAFETY" }] });
     await expect(promise).rejects.toThrow("content restrictions");
-  });
-});
-
-describe("extractGeminiText", () => {
-  it("joins answer parts and skips thought parts", async () => {
-    const { extractGeminiText } = await import("@/lib/gemini");
-    const result = extractGeminiText({
-      candidates: [
-        {
-          finishReason: "STOP",
-          content: {
-            parts: [
-              { text: "thinking...", thought: true },
-              { text: "Thank you, " },
-              { text: "Asha." },
-            ],
-          },
-        },
-      ],
-    });
-    expect(result).toEqual({ text: "Thank you, Asha.", finishReason: "STOP" });
   });
 });
 

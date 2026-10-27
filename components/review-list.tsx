@@ -352,7 +352,7 @@ export function ReviewList({ reviews, replies, canApprove, aiOnly = false, conta
             ) : (
               <Sparkles className="h-3 w-3" />
             )}
-            {bulkLoading === "generate" ? "Gemini is writing…" : "AI draft"}
+            {bulkLoading === "generate" ? "AI is writing…" : "AI draft"}
           </Button>
           {canApprove ? (
             <Button
@@ -417,7 +417,7 @@ export function ReviewList({ reviews, replies, canApprove, aiOnly = false, conta
 
       {bulkLoading === "generate" ? (
         <ActivityStatus
-          tone="gemini"
+          tone="ai"
           title="Generating AI replies…"
           detail={`Drafting ${selectedIds.length} selected ${selectedIds.length === 1 ? "reply" : "replies"} one at a time, using your organisation's saved guidelines. Nothing is posted to Google until someone approves.`}
         />

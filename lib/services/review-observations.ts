@@ -1,15 +1,7 @@
+import { generateAi } from "@/lib/ai/service";
+import { extractionSchema } from "@/lib/ai/schemas";
 import { createAdminClient } from "@/lib/supabase/admin";
-import {
-  classifyGeminiError,
-  extractGeminiText,
-  geminiGenerateUrl,
-  logGeminiFailure,
-  usageFromResponse,
-  GEMINI_FAST_MODEL_ID,
-  GEMINI_MODEL_ID,
-  GEMINI_THINKING_LOW,
-  GEMINI_THINKING_MINIMAL,
-} from "@/lib/gemini";
+
 import { logger } from "@/lib/logger";
 import { contentFingerprint } from "@/lib/review-version";
 import { detectReviewLanguage } from "@/lib/review-inbox";
@@ -22,7 +14,6 @@ import {
   type ObservationAggregates,
   type ObservationRow,
 } from "@/lib/review-intelligence";
-import { recordAiUsage } from "@/lib/services/ai-usage-ledger";
 
 type Admin = ReturnType<typeof createAdminClient>;
 
@@ -77,55 +68,12 @@ async function loadLocationContext(
   return context;
 }
 
-async function callExtractor(comment: string, starRating: number): Promise<{ text: string; model: string; usage: { inputTokens: number; outputTokens: number } }> {
-  const apiKey = process.env.GEMINI_API_KEY;
-  if (!apiKey) throw new Error("config: GEMINI_API_KEY is missing");
-  const prompt = extractionPrompt({ comment, starRating });
-
-  async function call(model: string): Promise<Response> {
-    const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
-    try {
-      return await fetch(geminiGenerateUrl(apiKey as string, model), {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          contents: [{ parts: [{ text: prompt }] }],
-          generationConfig: {
-            temperature: 0.1,
-            maxOutputTokens: 4096,
-            responseMimeType: "application/json",
-            thinkingConfig: model === GEMINI_FAST_MODEL_ID ? GEMINI_THINKING_MINIMAL : GEMINI_THINKING_LOW,
-          },
-        }),
-        signal: controller.signal,
-        cache: "no-store",
-      });
-    } finally {
-      clearTimeout(timeout);
-    }
-  }
-
-  let model = GEMINI_MODEL_ID;
-  let response = await call(model);
-  if (!response.ok && (response.status === 502 || response.status === 503)) {
-    const body = await response.text();
-    logGeminiFailure("review_observation.extract_failed", response.status, body);
-    model = GEMINI_FAST_MODEL_ID;
-    response = await call(model);
-  }
-  if (!response.ok) {
-    const body = await response.text();
-    logGeminiFailure("review_observation.extract_failed", response.status, body);
-    const classified = classifyGeminiError(response.status, body);
-    throw new Error(`${classified.type}: ${classified.message}`);
-  }
-  const data = await response.json();
-  const { text, finishReason } = extractGeminiText(data);
-  if (!text || finishReason === "MAX_TOKENS") {
-    throw new Error("invalid_response: extraction output was empty or truncated");
-  }
-  return { text, model, usage: usageFromResponse(data) };
+async function callExtractor(comment: string, starRating: number, workspaceId: string) {
+  return generateAi({
+    workspaceId, task: "extract", operation: "extract_review",
+    prompt: extractionPrompt({ comment, starRating }), schema: extractionSchema,
+    temperature: 0.1, maxOutputTokens: 4096, timeoutMs: REQUEST_TIMEOUT_MS,
+  });
 }
 
 async function upsertAnalysisRow(
@@ -339,14 +287,7 @@ export async function analyzeReview(
   }
 
   try {
-    const { text, model, usage } = await callExtractor(comment, typed.star_rating);
-    await recordAiUsage(admin, {
-      workspaceId,
-      operation: "extract_review",
-      model,
-      inputTokens: usage.inputTokens,
-      outputTokens: usage.outputTokens,
-    });
+    const { text, model } = await callExtractor(comment, typed.star_rating, workspaceId);
     const observations = validateObservations(parseExtractionResponse(text), comment);
     await persistAnalysisResult(admin, workspaceId, typed, observations, model);
     return { reviewId, status: "ready", observationCount: observations.length, reused: false };

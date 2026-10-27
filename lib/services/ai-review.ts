@@ -4,16 +4,8 @@ import { AppError, ValidationError } from "@/lib/errors";
 import { logger } from "@/lib/logger";
 import { forgetReviewList } from "@/lib/services/dashboard";
 import { createHash } from "crypto";
-import {
-  GEMINI_FAST_MODEL_ID,
-  GEMINI_MODEL_ID,
-  GEMINI_THINKING_LOW,
-  GEMINI_THINKING_MINIMAL,
-  classifyGeminiError,
-  extractGeminiText,
-  geminiGenerateUrl,
-  logGeminiFailure,
-} from "@/lib/gemini";
+import { generateAi } from "@/lib/ai/service";
+import { assertAiCredentials, resolveAiRoute } from "@/lib/ai/config";
 import { splitGoogleTranslation } from "@/lib/review-text";
 import type { Json } from "@/lib/types/supabase";
 import { toneInstruction, type ToneVoice } from "@/lib/onboarding";
@@ -37,24 +29,14 @@ import {
   type OrgContext,
 } from "@/lib/ai-config";
 import { inventedPromiseViolations, neverSayViolations, retrieveKnowledge } from "@/lib/reply-knowledge";
-import { usageFromResponse } from "@/lib/gemini";
-import { getAiBudget, recordAiUsage } from "@/lib/services/ai-usage-ledger";
 
 // ---------------------------------------------------------------------------
 // Config
 // ---------------------------------------------------------------------------
 
-const MODEL_ID = GEMINI_MODEL_ID;
 const PROMPT_VERSION = "v3.1";
 const REQUEST_TIMEOUT_MS = 30_000;
 const MAX_COMMENT_CHARS = 4000;
-
-const GENERATION_CONFIG = {
-  temperature: 0.6,
-  maxOutputTokens: 1024,
-  topP: 0.9,
-  thinkingConfig: GEMINI_THINKING_LOW,
-};
 
 export type DraftModelRoute = "fast" | "full";
 
@@ -86,20 +68,6 @@ export function draftModelRoute(input: {
   if (sentences.length > 2) return "full";
   return "fast";
 }
-
-/** The other draft model when the first is overloaded. A budget cap stays on the fast model. */
-export function alternateDraftModel(modelId: string, budgetExceeded: boolean): string | null {
-  if (modelId === GEMINI_FAST_MODEL_ID) return budgetExceeded ? null : GEMINI_MODEL_ID;
-  return GEMINI_FAST_MODEL_ID;
-}
-
-const BLOCKED_FINISH_REASONS = new Set([
-  "SAFETY",
-  "PROHIBITED_CONTENT",
-  "BLOCKLIST",
-  "SPII",
-  "RECITATION",
-]);
 
 // ---------------------------------------------------------------------------
 // Types
@@ -226,7 +194,6 @@ function hashPrompt(prompt: string): string {
   return createHash("sha256").update(prompt).digest("hex").slice(0, 16);
 }
 
-export { classifyGeminiError } from "@/lib/gemini";
 
 // ---------------------------------------------------------------------------
 // Service
@@ -240,11 +207,7 @@ export class AIReviewService {
   static async generateDraft(
     params: GenerateDraftParams
   ): Promise<GenerateDraftResult> {
-    const apiKey = process.env.GEMINI_API_KEY;
-    if (!apiKey) {
-      throw new AppError("Gemini API key not configured", "CONFIG_ERROR", 500);
-    }
-    const geminiKey = apiKey;
+    assertAiCredentials(resolveAiRoute("reply"));
 
     const admin = createAdminClient();
 
@@ -386,114 +349,19 @@ export class AIReviewService {
       adjustmentKind: params.adjustment?.kind ?? null,
       hasPreviousDraft: Boolean(previousDraft),
     });
-    let modelId = route === "fast" ? GEMINI_FAST_MODEL_ID : MODEL_ID;
-    // At the monthly budget, drafts stay available on the cheap model and the
-    // full model is skipped. Deterministic features are unaffected.
-    let budgetExceeded = false;
-    if (modelId !== GEMINI_FAST_MODEL_ID) {
-      const budget = await getAiBudget(admin, params.workspaceId);
-      if (budget.exceeded) {
-        modelId = GEMINI_FAST_MODEL_ID;
-        budgetExceeded = true;
-      }
-    }
     const startedAt = Date.now();
-
-    async function callModel(id: string): Promise<Response> {
-      const generationConfig =
-        id === GEMINI_FAST_MODEL_ID
-          ? { ...GENERATION_CONFIG, thinkingConfig: GEMINI_THINKING_MINIMAL }
-          : GENERATION_CONFIG;
-      const controller = new AbortController();
-      const timeout = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
-      try {
-        return await fetch(geminiGenerateUrl(geminiKey, id), {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            contents: [{ parts: [{ text: systemPrompt }] }],
-            generationConfig,
-          }),
-          signal: controller.signal,
-          cache: "no-store",
-        });
-      } finally {
-        clearTimeout(timeout);
-      }
-    }
-
     let responseText: string;
+    let modelId: string;
+    let generationConfig: Record<string, unknown>;
     try {
-      let response = await callModel(modelId);
-      if (!response.ok && (response.status === 503 || response.status === 502)) {
-        const failedBody = await response.text();
-        logGeminiFailure("ai_review.gemini_failed", response.status, failedBody, {
-          reviewId: params.reviewId,
-          model: modelId,
-        });
-        const alternate = alternateDraftModel(modelId, budgetExceeded);
-        if (!alternate) {
-          const classified = classifyGeminiError(response.status, failedBody);
-          throw new AppError(classified.message, `AI_${classified.type.toUpperCase()}`, 502);
-        }
-        logger.warn("ai_review.model_fallback", {
-          reviewId: params.reviewId,
-          from: modelId,
-          to: alternate,
-          status: response.status,
-        });
-        modelId = alternate;
-        response = await callModel(modelId);
-      }
-
-      if (!response.ok) {
-        const body = await response.text();
-        logGeminiFailure("ai_review.gemini_failed", response.status, body, {
-          reviewId: params.reviewId,
-          model: modelId,
-        });
-        logger.error("ai_review.generate_failed", {
-          workspaceId: params.workspaceId,
-          reviewId: params.reviewId,
-          aiConfigVersion: promptContext.config.version,
-          durationMs: Date.now() - startedAt,
-          success: false,
-          statusCode: response.status,
-        });
-        const classified = classifyGeminiError(response.status, body);
-        throw new AppError(classified.message, `AI_${classified.type.toUpperCase()}`, 502);
-      }
-
-      const data = await response.json();
-      const draftUsage = usageFromResponse(data);
-      await recordAiUsage(admin, {
-        workspaceId: params.workspaceId,
-        operation: "reply_draft",
-        model: modelId,
-        inputTokens: draftUsage.inputTokens,
-        outputTokens: draftUsage.outputTokens,
+      const generated = await generateAi({
+        workspaceId: params.workspaceId, task: "reply", operation: "reply_draft",
+        prompt: systemPrompt, fast: route === "fast", maxOutputTokens: 1024,
+        timeoutMs: REQUEST_TIMEOUT_MS, temperature: 0.6,
       });
-      const { text, finishReason } = extractGeminiText(data);
-      const blockReason = (data as { promptFeedback?: { blockReason?: string } })
-        .promptFeedback?.blockReason;
-
-      if (blockReason || (finishReason && BLOCKED_FINISH_REASONS.has(finishReason))) {
-        const classified = classifyGeminiError(null, "SAFETY");
-        throw new AppError(classified.message, "AI_SAFETY_BLOCKED", 502);
-      }
-
-      if (finishReason === "MAX_TOKENS") {
-        logger.warn("ai_review.truncated", {
-          reviewId: params.reviewId,
-          usage: (data as { usageMetadata?: unknown }).usageMetadata,
-        });
-        throw new AppError(
-          "The AI reply was cut off before it finished. Please try again.",
-          "AI_INVALID_RESPONSE",
-          502
-        );
-      }
-
+      modelId = generated.model;
+      generationConfig = generated.generationParams;
+      const text = generated.text;
       const cleaned = cleanReply(text);
       if (cleaned.length < 5) {
         throw new AppError(
@@ -558,11 +426,6 @@ export class AIReviewService {
         502
       );
     }
-
-    const generationConfig =
-      modelId === GEMINI_FAST_MODEL_ID
-        ? { ...GENERATION_CONFIG, thinkingConfig: GEMINI_THINKING_MINIMAL }
-        : GENERATION_CONFIG;
 
     if (params.deferPersistence) {
       const jobId = await createAiGenerationJob({

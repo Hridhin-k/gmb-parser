@@ -1,13 +1,8 @@
+import { aiRouteIdentity } from "@/lib/ai/config";
+import { generateAi } from "@/lib/ai/service";
+import { insightSchema } from "@/lib/ai/schemas";
 import { createAdminClient } from "@/lib/supabase/admin";
-import {
-  GEMINI_FAST_MODEL_ID,
-  GEMINI_MODEL_ID,
-  GEMINI_THINKING_LOW,
-  GEMINI_THINKING_MINIMAL,
-  extractGeminiText,
-  geminiGenerateUrl,
-  usageFromResponse,
-} from "@/lib/gemini";
+
 import { ANALYSIS_VERSION, withRetry } from "@/lib/review-intelligence";
 import {
   INSIGHT_PROMPT_VERSION,
@@ -57,7 +52,7 @@ export function reportCacheKey(workspaceId: string, input: AnalysisRunScope): st
     locationIds: input.locationIds,
     rangeStart: input.start,
     rangeEnd: input.end,
-    model: GEMINI_MODEL_ID,
+    model: aiRouteIdentity("insight"),
   });
 }
 
@@ -265,46 +260,11 @@ async function loadOutletNames(
   return names;
 }
 
-async function callSynthesis(
-  prompt: string
-): Promise<{ text: string; model: string; usage: { inputTokens: number; outputTokens: number } }> {
-  const apiKey = process.env.GEMINI_API_KEY;
-  if (!apiKey) throw new Error("config: GEMINI_API_KEY is missing");
-
-  async function call(model: string): Promise<Response> {
-    const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
-    try {
-      return await fetch(geminiGenerateUrl(apiKey as string, model), {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          contents: [{ role: "user", parts: [{ text: prompt }] }],
-          generationConfig: {
-            temperature: 0.2,
-            maxOutputTokens: 8192,
-            responseMimeType: "application/json",
-            thinkingConfig: model === GEMINI_FAST_MODEL_ID ? GEMINI_THINKING_MINIMAL : GEMINI_THINKING_LOW,
-          },
-        }),
-        signal: controller.signal,
-      });
-    } finally {
-      clearTimeout(timeout);
-    }
-  }
-
-  let model = GEMINI_MODEL_ID;
-  let response = await call(model);
-  if (!response.ok && (response.status === 502 || response.status === 503)) {
-    model = GEMINI_FAST_MODEL_ID;
-    response = await call(model);
-  }
-  if (!response.ok) throw new Error(`Gemini synthesis failed (${response.status})`);
-  const body = (await response.json()) as unknown;
-  const { text } = extractGeminiText(body);
-  if (!text.trim()) throw new Error("Gemini returned an empty synthesis");
-  return { text, model, usage: usageFromResponse(body) };
+async function callSynthesis(prompt: string, workspaceId: string) {
+  return generateAi({
+    workspaceId, task: "insight", operation: "insight_prose", prompt,
+    schema: insightSchema, temperature: 0.2, maxOutputTokens: 8192, timeoutMs: REQUEST_TIMEOUT_MS,
+  });
 }
 
 /**
@@ -340,7 +300,7 @@ export async function generateReport(
     );
 
     // Cache hit: same filters, same underlying reviews, same versions.
-    // No Gemini call and no re-analysis — return the saved report as-is.
+    // No AI call and no re-analysis — return the saved report as-is.
     if (
       (previousStatus === "completed" || previousStatus === "partial") &&
       previousFingerprint === fingerprint
@@ -391,7 +351,7 @@ export async function generateReport(
     let outputTokens = 0;
     if (items.length > 0) {
       const result = await withRetry(
-        () => callSynthesis(synthesisPrompt(items, input.scopeLabel)),
+        () => callSynthesis(synthesisPrompt(items, input.scopeLabel), workspaceId),
         { attempts: 2, baseDelayMs: 1000 }
       );
       model = result.model;

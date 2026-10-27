@@ -3,16 +3,16 @@ import { GoogleMark } from "@/components/google-mark";
 import { Spinner } from "@/components/ui/spinner";
 import { cn } from "@/lib/utils";
 
-type ActivityTone = "gemini" | "google" | "work";
+type ActivityTone = "ai" | "google" | "work";
 
 const TONE: Record<ActivityTone, { box: string; tile: string }> = {
-  gemini: { box: "border-action-blue/20 bg-info-banner-bg", tile: "bg-white text-action-blue" },
+  ai: { box: "border-action-blue/20 bg-info-banner-bg", tile: "bg-white text-action-blue" },
   google: { box: "border-silver bg-white", tile: "bg-paper" },
   work: { box: "border-silver bg-white", tile: "bg-paper text-ink" },
 };
 
 function ToneIcon({ tone }: { tone: ActivityTone }) {
-  if (tone === "gemini") return <Sparkles className="size-3.5 animate-pulse" />;
+  if (tone === "ai") return <Sparkles className="size-3.5 animate-pulse" />;
   if (tone === "google") {
     return (
       <span className="relative flex size-4 items-center justify-center">

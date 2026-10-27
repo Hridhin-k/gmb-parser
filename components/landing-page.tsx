@@ -55,7 +55,7 @@ const FEATURES: Array<{ icon: IconComponent; title: string; body: string }> = [
   {
     icon: Sparkles,
     title: "AI drafts in your voice",
-    body: "Gemini writes a reply that fits the review and the location. Regenerate until it reads right.",
+    body: "AI writes a reply that fits the review and the location. Regenerate until it reads right.",
   },
   {
     icon: ShieldCheck,

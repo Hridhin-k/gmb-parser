@@ -34,7 +34,7 @@ export interface BulkJob {
   updated_at: string;
 }
 
-/** Items processed at once: enough to be fast, few enough to spare Google/Gemini quotas. */
+/** Items processed at once: enough to be fast, few enough to spare provider quotas. */
 const BULK_CONCURRENCY = 4;
 
 /**

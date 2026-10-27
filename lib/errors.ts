@@ -171,17 +171,17 @@ export class GoogleUnavailableError extends GoogleApiError {
 }
 
 // ---------------------------------------------------------------------------
-// Gemini / AI errors
+// AI provider errors
 // ---------------------------------------------------------------------------
 
-export class GeminiError extends AppError {
+export class AiProviderError extends AppError {
   constructor(
     message = "AI generation failed. Please try again.",
-    code = "GEMINI_ERROR",
+    code = "AI_PROVIDER_ERROR",
     metadata?: Record<string, unknown>
   ) {
     super(message, code, 502, metadata);
-    this.name = "GeminiError";
+    this.name = "AiProviderError";
   }
 }
 

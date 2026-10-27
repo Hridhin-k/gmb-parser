@@ -12,7 +12,7 @@ import {
   GoogleQuotaError,
   GoogleRateLimitError,
   GoogleUnavailableError,
-  GeminiError,
+  AiProviderError,
   UnknownError,
   toUserMessage,
   toStatusCode,
@@ -47,8 +47,8 @@ describe("Error hierarchy — status codes", () => {
   it("GoogleRateLimitError → 502, googleErrorCode=429", () => {
     expect(new GoogleRateLimitError().googleErrorCode).toBe(429);
   });
-  it("GeminiError → 502", () => {
-    expect(new GeminiError().statusCode).toBe(502);
+  it("AiProviderError → 502", () => {
+    expect(new AiProviderError().statusCode).toBe(502);
   });
   it("UnknownError → 500", () => {
     expect(new UnknownError().statusCode).toBe(500);
@@ -71,8 +71,8 @@ describe("Error hierarchy — names", () => {
   it("GoogleUnavailableError.name", () => {
     expect(new GoogleUnavailableError().name).toBe("GoogleUnavailableError");
   });
-  it("GeminiError.name", () => {
-    expect(new GeminiError().name).toBe("GeminiError");
+  it("AiProviderError.name", () => {
+    expect(new AiProviderError().name).toBe("AiProviderError");
   });
 });
 
@@ -83,8 +83,8 @@ describe("Error hierarchy — instanceof", () => {
   it("GoogleQuotaError instanceof GoogleApiError", () => {
     expect(new GoogleQuotaError()).toBeInstanceOf(GoogleApiError);
   });
-  it("GeminiError instanceof AppError", () => {
-    expect(new GeminiError()).toBeInstanceOf(AppError);
+  it("AiProviderError instanceof AppError", () => {
+    expect(new AiProviderError()).toBeInstanceOf(AppError);
   });
   it("DatabaseError instanceof AppError", () => {
     expect(new DatabaseError()).toBeInstanceOf(AppError);

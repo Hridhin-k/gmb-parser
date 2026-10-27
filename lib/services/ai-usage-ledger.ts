@@ -27,37 +27,34 @@ export async function recordAiUsage(
     outputTokens: number;
     calls?: number;
     batch?: boolean;
+    usageKnown?: boolean;
+    status?: string;
+    cachedInputTokens?: number;
+    cacheWriteTokens?: number;
+    reasoningTokens?: number;
   }
 ): Promise<void> {
   try {
     const month = monthKey();
-    const cost = estimateCostUsd(entry.model, entry.inputTokens, entry.outputTokens, entry.batch);
-    const { data: existing, error: readError } = await admin
-      .from("grm_ai_usage_monthly")
-      .select("calls, input_tokens, output_tokens, estimated_usd")
-      .eq("workspace_id", entry.workspaceId)
-      .eq("month", month)
-      .eq("operation", entry.operation)
-      .maybeSingle();
-    if (readError) throw new Error(readError.message);
-    const payload = {
-      workspace_id: entry.workspaceId,
-      month,
-      operation: entry.operation,
-      calls: (existing?.calls ?? 0) + (entry.calls ?? 1),
-      input_tokens: (existing?.input_tokens ?? 0) + entry.inputTokens,
-      output_tokens: (existing?.output_tokens ?? 0) + entry.outputTokens,
-      estimated_usd: Number(((existing?.estimated_usd ?? 0) + cost).toFixed(6)),
-      updated_at: new Date().toISOString(),
-    };
-    const { error } = existing
-      ? await admin
-          .from("grm_ai_usage_monthly")
-          .update(payload)
-          .eq("workspace_id", entry.workspaceId)
-          .eq("month", month)
-          .eq("operation", entry.operation)
-      : await admin.from("grm_ai_usage_monthly").insert(payload);
+    // Conservative cache-write allowance; reasoning is already in outputTokens.
+    const inputForEstimate = entry.inputTokens + 1.5 * (entry.cacheWriteTokens ?? 0);
+    let cost = estimateCostUsd(entry.model, inputForEstimate, entry.outputTokens, entry.batch);
+    if (entry.model === "openai:gpt-6-luna" && entry.inputTokens > 272_000) {
+      cost = estimateCostUsd(entry.model, inputForEstimate * 2, entry.outputTokens * 1.5, entry.batch);
+    }
+    const { error } = await admin.rpc("grm_record_ai_usage", {
+      p_event_id: crypto.randomUUID(),
+      p_workspace_id: entry.workspaceId,
+      p_month: month,
+      p_operation: entry.operation,
+      p_model: entry.model,
+      p_input_tokens: entry.inputTokens,
+      p_output_tokens: entry.outputTokens,
+      p_estimated_usd: cost,
+      p_usage_known: entry.usageKnown ?? true,
+      p_status: entry.status ?? "completed",
+      p_calls: entry.calls ?? 1,
+    });
     if (error) throw new Error(error.message);
   } catch (error) {
     logger.warn("ai_usage.record_failed", { message: error instanceof Error ? error.message : "usage record failed" });

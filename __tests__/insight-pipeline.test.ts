@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { AppError } from "@/lib/errors";
 import {
   BATCH_MAX_INPUT_TOKENS,
   BATCH_MAX_REVIEWS,
@@ -192,6 +193,11 @@ describe("five-star reviews with serious allegations", () => {
 });
 
 describe("withRetry", () => {
+  it("does not retry permanent AI configuration failures", async () => {
+    let calls = 0;
+    await expect(withRetry(async () => { calls += 1; throw new AppError("Bad provider configuration", "CONFIG_ERROR"); })).rejects.toThrow("Bad provider configuration");
+    expect(calls).toBe(1);
+  });
   it("succeeds after transient failures without manual intervention", async () => {
     let calls = 0;
     const sleeps: number[] = [];

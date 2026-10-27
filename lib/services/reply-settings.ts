@@ -1,3 +1,4 @@
+import { aiConfigured } from "@/lib/ai/config";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { AuditService } from "@/lib/services/audit";
 import { EscalationService } from "@/lib/services/escalations";
@@ -489,7 +490,7 @@ export async function runAutomation(workspaceId: string, now = new Date()): Prom
       held += 1;
       continue;
     }
-    if (!process.env.GEMINI_API_KEY) {
+    if (!aiConfigured("reply")) {
       held += 1;
       continue;
     }

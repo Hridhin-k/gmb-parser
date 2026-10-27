@@ -2506,6 +2506,10 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      grm_record_ai_usage: {
+        Args: { p_event_id: string; p_workspace_id: string; p_month: string; p_operation: string; p_model: string; p_input_tokens: number; p_output_tokens: number; p_estimated_usd: number; p_usage_known: boolean; p_status: string; p_calls: number }
+        Returns: undefined
+      }
       grm_my_workspace_ids: { Args: Record<PropertyKey, never>; Returns: string[] }
       grm_can_see_scope_summary: {
         Args: {

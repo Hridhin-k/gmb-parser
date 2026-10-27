@@ -77,7 +77,7 @@ export default async function TenantDetailPage({ params }: PageProps) {
 
       <section className="rounded-xl border border-silver bg-white px-4 py-4">
         <h2 className="text-lg font-medium text-graphite">AI usage (recorded ${spent.toFixed(2)})</h2>
-        {detail.aiUsage.length === 0 ? <p className="mt-1 text-sm text-slate">No Gemini usage recorded.</p> : (
+        {detail.aiUsage.length === 0 ? <p className="mt-1 text-sm text-slate">No AI usage recorded.</p> : (
           <ul className="mt-2 divide-y divide-silver rounded-xl border border-silver">
             {detail.aiUsage.slice(0, 12).map((u) => (
               <li key={`${u.month}-${u.operation}`} className="flex justify-between px-3 py-2 text-sm"><span className="text-graphite">{u.month} · {u.operation}</span><span className="text-xs text-slate">{u.calls} calls · ${u.estimatedUsd.toFixed(4)}</span></li>

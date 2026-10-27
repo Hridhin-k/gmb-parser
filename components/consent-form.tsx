@@ -91,7 +91,7 @@ export function ConsentForm() {
               aria-label="Agree to AI draft processing"
             />
             <span>
-              I understand GRM can send review text to Google Gemini to draft
+              I understand GRM can send review text to the configured AI provider to draft
               a reply or a location summary. A person must review a draft
               before it is published, and a published reply appears on Google
               as the business’s reply.

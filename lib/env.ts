@@ -7,7 +7,8 @@ const serverEnvSchema = z.object({
   GOOGLE_CLIENT_ID: z.string().min(1),
   GOOGLE_CLIENT_SECRET: z.string().min(1),
   GOOGLE_REDIRECT_URI: z.url(),
-  GEMINI_API_KEY: z.string().min(1),
+  GOOGLE_GENERATIVE_AI_API_KEY: z.string().optional(),
+  OPENAI_API_KEY: z.string().optional(),
   NEXT_PUBLIC_APP_URL: z.url(),
   // 64 hex characters = 32 bytes = 256-bit key for AES-256-GCM token encryption
   TOKEN_ENCRYPTION_KEY: z

@@ -191,7 +191,7 @@ export function PageLoading({
   title: string;
   detail: string;
   variant?: Variant;
-  tone?: "work" | "google" | "gemini";
+  tone?: "work" | "google" | "ai";
 }) {
   return (
     <div className="space-y-6" aria-busy="true">

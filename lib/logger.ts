@@ -6,7 +6,7 @@
 // SAFETY RULES (enforced by scrubSensitive):
 //   - Never log OAuth access tokens
 //   - Never log OAuth refresh tokens
-//   - Never log Gemini API keys
+//   - Never log AI API keys
 //   - Never log any value whose key contains "token", "secret", "key", "password"
 // =============================================================================
 

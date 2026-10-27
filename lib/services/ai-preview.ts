@@ -1,16 +1,8 @@
 import { createAdminClient } from "@/lib/supabase/admin";
 import { AppError, ValidationError } from "@/lib/errors";
 import { logger } from "@/lib/logger";
-import {
-  GEMINI_FAST_MODEL_ID,
-  GEMINI_MODEL_ID,
-  GEMINI_THINKING_LOW,
-  GEMINI_THINKING_MINIMAL,
-  classifyGeminiError,
-  extractGeminiText,
-  geminiGenerateUrl,
-  logGeminiFailure,
-} from "@/lib/gemini";
+import { generateAi } from "@/lib/ai/service";
+import { aiConfigured } from "@/lib/ai/config";
 import { checkReplyGuardrails } from "@/lib/reply-guardrails";
 import { voiceGuide } from "@/lib/automation";
 import { resolvedForLocation } from "@/lib/services/reply-settings";
@@ -117,63 +109,24 @@ export async function previewAiDraft(input: {
     templates,
   });
 
-  const apiKey = process.env.GEMINI_API_KEY;
-  if (!apiKey) {
+  if (!aiConfigured("reply")) {
     return {
       text: "",
       words: 0,
       violations: [],
       draftPreview: true,
       aiConfigVersion: config.version,
-      unavailable: "Draft preview is unavailable until GEMINI_API_KEY is configured.",
+      unavailable: "Draft preview is unavailable until the selected AI provider is configured.",
     };
   }
 
   const route = draftModelRoute({ starRating: 5, comment: input.comment });
-  const modelId = route === "fast" ? GEMINI_FAST_MODEL_ID : GEMINI_MODEL_ID;
   const startedAt = Date.now();
-  const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
   try {
-    const response = await fetch(geminiGenerateUrl(apiKey, modelId), {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        contents: [{ parts: [{ text: prompt }] }],
-        generationConfig: {
-          temperature: 0.6,
-          maxOutputTokens: 1024,
-          topP: 0.9,
-          thinkingConfig: route === "fast" ? GEMINI_THINKING_MINIMAL : GEMINI_THINKING_LOW,
-        },
-      }),
-      signal: controller.signal,
-      cache: "no-store",
+    const { text, model: modelId } = await generateAi({
+      workspaceId: input.workspaceId, task: "reply", operation: "preview", prompt,
+      fast: route === "fast", maxOutputTokens: 1024, timeoutMs: REQUEST_TIMEOUT_MS, temperature: 0.6,
     });
-    if (!response.ok) {
-      const body = await response.text();
-      logGeminiFailure("ai_preview.gemini_failed", response.status, body, {
-        workspaceId: input.workspaceId,
-      });
-      logger.error("ai_preview.failed", {
-        workspaceId: input.workspaceId,
-        aiConfigVersion: config.version,
-        durationMs: Date.now() - startedAt,
-        success: false,
-        statusCode: response.status,
-      });
-      const classified = classifyGeminiError(response.status, body);
-      return {
-        text: "",
-        words: 0,
-        violations: [],
-        draftPreview: true,
-        aiConfigVersion: config.version,
-        unavailable: classified.message,
-      };
-    }
-    const data = await response.json();
-    const { text } = extractGeminiText(data);
     const cleaned = text
       .trim()
       .replace(/^(reply|response)\s*:\s*/i, "")
@@ -196,6 +149,7 @@ export async function previewAiDraft(input: {
       aiConfigVersion: config.version,
     };
   } catch (error) {
+    if (error instanceof AppError && error.code === "AI_TIMEOUT") throw error;
     if ((error as Error).name === "AbortError") {
       throw new AppError("Draft preview timed out. Please try again.", "AI_TIMEOUT", 504);
     }
@@ -211,9 +165,7 @@ export async function previewAiDraft(input: {
       violations: [],
       draftPreview: true,
       aiConfigVersion: config.version,
-      unavailable: "Draft preview is temporarily unavailable.",
+      unavailable: error instanceof AppError ? error.message : "Draft preview is temporarily unavailable.",
     };
-  } finally {
-    clearTimeout(timeout);
   }
 }

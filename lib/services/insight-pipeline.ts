@@ -1,14 +1,7 @@
+import { generateAi } from "@/lib/ai/service";
+import { batchExtractionSchema } from "@/lib/ai/schemas";
 import { createAdminClient } from "@/lib/supabase/admin";
-import {
-  GEMINI_FAST_MODEL_ID,
-  GEMINI_MODEL_ID,
-  GEMINI_THINKING_LOW,
-  GEMINI_THINKING_MINIMAL,
-  extractGeminiText,
-  geminiGenerateUrl,
-  usageFromResponse,
-} from "@/lib/gemini";
-import { recordAiUsage } from "@/lib/services/ai-usage-ledger";
+
 import {
   ANALYSIS_VERSION,
   batchExtractionPrompt,
@@ -34,7 +27,7 @@ const LOCATION_CHUNK = 80;
 /** Ids per analysis-lookup query: 150 uuids ≈ 5.5KB of URL, under gateway URL limits. */
 const ANALYSIS_LOOKUP_CHUNK = 150;
 /**
- * Gemini batches in flight at once. Raised 2 → 4 to roughly double analysis
+ * AI batches in flight at once. Raised 2 → 4 to roughly double analysis
  * throughput; withRetry backoff absorbs occasional 429s, and failed batches
  * are recorded per review and retried on a later run — never lost.
  */
@@ -211,49 +204,12 @@ export async function discoverScopeReviews(
   return all;
 }
 
-async function callBatchExtractor(
-  reviews: BatchReview[]
-): Promise<{ text: string; model: string; usage: { inputTokens: number; outputTokens: number } }> {
-  const apiKey = process.env.GEMINI_API_KEY;
-  if (!apiKey) throw new Error("config: GEMINI_API_KEY is missing");
-  const prompt = batchExtractionPrompt(reviews);
-
-  async function call(model: string): Promise<Response> {
-    const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
-    try {
-      return await fetch(geminiGenerateUrl(apiKey as string, model), {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          contents: [{ role: "user", parts: [{ text: prompt }] }],
-          generationConfig: {
-            temperature: 0.1,
-            maxOutputTokens: 8192,
-            responseMimeType: "application/json",
-            thinkingConfig: model === GEMINI_FAST_MODEL_ID ? GEMINI_THINKING_MINIMAL : GEMINI_THINKING_LOW,
-          },
-        }),
-        signal: controller.signal,
-      });
-    } finally {
-      clearTimeout(timeout);
-    }
-  }
-
-  let model = GEMINI_MODEL_ID;
-  let response = await call(model);
-  if (!response.ok && (response.status === 502 || response.status === 503)) {
-    model = GEMINI_FAST_MODEL_ID;
-    response = await call(model);
-  }
-  if (!response.ok) {
-    throw new Error(`Gemini batch extraction failed (${response.status})`);
-  }
-  const body = (await response.json()) as unknown;
-  const { text } = extractGeminiText(body);
-  if (!text.trim()) throw new Error("Gemini returned an empty response");
-  return { text, model, usage: usageFromResponse(body) };
+async function callBatchExtractor(reviews: BatchReview[], workspaceId: string) {
+  return generateAi({
+    workspaceId, task: "extract", operation: "extract_review",
+    prompt: batchExtractionPrompt(reviews), schema: batchExtractionSchema,
+    temperature: 0.1, maxOutputTokens: 8192, timeoutMs: REQUEST_TIMEOUT_MS,
+  });
 }
 
 export interface AnalysisRunScope {
@@ -447,7 +403,7 @@ function makeRunProcessor(
 
   async function processBatch(batch: BatchReview[]) {
     try {
-      const { text, model, usage } = await withRetry(() => callBatchExtractor(batch), {
+      const { text, model, usage } = await withRetry(() => callBatchExtractor(batch, workspaceId), {
         attempts: 3,
         baseDelayMs: 1000,
         onRetry: () => {
@@ -492,19 +448,11 @@ function makeRunProcessor(
             admin,
             workspaceId,
             review,
-            "Missing from Gemini batch response"
+            "Missing from AI batch response"
           ).catch(() => undefined);
           state.failed += 1;
         })
       );
-      // The usage ledger must never fail a batch whose reviews already persisted.
-      await recordAiUsage(admin, {
-        workspaceId,
-        operation: "extract_review",
-        model,
-        inputTokens: usage.inputTokens,
-        outputTokens: usage.outputTokens,
-      }).catch(() => undefined);
     } catch (error) {
       const message = error instanceof Error ? error.message : "Batch extraction failed";
       for (const review of batch) {

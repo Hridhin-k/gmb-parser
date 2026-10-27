@@ -3,7 +3,7 @@
  * Messages describe only what the app can honestly know.
  */
 
-export type StatusTone = "work" | "google" | "gemini";
+export type StatusTone = "work" | "google" | "ai";
 
 export interface StatusCopy {
   title: string;
@@ -153,7 +153,7 @@ export const ACTION_STATUS = {
     title: "Generating your AI reply…",
     detail: "AI is drafting a reply using your organisation's saved guidelines. Nothing is posted to Google until you approve it.",
     short: "Generating reply…",
-    tone: "gemini" as const,
+    tone: "ai" as const,
   },
   applying: {
     title: "Updating this page…",
@@ -165,7 +165,7 @@ export const ACTION_STATUS = {
     title: "Running draft preview…",
     detail: "Building a sample reply with your saved instructions. Nothing is published or stored.",
     short: "Previewing…",
-    tone: "gemini" as const,
+    tone: "ai" as const,
   },
   saveAi: {
     title: "Saving your organisation's AI rules…",

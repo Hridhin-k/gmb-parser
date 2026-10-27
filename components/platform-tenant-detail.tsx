@@ -74,7 +74,7 @@ export function TenantSettingsCard({ detail }: { detail: TenantDetail }) {
     <Card>
       <CardHeader>
         <CardTitle className="text-[22px] text-graphite" style={{ fontFamily: "var(--font-heading), sans-serif" }}>Plan, limits & flags</CardTitle>
-        <p className="mt-1 text-sm font-light text-slate">AI budget overrides the platform default and is enforced before Gemini calls. Member cap is enforced on team invites. Location cap is shown as usage guidance. Leaving a limit blank means unlimited / platform default.</p>
+        <p className="mt-1 text-sm font-light text-slate">AI budget overrides the platform default and is enforced before AI calls. Member cap is enforced on team invites. Location cap is shown as usage guidance. Leaving a limit blank means unlimited / platform default.</p>
       </CardHeader>
       <CardContent>
         <form onSubmit={save} className="space-y-4">
