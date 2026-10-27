@@ -1,10 +1,13 @@
 import { Download } from "lucide-react";
-import { AnalyticsBoard, ANALYTICS_SECTIONS, type AnalyticsSection } from "@/components/analytics-board";
+import { AnalyticsBoard } from "@/components/analytics-board";
+import { ANALYTICS_SECTIONS, type AnalyticsSection } from "@/lib/analytics-sections";
+import { analyticsSectionLoads } from "@/lib/analytics-section-loads";
 import { FreshMetrics } from "@/components/fresh-metrics";
 import { PageHeader } from "@/components/page-header";
 import { PendingRegion, TransitionScope } from "@/components/transition-scope";
 import { dateRangeParams, parseDateRange } from "@/lib/date-range";
-import { loadAnalyticsSlice } from "@/lib/services/analytics-slice";
+import { emptyAnalyticsSlice, loadAnalyticsSlice } from "@/lib/services/analytics-slice";
+import { emptyInsightDashboard } from "@/lib/insight-dashboard";
 import { loadInsightDashboard } from "@/lib/services/insight-dashboard";
 import type { AnalyticsCompare, RankBy, RankShow } from "@/lib/analytics-metrics";
 import { getDashboardContext } from "@/lib/services/dashboard-metrics";
@@ -35,20 +38,28 @@ export default async function AnalyticsPage({ searchParams }: AnalyticsPageProps
     ? (requested as AnalyticsSection)
     : "performance";
 
+  const { needsSlice, needsInsights, needsRoster } = analyticsSectionLoads(section);
+
   const [loaded, roster, slice, insights] = await Promise.all([
     getDashboardContext(workspaceId, range, { clientId, groupId, locationId }),
-    getWorkspaceRoster(workspaceId),
-    loadAnalyticsSlice({
-      workspaceId,
-      locationIds: resolved.locationIds,
-      start: range.start?.toISOString() ?? null,
-      end: range.end?.toISOString() ?? null,
-    }),
-    loadInsightDashboard(workspaceId, {
-      locationIds: resolved.locationIds,
-      start: range.start?.toISOString() ?? null,
-      end: range.end?.toISOString() ?? null,
-    }),
+    needsRoster
+      ? getWorkspaceRoster(workspaceId)
+      : Promise.resolve({ members: [] as Array<{ userId: string; email: string }> }),
+    needsSlice
+      ? loadAnalyticsSlice({
+          workspaceId,
+          locationIds: resolved.locationIds,
+          start: range.start?.toISOString() ?? null,
+          end: range.end?.toISOString() ?? null,
+        })
+      : Promise.resolve(emptyAnalyticsSlice()),
+    needsInsights
+      ? loadInsightDashboard(workspaceId, {
+          locationIds: resolved.locationIds,
+          start: range.start?.toISOString() ?? null,
+          end: range.end?.toISOString() ?? null,
+        })
+      : Promise.resolve(emptyInsightDashboard()),
   ]);
   const locationsInScope = loaded.locations.filter((location) => {
     if (locationId) return location.id === locationId;
@@ -73,6 +84,7 @@ export default async function AnalyticsPage({ searchParams }: AnalyticsPageProps
     rankBy: rankBy === "rating" ? "" : rankBy,
     show: show === "locations" ? "" : show,
     compare: compare === "previous" ? "" : compare,
+    section: section === "performance" ? "" : section,
   })) {
     if (value) query.set(key, value);
   }
