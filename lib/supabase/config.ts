@@ -25,6 +25,8 @@ export type SupabaseConfigInput = {
   anonKey?: string | null;
   serviceRoleKey?: string | null;
   nodeEnv?: string | null;
+  /** When true in development, allow the known production project (opt-in only). */
+  allowProdLocal?: boolean | null;
 };
 
 export function projectRefFromSupabaseUrl(url: string): string | null {
@@ -64,7 +66,19 @@ function assertPublicKeyIsNotServiceRole(anonKey: string): void {
   }
 }
 
-function assertDevelopmentTarget(projectRef: string | null, nodeEnv: string): void {
+function allowProdLocal(input: SupabaseConfigInput): boolean {
+  if (typeof input.allowProdLocal === "boolean") return input.allowProdLocal;
+  // Browser bundles only see NEXT_PUBLIC_*; server also accepts the private flag.
+  const publicFlag = (process.env.NEXT_PUBLIC_REVUPILOT_ALLOW_PROD_LOCAL ?? "").trim();
+  const privateFlag = (process.env.REVUPILOT_ALLOW_PROD_LOCAL ?? "").trim();
+  return publicFlag === "1" || privateFlag === "1";
+}
+
+function assertDevelopmentTarget(
+  projectRef: string | null,
+  nodeEnv: string,
+  input: SupabaseConfigInput
+): void {
   if (nodeEnv !== "development") return;
 
   if (!projectRef) {
@@ -74,8 +88,9 @@ function assertDevelopmentTarget(projectRef: string | null, nodeEnv: string): vo
   }
 
   if (projectRef === PRODUCTION_SUPABASE_REF) {
+    if (allowProdLocal(input)) return;
     throw new Error(
-      "Local development refuses the production Supabase project. Point NEXT_PUBLIC_SUPABASE_URL at staging."
+      "Local development refuses the production Supabase project. Point NEXT_PUBLIC_SUPABASE_URL at staging, or set NEXT_PUBLIC_REVUPILOT_ALLOW_PROD_LOCAL=1 (and REVUPILOT_ALLOW_PROD_LOCAL=1) to opt in."
     );
   }
 
@@ -103,7 +118,7 @@ function resolveUrlAndRef(input: SupabaseConfigInput): {
   }
 
   const projectRef = projectRefFromSupabaseUrl(url);
-  assertDevelopmentTarget(projectRef, nodeEnv);
+  assertDevelopmentTarget(projectRef, nodeEnv, input);
   if (!projectRef) {
     throw new Error("NEXT_PUBLIC_SUPABASE_URL must be a *.supabase.co project URL.");
   }

@@ -52,6 +52,32 @@ describe("getSupabasePublicConfig", () => {
     ).toThrow(/refuses the production Supabase project/);
   });
 
+  it("allows production in local development only with explicit opt-in", () => {
+    const config = getSupabasePublicConfig({
+      url: productionUrl,
+      anonKey,
+      nodeEnv: "development",
+      allowProdLocal: true,
+    });
+    expect(config.projectRef).toBe(PRODUCTION_SUPABASE_REF);
+  });
+
+  it("honours NEXT_PUBLIC_REVUPILOT_ALLOW_PROD_LOCAL for browser bundles", () => {
+    const prev = process.env.NEXT_PUBLIC_REVUPILOT_ALLOW_PROD_LOCAL;
+    process.env.NEXT_PUBLIC_REVUPILOT_ALLOW_PROD_LOCAL = "1";
+    try {
+      const config = getSupabasePublicConfig({
+        url: productionUrl,
+        anonKey,
+        nodeEnv: "development",
+      });
+      expect(config.projectRef).toBe(PRODUCTION_SUPABASE_REF);
+    } finally {
+      if (prev === undefined) delete process.env.NEXT_PUBLIC_REVUPILOT_ALLOW_PROD_LOCAL;
+      else process.env.NEXT_PUBLIC_REVUPILOT_ALLOW_PROD_LOCAL = prev;
+    }
+  });
+
   it("fails clearly when staging URL is missing in development", () => {
     expect(() =>
       getSupabasePublicConfig({
