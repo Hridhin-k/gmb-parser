@@ -53,6 +53,13 @@ function userFromClaims(claims: Record<string, unknown> | null | undefined): Use
  * so an invite can still be matched.
  */
 export const getCurrentUser = cache(async (): Promise<User | null> => {
+  try {
+    const { headers } = await import("next/headers");
+    const { enterBenchDiagFromHeaders } = await import("@/lib/bench-diag");
+    await enterBenchDiagFromHeaders((await headers()).get("x-revupilot-bench-id"));
+  } catch {
+    /* outside a request or diag unavailable */
+  }
   const supabase = await createClient();
   const { data } = await supabase.auth.getClaims();
   const fromClaims = userFromClaims(data?.claims as Record<string, unknown> | undefined);

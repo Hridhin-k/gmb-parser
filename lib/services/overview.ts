@@ -1,9 +1,11 @@
 import { createAdminClient } from "@/lib/supabase/admin";
 import { rpcLocationReviewStats } from "@/lib/supabase/rpc";
 import { UNASSIGNED_CLIENT_MARKER } from "@/lib/services/unassigned-client";
+import { locationWindowCacheKey } from "@/lib/services/dashboard-cache";
 import { locationDisplayName } from "@/lib/ui/location-place";
 import { previousDateRange, type DateRange } from "@/lib/date-range";
 import { EMPTY_OVERVIEW_SIGNALS, signalsFromRpc } from "@/lib/overview-signals";
+import { remember } from "@/lib/ttl-cache";
 
 /** One month from `grm_review_trends`. `negative` is 1–2★; `positive` is 4–5★. */
 export interface OverviewTrendMonth {
@@ -392,6 +394,20 @@ export async function loadOverviewSignals(
   now = new Date()
 ): Promise<OverviewSignals> {
   if (locationIds.length === 0) return EMPTY_OVERVIEW_SIGNALS;
+  const start = range.start?.toISOString() ?? null;
+  const end = range.end?.toISOString() ?? null;
+  // Day-bucket the rolling "now" used for the 48h window so TTL keys stay stable.
+  const nowDay = now.toISOString().slice(0, 10);
+  const key = `${locationWindowCacheKey("signals", workspaceId, locationIds, start, end)}:${nowDay}`;
+  return remember(key, 45_000, () => fetchOverviewSignals(workspaceId, locationIds, range, now));
+}
+
+async function fetchOverviewSignals(
+  workspaceId: string,
+  locationIds: string[],
+  range: { start: Date | null; end: Date | null },
+  now: Date
+): Promise<OverviewSignals> {
   const admin = createAdminClient();
   const since48 = new Date(now.getTime() - 48 * 60 * 60 * 1000).toISOString();
   const { data, error } = await admin.rpc("grm_overview_signals", {

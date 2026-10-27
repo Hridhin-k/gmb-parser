@@ -1,6 +1,7 @@
 import Link from "next/link";
 import type { ObservationAggregates } from "@/lib/review-intelligence";
 import type { InsightRecord } from "@/lib/insight-report";
+import { insightTrendMonths } from "@/lib/insight-dashboard";
 import { monthlySeriesMetrics } from "@/lib/chart-metrics";
 import { MetricStrip } from "@/components/charts";
 
@@ -55,7 +56,7 @@ export function SentimentDonut({
 }
 
 export function SentimentTrend({ byMonth }: { byMonth: ObservationAggregates["byMonth"] }) {
-  const months = [...byMonth].sort((a, b) => a.month.localeCompare(b.month)).slice(-12);
+  const months = insightTrendMonths(byMonth);
   if (months.length < 2) {
     return <p className="mt-3 text-sm text-slate">Not enough monthly history in this range yet.</p>;
   }
@@ -71,7 +72,7 @@ export function SentimentTrend({ byMonth }: { byMonth: ObservationAggregates["by
     new Date(`${m}-02T00:00:00Z`).toLocaleDateString("en-GB", { month: "short", timeZone: "UTC" });
   const monthLabel = (m: string) =>
     new Date(`${m}-02T00:00:00Z`).toLocaleDateString("en-GB", { month: "short", year: "2-digit", timeZone: "UTC" });
-  // Metrics are computed from the same 12 months the lines draw.
+  // Metrics match every month drawn for the selected range.
   const metrics = monthlySeriesMetrics(
     months.map((m) => ({ label: monthLabel(m.month), positive: m.positive, negative: m.negative }))
   );

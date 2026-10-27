@@ -1,5 +1,6 @@
 import { ANALYSIS_VERSION } from "@/lib/review-intelligence";
 import { emptyInsightDashboard, parseInsightDashboard, type InsightDashboardData } from "@/lib/insight-dashboard";
+import { locationWindowCacheKey } from "@/lib/services/dashboard-cache";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { remember } from "@/lib/ttl-cache";
 
@@ -11,8 +12,7 @@ export async function loadInsightDashboard(
   workspaceId: string,
   input: { locationIds: string[]; start: string | null; end: string | null }
 ): Promise<InsightDashboardData> {
-  const places = [...input.locationIds].sort().join(",");
-  const key = `insights:${workspaceId}:${input.start ?? ""}:${input.end ?? ""}:${places}`;
+  const key = locationWindowCacheKey("insights", workspaceId, input.locationIds, input.start, input.end);
   return remember(key, 45_000, () => fetchInsightDashboard(workspaceId, input));
 }
 

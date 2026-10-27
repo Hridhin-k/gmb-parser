@@ -1,7 +1,9 @@
 import { NextResponse } from "next/server";
+import { createAdminClient } from "@/lib/supabase/admin";
 import { logger } from "@/lib/logger";
 import { listStaleAiGenerationJobs } from "@/lib/services/ai-generation-jobs";
 import { persistAiGenerationJob } from "@/lib/services/ai-generation-persist";
+import { failStaleAnalysisRuns } from "@/lib/services/insight-pipeline";
 import { mapPool } from "@/lib/pool";
 
 /**
@@ -22,7 +24,19 @@ export async function GET(request: Request) {
     await mapPool(jobs, 3, async (job) => {
       await persistAiGenerationJob(job.id);
     });
-    return NextResponse.json({ processed: jobs.length });
+    const admin = createAdminClient();
+    const cutoff = new Date(Date.now() - 5 * 60 * 1000).toISOString();
+    const { data: staleRuns } = await admin
+      .from("grm_analysis_runs")
+      .select("workspace_id")
+      .eq("status", "running")
+      .lt("updated_at", cutoff)
+      .limit(50);
+    const workspaces = [...new Set((staleRuns ?? []).map((row) => row.workspace_id))];
+    await mapPool(workspaces, 3, async (workspaceId) => {
+      await failStaleAnalysisRuns(workspaceId);
+    });
+    return NextResponse.json({ processed: jobs.length, staleAnalysisWorkspaces: workspaces.length });
   } catch (error) {
     logger.error("cron.ai_generations.failed", {
       message: error instanceof Error ? error.message : "Unknown",
