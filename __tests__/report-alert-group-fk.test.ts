@@ -6,9 +6,12 @@ const migrationsDir = path.join(process.cwd(), "supabase/migrations");
 const migrationName = "20261027007_report_alert_group_fk.sql";
 
 describe("report and alert group_id foreign keys", () => {
-  it("ships after the latest Phase 3 migration and only retargets the two tables", () => {
+  it("ships after the inbox index migration and only retargets the two tables", () => {
     const files = readdirSync(migrationsDir).filter((name) => name.endsWith(".sql")).sort();
-    expect(files.at(-1)).toBe(migrationName);
+    expect(files).toContain(migrationName);
+    expect(files.indexOf(migrationName)).toBeGreaterThan(
+      files.indexOf("20261027006_inbox_visible_workspace_index.sql")
+    );
 
     const sql = readFileSync(path.join(migrationsDir, migrationName), "utf8");
 
