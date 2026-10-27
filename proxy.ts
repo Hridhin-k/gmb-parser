@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
 import { createServerClient } from "@supabase/ssr";
+import { getSupabasePublicConfig } from "@/lib/supabase/config";
 import { serverTimingHeader } from "@/lib/timing";
 
 const PUBLIC_PATHS = [
@@ -42,13 +43,19 @@ export async function proxy(request: NextRequest) {
 
   const requestHeaders = new Headers(request.headers);
   requestHeaders.set("x-grm-path", pathname);
+  // Preserve benchmark correlation id for staging-only diagnostics (ignored unless REVUPILOT_APP_DIAG=1).
+  const benchId = request.headers.get("x-revupilot-bench-id");
+  if (benchId && /^[a-zA-Z0-9_-]{8,80}$/.test(benchId)) {
+    requestHeaders.set("x-revupilot-bench-id", benchId);
+  }
   const response = NextResponse.next({
     request: { headers: requestHeaders },
   });
 
+  const { url, anonKey } = getSupabasePublicConfig();
   const supabase = createServerClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+    url,
+    anonKey,
     {
       cookies: {
         getAll() {

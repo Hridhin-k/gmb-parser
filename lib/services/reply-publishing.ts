@@ -138,7 +138,6 @@ export class ReplyPublishingService {
     userId: string,
     options?: { automated?: boolean }
   ): Promise<PublishResult> {
-    forgetReviewList(workspaceId);
     const supabase = createAdminClient();
 
     // ── 1. Load reply with full relationship chain ────────────────────────
@@ -472,6 +471,9 @@ export class ReplyPublishingService {
       },
     });
 
+    // Bust dashboard caches only after a confirmed publish — failed or
+    // no-op attempts must not imply fresh review data.
+    forgetReviewList(workspaceId);
     return { replyId, reviewId, publishedAt };
   }
 
@@ -579,6 +581,7 @@ export class ReplyPublishingService {
         entityId: reviewId,
         metadata: { replyId, publishedAt },
       });
+      forgetReviewList(workspaceId);
       return { replyId, reviewId, publishedAt };
     }
 

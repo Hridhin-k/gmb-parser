@@ -10,7 +10,7 @@ const PRICE_PER_MILLION: Record<string, { input: number; output: number }> = {
   [GEMINI_MODEL_ID]: { input: 0.75, output: 3.75 },
 };
 
-export type AiOperation = "reply_draft" | "extract_review";
+export type AiOperation = "reply_draft" | "extract_review" | "insight_prose";
 
 export function estimateCostUsd(model: string, inputTokens: number, outputTokens: number, batch = false): number {
   const price = PRICE_PER_MILLION[model];

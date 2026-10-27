@@ -302,4 +302,103 @@ describe("buildOverviewBoard", () => {
     expect(board.analysis).toEqual([]);
     expect(board.brief).toEqual(["This period. No reviews in this period."]);
   });
+
+  it("keeps every all-time month on the chart while KPIs use full-window aggregates", () => {
+    const months = Array.from({ length: 20 }, (_, index) => {
+      const year = 2024 + Math.floor(index / 12);
+      const month = (index % 12) + 1;
+      return {
+        month: `${year}-${String(month).padStart(2, "0")}-01`,
+        reviews: 10 + index,
+        ratingSum: 40 + index,
+        positive: 8,
+        oneToThree: 2,
+        negative: 1,
+        replied: 5,
+      };
+    });
+    const board = buildOverviewBoard({
+      facts: facts({
+        reviews: 40_050,
+        ratingSum: 180_000,
+        oneToThree: 4_000,
+        replied: 30_000,
+        unreplied: 10_050,
+        stars: [500, 800, 2700, 8000, 28050],
+        months,
+        themeMonths: months.flatMap((month) => [
+          { month: month.month, theme: "wait_time", count: 2 },
+          { month: month.month, theme: "staff", count: 1 },
+        ]),
+      }),
+      previous: null,
+      places,
+      complaints: [],
+      topics: [{ topic: "wait_time", count: 12, reviews: 10 }],
+      praise: [{ topic: "staff", count: 8, reviews: 7 }],
+      periodLabel: "All time",
+      coverage: { analysed: 100, ratingOnly: 50 },
+      links,
+      attention: [],
+    });
+
+    expect(board.kpis.reviews).toBe(40_050);
+    expect(board.kpis.avgRating).toBeCloseTo(180_000 / 40_050);
+    expect(board.months).toHaveLength(20);
+    expect(board.months[0]?.key).toBe(months[0]!.month);
+    expect(board.months[board.months.length - 1]?.key).toBe(months[months.length - 1]!.month);
+    expect(board.months[0]).not.toHaveProperty("stars");
+    expect(board.themes[0]?.label).toBe("Wait Time");
+    expect(board.starMix.find((row) => row.stars === 5)?.count).toBe(28050);
+  });
+
+  it("keeps bounded month series complete without inventing truncation", () => {
+    const months = [
+      {
+        month: "2026-09-01",
+        reviews: 40,
+        ratingSum: 160,
+        positive: 30,
+        oneToThree: 5,
+        negative: 2,
+        replied: 20,
+      },
+      {
+        month: "2026-10-01",
+        reviews: 43,
+        ratingSum: 180,
+        positive: 35,
+        oneToThree: 4,
+        negative: 1,
+        replied: 25,
+      },
+    ];
+    const board = buildOverviewBoard({
+      facts: facts({ reviews: 83, ratingSum: 340, months }),
+      previous: null,
+      places: [places[0]!],
+      complaints: [],
+      topics: [],
+      periodLabel: "Last month",
+      coverage: { analysed: 0, ratingOnly: 0 },
+      links,
+      attention: [],
+    });
+    expect(board.months).toHaveLength(2);
+    expect(board.kpis.reviews).toBe(83);
+  });
+
+  it("renders an empty month series gracefully", () => {
+    const board = buildOverviewBoard({
+      facts: facts({ reviews: 0, months: [] }),
+      previous: null,
+      places: [places[0]!],
+      complaints: [],
+      topics: [],
+      coverage: { analysed: 0, ratingOnly: 0 },
+      links,
+      attention: [],
+    });
+    expect(board.months).toEqual([]);
+  });
 });

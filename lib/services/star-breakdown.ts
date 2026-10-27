@@ -6,7 +6,6 @@ import {
   type StarMaps,
 } from "@/lib/star-breakdown";
 
-const CAP = 25000;
 const CHUNK = 80;
 
 export interface StarBreakdownInput {
@@ -28,12 +27,12 @@ interface AggregateRow {
 
 /**
  * Count 1★–5★ for every chart slice in this window.
- * Returns null when the window is larger than the cap, so the charts do not show a partial mix.
  *
- * Counts are aggregated in Postgres (`grm_star_breakdown`, applied in
- * production): one small result per 80 locations instead of downloading up
- * to 25k review rows page by page. There is deliberately no row-scan
- * fallback: a missing RPC must fail loudly, not reintroduce the download.
+ * Counts are aggregated in Postgres (`grm_star_breakdown`): one result per
+ * 80 locations instead of downloading review rows. The previous 25,000
+ * review-count abort blanked charts for the workspace that already holds
+ * 40,750 reviews, even though each chunk was a complete aggregate. A missing
+ * RPC still fails loudly. There is no row-scan fallback.
  */
 export async function loadStarBreakdown(input: StarBreakdownInput): Promise<StarMaps | null> {
   if (input.locationIds.length === 0) return tallyStarReviews([], input.timezone);
@@ -56,14 +55,11 @@ export async function loadStarBreakdown(input: StarBreakdownInput): Promise<Star
     )
   );
 
-  let total = 0;
   const aggregates: StarAggregate[] = [];
   for (const result of results) {
     if (result.error) throw new Error(`Failed to load star counts: ${result.error.message}`);
     for (const row of (result.data ?? []) as AggregateRow[]) {
       const count = Number(row.review_count) || 0;
-      total += count;
-      if (total >= CAP) return null;
       aggregates.push({
         month: typeof row.month === "string" ? row.month.slice(0, 10) : "",
         locationId: row.location_id,

@@ -1,7 +1,6 @@
 "use client";
 
 import Link from "next/link";
-import { useState } from "react";
 import {
   CHART,
   ChartCard,
@@ -30,24 +29,24 @@ import { themeLabel } from "@/lib/review-inbox";
 import type { DashboardContext, DashboardScope } from "@/lib/services/dashboard-metrics";
 import { formatFriendlyDate } from "@/lib/format-date";
 import { formatPercent as percent } from "@/lib/format";
+import { ANALYTICS_SECTIONS, type AnalyticsSection } from "@/lib/analytics-sections";
 
 const HEADING = { fontFamily: "var(--font-heading), sans-serif" };
-
-export const ANALYTICS_SECTIONS = [
-  { id: "performance", label: "Performance" },
-  { id: "themes", label: "Themes" },
-  { id: "profile", label: "Google profile" },
-  { id: "automation", label: "Automation health" },
-  { id: "team", label: "Team" },
-] as const;
-
-export type AnalyticsSection = (typeof ANALYTICS_SECTIONS)[number]["id"];
 
 function insightsHref(query: string): string {
   const params = new URLSearchParams(query);
   for (const key of ["rankBy", "show", "compare", "section"]) params.delete(key);
   const text = params.toString();
   return text ? `/insights?${text}` : "/insights";
+}
+
+/** Keep filters in the URL so each Analytics tab can load only the RPCs it needs. */
+function sectionHref(query: string, section: AnalyticsSection): string {
+  const params = new URLSearchParams(query);
+  if (section === "performance") params.delete("section");
+  else params.set("section", section);
+  const text = params.toString();
+  return text ? `/analytics?${text}` : "/analytics";
 }
 
 function hours(value: number | null) {
@@ -98,7 +97,6 @@ export function AnalyticsBoard({
   show: RankShow;
   compare: AnalyticsCompare;
 }) {
-  const [activeSection, setActiveSection] = useState(section);
   const names = new Map(context.locations.map((location) => [location.id, location.name]));
   const groupNames = new Map(context.groups.map((group) => [group.id, group.name]));
   const drill = (extra?: Record<string, string>) => reviewDrillHref(range, scope, extra);
@@ -107,22 +105,21 @@ export function AnalyticsBoard({
     <div className="space-y-6">
       <div className="flex flex-wrap gap-2">
         {ANALYTICS_SECTIONS.map((item) => (
-          <button
+          <Link
             key={item.id}
-            type="button"
-            onClick={() => setActiveSection(item.id)}
-            aria-current={activeSection === item.id ? "page" : undefined}
+            href={sectionHref(query, item.id)}
+            aria-current={section === item.id ? "page" : undefined}
             className={
-              activeSection === item.id
+              section === item.id
                 ? "rounded-full bg-navy px-3.5 py-1.5 text-sm text-white"
                 : "rounded-full border border-silver bg-white px-3.5 py-1.5 text-sm text-graphite hover:border-action-blue hover:text-action-blue"
             }
           >
             {item.label}
-          </button>
+          </Link>
         ))}
       </div>
-      {activeSection === "performance" ? (
+      {section === "performance" ? (
         <Performance
           facts={context.facts}
           previous={context.previous}
@@ -140,7 +137,7 @@ export function AnalyticsBoard({
           parentOf={(groupId) => context.locations.find((location) => location.groupId === groupId)?.parentGroupId ?? null}
         />
       ) : null}
-      {activeSection === "themes" ? (
+      {section === "themes" ? (
         <Themes
           facts={context.facts}
           groupNames={groupNames}
@@ -150,9 +147,9 @@ export function AnalyticsBoard({
           insightsHref={insightsHref(query)}
         />
       ) : null}
-      {activeSection === "profile" ? <Profile context={context} scope={scope} /> : null}
-      {activeSection === "automation" ? <Automation context={context} scope={scope} /> : null}
-      {activeSection === "team" ? <Team facts={context.facts} members={members} drill={drill} /> : null}
+      {section === "profile" ? <Profile context={context} scope={scope} /> : null}
+      {section === "automation" ? <Automation context={context} scope={scope} /> : null}
+      {section === "team" ? <Team facts={context.facts} members={members} drill={drill} /> : null}
       <p className="text-xs leading-relaxed text-slate">
         1–3 star share is the portion of reviews rated 1–3 stars. The month chart splits reviews into 4–5 stars, 3 stars, and 1–2 stars. Reply rate counts a review once Google has a reply.
         Average rating is the sum of stars divided by reviews. Reply rate is reviews with a Google reply divided by reviews.

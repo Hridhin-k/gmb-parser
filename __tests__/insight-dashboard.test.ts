@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { parseInsightDashboard } from "@/lib/insight-dashboard";
+import { insightTrendMonths, parseInsightDashboard } from "@/lib/insight-dashboard";
 
 describe("parseInsightDashboard", () => {
   it("maps the database summary into the chart and coverage shapes", () => {
@@ -49,5 +49,18 @@ describe("parseInsightDashboard", () => {
     expect(parsed.counts.discovered).toBe(0);
     expect(parsed.aggregates.byMonth).toEqual([]);
     expect(parsed.severeIncidents).toEqual([]);
+  });
+
+  it("keeps more than twelve months on the sentiment trend for all-time ranges", () => {
+    const byMonth = Array.from({ length: 20 }, (_, index) => {
+      const year = 2024 + Math.floor(index / 12);
+      const month = String((index % 12) + 1).padStart(2, "0");
+      return { month: `${year}-${month}`, positive: index + 1, negative: 1 };
+    });
+    const shuffled = [...byMonth].reverse();
+    const months = insightTrendMonths(shuffled);
+    expect(months).toHaveLength(20);
+    expect(months[0]?.month).toBe("2024-01");
+    expect(months[months.length - 1]?.month).toBe("2025-08");
   });
 });

@@ -37,11 +37,17 @@ vi.mock("@/lib/supabase/admin", () => {
                   workspace_id: "ws-1",
                   last_synced_at: syncState.locationLastSynced,
                   reviews_full_synced_at: syncState.locationFullSynced,
+                  sync_status: "idle",
+                  sync_started_at: null,
+                  sync_cursor: null,
                 },
                 error: null,
               });
             }
             return Promise.resolve({ data: null, error: null });
+          }),
+          order: vi.fn().mockReturnValue({
+            range: vi.fn().mockResolvedValue({ data: [], error: null }),
           }),
         }),
         in: vi.fn().mockImplementation(() =>
@@ -55,9 +61,18 @@ vi.mock("@/lib/supabase/admin", () => {
     }),
     update: vi.fn().mockImplementation((data: unknown) => {
       updateCalls.push(data);
-      return {
-        eq: vi.fn().mockReturnValue(Promise.resolve({ error: null })),
+      const result = Promise.resolve({ error: null, data: { id: "loc-1" } });
+      const node: Record<string, unknown> = {
+        then: result.then.bind(result),
+        catch: result.catch.bind(result),
+        finally: result.finally.bind(result),
       };
+      const self = () => node;
+      node.eq = vi.fn(self);
+      node.is = vi.fn(self);
+      node.or = vi.fn(self);
+      node.select = vi.fn(self);
+      return node;
     }),
     insert: vi.fn().mockResolvedValue({ error: null }),
   });
@@ -81,7 +96,7 @@ vi.mock("@/lib/services/audit", () => ({
   },
 }));
 
-import { ReviewSyncService, classifyReviewError } from "@/lib/services/review-sync";
+import { ReviewSyncService, classifyReviewError, retryDelayMs, syncLeaseOpen } from "@/lib/services/review-sync";
 import { GoogleApiError } from "@/lib/errors";
 
 // ---------------------------------------------------------------------------
@@ -124,6 +139,19 @@ beforeEach(() => {
 // ---------------------------------------------------------------------------
 // classifyReviewError
 // ---------------------------------------------------------------------------
+
+describe("sync lease and retry", () => {
+  it("keeps a fresh syncing location locked and lets an expired lease be taken", () => {
+    const now = Date.parse("2026-10-27T04:00:00.000Z");
+    expect(syncLeaseOpen("syncing", "2026-10-27T03:55:00.000Z", now)).toBe(false);
+    expect(syncLeaseOpen("syncing", "2026-10-27T03:40:00.000Z", now)).toBe(true);
+    expect(syncLeaseOpen("partial", "2026-10-27T03:55:00.000Z", now)).toBe(true);
+    expect(retryDelayMs(1, "network", 0)).toBe(300);
+    expect(retryDelayMs(2, "network", 0)).toBe(600);
+    expect(retryDelayMs(1, "quota", 0)).toBe(1000);
+    expect(retryDelayMs(2, "quota", 100)).toBe(2100);
+  });
+});
 
 describe("classifyReviewError", () => {
   it("classifies 401 as authentication", () => {

@@ -1,6 +1,6 @@
 import { formatHours } from "@/lib/analytics-metrics";
 import { insightTopicLabel } from "@/lib/insight-dashboard";
-import { average, reviewWindow, type DashboardFacts, type StarCounts } from "@/lib/metrics";
+import { average, reviewWindow, type DashboardFacts } from "@/lib/metrics";
 
 /**
  * Overview numbers for one scope and one date window.
@@ -13,6 +13,10 @@ import { average, reviewWindow, type DashboardFacts, type StarCounts } from "@/l
  * Reply rate is reviews with a Google reply divided by all reviews in the window.
  * A location is ranked only by its own average rating. Ties go to the location
  * with more reviews, then by name. Locations with no reviews in the window are left out.
+ *
+ * When the selected range is All time (or any other window), KPI totals and the
+ * month chart both use every month bucket returned for that scope. Chart props
+ * stay lean (no per-month star arrays) so long histories do not bloat HTML.
  */
 
 export interface BoardPlace {
@@ -91,7 +95,6 @@ export interface OverviewMonthBar {
   negative: number;
   avgRating: number | null;
   href: string;
-  stars?: StarCounts;
 }
 
 export interface OverviewAttentionRow {
@@ -554,7 +557,6 @@ export function buildOverviewBoard(input: {
   const firstSevereExcerpt = typeof input.severeExcerpt === "string" && input.severeExcerpt.trim().length > 0
     ? input.severeExcerpt.trim()
     : null;
-
   return {
     kpis: {
       avgRating: current.avgRating,
@@ -591,7 +593,6 @@ export function buildOverviewBoard(input: {
         negative: month.negative,
         avgRating: average(month.ratingSum, month.reviews),
         href: input.links.reviews({ focusFrom: bounds.from, focusTo: bounds.to }),
-        stars: month.stars,
       };
     }),
     trendCaption: trendCaption(input.facts.months),

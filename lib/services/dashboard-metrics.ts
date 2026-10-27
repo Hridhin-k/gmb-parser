@@ -6,6 +6,7 @@ import { applyStarBreakdown } from "@/lib/star-breakdown";
 import { loadStarBreakdown } from "@/lib/services/star-breakdown";
 import { UNASSIGNED_CLIENT_MARKER } from "@/lib/services/unassigned-client";
 import { loadCatalogTables } from "@/lib/services/catalog-tables";
+import { dashboardContextCacheKey } from "@/lib/services/dashboard-cache";
 import { remember } from "@/lib/ttl-cache";
 import { locationDisplayName } from "@/lib/ui/location-place";
 
@@ -87,16 +88,55 @@ export async function getDashboardContext(
   range: DateRange,
   scope: DashboardScope
 ): Promise<DashboardContext> {
-  const key = [
-    "dashctx",
-    workspaceId,
-    scope.clientId ?? "",
-    scope.groupId ?? "",
-    scope.locationId ?? "",
-    range.start?.toISOString() ?? "",
-    range.end?.toISOString() ?? "",
-  ].join(":");
+  const key = dashboardContextCacheKey(workspaceId, scope, {
+    start: range.start?.toISOString() ?? null,
+    end: range.end?.toISOString() ?? null,
+  });
   return remember(key, 45_000, () => loadDashboardContext(workspaceId, range, scope));
+}
+
+/** Default zone used when the workspace policy is missing or unknown. */
+export const DASHBOARD_DEFAULT_TIMEZONE = "Asia/Kolkata";
+
+/** Resolve the timezone the metrics RPCs must use. Pure so tests can cover it. */
+export function resolveDashboardTimezone(policyTimezone: string | null | undefined): string {
+  return ESCALATION_TIMEZONES.some((zone) => zone.id === policyTimezone)
+    ? policyTimezone!
+    : DASHBOARD_DEFAULT_TIMEZONE;
+}
+
+/**
+ * Bundle RPC windows for one dashboard request. Current and previous periods
+ * stay separate: they use different date bounds and must not share a cached
+ * payload across tenants or filter combinations. All-time has no previous.
+ */
+export function dashboardFactWindows(
+  range: DateRange,
+  timezone: string
+): Array<{ kind: "current" | "previous"; start: string | null; end: string | null; timezone: string }> {
+  const windows: Array<{
+    kind: "current" | "previous";
+    start: string | null;
+    end: string | null;
+    timezone: string;
+  }> = [
+    {
+      kind: "current",
+      start: range.start?.toISOString() ?? null,
+      end: range.end?.toISOString() ?? null,
+      timezone,
+    },
+  ];
+  const previousWindow = previousDateRange(range);
+  if (previousWindow) {
+    windows.push({
+      kind: "previous",
+      start: previousWindow.start.toISOString(),
+      end: previousWindow.end.toISOString(),
+      timezone,
+    });
+  }
+  return windows;
 }
 
 async function loadDashboardContext(
@@ -105,14 +145,21 @@ async function loadDashboardContext(
   scope: DashboardScope
 ): Promise<DashboardContext> {
   const admin = createAdminClient();
-  const previousWindow = previousDateRange(range);
-  // Metrics RPCs do not depend on the catalog rows — start them with the default
-  // timezone, then redo only if the workspace policy uses a different zone.
-  const defaultTimezone = "Asia/Kolkata";
-  const startIso = range.start?.toISOString() ?? null;
-  const endIso = range.end?.toISOString() ?? null;
-  const catalogPromise = loadCatalogTables(workspaceId);
-  const starsFor = (catalog: Awaited<ReturnType<typeof loadCatalogTables>>, timezone: string) => {
+  // Resolve timezone before metrics RPCs so we never speculative-fetch under
+  // Asia/Kolkata and then redo when the policy uses another zone.
+  const policy = await admin
+    .from("grm_escalation_policies")
+    .select("timezone")
+    .eq("workspace_id", workspaceId)
+    .maybeSingle();
+  if (policy.error) throw new Error(`Failed to load dashboard settings: ${policy.error.message}`);
+  const timezone = resolveDashboardTimezone(policy.data?.timezone);
+  const windows = dashboardFactWindows(range, timezone);
+  const currentWindow = windows.find((window) => window.kind === "current")!;
+  const previousWindow = windows.find((window) => window.kind === "previous") ?? null;
+  const startIso = currentWindow.start;
+  const endIso = currentWindow.end;
+  const starsFor = (catalog: Awaited<ReturnType<typeof loadCatalogTables>>) => {
     const names = new Map(
       catalog.clients
         .filter((client) => client.notes !== UNASSIGNED_CLIENT_MARKER)
@@ -138,62 +185,30 @@ async function loadDashboardContext(
       timezone,
     });
   };
-  const [
-    policy,
-    catalog,
-    connectionsResult,
-    pausesResult,
-    factsDefault,
-    previousDefault,
-    starDefault,
-  ] = await Promise.all([
-    admin
-      .from("grm_escalation_policies")
-      .select("timezone")
-      .eq("workspace_id", workspaceId)
-      .maybeSingle(),
-    loadCatalogTables(workspaceId),
+  const catalogPromise = loadCatalogTables(workspaceId);
+  const [catalog, connectionsResult, pausesResult, factsBase, previous, starMaps] = await Promise.all([
+    catalogPromise,
     admin.from("grm_google_connections").select("status").eq("workspace_id", workspaceId),
     admin
       .from("grm_autoreply_pauses")
       .select("scope, client_id, location_id")
       .eq("workspace_id", workspaceId)
       .is("cleared_at", null),
-    loadFacts(workspaceId, scope, startIso, endIso, defaultTimezone),
+    loadFacts(workspaceId, scope, currentWindow.start, currentWindow.end, timezone),
     previousWindow
-      ? loadFacts(workspaceId, scope, previousWindow.start.toISOString(), previousWindow.end.toISOString(), defaultTimezone)
+      ? loadFacts(workspaceId, scope, previousWindow.start, previousWindow.end, timezone)
       : Promise.resolve(null),
-    catalogPromise.then((tables) => starsFor(tables, defaultTimezone)),
+    catalogPromise.then((tables) => starsFor(tables)),
   ]);
 
-  if (policy.error) throw new Error(`Failed to load dashboard settings: ${policy.error.message}`);
   if (connectionsResult.error) throw new Error(`Failed to load Google connections: ${connectionsResult.error.message}`);
   if (pausesResult.error) throw new Error(`Failed to load autoreply pauses: ${pausesResult.error.message}`);
 
-  const timezone = ESCALATION_TIMEZONES.some((zone) => zone.id === policy.data?.timezone)
-    ? policy.data!.timezone
-    : defaultTimezone;
   const clients = catalog.clients
     .filter((client) => client.notes !== UNASSIGNED_CLIENT_MARKER)
     .map((client) => ({ id: client.id, name: client.name }));
   const clientNames = new Map(clients.map((client) => [client.id, client.name]));
   const parentByGroup = new Map(catalog.groups.map((group) => [group.id, group.parent_id]));
-  const [factsBase, previous, starMaps] =
-    timezone === defaultTimezone
-      ? [factsDefault, previousDefault, starDefault]
-      : await Promise.all([
-          loadFacts(workspaceId, scope, startIso, endIso, timezone),
-          previousWindow
-            ? loadFacts(
-                workspaceId,
-                scope,
-                previousWindow.start.toISOString(),
-                previousWindow.end.toISOString(),
-                timezone
-              )
-            : Promise.resolve(null),
-          starsFor(catalog, timezone),
-        ]);
   const facts = starMaps ? applyStarBreakdown(factsBase, starMaps) : factsBase;
   const locations: DashboardLocation[] = catalog.locations
     .filter((location) => location.client_id && clientNames.has(location.client_id))
