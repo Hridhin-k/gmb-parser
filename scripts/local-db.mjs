@@ -43,7 +43,7 @@ for (const key of ["DATABASE_URL", "DATABASE_MIGRATION_URL"]) {
 try { run("pg_ctl", ["-D", data, "status"]); }
 catch { run("pg_ctl", ["-D", data, "-l", resolve(root, "postgres.log"), "-o", `-p ${port} -h 127.0.0.1 -k ${root}`, "start"]); }
 setIfMissing("AUTH_SECRET", randomBytes(32).toString("hex"));
-setIfMissing("AUTH_URL", "http://localhost:3001");
+setIfMissing("AUTH_URL", "http://localhost:3000");
 setIfMissing("AUTH_DEV_LOGIN", "true");
 setIfMissing("AUTH_DEV_LOGIN_TOKEN", randomBytes(32).toString("hex"));
 const appPassword = randomBytes(24).toString("hex");

@@ -18,7 +18,7 @@ npm run db:seed:local
 npm run dev -- --port 3001 --hostname localhost
 ```
 
-Open [localhost:3001/login](http://localhost:3001/login) and select **Open local test
+Open [localhost:3000/login](http://localhost:3000/login) and select **Open local test
 workspace**. The seed creates an empty workspace and a local tester, without
 inventing reviews or importing production data. Accept the consent screen to
 continue. Google Business Profile can be connected through Settings.
@@ -42,9 +42,9 @@ version.
 ## Authentication
 
 Google login uses NextAuth's `/api/auth/callback/google`. Register
-`http://localhost:3001/api/auth/callback/google` as an authorized redirect URI in
+`http://localhost:3000/api/auth/callback/google` as an authorized redirect URI in
 the Google OAuth client. Business Profile authorization is a separate flow and
-still needs `http://localhost:3001/api/google/callback`, matching
+still needs `http://localhost:3000/api/google/callback`, matching
 `GOOGLE_REDIRECT_URI`. Set `AUTH_URL` and `NEXT_PUBLIC_APP_URL` to the app's origin.
 
 Production uses opaque, revocable database sessions and Google OAuth. Login
