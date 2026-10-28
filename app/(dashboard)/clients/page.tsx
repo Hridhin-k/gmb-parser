@@ -1,3 +1,4 @@
+import { cache, Suspense } from "react";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { GoogleBusinessProfileService } from "@/lib/services/google-business-profile";
 import { getMemberAccess, visibleClientIds } from "@/lib/services/access";
@@ -6,6 +7,7 @@ import { canSyncWorkspace } from "@/lib/services/workspace";
 import { allows, workspaceGrant } from "@/lib/access";
 import { isManager } from "@/lib/shell";
 import { PageHeader } from "@/components/page-header";
+import { SectionLoading } from "@/components/section-loading";
 import { EmptyState } from "@/components/empty-state";
 import { UnassignedLocationsBoard } from "@/components/unassigned-locations-board";
 import { SyncLocationsButton } from "@/components/sync-locations-button";
@@ -26,6 +28,16 @@ function locationCountFor(client: {
   return (client.grm_google_locations as Array<{ count: number }> | null)?.[0]?.count ?? 0;
 }
 
+const activeConnectionId = cache(async (workspaceId: string): Promise<string | null> => {
+  const { data } = await createAdminClient()
+    .from("grm_google_connections")
+    .select("id")
+    .eq("workspace_id", workspaceId)
+    .eq("status", "active")
+    .limit(1);
+  return data?.[0]?.id ?? null;
+});
+
 export default async function ClientsPage({
   searchParams,
 }: {
@@ -36,19 +48,61 @@ export default async function ClientsPage({
     getActiveWorkspace(),
     getActiveRole(),
   ]);
-  const access = await getMemberAccess(user.id, workspaceId);
+
+  return (
+    <div className="space-y-6">
+      <PageHeader
+        title="Locations and groups"
+        description="Organise Google profiles into organisations and groups. Groups appear in the scope selector across Overview, Inbox, and Analytics."
+      >
+        <Suspense fallback={null}>
+          <ClientsHeaderActions workspaceId={workspaceId} role={role} />
+        </Suspense>
+      </PageHeader>
+      <Suspense fallback={<SectionLoading page="clients" variant="rows" />}>
+        <ClientsBody userId={user.id} workspaceId={workspaceId} role={role} params={params} />
+      </Suspense>
+    </div>
+  );
+}
+
+async function ClientsHeaderActions({
+  workspaceId,
+  role,
+}: {
+  workspaceId: string;
+  role: Awaited<ReturnType<typeof getActiveRole>>;
+}) {
+  const connectionId = await activeConnectionId(workspaceId);
+  if (connectionId && canSyncWorkspace(role)) return <SyncLocationsButton connectionId={connectionId} />;
+  if (connectionId || !isManager(role)) return null;
+  return (
+    <Link
+      href="/settings"
+      className="inline-flex h-10 items-center rounded-full bg-ink px-4 text-sm font-semibold text-white hover:bg-graphite"
+    >
+      Connect Google
+    </Link>
+  );
+}
+
+async function ClientsBody({
+  userId,
+  workspaceId,
+  role,
+  params,
+}: {
+  userId: string;
+  workspaceId: string;
+  role: Awaited<ReturnType<typeof getActiveRole>>;
+  params: Record<string, string | string[] | undefined>;
+}) {
+  const access = await getMemberAccess(userId, workspaceId);
   const allowedClientIds = await visibleClientIds(workspaceId, access?.scope);
-  const canSync = canSyncWorkspace(role);
-  const admin = createAdminClient();
 
   const attention = Array.isArray(params.attention) ? params.attention[0] : params.attention;
-  const [{ data: connections }, clients, unassignedLocations, hierarchy] = await Promise.all([
-    admin
-      .from("grm_google_connections")
-      .select("id")
-      .eq("workspace_id", workspaceId)
-      .eq("status", "active")
-      .limit(1),
+  const [connectionId, clients, unassignedLocations, hierarchy] = await Promise.all([
+    activeConnectionId(workspaceId),
     GoogleBusinessProfileService.getWorkspaceClients(workspaceId),
     GoogleBusinessProfileService.getUnlinkedLocations(workspaceId),
     loadHierarchy(workspaceId, {
@@ -60,7 +114,6 @@ export default async function ClientsPage({
     }, allowedClientIds),
   ]);
 
-  const connectionId = connections?.[0]?.id ?? null;
   const visibleClients = allowedClientIds
     ? clients.filter((client) => allowedClientIds.includes(client.id))
     : clients;
@@ -76,23 +129,7 @@ export default async function ClientsPage({
     hierarchy.attention.expired + hierarchy.attention.duplicates + hierarchy.attention.unverified;
 
   return (
-    <div className="space-y-6">
-      <PageHeader
-        title="Locations and groups"
-        description="Organise Google profiles into organisations and groups. Groups appear in the scope selector across Overview, Inbox, and Analytics."
-      >
-        {connectionId && canSync ? (
-          <SyncLocationsButton connectionId={connectionId} />
-        ) : connectionId || !isManager(role) ? null : (
-          <Link
-            href="/settings"
-            className="inline-flex h-10 items-center rounded-full bg-ink px-4 text-sm font-semibold text-white hover:bg-graphite"
-          >
-            Connect Google
-          </Link>
-        )}
-      </PageHeader>
-
+    <>
       {visibleClients.length > 0 ? (
         <section className="rounded-2xl border border-[#e6ebf2] bg-white p-5">
           <p className="text-xs font-semibold uppercase tracking-wide text-[#5c6b82]">Workspace map</p>
@@ -183,7 +220,7 @@ export default async function ClientsPage({
           </ul>
         </section>
       )}
-    </div>
+    </>
   );
 }
 

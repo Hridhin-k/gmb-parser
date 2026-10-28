@@ -1,6 +1,8 @@
+import { Suspense } from "react";
 import { after } from "next/server";
 import { FreshMetrics } from "@/components/fresh-metrics";
 import { PageHeader } from "@/components/page-header";
+import { SectionLoading } from "@/components/section-loading";
 import { EscalationBoard } from "@/components/escalation-board";
 import { PendingRegion, TransitionScope } from "@/components/transition-scope";
 import { dateRangeParams, parseDateRange } from "@/lib/date-range";
@@ -71,23 +73,6 @@ export default async function EscalationsPage({ searchParams }: EscalationsPageP
 
   const search = typeof params.q === "string" ? params.q : "";
   const sort = params.sort === "opened" ? "opened" : "due";
-  const [assignmentReady, queue, counts, policy, pauses, scopes, roster] = await Promise.all([
-    EscalationService.assignmentColumnsReady(),
-    EscalationService.queue({
-      workspaceId,
-      bucket,
-      ...scope,
-      query: search || null,
-      sort,
-      page,
-      pageSize: PAGE_SIZE,
-    }),
-    EscalationService.counts(workspaceId, scope),
-    EscalationService.policy(workspaceId),
-    EscalationService.pausedTargets(workspaceId),
-    EscalationService.scopes(workspaceId),
-    getWorkspaceRoster(workspaceId),
-  ]);
 
   const query = new URLSearchParams();
   for (const [key, value] of Object.entries({
@@ -107,41 +92,102 @@ export default async function EscalationsPage({ searchParams }: EscalationsPageP
         title="Escalations"
         description="Each case opens on its own page. Assign it, comment, and record a resolution there. A published reply does not close the case."
       />
-        <FreshMetrics
-          rendered={overviewQueryKey((key) => (Array.isArray(params[key]) ? params[key][0] : params[key]))}
-          surface="escalations"
-        >
+      <FreshMetrics
+        rendered={overviewQueryKey((key) => (Array.isArray(params[key]) ? params[key][0] : params[key]))}
+        surface="escalations"
+      >
         <PendingRegion label="Updating escalations…">
-        <div className="mt-6">
-          {assignmentReady ? null : (
-            <p className="mb-4 rounded-xl border border-[#e6ebf2] bg-white px-4 py-3 text-sm text-ink" role="status">
-              Manager assignment and the one-step SLA move are not stored yet. The queue still follows the complaint rules. Apply the escalation assignment migration before those owners are recorded.
-            </p>
-          )}
-          <EscalationBoard
-            bucket={bucket}
-            counts={counts}
-            items={stampQueue(queue.items, policy.timezone)}
-            policy={policy}
-            pauses={pauses}
-            clients={scopes.clients}
-            locations={scopes.locations}
-            members={roster.members
-              .filter((member) => member.accessEnabled)
-              .map((member) => ({
-                userId: member.userId,
-                email: member.email,
-                role: member.role,
-                scopeLabel: member.scopeLabel,
-              }))}
-            canManage={canApproveReplies(role)}
-            query={query.toString()}
-            page={page}
-            totalPages={Math.max(1, Math.ceil(queue.total / PAGE_SIZE))}
-          />
-        </div>
-      </PendingRegion>
-        </FreshMetrics>
+          <div className="mt-6">
+            <Suspense fallback={<SectionLoading page="escalations" variant="rows" />}>
+              <EscalationsBoardSection
+                workspaceId={workspaceId}
+                role={role}
+                bucket={bucket}
+                scope={scope}
+                search={search}
+                sort={sort}
+                page={page}
+                query={query.toString()}
+              />
+            </Suspense>
+          </div>
+        </PendingRegion>
+      </FreshMetrics>
     </TransitionScope>
+  );
+}
+
+async function EscalationsBoardSection({
+  workspaceId,
+  role,
+  bucket,
+  scope,
+  search,
+  sort,
+  page,
+  query,
+}: {
+  workspaceId: string;
+  role: Awaited<ReturnType<typeof getActiveRole>>;
+  bucket: (typeof BUCKETS)[number];
+  scope: {
+    clientId: string | null;
+    locationId: string | null;
+    groupId: string | null;
+    since: string | null;
+    until: string | null;
+  };
+  search: string;
+  sort: "opened" | "due";
+  page: number;
+  query: string;
+}) {
+  const [assignmentReady, queue, counts, policy, pauses, scopes, roster] = await Promise.all([
+    EscalationService.assignmentColumnsReady(),
+    EscalationService.queue({
+      workspaceId,
+      bucket,
+      ...scope,
+      query: search || null,
+      sort,
+      page,
+      pageSize: PAGE_SIZE,
+    }),
+    EscalationService.counts(workspaceId, scope),
+    EscalationService.policy(workspaceId),
+    EscalationService.pausedTargets(workspaceId),
+    EscalationService.scopes(workspaceId),
+    getWorkspaceRoster(workspaceId),
+  ]);
+
+  return (
+    <>
+      {assignmentReady ? null : (
+        <p className="mb-4 rounded-xl border border-[#e6ebf2] bg-white px-4 py-3 text-sm text-ink" role="status">
+          Manager assignment and the one-step SLA move are not stored yet. The queue still follows the complaint rules. Apply the escalation assignment migration before those owners are recorded.
+        </p>
+      )}
+      <EscalationBoard
+        bucket={bucket}
+        counts={counts}
+        items={stampQueue(queue.items, policy.timezone)}
+        policy={policy}
+        pauses={pauses}
+        clients={scopes.clients}
+        locations={scopes.locations}
+        members={roster.members
+          .filter((member) => member.accessEnabled)
+          .map((member) => ({
+            userId: member.userId,
+            email: member.email,
+            role: member.role,
+            scopeLabel: member.scopeLabel,
+          }))}
+        canManage={canApproveReplies(role)}
+        query={query}
+        page={page}
+        totalPages={Math.max(1, Math.ceil(queue.total / PAGE_SIZE))}
+      />
+    </>
   );
 }

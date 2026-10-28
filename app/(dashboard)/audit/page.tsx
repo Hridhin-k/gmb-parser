@@ -1,15 +1,17 @@
+import { Suspense } from "react";
 import { redirect } from "next/navigation";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { getActiveRole, getActiveWorkspace } from "@/lib/services/session";
 import { canOpenPath } from "@/lib/shell";
 import { getWorkspaceRoster } from "@/lib/services/workspace";
 import { PageHeader } from "@/components/page-header";
+import { SectionLoading } from "@/components/section-loading";
 import { EmptyState } from "@/components/empty-state";
 import { AuditLogFilters } from "@/components/audit-log-filters";
 import { PendingRegion, TransitionScope } from "@/components/transition-scope";
 import { ClipboardList } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { parseDateRange } from "@/lib/date-range";
+import { parseDateRange, type DateRange } from "@/lib/date-range";
 import { PaginationBar } from "@/components/pagination-bar";
 import { validatePage } from "@/lib/validation";
 import { formatFriendlyDateTime } from "@/lib/format-date";
@@ -144,13 +146,54 @@ export default async function AuditPage({ searchParams }: AuditPageProps) {
     searchParams,
     getActiveWorkspace(),
   ]);
-  const admin = createAdminClient();
-
   const actionFilter = typeof params.action === "string" ? params.action : "";
   const userFilter = typeof params.user === "string" ? params.user : "";
   const range = parseDateRange(params, "all");
   const entityFilter = typeof params.entity === "string" ? params.entity : "";
   const currentPage = validatePage(params.page);
+
+  return (
+    <div className="space-y-6">
+      <PageHeader
+        title="Audit log"
+        description="Every connection, sync, draft, approval, and publish in this workspace, with who did it."
+      />
+
+      <TransitionScope>
+        <Suspense fallback={<SectionLoading page="audit" variant="rows" />}>
+          <AuditBody
+            workspaceId={workspaceId}
+            params={params}
+            actionFilter={actionFilter}
+            userFilter={userFilter}
+            entityFilter={entityFilter}
+            range={range}
+            currentPage={currentPage}
+          />
+        </Suspense>
+      </TransitionScope>
+    </div>
+  );
+}
+
+async function AuditBody({
+  workspaceId,
+  params,
+  actionFilter,
+  userFilter,
+  entityFilter,
+  range,
+  currentPage,
+}: {
+  workspaceId: string;
+  params: Record<string, string | string[] | undefined>;
+  actionFilter: string;
+  userFilter: string;
+  entityFilter: string;
+  range: DateRange;
+  currentPage: number;
+}) {
+  const admin = createAdminClient();
 
   // Server-side pagination: exact count + one ranged page from Postgres.
   let query = admin
@@ -191,108 +234,101 @@ export default async function AuditPage({ searchParams }: AuditPageProps) {
   );
 
   return (
-    <div className="space-y-6">
-      <PageHeader
-        title="Audit log"
-        description="Every connection, sync, draft, approval, and publish in this workspace, with who did it."
+    <>
+      <AuditLogFilters
+        currentAction={actionFilter}
+        currentUser={userFilter}
+        currentEntity={entityFilter}
+        currentRange={{ key: range.key, from: range.from, to: range.to }}
+        actionOptions={Object.entries(ACTION_LABELS).map(([value, v]) => ({
+          value,
+          label: v.label,
+        }))}
+        entityOptions={Object.entries(ENTITY_LABELS).map(
+          ([value, label]) => ({
+            value,
+            label,
+          }),
+        )}
+        memberOptions={roster.members.map((m) => ({
+          value: m.userId,
+          label: m.email,
+        }))}
       />
 
-      <TransitionScope>
-        <AuditLogFilters
-          currentAction={actionFilter}
-          currentUser={userFilter}
-          currentEntity={entityFilter}
-          currentRange={{ key: range.key, from: range.from, to: range.to }}
-          actionOptions={Object.entries(ACTION_LABELS).map(([value, v]) => ({
-            value,
-            label: v.label,
-          }))}
-          entityOptions={Object.entries(ENTITY_LABELS).map(
-            ([value, label]) => ({
-              value,
-              label,
-            }),
-          )}
-          memberOptions={roster.members.map((m) => ({
-            value: m.userId,
-            label: m.email,
-          }))}
-        />
-
-        <PendingRegion label="Filtering activity…">
-          {rows.length === 0 ? (
-            <EmptyState
-              icon={ClipboardList}
-              title={
-                hasFilters ? "No entries match your filters" : "No activity yet"
-              }
-              description={
-                hasFilters
-                  ? "Try a wider date range or clear the filters."
-                  : "Entries appear here as your team connects accounts, syncs, and replies."
-              }
-            />
-          ) : (
-            <div className="overflow-hidden rounded-xl bg-white shadow-card">
-              <ul className="divide-y divide-silver">
-                {rows.map((log) => {
-                  const action = readableAction(log.action);
-                  const actor = log.user_id
-                    ? (emailById.get(log.user_id) ?? "Former member")
-                    : "System";
-                  return (
-                    <li
-                      key={log.id}
-                      className="flex flex-col gap-2 px-4 py-3.5 sm:flex-row sm:items-start sm:gap-4 sm:px-5"
+      <PendingRegion label="Filtering activity…">
+        {rows.length === 0 ? (
+          <EmptyState
+            icon={ClipboardList}
+            title={
+              hasFilters ? "No entries match your filters" : "No activity yet"
+            }
+            description={
+              hasFilters
+                ? "Try a wider date range or clear the filters."
+                : "Entries appear here as your team connects accounts, syncs, and replies."
+            }
+          />
+        ) : (
+          <div className="overflow-hidden rounded-xl bg-white shadow-card">
+            <ul className="divide-y divide-silver">
+              {rows.map((log) => {
+                const action = readableAction(log.action);
+                const actor = log.user_id
+                  ? (emailById.get(log.user_id) ?? "Former member")
+                  : "System";
+                return (
+                  <li
+                    key={log.id}
+                    className="flex flex-col gap-2 px-4 py-3.5 sm:flex-row sm:items-start sm:gap-4 sm:px-5"
+                  >
+                    <time
+                      dateTime={log.created_at}
+                      className="shrink-0 text-xs tabular-nums text-slate sm:w-40 sm:pt-0.5"
                     >
-                      <time
-                        dateTime={log.created_at}
-                        className="shrink-0 text-xs tabular-nums text-slate sm:w-40 sm:pt-0.5"
-                      >
-                        {formatDate(log.created_at)}
-                      </time>
-                      <div className="min-w-0 flex-1">
-                        <div className="flex flex-wrap items-center gap-2">
-                          <span
-                            className={cn(
-                              "rounded-full px-2.5 py-0.5 text-xs font-medium",
-                              TONE_CLASSES[action.tone],
-                            )}
-                          >
-                            {action.label}
-                          </span>
-                          <span className="text-xs text-slate">
-                            {ENTITY_LABELS[log.entity_type] ?? log.entity_type}
-                          </span>
-                        </div>
-                        <MetadataLine
-                          metadata={
-                            (log.metadata ?? {}) as Record<string, unknown>
-                          }
-                        />
+                      {formatDate(log.created_at)}
+                    </time>
+                    <div className="min-w-0 flex-1">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <span
+                          className={cn(
+                            "rounded-full px-2.5 py-0.5 text-xs font-medium",
+                            TONE_CLASSES[action.tone],
+                          )}
+                        >
+                          {action.label}
+                        </span>
+                        <span className="text-xs text-slate">
+                          {ENTITY_LABELS[log.entity_type] ?? log.entity_type}
+                        </span>
                       </div>
-                      <p className="truncate text-sm text-graphite sm:max-w-[220px] sm:text-right">
-                        {actor}
-                      </p>
-                    </li>
-                  );
-                })}
-              </ul>
-              <div className="border-t border-silver px-5 py-2.5 text-xs text-slate">
-                Showing {fromEntry}–{toEntry} of {totalEntries} entries
-              </div>
-              {totalPages > 1 ? (
-                <PaginationBar
-                  basePath="/audit"
-                  currentPage={currentPage}
-                  totalPages={totalPages}
-                  searchParams={paginationParams}
-                />
-              ) : null}
+                      <MetadataLine
+                        metadata={
+                          (log.metadata ?? {}) as Record<string, unknown>
+                        }
+                      />
+                    </div>
+                    <p className="truncate text-sm text-graphite sm:max-w-[220px] sm:text-right">
+                      {actor}
+                    </p>
+                  </li>
+                );
+              })}
+            </ul>
+            <div className="border-t border-silver px-5 py-2.5 text-xs text-slate">
+              Showing {fromEntry}–{toEntry} of {totalEntries} entries
             </div>
-          )}
-        </PendingRegion>
-      </TransitionScope>
-    </div>
+            {totalPages > 1 ? (
+              <PaginationBar
+                basePath="/audit"
+                currentPage={currentPage}
+                totalPages={totalPages}
+                searchParams={paginationParams}
+              />
+            ) : null}
+          </div>
+        )}
+      </PendingRegion>
+    </>
   );
 }

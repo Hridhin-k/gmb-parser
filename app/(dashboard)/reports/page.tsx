@@ -1,9 +1,11 @@
+import { Suspense } from "react";
 import Link from "next/link";
 import { Download } from "lucide-react";
 import { FreshMetrics } from "@/components/fresh-metrics";
 import { ReportsBoard } from "@/components/reports-board";
 import { PageHeader } from "@/components/page-header";
-import { dateRangeParams, parseDateRange } from "@/lib/date-range";
+import { SectionLoading } from "@/components/section-loading";
+import { dateRangeParams, parseDateRange, type DateRange } from "@/lib/date-range";
 import { channelOptions, readDeliveryEnv } from "@/lib/reporting";
 import { countExportableReviews } from "@/lib/services/review-export";
 import { AlertService, listReportScopes, ReportService } from "@/lib/services/reporting";
@@ -13,6 +15,7 @@ import { getWorkspaceRoster } from "@/lib/services/workspace";
 import { getMemberAccess, visibleClientIds, visibleLocationIds } from "@/lib/services/access";
 import { readPageScope } from "@/lib/services/scope-catalog";
 import { workspaceGrant } from "@/lib/access";
+import type { ResolvedScope } from "@/lib/scope";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { overviewQueryKey } from "@/lib/overview-board";
 import { isManager, scopedHref, shellAlerts } from "@/lib/shell";
@@ -29,16 +32,49 @@ export default async function ReportsPage({ searchParams }: ReportsPageProps) {
     getActiveWorkspace(),
     getActiveRole(),
   ]);
-  const access = await getMemberAccess(user.id, workspaceId);
+  const resolved = await readPageScope(user.id, workspaceId, params);
+  const range = parseDateRange(params, DEFAULT_RANGE);
+
+  return (
+    <div className="space-y-6">
+      <PageHeader
+        title="Reports and alerts"
+        description="Schedule a report from stored reviews, and turn on alert rules. Email, Slack, and WhatsApp send only when that provider is configured."
+      />
+
+      <FreshMetrics
+        rendered={overviewQueryKey((key) => (Array.isArray(params[key]) ? params[key][0] : params[key]))}
+        surface="reports"
+      >
+        <Suspense fallback={<SectionLoading page="reports" variant="rows" />}>
+          <ReportsBody userId={user.id} workspaceId={workspaceId} role={role} resolved={resolved} range={range} />
+        </Suspense>
+      </FreshMetrics>
+    </div>
+  );
+}
+
+async function ReportsBody({
+  userId,
+  workspaceId,
+  role,
+  resolved,
+  range,
+}: {
+  userId: string;
+  workspaceId: string;
+  role: Awaited<ReturnType<typeof getActiveRole>>;
+  resolved: ResolvedScope;
+  range: DateRange;
+}) {
+  const access = await getMemberAccess(userId, workspaceId);
   const [allowedClientIds, locationIds] = await Promise.all([
     visibleClientIds(workspaceId, access?.scope),
     visibleLocationIds(workspaceId, access?.scope),
   ]);
-  const resolved = await readPageScope(user.id, workspaceId, params);
   const clientId = resolved.clientId ?? "";
   const groupId = resolved.groupId ?? "";
   const locationId = resolved.locationId ?? "";
-  const range = parseDateRange(params, DEFAULT_RANGE);
 
   const admin = createAdminClient();
   const scopedClientIds = allowedClientIds?.length
@@ -56,7 +92,7 @@ export default async function ReportsPage({ searchParams }: ReportsPageProps) {
     AlertService.list(workspaceId),
     listReportScopes(workspaceId),
     getWorkspaceRoster(workspaceId),
-    getShellSummary(workspaceId, allowedClientIds, locationIds, user.id),
+    getShellSummary(workspaceId, allowedClientIds, locationIds, userId),
     allowedClientIds
       ? admin
           .from("grm_google_locations")
@@ -108,16 +144,7 @@ export default async function ReportsPage({ searchParams }: ReportsPageProps) {
   }));
 
   return (
-    <div className="space-y-6">
-      <PageHeader
-        title="Reports and alerts"
-        description="Schedule a report from stored reviews, and turn on alert rules. Email, Slack, and WhatsApp send only when that provider is configured."
-      />
-
-      <FreshMetrics
-        rendered={overviewQueryKey((key) => (Array.isArray(params[key]) ? params[key][0] : params[key]))}
-        surface="reports"
-      >
+    <>
       <section className="rounded-xl bg-white p-4 shadow-card sm:p-5">
         <h2 className="text-sm font-semibold text-graphite">Exports for the dates above</h2>
         <ul className="mt-3 divide-y divide-silver">
@@ -191,7 +218,6 @@ export default async function ReportsPage({ searchParams }: ReportsPageProps) {
             : alerts.events
         }
       />
-      </FreshMetrics>
-    </div>
+    </>
   );
 }

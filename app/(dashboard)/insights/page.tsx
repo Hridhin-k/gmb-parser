@@ -1,11 +1,15 @@
+import { Suspense } from "react";
 import Link from "next/link";
 import { PageHeader } from "@/components/page-header";
+import { SectionLoading } from "@/components/section-loading";
 import { getActiveWorkspace } from "@/lib/services/session";
 import { readPageScope } from "@/lib/services/scope-catalog";
 import { parseDateRange } from "@/lib/date-range";
 import { getLatestAnalysisRun } from "@/lib/services/insight-pipeline";
 import { loadInsightDashboard } from "@/lib/services/insight-dashboard";
 import { loadScopeCatalog } from "@/lib/services/scope-catalog";
+import type { ResolvedScope } from "@/lib/scope";
+import type { DateRange } from "@/lib/date-range";
 import {
   KeyInsights,
   LocationPerformance,
@@ -218,6 +222,39 @@ export default async function InsightsPage({ searchParams }: InsightsPageProps) 
   ]);
   const scope = await readPageScope(user.id, workspaceId, params);
   const range = parseDateRange(params, "12m");
+
+  return (
+    <>
+      <PageHeader
+        title="AI Insights"
+        description="Every written review is analysed into evidence-backed observations, then synthesised into a saved report. Rating-only reviews count toward ratings but are never used as evidence."
+      />
+      <Suspense fallback={<SectionLoading page="analytics" variant="charts" />}>
+        <InsightsBody
+          userId={user.id}
+          workspaceId={workspaceId}
+          params={params}
+          scope={scope}
+          range={range}
+        />
+      </Suspense>
+    </>
+  );
+}
+
+async function InsightsBody({
+  userId,
+  workspaceId,
+  params,
+  scope,
+  range,
+}: {
+  userId: string;
+  workspaceId: string;
+  params: Record<string, string | string[] | undefined>;
+  scope: ResolvedScope;
+  range: DateRange;
+}) {
   const start = range.start ? range.start.toISOString() : null;
   const end = range.end ? range.end.toISOString() : null;
 
@@ -233,7 +270,7 @@ export default async function InsightsPage({ searchParams }: InsightsPageProps) 
     loadInsightDashboard(workspaceId, { locationIds: scope.locationIds, start, end }),
     getLatestAnalysisRun(workspaceId),
     getReportByCacheKey(workspaceId, cacheKey),
-    loadScopeCatalog(user.id, workspaceId),
+    loadScopeCatalog(userId, workspaceId),
   ]);
   // Rolling preset windows drift daily, so from tomorrow the exact cache
   // key misses. Fall back to the most recent saved report for this scope
@@ -353,11 +390,6 @@ export default async function InsightsPage({ searchParams }: InsightsPageProps) 
 
   return (
     <>
-      <PageHeader
-        title="AI Insights"
-        description="Every written review is analysed into evidence-backed observations, then synthesised into a saved report. Rating-only reviews count toward ratings but are never used as evidence."
-      />
-
       {/* Active filter identity */}
       <div className="mb-4 flex flex-wrap items-center gap-1.5 rounded-xl border border-silver bg-white p-3">
         <span className="text-xs font-medium uppercase tracking-wide text-slate">Showing</span>

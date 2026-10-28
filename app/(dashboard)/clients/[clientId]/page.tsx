@@ -1,3 +1,4 @@
+import { Suspense } from "react";
 import { notFound } from "next/navigation";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { GoogleBusinessProfileService } from "@/lib/services/google-business-profile";
@@ -10,6 +11,7 @@ import { AgencyClientForm } from "@/components/agency-client-form";
 import { ClientQueue } from "@/components/client-queue";
 import { canSyncWorkspace } from "@/lib/services/workspace";
 import { PageHeader } from "@/components/page-header";
+import { SectionLoading } from "@/components/section-loading";
 import { LocationTable } from "@/components/location-table";
 import { UnlinkedLocationsPanel } from "@/components/unlinked-locations-panel";
 import { ArrowLeft, MessageSquareText } from "lucide-react";
@@ -34,6 +36,36 @@ export default async function ClientDetailPage({
   const access = await getMemberAccess(user.id, workspaceId);
   const allowed = await visibleClientIds(workspaceId, access?.scope);
   if (allowed && !allowed.includes(clientId)) notFound();
+
+  return (
+    <div className="space-y-10">
+      <div className="flex items-center gap-2">
+        <Link
+          href="/clients"
+          className="flex items-center gap-1 text-sm font-medium text-ink underline decoration-stone/50 underline-offset-4 hover:decoration-ink"
+        >
+          <ArrowLeft className="h-3.5 w-3.5" />
+          Locations
+        </Link>
+      </div>
+      <Suspense fallback={<SectionLoading page="client" variant="panel" />}>
+        <ClientDetailBody workspaceId={workspaceId} clientId={clientId} role={role} access={access} />
+      </Suspense>
+    </div>
+  );
+}
+
+async function ClientDetailBody({
+  workspaceId,
+  clientId,
+  role,
+  access,
+}: {
+  workspaceId: string;
+  clientId: string;
+  role: Awaited<ReturnType<typeof getActiveRole>>;
+  access: Awaited<ReturnType<typeof getMemberAccess>>;
+}) {
   const admin = createAdminClient();
 
   const [
@@ -121,17 +153,7 @@ export default async function ClientDetailPage({
       : "Waiting for this client to connect Google.";
 
   return (
-    <div className="space-y-10">
-      <div className="flex items-center gap-2">
-        <Link
-          href="/clients"
-          className="flex items-center gap-1 text-sm font-medium text-ink underline decoration-stone/50 underline-offset-4 hover:decoration-ink"
-        >
-          <ArrowLeft className="h-3.5 w-3.5" />
-          Locations
-        </Link>
-      </div>
-
+    <>
       <section className="rounded-xl border border-silver bg-white p-4">
         <h2 className="text-sm font-semibold text-graphite">{clientRow.brand_name || clientRow.name}</h2>
         <p className="mt-1 mb-3 text-xs text-slate">
@@ -228,6 +250,6 @@ export default async function ClientDetailPage({
         }))}
       />
 
-    </div>
+    </>
   );
 }

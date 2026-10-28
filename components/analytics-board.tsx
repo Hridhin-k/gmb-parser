@@ -84,6 +84,7 @@ export function AnalyticsBoard({
   rankBy,
   show,
   compare,
+  hideSectionNav = false,
 }: {
   context: DashboardContext;
   range: DateRange;
@@ -96,6 +97,8 @@ export function AnalyticsBoard({
   rankBy: RankBy;
   show: RankShow;
   compare: AnalyticsCompare;
+  /** When tabs are painted by the page shell above Suspense. */
+  hideSectionNav?: boolean;
 }) {
   const names = new Map(context.locations.map((location) => [location.id, location.name]));
   const groupNames = new Map(context.groups.map((group) => [group.id, group.name]));
@@ -103,22 +106,24 @@ export function AnalyticsBoard({
 
   return (
     <div className="space-y-6">
-      <div className="flex flex-wrap gap-2">
-        {ANALYTICS_SECTIONS.map((item) => (
-          <Link
-            key={item.id}
-            href={sectionHref(query, item.id)}
-            aria-current={section === item.id ? "page" : undefined}
-            className={
-              section === item.id
-                ? "rounded-full bg-navy px-3.5 py-1.5 text-sm text-white"
-                : "rounded-full border border-silver bg-white px-3.5 py-1.5 text-sm text-graphite hover:border-action-blue hover:text-action-blue"
-            }
-          >
-            {item.label}
-          </Link>
-        ))}
-      </div>
+      {hideSectionNav ? null : (
+        <div className="flex flex-wrap gap-2">
+          {ANALYTICS_SECTIONS.map((item) => (
+            <Link
+              key={item.id}
+              href={sectionHref(query, item.id)}
+              aria-current={section === item.id ? "page" : undefined}
+              className={
+                section === item.id
+                  ? "rounded-full bg-navy px-3.5 py-1.5 text-sm text-white"
+                  : "rounded-full border border-silver bg-white px-3.5 py-1.5 text-sm text-graphite hover:border-action-blue hover:text-action-blue"
+              }
+            >
+              {item.label}
+            </Link>
+          ))}
+        </div>
+      )}
       {section === "performance" ? (
         <Performance
           facts={context.facts}

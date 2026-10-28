@@ -102,7 +102,7 @@ function ratingLabel(value: number | null): string {
   return value === null ? "—" : value.toFixed(2);
 }
 
-export function ClientOverviewView({
+export function OverviewMetricsPanel({
   board,
   reviewsHref,
   negativeHref,
@@ -118,7 +118,7 @@ export function ClientOverviewView({
   const { kpis } = board;
   const starMax = Math.max(1, ...board.starMix.map((row) => row.count));
   return (
-    <div className="space-y-4">
+    <>
       <section className="rounded-xl border border-[#e6ebf2] bg-white px-4 py-4 shadow-[0_1px_2px_rgba(16,24,40,0.04)] sm:px-5">
         <p className="text-xs font-semibold uppercase tracking-[0.08em] text-[#163a7a]">{board.periodLabel}</p>
         <div className="mt-2 space-y-1.5">
@@ -246,53 +246,71 @@ export function ClientOverviewView({
           </Panel>
         </div>
       </div>
+    </>
+  );
+}
 
-      <AiInsight board={board} />
+export function OverviewAiInsightPanel({ board }: { board: OverviewBoard }) {
+  return <AiInsight board={board} />;
+}
 
+export function OverviewOutletsPanel({ board }: { board: OverviewBoard }) {
+  const { kpis } = board;
+  return (
+    <>
       {board.lowest.length > 0 ? (
-            <Panel title="Lowest rated outlets" action={<Link href={board.analyticsHref} className="text-xs font-medium text-[#2563eb] hover:underline">See all {board.rankedCount}</Link>}>
-              <div className="mt-3 overflow-x-auto">
-                <table className="w-full min-w-[36rem] text-left text-sm">
-                  <thead>
-                    <tr className="text-xs text-slate">
-                      <th className="pb-2 font-medium">Outlet</th>
-                      <th className="pb-2 font-medium">Rating</th>
-                      <th className="pb-2 font-medium">Change</th>
-                      <th className="pb-2 font-medium">1–3 stars</th>
-                      <th className="pb-2 font-medium">Main complaint</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {board.lowest.map((store) => (
-                      <tr key={store.id} className="border-t border-[#eef2f7]">
-                        <td className="py-2.5 pr-3">
-                          <Link href={store.href} className="font-medium text-graphite hover:text-[#163a7a]">
-                            {store.name}
-                          </Link>
-                          <p className="text-xs text-slate">{store.reviews.toLocaleString("en-US")} reviews</p>
-                        </td>
-                        <td className="py-2.5 tabular-nums">{store.rating.toFixed(2)}</td>
-                        <td className="py-2.5 tabular-nums">{changeLabel(store.ratingChange)}</td>
-                        <td className="py-2.5">
-                          <Link href={store.negativeHref} className="tabular-nums text-graphite hover:text-[#163a7a]">
-                            {pct(store.negativeShare)}
-                          </Link>
-                        </td>
-                        <td className="py-2.5 text-slate">{store.complaint ?? "—"}</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-              <p className="mt-auto pt-3 text-xs text-slate">
-                Sorted by average rating, lowest first. Change is against the previous period of the same length. Main complaint is that outlet&apos;s most common negative topic from analysed reviews. A dash means none was found.
-              </p>
-            </Panel>
-          ) : (
-            <Panel title="Lowest rated outlets">
-              <p className="mt-3 text-sm text-slate">A ranking appears when this scope has two or more outlets with reviews.</p>
-            </Panel>
-          )}
+        <Panel
+          title="Lowest rated outlets"
+          action={
+            <Link href={board.analyticsHref} className="text-xs font-medium text-[#2563eb] hover:underline">
+              See all {board.rankedCount}
+            </Link>
+          }
+        >
+          <div className="mt-3 overflow-x-auto">
+            <table className="w-full min-w-[36rem] text-left text-sm">
+              <thead>
+                <tr className="text-xs text-slate">
+                  <th className="pb-2 font-medium">Outlet</th>
+                  <th className="pb-2 font-medium">Rating</th>
+                  <th className="pb-2 font-medium">Change</th>
+                  <th className="pb-2 font-medium">1–3 stars</th>
+                  <th className="pb-2 font-medium">Main complaint</th>
+                </tr>
+              </thead>
+              <tbody>
+                {board.lowest.map((store) => (
+                  <tr key={store.id} className="border-t border-[#eef2f7]">
+                    <td className="py-2.5 pr-3">
+                      <Link href={store.href} className="font-medium text-graphite hover:text-[#163a7a]">
+                        {store.name}
+                      </Link>
+                      <p className="text-xs text-slate">{store.reviews.toLocaleString("en-US")} reviews</p>
+                    </td>
+                    <td className="py-2.5 tabular-nums">{store.rating.toFixed(2)}</td>
+                    <td className="py-2.5 tabular-nums">{changeLabel(store.ratingChange)}</td>
+                    <td className="py-2.5">
+                      <Link href={store.negativeHref} className="tabular-nums text-graphite hover:text-[#163a7a]">
+                        {pct(store.negativeShare)}
+                      </Link>
+                    </td>
+                    <td className="py-2.5 text-slate">{store.complaint ?? "—"}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+          <p className="mt-auto pt-3 text-xs text-slate">
+            Sorted by average rating, lowest first. Change is against the previous period of the same length. Main
+            complaint is that outlet&apos;s most common negative topic from analysed reviews. A dash means none was
+            found.
+          </p>
+        </Panel>
+      ) : (
+        <Panel title="Lowest rated outlets">
+          <p className="mt-3 text-sm text-slate">A ranking appears when this scope has two or more outlets with reviews.</p>
+        </Panel>
+      )}
 
       <div className="grid items-stretch gap-4 xl:grid-cols-2">
         {board.worst ? (
@@ -323,6 +341,34 @@ export function ClientOverviewView({
           )}
         </Panel>
       </div>
+    </>
+  );
+}
+
+export function ClientOverviewView({
+  board,
+  reviewsHref,
+  negativeHref,
+  unansweredHref,
+  escalationsHref,
+}: {
+  board: OverviewBoard;
+  reviewsHref: string;
+  negativeHref: string;
+  unansweredHref: string;
+  escalationsHref: string;
+}) {
+  return (
+    <div className="space-y-4">
+      <OverviewMetricsPanel
+        board={board}
+        reviewsHref={reviewsHref}
+        negativeHref={negativeHref}
+        unansweredHref={unansweredHref}
+        escalationsHref={escalationsHref}
+      />
+      <OverviewAiInsightPanel board={board} />
+      <OverviewOutletsPanel board={board} />
     </div>
   );
 }

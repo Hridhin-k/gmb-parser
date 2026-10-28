@@ -1,3 +1,4 @@
+import { Suspense } from "react";
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { createAdminClient } from "@/lib/supabase/admin";
@@ -7,6 +8,7 @@ import { SettingsBoard } from "@/components/settings-board";
 import { AiConfigPanel } from "@/components/ai-config-panel";
 import { GoogleConnectionCard } from "@/components/google-connection-card";
 import { PageHeader } from "@/components/page-header";
+import { SectionLoading } from "@/components/section-loading";
 import { EscalationContactStore, EscalationService } from "@/lib/services/escalations";
 import { ResolutionContactForm } from "@/components/resolution-contact-form";
 import { listScopeChoices } from "@/lib/services/access";
@@ -92,9 +94,98 @@ export default async function SettingsPage({
       redirect("/settings?section=tone");
     }
   }
-  const [settings, scopes, policy, contact, connections, branding, aiBoard] = await Promise.all([
+
+  const scopeQuery = target.kind === "workspace" ? "" : `&scope=${target.kind}:${target.id}`;
+
+  return (
+    <div className="space-y-6">
+      <PageHeader
+        title="Settings"
+        description="Choose where the settings apply, then the section to edit."
+      />
+      <Suspense fallback={null}>
+        <SettingsScopeTabs workspaceId={workspaceId} section={section} target={target} allowedClients={allowedClients} />
+      </Suspense>
+      <nav className="flex flex-wrap gap-2 border-b border-silver pb-3">
+        {SECTIONS.filter(([id]) => (id !== "plan" && id !== "branding") || canBill).map(([id, label]) => (
+          <Link key={id} href={`/settings?section=${id}${scopeQuery}`} className={`rounded-full px-3 py-1 text-sm ${section === id ? "bg-ink text-white" : "text-graphite"}`}>
+            {label}
+          </Link>
+        ))}
+      </nav>
+      <Suspense fallback={<SectionLoading page="settings" variant="settings" />}>
+        <SettingsSection
+          userId={user.id}
+          workspaceId={workspaceId}
+          role={role}
+          section={section}
+          target={target}
+          canBill={canBill}
+          canEdit={canEdit}
+          canEditWorkspace={canEditWorkspace}
+          params={params}
+        />
+      </Suspense>
+    </div>
+  );
+}
+
+async function SettingsScopeTabs({
+  workspaceId,
+  section,
+  target,
+  allowedClients,
+}: {
+  workspaceId: string;
+  section: string;
+  target: SettingsTarget;
+  allowedClients: string[] | null;
+}) {
+  const scopes = await listScopeChoices(workspaceId);
+  const visibleScopes = allowedClients
+    ? scopes.filter((choice) => choice.kind === "client" && allowedClients.includes(choice.id))
+    : scopes;
+
+  return (
+    <div className="flex flex-wrap gap-2">
+      <Link href={`/settings?section=${section}`} className={`rounded-full border px-3 py-1 text-sm ${target.kind === "workspace" ? "border-ink bg-ink text-white" : "border-silver text-graphite"}`}>
+        Organization
+      </Link>
+      {visibleScopes.slice(0, 12).map((scope) => {
+        const active = target.kind === scope.kind && "id" in target && target.id === scope.id;
+        return (
+          <Link key={scope.id} href={`/settings?section=${section}&scope=${scope.kind}:${scope.id}`} className={`rounded-full border px-3 py-1 text-sm ${active ? "border-ink bg-ink text-white" : "border-silver text-graphite"}`}>
+            {scope.label}
+          </Link>
+        );
+      })}
+    </div>
+  );
+}
+
+async function SettingsSection({
+  userId,
+  workspaceId,
+  role,
+  section,
+  target,
+  canBill,
+  canEdit,
+  canEditWorkspace,
+  params,
+}: {
+  userId: string;
+  workspaceId: string;
+  role: Awaited<ReturnType<typeof getActiveRole>>;
+  section: string;
+  target: SettingsTarget;
+  canBill: boolean;
+  canEdit: boolean;
+  canEditWorkspace: boolean;
+  params: Record<string, string | string[] | undefined>;
+}) {
+  const [settings, policy, contact, connections, branding, aiBoard] = await Promise.all([
     loadReplySettings(workspaceId, target),
-    listScopeChoices(workspaceId),
     EscalationService.policy(workspaceId),
     EscalationContactStore.read(workspaceId),
     createAdminClient()
@@ -104,44 +195,18 @@ export default async function SettingsPage({
       .neq("status", "revoked")
       .order("created_at", { ascending: false }),
     canBill ? loadAgencyBranding(workspaceId) : Promise.resolve(null),
-    section === "tone" ? loadAiBoard(workspaceId, user.id) : Promise.resolve(null),
+    section === "tone" ? loadAiBoard(workspaceId, userId) : Promise.resolve(null),
   ]);
 
   const googleError = typeof params.google_error === "string" ? params.google_error : null;
   const methods = authMethodsFromEnv();
   const emailDelivery = Boolean(process.env.RESEND_API_KEY && process.env.REPORT_FROM_EMAIL);
-  const scopeQuery = target.kind === "workspace" ? "" : `&scope=${target.kind}:${target.id}`;
-  const visibleScopes = allowedClients
-    ? scopes.filter((choice) => choice.kind === "client" && allowedClients.includes(choice.id))
-    : scopes;
 
   return (
     <div className="space-y-6">
-      <PageHeader
-        title="Settings"
-        description={`Editing for ${settings.label}. Applies to ${settings.appliesTo}.`}
-      />
-      <div className="flex flex-wrap gap-2">
-        <Link href={`/settings?section=${section}`} className={`rounded-full border px-3 py-1 text-sm ${target.kind === "workspace" ? "border-ink bg-ink text-white" : "border-silver text-graphite"}`}>
-          Organization
-        </Link>
-        {visibleScopes.slice(0, 12).map((scope) => {
-          const active = target.kind === scope.kind && "id" in target && target.id === scope.id;
-          return (
-            <Link key={scope.id} href={`/settings?section=${section}&scope=${scope.kind}:${scope.id}`} className={`rounded-full border px-3 py-1 text-sm ${active ? "border-ink bg-ink text-white" : "border-silver text-graphite"}`}>
-              {scope.label}
-            </Link>
-          );
-        })}
-      </div>
-      <nav className="flex flex-wrap gap-2 border-b border-silver pb-3">
-        {SECTIONS.filter(([id]) => (id !== "plan" && id !== "branding") || canBill).map(([id, label]) => (
-          <Link key={id} href={`/settings?section=${id}${scopeQuery}`} className={`rounded-full px-3 py-1 text-sm ${section === id ? "bg-ink text-white" : "text-graphite"}`}>
-            {label}
-          </Link>
-        ))}
-      </nav>
-
+      <p className="text-sm text-slate">
+        Editing for {settings.label}. Applies to {settings.appliesTo}.
+      </p>
       {section === "tone" && aiBoard ? (
         <div className="space-y-8">
           <AiConfigPanel
@@ -276,7 +341,6 @@ export default async function SettingsPage({
           </ul>
         </section>
       ) : null}
-
     </div>
   );
 }
