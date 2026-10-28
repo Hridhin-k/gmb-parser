@@ -39,6 +39,27 @@ access to the runtime role; it must already exist and must not be a superuser.
 The runtime does not need the owner's credentials. PostgreSQL 18 is the tested
 version.
 
+## Local demo store
+
+To test the inbox, analytics, escalations, insights, and AI drafts without a
+Business Profile, first sign in locally, then run:
+
+```sh
+npm run db:seed:demo -- --email your-local-login@example.com
+```
+
+Without `--email`, this uses the seeded local tester (`local@grm.test`). It creates
+a separate **Local demo workspace** with **Demo · Willow & Oak — High Street**,
+120 synthetic reviews over six months, sample historical replies, and three
+escalations. Your existing workspace is preserved. Refresh the app to open the
+demo; rerunning the seed preserves edits and does not duplicate reviews.
+
+The seed requires a loopback database and local signup enabled, and refuses
+production mode. A visible banner labels the sample data. The demo has no
+Google credentials: sync and publishing are unavailable. AI actions still use
+the configured provider and its normal budget/usage accounting. Analysis runs
+only when requested; seeding makes no paid AI calls.
+
 ## Authentication
 
 Google login uses NextAuth's `/api/auth/callback/google`. Register

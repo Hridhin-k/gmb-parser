@@ -45,6 +45,11 @@ export default async function DashboardLayout({
 
   return (
     <>
+      {chrome.localDemo ? (
+        <div className="border-b border-amber-200 bg-amber-50 px-4 py-2 text-sm text-amber-950" role="status">
+          <strong>Local demo · sample reviews.</strong> Google sync and publishing are disabled. AI drafts and analysis use your configured provider.
+        </div>
+      ) : null}
       {supportTenantId ? (
         <div className="flex flex-wrap items-center justify-between gap-2 bg-amber-100 px-4 py-2 text-sm text-amber-900">
           <span>Support view (read-only) — you are viewing <strong>{chrome.workspaceName}</strong> as a super admin. Changes are blocked.</span>

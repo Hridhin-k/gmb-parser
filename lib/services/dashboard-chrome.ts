@@ -12,6 +12,7 @@ import { getShellSummary, type ShellSummary } from "@/lib/services/shell-summary
 import { listAccessibleWorkspaces, type AccessibleWorkspace } from "@/lib/services/workspace";
 import { redirect } from "next/navigation";
 import { AppError } from "@/lib/errors";
+import { createAdminClient } from "@/lib/db/client";
 
 const CHROME_TTL_MS = 60_000;
 
@@ -29,6 +30,7 @@ export interface DashboardChrome {
   maintenance: { enabled: boolean; message: string | null };
   announcement: PlatformAnnouncementRow | null;
   supportTenantId: string | null;
+  localDemo: boolean;
 }
 
 /**
@@ -59,12 +61,13 @@ async function buildDashboardChrome(
   workspaceId: string,
   supportTenantId: string | null
 ): Promise<DashboardChrome> {
-  const [maintenance, announcement, access, workspaces, branding] = await Promise.all([
+  const [maintenance, announcement, access, workspaces, branding, workspace] = await Promise.all([
     getMaintenance().catch(() => ({ enabled: false, message: null as string | null })),
     getActiveAnnouncement().catch(() => null),
     getMemberAccess(user.id, workspaceId),
     listAccessibleWorkspaces(user.id),
     loadAgencyBranding(workspaceId),
+    createAdminClient().from("grm_workspaces").select("feature_flags").eq("id", workspaceId).single(),
   ]);
   const role = (access?.role as GrmMemberRole | undefined) ?? null;
   const [allowedClientIds, locationIds] = await Promise.all([
@@ -97,5 +100,6 @@ async function buildDashboardChrome(
     maintenance,
     announcement,
     supportTenantId,
+    localDemo: Boolean(workspace.data?.feature_flags && typeof workspace.data.feature_flags === "object" && !Array.isArray(workspace.data.feature_flags) && workspace.data.feature_flags.local_demo === true),
   };
 }

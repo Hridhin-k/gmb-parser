@@ -11,7 +11,8 @@
     "db:local": "node scripts/local-db.mjs",
     "db:migrate": "node scripts/db-migrate.mjs",
     "db:seed:local": "node scripts/db-seed-local.mjs",
-    "db:metadata": "node scripts/db-metadata.mjs"
+    "db:metadata": "node scripts/db-metadata.mjs",
+    "db:seed:demo": "node scripts/db-seed-demo.mjs"
   },
   "dependencies": {
     "@ai-sdk/google": "^4.0.106",
