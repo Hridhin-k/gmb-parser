@@ -45,6 +45,7 @@ catch { run("pg_ctl", ["-D", data, "-l", resolve(root, "postgres.log"), "-o", `-
 setIfMissing("AUTH_SECRET", randomBytes(32).toString("hex"));
 setIfMissing("AUTH_URL", "http://localhost:3000");
 setIfMissing("AUTH_DEV_LOGIN", "true");
+setIfMissing("AUTH_DEV_OPEN_SIGNUP", "true");
 setIfMissing("AUTH_DEV_LOGIN_TOKEN", randomBytes(32).toString("hex"));
 const appPassword = randomBytes(24).toString("hex");
 setIfMissing("DATABASE_URL", `postgresql://grm_app:${appPassword}@127.0.0.1:${port}/grm`);

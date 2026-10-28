@@ -44,8 +44,8 @@ export function CreateTenantForm({ email }: { email: string }) {
           Create your organization
         </h1>
         <p className="mt-2 text-sm font-light leading-relaxed text-slate sm:text-base">
-          You were invited as the owner for <span className="font-medium text-graphite">{email}</span>. Name your
-          organization — this becomes your tenant. You can then connect Google, add locations, and invite your
+          Create an organization for <span className="font-medium text-graphite">{email}</span>. You will be its owner.
+          You can then connect Google, add locations, and invite your
           admins, managers, and members.
         </p>
         {error ? (

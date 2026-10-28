@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { SqlQuery } from "@/lib/db/query";
-import { devLoginEnabled } from "@/lib/auth/dev-login";
+import { devLoginEnabled, localSignupEnabled } from "@/lib/auth/dev-login";
 
 describe("native Postgres query compiler", () => {
   it("parameterizes filter values and quotes identifiers", () => {
@@ -57,6 +57,13 @@ describe("local login guard", () => {
     expect(devLoginEnabled(enabled)).toBe(true);
     for (const override of [{ NODE_ENV: "production" }, { NODE_ENV: "test" }, { AUTH_DEV_LOGIN: "false" }, { AUTH_DEV_LOGIN_TOKEN: "" }, { AUTH_URL: "https://example.com" }]) {
       expect(devLoginEnabled({ ...enabled, ...override } as NodeJS.ProcessEnv)).toBe(false);
+    }
+  });
+  it("opens signup only with an explicit flag on a development loopback origin", () => {
+    const signup = { ...enabled, AUTH_DEV_OPEN_SIGNUP: "true", AUTH_DEV_LOGIN: "false", AUTH_DEV_LOGIN_TOKEN: "" };
+    expect(localSignupEnabled(signup)).toBe(true);
+    for (const override of [{ NODE_ENV: "production" }, { NODE_ENV: "test" }, { AUTH_DEV_OPEN_SIGNUP: "false" }, { AUTH_DEV_OPEN_SIGNUP: "" }, { AUTH_URL: "https://example.com" }, { AUTH_URL: "invalid" }]) {
+      expect(localSignupEnabled({ ...signup, ...override } as NodeJS.ProcessEnv)).toBe(false);
     }
   });
 });

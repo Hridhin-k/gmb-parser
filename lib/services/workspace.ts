@@ -1,4 +1,5 @@
 import { getAuthUserById, findAuthUserIdByEmail } from "@/lib/auth/users";
+import { localSignupEnabled } from "@/lib/auth/dev-login";
 import { cache } from "react";
 import { createAdminClient } from "@/lib/db/client";
 import { inviteExpiresAt, isInviteExpired } from "@/lib/onboarding";
@@ -398,7 +399,7 @@ export interface TenantAccess {
 /**
  * Invite-only gate, without creating anything.
  * Existing memberships (grandfathered owners + accepted team invites) are
- * allowed. A brand-new user is allowed only with a live platform invite,
+ * allowed. Outside local open-signup mode, a new user needs a live platform invite,
  * and then only to name & create their tenant — never auto-created here.
  */
 export async function inspectTenantAccess(user: {
@@ -443,6 +444,9 @@ async function resolveTenantAccess(user: {
   });
   if (kind === "suspended" || kind === "deleted") {
     return { kind, workspaceId: null, platformInvite: null };
+  }
+  if (localSignupEnabled()) {
+    return { kind: "setup", workspaceId: null, platformInvite: null };
   }
   const invite = await livePlatformInvite(user.email);
   return {
@@ -588,30 +592,33 @@ export async function createTenantWorkspace(user: {
   if (existing.kind === "allowed") {
     throw new ValidationError("You already have a workspace. Open it instead of creating another tenant.");
   }
+  if (existing.kind !== "setup") throw gateError(existing.kind);
   const invite = existing.platformInvite ?? (await livePlatformInvite(user.email));
-  if (!invite) throw gateError("not_invited");
+  if (!invite && !localSignupEnabled()) throw gateError("not_invited");
   const workspaceId = await createPersonalWorkspace(user, name);
-  const admin = createAdminClient();
-  const { error } = await admin
-    .from("grm_platform_invites")
-    .update({
-      status: "accepted",
-      workspace_id: workspaceId,
-      accepted_user_id: user.id,
-      accepted_at: new Date().toISOString(),
-    })
-    .eq("id", invite.id)
-    .eq("status", "pending");
-  if (error && !isSchemaNotReady(error)) {
-    throw new AppError("Your workspace was created, but the invite could not be marked accepted. Contact support.", "DB_ERROR", 500, { dbError: error.message });
+  if (invite) {
+    const admin = createAdminClient();
+    const { error } = await admin
+      .from("grm_platform_invites")
+      .update({
+        status: "accepted",
+        workspace_id: workspaceId,
+        accepted_user_id: user.id,
+        accepted_at: new Date().toISOString(),
+      })
+      .eq("id", invite.id)
+      .eq("status", "pending");
+    if (error && !isSchemaNotReady(error)) {
+      throw new AppError("Your workspace was created, but the invite could not be marked accepted. Contact support.", "DB_ERROR", 500, { dbError: error.message });
+    }
   }
   await AuditService.log({
     workspaceId,
     userId: user.id,
     action: "platform.tenant_created",
-    entityType: "grm_platform_invites",
-    entityId: invite.id,
-    metadata: { email: normalizeEmail(user.email), name } as Record<string, unknown>,
+    entityType: invite ? "grm_platform_invites" : "grm_workspaces",
+    entityId: invite?.id ?? workspaceId,
+    metadata: { email: normalizeEmail(user.email), name, localSignup: !invite } as Record<string, unknown>,
   });
   return { workspace_id: workspaceId };
 }

@@ -47,6 +47,11 @@ the Google OAuth client. Business Profile authorization is a separate flow and
 still needs `http://localhost:3000/api/google/callback`, matching
 `GOOGLE_REDIRECT_URI`. Set `AUTH_URL` and `NEXT_PUBLIC_APP_URL` to the app's origin.
 
+With `AUTH_DEV_OPEN_SIGNUP=true`, signed-in users on a loopback development
+server can create their own organization without an invite. This is disabled
+in production. Blocked accounts, suspended/deleted workspaces, and expired plans
+remain restricted.
+
 Production uses opaque, revocable database sessions and Google OAuth. Login
 requires verified Google email; workspace membership, invites, consent,
 suspension, and scoped permissions remain enforced by the application. Set

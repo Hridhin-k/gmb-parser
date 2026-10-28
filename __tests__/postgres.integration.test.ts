@@ -1,9 +1,11 @@
-import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import { randomUUID } from "node:crypto";
 import { getPool, getAuthPool } from "@/lib/db/pool";
 import { createAdminClient } from "@/lib/db/client";
 import PostgresAdapter from "@auth/pg-adapter";
 import { generateAi } from "@/lib/ai/service";
+import { createTenantWorkspace, inspectTenantAccess } from "@/lib/services/workspace";
+import { forget } from "@/lib/ttl-cache";
 
 // Explicit opt-in, loopback-only sandbox. Ordinary npm test never requires a DB
 // and never makes a paid AI call.
@@ -12,6 +14,7 @@ describe.skipIf(!enabled)("Postgres integration", () => {
   const ws = randomUUID(), other = randomUUID(), user = randomUUID();
   const client = randomUUID(), location = randomUUID(), review = randomUUID();
   const db = createAdminClient();
+  let localWorkspace: string | undefined;
   beforeAll(async () => {
     process.loadEnvFile(".env.local");
     const url = new URL(process.env.DATABASE_URL || "");
@@ -28,7 +31,7 @@ describe.skipIf(!enabled)("Postgres integration", () => {
     // A synthetic draft's author uses RESTRICT; clear it before deleting fixtures.
     await getPool().query("DELETE FROM grm_review_replies WHERE workspace_id=$1", [ws]);
     await getPool().query("DELETE FROM grm_review_ai_drafts WHERE workspace_id=$1", [ws]);
-    await getPool().query("DELETE FROM grm_workspaces WHERE id=ANY($1::uuid[])", [[ws, other]]);
+    await getPool().query("DELETE FROM grm_workspaces WHERE id=ANY($1::uuid[])", [[ws, other, ...(localWorkspace ? [localWorkspace] : [])]]);
     await getAuthPool().query("DELETE FROM authn.users WHERE id=$1", [user]);
     await getPool().end(); await getAuthPool().end();
   });
@@ -85,6 +88,25 @@ describe.skipIf(!enabled)("Postgres integration", () => {
   it("generates an escalation ticket with the expected initial status", async () => {
     const result = await db.from("grm_escalations").insert({ workspace_id: ws, review_id: review, location_id: location, opened_at: new Date().toISOString(), due_at: new Date(Date.now()+3600000).toISOString(), trigger_key: 'integration', trigger_reasons: ['low_stars'] }).select("ticket_no,status").single();
     expect(result.error).toBeNull(); expect(result.data).toEqual({ ticket_no: 1, status: 'needs_human' });
+  });
+  it("creates a local owner's workspace without an invite while preserving production and suspension gates", async () => {
+    const identity = { id: user, email: `test-${user}@grm.test` };
+    try {
+      vi.stubEnv("AUTH_DEV_OPEN_SIGNUP", "true");
+      vi.stubEnv("AUTH_URL", "http://localhost:3000");
+      vi.stubEnv("NODE_ENV", "production");
+      expect((await inspectTenantAccess(identity)).kind).toBe("not_invited");
+      await expect(createTenantWorkspace(identity, "Local signup test")).rejects.toMatchObject({ code: "PLATFORM_NOT_INVITED" });
+      vi.stubEnv("NODE_ENV", "development");
+      expect((await inspectTenantAccess(identity)).kind).toBe("setup");
+      localWorkspace = (await createTenantWorkspace(identity, "Local signup test")).workspace_id;
+      const membership = await db.from("grm_workspace_members").select("role").eq("workspace_id", localWorkspace).eq("user_id", user).single();
+      expect(membership.data?.role).toBe("owner");
+      await getPool().query("UPDATE grm_workspaces SET status='suspended' WHERE id=$1", [localWorkspace]);
+      forget(`tenant-access:${user}`);
+      expect((await inspectTenantAccess(identity)).kind).toBe("suspended");
+      await expect(createTenantWorkspace(identity, "Another workspace")).rejects.toMatchObject({ code: "WORKSPACE_SUSPENDED" });
+    } finally { forget(`tenant-access:${user}`); vi.unstubAllEnvs(); }
   });
   it.skipIf(process.env.RUN_AI_SMOKE !== "1")("uses Gemini through the shared SDK and writes the usage ledger", async () => {
     const result = await generateAi({ workspaceId: ws, task: "reply", operation: "reply_draft", prompt: 'Write one short sentence thanking a customer for a review. No introduction.', maxOutputTokens: 128, timeoutMs: 30000, temperature: 0.2 });

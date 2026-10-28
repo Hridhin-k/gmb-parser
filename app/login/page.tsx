@@ -1,6 +1,6 @@
 import { redirect } from "next/navigation";
 import { getCurrentUser } from "@/lib/auth/server";
-import { devLoginEnabled } from "@/lib/auth/dev-login";
+import { devLoginEnabled, localSignupEnabled } from "@/lib/auth/dev-login";
 import { LoginForm } from "@/components/login-form";
 import { authMethodsFromEnv } from "@/lib/auth-methods";
 import { loginErrorMessage, shouldEnterWizard } from "@/lib/onboarding";
@@ -45,6 +45,7 @@ export default async function LoginPage({ searchParams }: LoginPageProps) {
       <LoginForm
         methods={authMethodsFromEnv()}
         localLogin={devLoginEnabled()}
+        openSignup={localSignupEnabled()}
         initialError={loginErrorMessage(errorCode, errorReason)}
       />
     </div>

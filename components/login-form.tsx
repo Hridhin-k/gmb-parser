@@ -8,8 +8,8 @@ import { Button } from "@/components/ui/button";
 import { GoogleMark } from "@/components/google-mark";
 import type { AuthMethod } from "@/lib/onboarding";
 
-export function LoginForm({ methods, initialError, localLogin = false }: {
-  methods: AuthMethod[]; initialError: string | null; localLogin?: boolean;
+export function LoginForm({ methods, initialError, localLogin = false, openSignup = false }: {
+  methods: AuthMethod[]; initialError: string | null; localLogin?: boolean; openSignup?: boolean;
 }) {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(initialError);
@@ -18,7 +18,7 @@ export function LoginForm({ methods, initialError, localLogin = false }: {
     <div className="w-full max-w-md rounded-2xl border border-silver bg-white p-8 shadow-sm">
       <Link href="/" className="text-sm font-medium text-graphite">RevuPilot</Link>
       <h1 className="mt-5 text-[31px] leading-[1.2] text-graphite" style={{ fontFamily: "var(--font-heading), sans-serif" }}>Sign in to RevuPilot</h1>
-      <p className="mt-2 mb-6 text-base font-light text-slate">Sign in with the Google email you were invited with, then connect the account that manages your businesses.</p>
+      <p className="mt-2 mb-6 text-base font-light text-slate">{openSignup ? "Sign in with Google, create your organization, then connect the account that manages your businesses." : "Sign in with the Google email you were invited with, then connect the account that manages your businesses."}</p>
       {error ? <p className="mb-4 rounded-md bg-red-50 p-3 text-sm text-red-700" role="alert">{error}</p> : null}
       {google ? <Button className="w-full gap-2" size="lg" loading={loading} onClick={async () => {
         setLoading(true);
