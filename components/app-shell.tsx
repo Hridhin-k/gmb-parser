@@ -32,7 +32,16 @@ import { SelectField } from "@/components/ui/select-field";
 import { GlobalFilters } from "@/components/global-filters";
 import type { ScopeCatalog } from "@/lib/scope";
 import type { ShellSummary } from "@/lib/services/shell-summary";
-import { homePath, scopedHref, visibleNav, type ShellNavId } from "@/lib/shell";
+import {
+  canOpenPath,
+  homePath,
+  scopedHref,
+  visibleNav,
+  type ShellFeatureFlags,
+  type ShellNavId,
+} from "@/lib/shell";
+import { toast } from "sonner";
+import { type AttentionEventDetail } from "@/lib/attention-client";
 
 const NAV: Record<
   ShellNavId,
@@ -49,7 +58,7 @@ const NAV: Record<
   team: { href: "/team", label: "Team and roles", icon: UsersRound, section: "manage" },
   settings: { href: "/settings", label: "Settings", icon: Settings, section: "manage" },
   clients: { href: "/dashboard", label: "All clients", icon: LayoutGrid, section: "agency" },
-  usage: { href: "/dashboard#usage", label: "Usage", icon: Receipt, section: "agency" },
+  usage: { href: "/usage", label: "Usage", icon: Receipt, section: "agency" },
 };
 
 const SECTIONS = [
@@ -69,6 +78,7 @@ interface AppShellProps {
   summary: ShellSummary;
   logoUrl?: string | null;
   productTitle?: string;
+  features?: ShellFeatureFlags;
   children: React.ReactNode;
 }
 
@@ -106,6 +116,7 @@ function SidebarNav({
   hash,
   searchParams,
   onNavigate,
+  features,
 }: {
   role: string | null;
   summary: ShellSummary;
@@ -113,8 +124,9 @@ function SidebarNav({
   hash: string;
   searchParams: URLSearchParams;
   onNavigate: () => void;
+  features: ShellFeatureFlags;
 }) {
-  const allowed = new Set(visibleNav(role));
+  const allowed = new Set(visibleNav(role, features));
   const linkClass = (active: boolean) =>
     cn(
       "flex items-center gap-2.5 rounded-lg px-3 py-2 text-sm transition-colors",
@@ -194,6 +206,7 @@ export function AppShell({
   summary,
   logoUrl,
   productTitle = "RevuPilot",
+  features = {},
   children,
 }: AppShellProps) {
   const pathname = usePathname();
@@ -202,6 +215,53 @@ export function AppShell({
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [savingWorkspace, setSavingWorkspace] = useState(false);
   const [isRefreshing, startRefresh] = useTransition();
+  const [opened, setOpened] = useState({ unreplied: 0, escalations: 0, alerts: [] as string[] });
+  const summaryKey = `${summary.unreplied}:${summary.escalations}:${summary.notices.map((notice) => notice.id).join(",")}:${summary.dismissedAlerts.map((alert) => `${alert.id}:${alert.title}`).join(",")}`;
+  const [syncedSummary, setSyncedSummary] = useState(summaryKey);
+  if (syncedSummary !== summaryKey) {
+    setSyncedSummary(summaryKey);
+    setOpened({ unreplied: 0, escalations: 0, alerts: [] });
+  }
+  useEffect(() => {
+    function apply(detail: AttentionEventDetail, direction: 1 | -1) {
+      setOpened((current) => ({
+        unreplied: Math.max(0, current.unreplied + direction * (detail.countsAsUnreplied ? 1 : 0)),
+        escalations: Math.max(0, current.escalations + direction * (detail.countsAsEscalation ? 1 : 0)),
+        alerts:
+          detail.kind === "alert"
+            ? direction === 1
+              ? [...current.alerts, `${detail.id}\0${detail.title ?? ""}`]
+              : current.alerts.filter((token) => token !== `${detail.id}\0${detail.title ?? ""}`)
+            : current.alerts,
+      }));
+    }
+    function onAttention(event: Event) {
+      const detail = (event as CustomEvent<AttentionEventDetail>).detail;
+      if (detail) apply(detail, 1);
+    }
+    function onFailed(event: Event) {
+      const detail = (event as CustomEvent<AttentionEventDetail>).detail;
+      if (detail) apply(detail, -1);
+    }
+    window.addEventListener("grm-attention", onAttention);
+    window.addEventListener("grm-attention-failed", onFailed);
+    return () => {
+      window.removeEventListener("grm-attention", onAttention);
+      window.removeEventListener("grm-attention-failed", onFailed);
+    };
+  }, []);
+  const displaySummary: ShellSummary = {
+    ...summary,
+    unreplied: Math.max(0, summary.unreplied - opened.unreplied),
+    escalations: Math.max(0, summary.escalations - opened.escalations),
+    dismissedAlerts: [
+      ...summary.dismissedAlerts,
+      ...opened.alerts.map((token) => {
+        const splitAt = token.indexOf("\0");
+        return { id: token.slice(0, splitAt), title: token.slice(splitAt + 1) };
+      }),
+    ],
+  };
   const switching = savingWorkspace || isRefreshing;
 
   const handleKeyDown = useCallback((event: KeyboardEvent) => {
@@ -252,7 +312,7 @@ export function AppShell({
           </div>
         </main>
         <Suspense fallback={null}>
-          <MobileNav summary={summary} />
+          <MobileNav summary={displaySummary} role={role} />
         </Suspense>
       </div>
       </FilterNavigation>
@@ -322,16 +382,24 @@ export function AppShell({
               disabled={switching}
               className="w-full"
               onValueChange={async (workspaceId) => {
+                if (workspaceId === activeWorkspaceId) return;
                 setSavingWorkspace(true);
                 try {
-                  await fetch("/api/workspace/active", {
+                  const response = await fetch("/api/workspace/active", {
                     method: "POST",
                     headers: { "Content-Type": "application/json" },
                     body: JSON.stringify({ workspaceId }),
                   });
+                  const payload = (await response.json().catch(() => ({}))) as { error?: string };
+                  if (!response.ok) {
+                    toast.error(payload.error ?? "Could not switch workspace.");
+                    return;
+                  }
                   startRefresh(() => {
                     router.refresh();
                   });
+                } catch {
+                  toast.error("Could not reach the server to switch workspace.");
                 } finally {
                   setSavingWorkspace(false);
                 }
@@ -356,37 +424,42 @@ export function AppShell({
           <Suspense fallback={null}>
             <SidebarNavLive
               role={role}
-              summary={summary}
+              summary={displaySummary}
               pathname={pathname}
               onNavigate={closeSidebar}
+              features={features}
             />
           </Suspense>
 
-          <p className="mb-1 mt-5 px-3 text-[11px] font-medium uppercase tracking-wide text-white/40">
-            Jump to client
-          </p>
-          <div className="space-y-0.5">
-            {clients.length === 0 ? (
-              <p className="px-3 py-2 text-sm text-white/50">No clients yet</p>
-            ) : (
-              clients.map((client) => {
-                const href = `/clients/${client.id}`;
-                const active = pathname === href;
-                return (
-                  <Link
-                    key={client.id}
-                    href={href}
-                    onClick={closeSidebar}
-                    className={linkClass(active)}
-                    aria-current={active ? "page" : undefined}
-                  >
-                    <ClientInitial name={client.name} active={active} />
-                    <span className="block truncate">{client.name}</span>
-                  </Link>
-                );
-              })
-            )}
-          </div>
+          {canOpenPath("/clients", role) ? (
+            <>
+              <p className="mb-1 mt-5 px-3 text-[11px] font-medium uppercase tracking-wide text-white/40">
+                Jump to client
+              </p>
+              <div className="space-y-0.5">
+                {clients.length === 0 ? (
+                  <p className="px-3 py-2 text-sm text-white/50">No clients yet</p>
+                ) : (
+                  clients.map((client) => {
+                    const href = `/clients/${client.id}`;
+                    const active = pathname === href;
+                    return (
+                      <Link
+                        key={client.id}
+                        href={href}
+                        onClick={closeSidebar}
+                        className={linkClass(active)}
+                        aria-current={active ? "page" : undefined}
+                      >
+                        <ClientInitial name={client.name} active={active} />
+                        <span className="block truncate">{client.name}</span>
+                      </Link>
+                    );
+                  })
+                )}
+              </div>
+            </>
+          ) : null}
         </nav>
 
         <div className="flex gap-3 border-t border-white/10 px-4 py-3 text-xs text-white/60">
@@ -405,7 +478,7 @@ export function AppShell({
             user={user}
             role={role}
             catalog={catalog}
-            summary={summary}
+            summary={displaySummary}
             onOpenMenu={() => setSidebarOpen(true)}
           />
         </Suspense>

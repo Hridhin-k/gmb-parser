@@ -2,6 +2,7 @@ import { cache } from "react";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { AuthorizationError, ValidationError } from "@/lib/errors";
 import { UNASSIGNED_CLIENT_MARKER } from "@/lib/services/unassigned-client";
+import { disambiguateScopeLabels, scopeChoiceLabel } from "@/lib/scope-labels";
 import { loadCatalogTables } from "@/lib/services/catalog-tables";
 import {
   canAct,
@@ -331,16 +332,43 @@ export async function listScopeChoices(workspaceId: string): Promise<
   Array<{ id: string; label: string; kind: "client" | "group" | "location" }>
 > {
   const catalog = await loadCatalogTables(workspaceId);
+  const brandNames = new Map(catalog.clients.map((client) => [client.id, client.name]));
+  const groupNames = new Map(catalog.groups.map((group) => [group.id, group.name]));
   const choices: Array<{ id: string; label: string; kind: "client" | "group" | "location" }> = [];
   for (const client of catalog.clients) {
     if (client.notes === UNASSIGNED_CLIENT_MARKER) continue;
-    choices.push({ id: client.id, label: client.name, kind: "client" });
+    choices.push({
+      id: client.id,
+      kind: "client",
+      label: scopeChoiceLabel({ kind: "client", name: client.name }),
+    });
   }
-  for (const group of catalog.groups) choices.push({ id: group.id, label: group.name, kind: "group" });
+  for (const group of catalog.groups) {
+    choices.push({
+      id: group.id,
+      kind: "group",
+      label: scopeChoiceLabel({
+        kind: "group",
+        name: group.name,
+        brand: group.client_id ? brandNames.get(group.client_id) : null,
+      }),
+    });
+  }
   for (const location of catalog.locations) {
-    choices.push({ id: location.id, label: location.location_title ?? "Location", kind: "location" });
+    choices.push({
+      id: location.id,
+      kind: "location",
+      label: scopeChoiceLabel({
+        kind: "location",
+        name: location.location_title ?? "Location",
+        brand: location.client_id ? brandNames.get(location.client_id) : null,
+        group: location.group_id ? groupNames.get(location.group_id) : null,
+        storeCode: location.store_code,
+        address: location.address_formatted,
+      }),
+    });
   }
-  return choices;
+  return disambiguateScopeLabels(choices);
 }
 
 /** A scoped person can open a record only when it sits inside their brand, group, or location. */

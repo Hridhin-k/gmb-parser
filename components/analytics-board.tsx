@@ -24,7 +24,11 @@ import type { AnalyticsSlice } from "@/lib/services/analytics-slice";
 import { dateRangeParams, type DateRange } from "@/lib/date-range";
 import { average, monthBounds, reviewDrillHref, reviewWindow, share, type DashboardFacts, type StarCounts } from "@/lib/metrics";
 import { sumStarCounts } from "@/lib/star-breakdown";
-import { insightTopicLabel, type InsightDashboardData } from "@/lib/insight-dashboard";
+import {
+  insightTopicInboxExtra,
+  insightTopicLabel,
+  type InsightDashboardData,
+} from "@/lib/insight-dashboard";
 import { themeLabel } from "@/lib/review-inbox";
 import type { DashboardContext, DashboardScope } from "@/lib/services/dashboard-metrics";
 import { formatFriendlyDate } from "@/lib/format-date";
@@ -32,13 +36,6 @@ import { formatPercent as percent } from "@/lib/format";
 import { ANALYTICS_SECTIONS, type AnalyticsSection } from "@/lib/analytics-sections";
 
 const HEADING = { fontFamily: "var(--font-heading), sans-serif" };
-
-function insightsHref(query: string): string {
-  const params = new URLSearchParams(query);
-  for (const key of ["rankBy", "show", "compare", "section"]) params.delete(key);
-  const text = params.toString();
-  return text ? `/insights?${text}` : "/insights";
-}
 
 /** Keep filters in the URL so each Analytics tab can load only the RPCs it needs. */
 function sectionHref(query: string, section: AnalyticsSection): string {
@@ -149,7 +146,6 @@ export function AnalyticsBoard({
           names={names}
           drill={drill}
           insights={insights}
-          insightsHref={insightsHref(query)}
         />
       ) : null}
       {section === "profile" ? <Profile context={context} scope={scope} /> : null}
@@ -710,14 +706,12 @@ function Themes({
   names,
   drill,
   insights,
-  insightsHref,
 }: {
   facts: DashboardFacts;
   groupNames: Map<string, string>;
   names: Map<string, string>;
   drill: (extra?: Record<string, string>) => string;
   insights: InsightDashboardData;
-  insightsHref: string;
 }) {
   const topics = insights.aggregates.negative.filter((topic) => topic.count > 0);
   const outlets = [...insights.aggregates.byOutlet].sort(
@@ -740,7 +734,7 @@ function Themes({
                 label: insightTopicLabel(topic.topic),
                 value: topic.count,
                 color: themeColors[index % themeColors.length],
-                href: insightsHref,
+                href: drill(insightTopicInboxExtra(topic.topic, "complaint")),
                 suffix: topic.reviews > 0 ? `mentions · ${topic.reviews.toLocaleString("en-US")} reviews` : "mentions",
                 lines: ["Complaint mentions in analysed reviews"],
               }))}
@@ -904,7 +898,11 @@ function Automation({ context, scope }: { context: DashboardContext; scope: Dash
           <li>
             <StatusPill label={paused ? "Paused for this scope" : "Running for this scope"} tone={paused ? "amber" : "green"} />
           </li>
-          <li>There is no automatic reply sender. A pause blocks background draft generation.</li>
+          <li>
+            When automation is on in Settings, eligible 4–5★ reviews can be drafted and published by the daily job.
+            A pause stops that for this scope; shadow mode still drafts without posting. 1–3★ replies always need a
+            person.
+          </li>
           <li>{context.facts.failed.toLocaleString("en-US")} replies in this period failed to publish.</li>
           <li>
             {context.facts.pendingNow.toLocaleString("en-US")} replies in this scope are waiting on an unconfirmed

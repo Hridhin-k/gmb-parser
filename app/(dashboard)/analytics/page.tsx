@@ -63,11 +63,10 @@ export default async function AnalyticsPage({ searchParams }: AnalyticsPageProps
   })) {
     if (value) query.set(key, value);
   }
-  const exportParams = new URLSearchParams(dateRangeParams(range, "all"));
-  if (clientId) exportParams.set("client", clientId);
-  if (groupId) exportParams.set("group", groupId);
-  if (locationId) exportParams.set("location", locationId);
+  const exportParams = new URLSearchParams(query);
+  exportParams.delete("section");
   const tabQuery = query.toString();
+  const exportQuery = exportParams.toString();
 
   return (
     <div className="flex flex-col gap-6">
@@ -76,7 +75,7 @@ export default async function AnalyticsPage({ searchParams }: AnalyticsPageProps
         description="The same review totals as Overview, split into performance, themes, profile, automation, and team."
       >
         <a
-          href={`/api/reviews/export?${exportParams.toString()}`}
+          href={exportQuery ? `/api/analytics/export?${exportQuery}` : "/api/analytics/export"}
           className="inline-flex h-9 items-center gap-1.5 rounded-full border border-silver bg-white px-4 text-sm font-medium text-navy hover:border-action-blue hover:bg-info-banner-bg"
         >
           <Download className="h-3.5 w-3.5" aria-hidden />

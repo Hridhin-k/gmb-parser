@@ -41,7 +41,7 @@ export async function POST(request: Request) {
 
   try {
     const membership = await ensurePersonalWorkspace(user);
-    await inviteToWorkspace({
+    const result = await inviteToWorkspace({
       workspaceId: membership.workspace_id,
       inviterId: user.id,
       email: body.email,
@@ -52,7 +52,7 @@ export async function POST(request: Request) {
         locationId: body.locationId ?? null,
       },
     });
-    return NextResponse.json({ success: true, emailed: false });
+    return NextResponse.json({ success: true, emailed: result.emailed });
   } catch (error) {
     if (error instanceof AppError) {
       return NextResponse.json({ error: error.message }, { status: error.statusCode });

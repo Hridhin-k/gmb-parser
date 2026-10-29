@@ -1,3 +1,4 @@
+import { sendBrevoEmail } from "@/lib/mail";
 import { providerOutcome, type ProviderOutcome, type RequestChannel, type RequestEnv } from "@/lib/review-requests";
 
 export interface OutboundMessage {
@@ -34,22 +35,28 @@ export async function sendRequestMessage(env: RequestEnv, message: OutboundMessa
 }
 
 async function sendEmail(env: RequestEnv, message: OutboundMessage): Promise<OutboundResult> {
-  const { status, json } = await postJson("https://api.resend.com/emails", {
-    method: "POST",
-    headers: {
-      Authorization: `Bearer ${env.resendApiKey}`,
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify({
-      from: env.fromEmail,
-      to: [message.to],
-      subject: "How was your visit?",
-      text: message.body,
-    }),
+  if (!env.brevoApiKey || !env.fromEmail) {
+    return {
+      state: "failed",
+      delivered: false,
+      retryable: false,
+      detail: "No email provider is configured.",
+      providerRef: null,
+    };
+  }
+  const result = await sendBrevoEmail({
+    apiKey: env.brevoApiKey,
+    from: env.fromEmail,
+    to: message.to,
+    subject: "How was your visit?",
+    text: message.body,
   });
-  const outcome = providerOutcome(status, null);
-  const id = typeof json?.id === "string" ? json.id : null;
-  return { ...outcome, providerRef: id };
+  const outcome = providerOutcome(result.status || (result.ok ? 200 : 500), null);
+  return {
+    ...outcome,
+    detail: result.ok ? outcome.detail : result.detail,
+    providerRef: result.messageId,
+  };
 }
 
 async function sendSms(env: RequestEnv, message: OutboundMessage): Promise<OutboundResult> {

@@ -1,5 +1,13 @@
 import { describe, expect, it } from "vitest";
-import { canOpenPath, homePath, scopedHref, scopeMode, shellAlerts, visibleNav } from "@/lib/shell";
+import {
+  canOpenPath,
+  homePath,
+  scopedHref,
+  scopeMode,
+  shellAlerts,
+  visibleMobileNav,
+  visibleNav,
+} from "@/lib/shell";
 
 describe("visibleNav", () => {
   it("keeps members on the inbox and escalations", () => {
@@ -16,14 +24,31 @@ describe("visibleNav", () => {
   it("lets the owner see billing", () => {
     expect(visibleNav("owner")).toContain("usage");
   });
+
+  it("hides requests and reports when tenant flags are off", () => {
+    const items = visibleNav("owner", { requests: false, reports: false });
+    expect(items).not.toContain("requests");
+    expect(items).not.toContain("reports");
+    expect(items).toContain("overview");
+  });
 });
 
 describe("canOpenPath", () => {
+  it("blocks requests and reports paths when those features are off", () => {
+    expect(canOpenPath("/requests", "owner")).toBe(true);
+    expect(canOpenPath("/reports", "owner")).toBe(true);
+    expect(canOpenPath("/requests", "owner", { requests: false })).toBe(false);
+    expect(canOpenPath("/reports", "owner", { reports: false })).toBe(false);
+  });
+
   it("sends members away from team, settings, audit, and all clients", () => {
     expect(canOpenPath("/team", "member")).toBe(false);
     expect(canOpenPath("/settings", "member")).toBe(false);
     expect(canOpenPath("/audit", "member")).toBe(false);
     expect(canOpenPath("/dashboard", "member")).toBe(false);
+    expect(canOpenPath("/usage", "member")).toBe(false);
+    expect(canOpenPath("/usage", "owner")).toBe(true);
+    expect(canOpenPath("/usage", "brand_manager")).toBe(false);
     expect(canOpenPath("/reviews", "member")).toBe(true);
     expect(canOpenPath("/reviews/abc", "member")).toBe(true);
     expect(canOpenPath("/escalations", "member")).toBe(true);
@@ -33,8 +58,24 @@ describe("canOpenPath", () => {
     expect(canOpenPath("/locations", "member")).toBe(false);
     expect(canOpenPath("/m", "member")).toBe(false);
     expect(canOpenPath("/m/approve", "member")).toBe(false);
+    expect(canOpenPath("/clients", "member")).toBe(false);
+    expect(canOpenPath("/clients/abc", "member")).toBe(false);
     expect(homePath("member")).toBe("/reviews");
     expect(homePath("owner")).toBe("/overview");
+  });
+});
+
+describe("visibleMobileNav", () => {
+  it("keeps AI-only members on escalations only", () => {
+    expect(visibleMobileNav("member").map((item) => item.id)).toEqual(["escalations"]);
+  });
+
+  it("shows overview, approve, and escalations for managers", () => {
+    expect(visibleMobileNav("owner").map((item) => item.id)).toEqual([
+      "overview",
+      "approve",
+      "escalations",
+    ]);
   });
 });
 
@@ -64,6 +105,23 @@ describe("shellAlerts", () => {
     expect(alerts[2]?.href).toBe("/reviews?location=l2&filter=failed");
     expect(alerts[1]?.title).toContain("Fazyo Thrissur");
     expect(alerts.some((item) => item.id === "unreplied")).toBe(false);
+  });
+
+  it("hides a bell item after it has been opened, until the title changes", () => {
+    const summary = {
+      unreplied: 2,
+      escalations: 1,
+      drafts: 0,
+      expiredConnections: 0,
+      dismissedAlerts: [{ id: "unreplied", title: "2 reviews have no reply" }],
+    };
+    expect(shellAlerts(summary, "owner").map((item) => item.id)).toEqual(["escalations"]);
+    expect(
+      shellAlerts(
+        { ...summary, unreplied: 3, dismissedAlerts: [{ id: "unreplied", title: "2 reviews have no reply" }] },
+        "owner"
+      ).some((item) => item.id === "unreplied")
+    ).toBe(true);
   });
 });
 

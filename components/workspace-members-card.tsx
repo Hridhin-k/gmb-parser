@@ -9,7 +9,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { SelectField } from "@/components/ui/select-field";
 import { ConfirmDialog } from "@/components/confirm-dialog";
-import { ASSIGNABLE_ROLES, allows, roleLabel } from "@/lib/access";
+import { ASSIGNABLE_ROLES, allows, roleLabel, rolePlaceKind, type ScopeIds } from "@/lib/access";
 import { canManageMember } from "@/lib/roles";
 import { cn } from "@/lib/utils";
 
@@ -20,6 +20,7 @@ interface MemberRow {
   joinedAt?: string;
   accessEnabled?: boolean;
   scopeLabel?: string;
+  scope?: ScopeIds;
   alertEmail?: boolean;
   alertInApp?: boolean;
   twoStep?: "on" | "off" | "unavailable";
@@ -61,7 +62,7 @@ async function send(method: string, url: string, body: object) {
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(body),
   });
-  const data = (await response.json().catch(() => ({}))) as { error?: string };
+  const data = (await response.json().catch(() => ({}))) as { error?: string; emailed?: boolean };
   if (!response.ok) throw new Error(data.error ?? "Something went wrong.");
   return data;
 }
@@ -80,7 +81,8 @@ export function WorkspaceMembersCard({
   const isOwner = allows(currentRole, "manage_people");
   const [email, setEmail] = useState("");
   const [role, setRole] = useState<string>("member");
-  const [scopeId, setScopeId] = useState("organization");
+  const [scopeId, setScopeId] = useState("");
+  const [roleDraft, setRoleDraft] = useState<{ userId: string; role: string; scopeId: string } | null>(null);
   const [inviting, setInviting] = useState(false);
   const [busyId, setBusyId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -91,8 +93,20 @@ export function WorkspaceMembersCard({
     setError(null);
     setInviting(true);
     try {
-      const choice = scopes.find((item) => item.id === scopeId);
-      await send("POST", "/api/workspace/invites", {
+      const kind = rolePlaceKind(role);
+      const choice = kind ? scopes.find((item) => item.id === scopeId && item.kind === kind) : undefined;
+      if (kind && !choice) {
+        setError(
+          kind === "client"
+            ? "Choose a brand for this brand manager."
+            : kind === "group"
+              ? "Choose a group for this group manager."
+              : "Choose a store for this store manager."
+        );
+        setInviting(false);
+        return;
+      }
+      const result = await send("POST", "/api/workspace/invites", {
         email,
         role: isOwner ? role : "member",
         clientId: choice?.kind === "client" ? choice.id : null,
@@ -100,9 +114,11 @@ export function WorkspaceMembersCard({
         locationId: choice?.kind === "location" ? choice.id : null,
       });
       toast.success(`Invite saved for ${email}`, {
-        description: emailDelivery
-          ? "Copy the invite message and send it to them."
-          : "No email is sent until a mail provider is configured. Copy the invite and share it.",
+        description: result.emailed
+          ? "An invite email was sent. You can still copy the invite link if needed."
+          : emailDelivery
+            ? "Mail is configured but the invite email did not send. Copy the invite and share it."
+            : "No email is sent until Brevo is configured. Copy the invite and share it.",
       });
       setEmail("");
       router.refresh();
@@ -127,20 +143,61 @@ export function WorkspaceMembersCard({
     }
   }
 
-  async function handleRoleChange(member: MemberRow, nextRole: string) {
-    if (!nextRole || nextRole === member.role) return;
+  async function handleRoleChange(member: MemberRow, nextRole: string, scope: ScopeIds) {
+    if (!nextRole) return;
     if (!(ASSIGNABLE_ROLES as readonly string[]).includes(nextRole)) return;
+    const kind = rolePlaceKind(nextRole);
+    if (kind) {
+      const chosen =
+        (kind === "client" && scope.clientId) ||
+        (kind === "group" && scope.groupId) ||
+        (kind === "location" && scope.locationId);
+      if (!chosen) {
+        setError(
+          kind === "client"
+            ? "Choose a brand before saving a brand manager."
+            : kind === "group"
+              ? "Choose a group before saving a group manager."
+              : "Choose a store before saving a store manager."
+        );
+        return;
+      }
+    }
     setError(null);
     setBusyId(member.userId);
     try {
-      await send("PATCH", "/api/workspace/members", { userId: member.userId, role: nextRole });
+      await send("PATCH", "/api/workspace/members", {
+        userId: member.userId,
+        role: nextRole,
+        clientId: scope.clientId,
+        groupId: scope.groupId,
+        locationId: scope.locationId,
+      });
       toast.success(`${member.email} is now ${roleLabel(nextRole)}`);
+      setRoleDraft(null);
       router.refresh();
     } catch (e) {
       setError(e instanceof Error ? e.message : "Could not change the role.");
     } finally {
       setBusyId(null);
     }
+  }
+
+  function startRoleDraft(member: MemberRow, nextRole: string) {
+    if (!nextRole || (nextRole === member.role && !rolePlaceKind(nextRole))) return;
+    const kind = rolePlaceKind(nextRole);
+    if (!kind) {
+      setRoleDraft(null);
+      void handleRoleChange(member, nextRole, { clientId: null, groupId: null, locationId: null });
+      return;
+    }
+    const currentId =
+      kind === "client" ? member.scope?.clientId : kind === "group" ? member.scope?.groupId : member.scope?.locationId;
+    setRoleDraft({
+      userId: member.userId,
+      role: nextRole,
+      scopeId: currentId && scopes.some((item) => item.id === currentId && item.kind === kind) ? currentId : "",
+    });
   }
 
   async function handleRemove(member: MemberRow) {
@@ -174,8 +231,8 @@ export function WorkspaceMembersCard({
       `${window.location.origin}/login`,
       "",
       invite.expiresAt
-        ? `This invite expires on ${new Date(invite.expiresAt).toLocaleDateString()}. No email is sent automatically.`
-        : "No email is sent automatically.",
+        ? `This invite expires on ${new Date(invite.expiresAt).toLocaleDateString()}.`
+        : "Open the link after you sign in with Google.",
     ].join("\n");
     try {
       await navigator.clipboard.writeText(message);
@@ -236,13 +293,14 @@ export function WorkspaceMembersCard({
                 </div>
                 <div className="flex shrink-0 items-center gap-2">
                   {manageable && isOwner ? (
+                    <div className="flex flex-wrap items-center gap-2">
                     <SelectField
                       label={`Role for ${member.email}`}
-                      value={member.role}
+                      value={roleDraft?.userId === member.userId ? roleDraft.role : member.role}
                       size="sm"
                       disabled={busyId === member.userId}
-                      className="w-32"
-                      onValueChange={(next) => handleRoleChange(member, next)}
+                      className="w-40"
+                      onValueChange={(next) => startRoleDraft(member, next)}
                       options={[
                         ...(ASSIGNABLE_ROLES as readonly string[]).includes(member.role)
                           ? []
@@ -250,6 +308,45 @@ export function WorkspaceMembersCard({
                         ...ASSIGNABLE_ROLES.map((item) => ({ value: item, label: roleLabel(item) })),
                       ]}
                     />
+                    {roleDraft?.userId === member.userId && rolePlaceKind(roleDraft.role) ? (
+                      <>
+                        <SelectField
+                          label={`Place for ${member.email}`}
+                          value={roleDraft.scopeId}
+                          size="sm"
+                          className="w-56"
+                          placeholder={
+                            rolePlaceKind(roleDraft.role) === "client"
+                              ? "Choose a brand"
+                              : rolePlaceKind(roleDraft.role) === "group"
+                                ? "Choose a group"
+                                : "Choose a store"
+                          }
+                          onValueChange={(next) =>
+                            setRoleDraft({ ...roleDraft, scopeId: next })
+                          }
+                          options={scopes
+                            .filter((item) => item.kind === rolePlaceKind(roleDraft.role))
+                            .map((item) => ({ value: item.id, label: item.label }))}
+                        />
+                        <Button
+                          type="button"
+                          size="sm"
+                          disabled={busyId === member.userId || !roleDraft.scopeId}
+                          onClick={() => {
+                            const kind = rolePlaceKind(roleDraft.role);
+                            void handleRoleChange(member, roleDraft.role, {
+                              clientId: kind === "client" ? roleDraft.scopeId : null,
+                              groupId: kind === "group" ? roleDraft.scopeId : null,
+                              locationId: kind === "location" ? roleDraft.scopeId : null,
+                            });
+                          }}
+                        >
+                          Save role
+                        </Button>
+                      </>
+                    ) : null}
+                    </div>
                   ) : (
                     <span
                       className={cn(
@@ -381,9 +478,11 @@ export function WorkspaceMembersCard({
                         onClick={() => {
                           setBusyId(`resend-${invite.id}`);
                           send("PATCH", "/api/workspace/invites", { inviteId: invite.id })
-                            .then(() => {
+                            .then((result) => {
                               toast.success("Invite refreshed", {
-                                description: "No email was sent. Copy the invite and share it.",
+                                description: result.emailed
+                                  ? "The invite email was sent again."
+                                  : "No email was sent. Copy the invite and share it.",
                               });
                               router.refresh();
                             })
@@ -416,8 +515,8 @@ export function WorkspaceMembersCard({
               People only see what sits below the place you pick. The invite expires in 14 days and is accepted the next
               time that email signs in.
               {emailDelivery
-                ? " Email delivery is configured."
-                : " Email is not sent until a mail provider is configured, so copy the invite and share it."}{" "}
+                ? " Invite emails are sent through Brevo when configured."
+                : " Email is not sent until Brevo is configured, so copy the invite and share it."}{" "}
               WhatsApp alerts are not available.
             </p>
             <div className="flex flex-col gap-2 sm:flex-row">
@@ -436,21 +535,30 @@ export function WorkspaceMembersCard({
                   label="Role"
                   value={role}
                   className="sm:w-44"
-                  onValueChange={setRole}
+                  onValueChange={(next) => {
+                    setRole(next);
+                    setScopeId("");
+                  }}
                   options={ASSIGNABLE_ROLES.map((item) => ({ value: item, label: roleLabel(item) }))}
                 />
               ) : null}
-              {isOwner ? (
+              {isOwner && rolePlaceKind(role) ? (
                 <SelectField
                   id="invite-scope"
                   label="Can see"
                   value={scopeId}
-                  className="sm:w-52"
+                  className="sm:w-72"
+                  placeholder={
+                    rolePlaceKind(role) === "client"
+                      ? "Choose a brand"
+                      : rolePlaceKind(role) === "group"
+                        ? "Choose a group"
+                        : "Choose a store"
+                  }
                   onValueChange={setScopeId}
-                  options={[
-                    { value: "organization", label: "Whole organization" },
-                    ...scopes.map((item) => ({ value: item.id, label: item.label })),
-                  ]}
+                  options={scopes
+                    .filter((item) => item.kind === rolePlaceKind(role))
+                    .map((item) => ({ value: item.id, label: item.label }))}
                 />
               ) : null}
               <Button type="submit" loading={inviting}>

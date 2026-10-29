@@ -134,6 +134,7 @@ export default async function ReviewsPage({ searchParams }: ReviewsPageProps) {
           <Suspense fallback={<SectionLoading page="reviews" variant="filters" />}>
             <ReviewsBody
               workspaceId={workspaceId}
+              userId={user.id}
               role={role}
               statusParams={statusParams}
               ratingParams={ratingParams}
@@ -163,6 +164,7 @@ export default async function ReviewsPage({ searchParams }: ReviewsPageProps) {
 
 async function ReviewsBody({
   workspaceId,
+  userId,
   role,
   statusParams,
   ratingParams,
@@ -184,6 +186,7 @@ async function ReviewsBody({
   queryForPagination,
 }: {
   workspaceId: string;
+  userId: string;
   role: Awaited<ReturnType<typeof getActiveRole>>;
   statusParams: string[];
   ratingParams: number[];
@@ -276,7 +279,11 @@ async function ReviewsBody({
         currentSort={sortParam}
         currentText={textParam}
         groups={data.groups}
-        members={roster.members.map((member) => ({ id: member.userId, email: member.email }))}
+        members={roster.members.map((member) => ({
+          id: member.userId,
+          email: member.email,
+          role: member.role,
+        }))}
         statusFilters={[
           { key: "all", label: "All" },
           { key: "unanswered", label: "Needs reply" },
@@ -322,6 +329,8 @@ async function ReviewsBody({
               aiOnly={draftsWithAiOnly(role)}
               contact={contact}
               members={roster.members.map((member) => ({ id: member.userId, email: member.email }))}
+              currentUserId={userId}
+              canModerateNotes={role === "owner" || role === "org_admin" || role === "admin"}
             />
             {totalPages > 1 && (
               <PaginationBar

@@ -4,7 +4,8 @@ import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { AuditService } from "@/lib/services/audit";
 import { ensurePersonalWorkspace } from "@/lib/services/workspace";
-import { assertCanAssignReviews, assertReviewAction } from "@/lib/services/access";
+import { assertCanAssignReviews, assertReviewAction, getMemberAccess } from "@/lib/services/access";
+import { canEditReviewNote } from "@/lib/access";
 import { AppError, toErrorCode, toStatusCode, toUserMessage } from "@/lib/errors";
 import { parseBody, validateId } from "@/lib/validation";
 
@@ -16,6 +17,15 @@ const bodySchema = z.discriminatedUnion("action", [
   z.object({
     action: z.literal("note"),
     body: z.string().trim().min(1).max(2000),
+  }),
+  z.object({
+    action: z.literal("note_update"),
+    noteId: z.string().uuid(),
+    body: z.string().trim().min(1).max(2000),
+  }),
+  z.object({
+    action: z.literal("note_delete"),
+    noteId: z.string().uuid(),
   }),
 ]);
 
@@ -95,17 +105,66 @@ export async function POST(
       return NextResponse.json({ ok: true });
     }
 
-    const { error } = await admin.from("grm_review_notes").insert({
-      workspace_id: membership.workspace_id,
-      review_id: reviewId,
-      author_id: user.id,
-      body: body.body,
-    });
-    if (error) throw new AppError("Could not save the note.", "DB_ERROR", 500);
+    if (body.action === "note") {
+      const { error } = await admin.from("grm_review_notes").insert({
+        workspace_id: membership.workspace_id,
+        review_id: reviewId,
+        author_id: user.id,
+        body: body.body,
+      });
+      if (error) throw new AppError("Could not save the note.", "DB_ERROR", 500);
+      await AuditService.log({
+        workspaceId: membership.workspace_id,
+        userId: user.id,
+        action: "review.note_added",
+        entityType: "grm_reviews",
+        entityId: reviewId,
+      });
+      return NextResponse.json({ ok: true });
+    }
+
+    const access = await getMemberAccess(user.id, membership.workspace_id);
+    const existing = await admin
+      .from("grm_review_notes")
+      .select("id, author_id")
+      .eq("id", body.noteId)
+      .eq("review_id", reviewId)
+      .eq("workspace_id", membership.workspace_id)
+      .maybeSingle();
+    if (existing.error || !existing.data) {
+      return NextResponse.json({ error: "That note is not on this review." }, { status: 404 });
+    }
+    if (!canEditReviewNote(access?.role, user.id, existing.data.author_id)) {
+      return NextResponse.json({ error: "You cannot change that note." }, { status: 403 });
+    }
+
+    if (body.action === "note_delete") {
+      const { error } = await admin
+        .from("grm_review_notes")
+        .delete()
+        .eq("id", body.noteId)
+        .eq("workspace_id", membership.workspace_id);
+      if (error) throw new AppError("Could not delete the note.", "DB_ERROR", 500);
+      await AuditService.log({
+        workspaceId: membership.workspace_id,
+        userId: user.id,
+        action: "review.note_deleted",
+        entityType: "grm_reviews",
+        entityId: reviewId,
+      });
+      return NextResponse.json({ ok: true });
+    }
+
+    const { error } = await admin
+      .from("grm_review_notes")
+      .update({ body: body.body })
+      .eq("id", body.noteId)
+      .eq("workspace_id", membership.workspace_id);
+    if (error) throw new AppError("Could not update the note.", "DB_ERROR", 500);
     await AuditService.log({
       workspaceId: membership.workspace_id,
       userId: user.id,
-      action: "review.note_added",
+      action: "review.note_updated",
       entityType: "grm_reviews",
       entityId: reviewId,
     });

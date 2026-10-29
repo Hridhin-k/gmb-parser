@@ -1,4 +1,5 @@
 import { channelOptions, type DeliveryChannel, type DeliveryEnv } from "@/lib/reporting";
+import { sendBrevoEmail } from "@/lib/mail";
 
 export interface DeliveryResult {
   status: "recorded" | "sent" | "failed" | "unavailable";
@@ -43,37 +44,21 @@ async function sendEmail(
   body: string,
   pdf?: Uint8Array
 ): Promise<DeliveryResult> {
-  const payload: Record<string, unknown> = {
+  if (!env.brevoApiKey || !env.reportFromEmail) {
+    return { status: "unavailable", detail: "No email provider is configured." };
+  }
+  const result = await sendBrevoEmail({
+    apiKey: env.brevoApiKey,
     from: env.reportFromEmail,
-    to: [recipient],
+    to: recipient,
     subject,
     text: body,
-  };
-  if (pdf) {
-    payload.attachments = [
-      {
-        filename: "report.pdf",
-        content: Buffer.from(pdf).toString("base64"),
-      },
-    ];
-  }
-  try {
-    const response = await fetch("https://api.resend.com/emails", {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${env.resendApiKey}`,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify(payload),
-      signal: AbortSignal.timeout(10_000),
-    });
-    if (!response.ok) {
-      return { status: "failed", detail: `Email provider returned ${response.status}.` };
-    }
-    return { status: "sent", detail: "Accepted by the email provider." };
-  } catch {
-    return { status: "failed", detail: "The email provider did not respond." };
-  }
+    attachments: pdf
+      ? [{ name: "report.pdf", content: Buffer.from(pdf).toString("base64") }]
+      : undefined,
+  });
+  if (!result.ok) return { status: "failed", detail: result.detail };
+  return { status: "sent", detail: "Accepted by the email provider." };
 }
 
 async function sendSlack(webhook: string | null, subject: string, body: string): Promise<DeliveryResult> {

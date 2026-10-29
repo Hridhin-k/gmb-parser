@@ -82,29 +82,21 @@ function inviteRow(row: Record<string, unknown>): PlatformInviteRow {
   };
 }
 
-/** Best-effort invite email via the already-configured Resend env. Invite works without it. */
+/** Best-effort invite email via Brevo. Invite still works without mail configured. */
 async function trySendInviteEmail(email: string): Promise<boolean> {
   const env = readDeliveryEnv(process.env);
   const from = process.env.PLATFORM_FROM_EMAIL?.trim() || env.reportFromEmail;
-  if (!env.resendApiKey || !from) return false;
+  if (!env.brevoApiKey || !from) return false;
+  const { sendBrevoEmail } = await import("@/lib/mail");
   const appUrl = (process.env.NEXT_PUBLIC_APP_URL ?? "").replace(/\/$/, "");
-  try {
-    const response = await fetch("https://api.resend.com/emails", {
-      method: "POST",
-      headers: { Authorization: `Bearer ${env.resendApiKey}`, "Content-Type": "application/json" },
-      body: JSON.stringify({
-        from,
-        to: [email],
-        subject: "You're invited to RevuPilot",
-        text: `You've been invited to create your RevuPilot tenant.\n\nSign in with Google using this exact email (${email}):\n${appUrl}/login\n\nThis invite expires in 7 days. After signing in, you'll name your organization and can then invite your admins, managers, and members.`,
-      }),
-      signal: AbortSignal.timeout(10_000),
-      cache: "no-store",
-    });
-    return response.ok;
-  } catch {
-    return false;
-  }
+  const result = await sendBrevoEmail({
+    apiKey: env.brevoApiKey,
+    from,
+    to: email,
+    subject: "You're invited to RevuPilot",
+    text: `You've been invited to create your RevuPilot tenant.\n\nSign in with Google using this exact email (${email}):\n${appUrl}/login\n\nThis invite expires in 7 days. After signing in, you'll name your organization and can then invite your admins, managers, and members.`,
+  });
+  return result.ok;
 }
 
 export async function createPlatformInvite(input: {
@@ -189,13 +181,48 @@ export async function revokePlatformInvite(input: {
   if (!data) throw new ValidationError("That invite is no longer pending.");
 }
 
+export const TENANT_FEATURE_KEYS = ["automation", "requests", "reports"] as const;
+export type TenantFeatureKey = (typeof TENANT_FEATURE_KEYS)[number];
+
+export type TenantFeatures = Record<TenantFeatureKey, boolean>;
+
+/** Missing column/flag = enabled (flags only ever turn things off). */
+export function parseTenantFeatures(raw: unknown): TenantFeatures {
+  const flags = raw && typeof raw === "object" ? (raw as Record<string, unknown>) : {};
+  return {
+    automation: flags.automation !== false,
+    requests: flags.requests !== false,
+    reports: flags.reports !== false,
+  };
+}
+
 /** Tenant feature flag check. Missing column/flag = enabled (flags only ever turn things off). */
-export async function tenantFeatureEnabled(workspaceId: string, key: string): Promise<boolean> {
+export async function tenantFeatureEnabled(workspaceId: string, key: TenantFeatureKey | string): Promise<boolean> {
   const admin = createAdminClient();
   const { data, error } = await admin.from("grm_workspaces").select("feature_flags").eq("id", workspaceId).maybeSingle();
   if (error || !data) return true;
+  const features = parseTenantFeatures(data.feature_flags);
+  if (key === "automation" || key === "requests" || key === "reports") return features[key];
   const flags = (data.feature_flags && typeof data.feature_flags === "object" ? data.feature_flags : {}) as Record<string, unknown>;
   return flags[key] !== false;
+}
+
+export async function loadTenantFeatures(workspaceId: string): Promise<TenantFeatures> {
+  const admin = createAdminClient();
+  const { data, error } = await admin.from("grm_workspaces").select("feature_flags").eq("id", workspaceId).maybeSingle();
+  if (error || !data) return parseTenantFeatures(null);
+  return parseTenantFeatures(data.feature_flags);
+}
+
+/** Throws 403 when a tenant flag turns the feature off. */
+export async function requireTenantFeature(workspaceId: string, key: TenantFeatureKey): Promise<void> {
+  if (await tenantFeatureEnabled(workspaceId, key)) return;
+  const labels: Record<TenantFeatureKey, string> = {
+    automation: "Automation",
+    requests: "Review requests",
+    reports: "Reports and alerts",
+  };
+  throw new AuthorizationError(`${labels[key]} is turned off for this workspace.`);
 }
 
 export type TenantAction = "suspend" | "reactivate" | "delete" | "restore";
@@ -524,7 +551,7 @@ export async function loadPlatformHealth(actor: { id: string; email?: string | n
       platformInvitesTable: !inviteRows.error,
       aiUsageLedger: Boolean(usageProbe),
       cronSecretConfigured: Boolean(process.env.CRON_SECRET?.trim()),
-      resendConfigured: Boolean(process.env.RESEND_API_KEY && (process.env.REPORT_FROM_EMAIL || process.env.PLATFORM_FROM_EMAIL)),
+      resendConfigured: Boolean(process.env.BREVO_API_KEY && (process.env.REPORT_FROM_EMAIL || process.env.PLATFORM_FROM_EMAIL)),
       superAdminsConfigured: (process.env.SUPER_ADMIN_EMAILS ?? "").split(",").filter((p) => p.includes("@")).length,
     },
     tenantsByStatus: {

@@ -1,6 +1,7 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
+import { acknowledgeAttention } from "@/lib/attention-client";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
@@ -54,6 +55,10 @@ export function EscalationTicket({
     return members.find((member) => member.userId === userId)?.email ?? "a former member";
   };
   const open = item.status !== "resolved";
+  useEffect(() => {
+    if (!open) return;
+    acknowledgeAttention({ kind: "escalation", id: item.id, countsAsEscalation: true });
+  }, [item.id, open]);
 
   async function send(body: unknown) {
     setPending(true);

@@ -53,7 +53,7 @@ export const DELIVERY_CHANNELS = ["in_app", "email", "slack", "whatsapp"] as con
 export type DeliveryChannel = (typeof DELIVERY_CHANNELS)[number];
 
 export interface DeliveryEnv {
-  resendApiKey: string | null;
+  brevoApiKey: string | null;
   reportFromEmail: string | null;
   slackWebhookUrl: string | null;
   whatsappToken: string | null;
@@ -73,7 +73,7 @@ export function readDeliveryEnv(source: Record<string, string | undefined>): Del
     return raw ? raw : null;
   };
   return {
-    resendApiKey: value("RESEND_API_KEY"),
+    brevoApiKey: value("BREVO_API_KEY"),
     reportFromEmail: value("REPORT_FROM_EMAIL"),
     slackWebhookUrl: value("SLACK_WEBHOOK_URL"),
     whatsappToken: value("WHATSAPP_TOKEN"),
@@ -82,7 +82,7 @@ export function readDeliveryEnv(source: Record<string, string | undefined>): Del
 }
 
 export function channelOptions(env: DeliveryEnv): ChannelOption[] {
-  const email = Boolean(env.resendApiKey && env.reportFromEmail);
+  const email = Boolean(env.brevoApiKey && env.reportFromEmail);
   const slack = Boolean(env.slackWebhookUrl);
   const whatsapp = Boolean(env.whatsappToken && env.whatsappPhoneNumberId);
   return [

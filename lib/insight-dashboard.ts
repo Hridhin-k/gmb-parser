@@ -61,6 +61,34 @@ export function insightTopicLabel(topic: string): string {
   return text.replace(/\b\p{L}/gu, (letter) => letter.toUpperCase());
 }
 
+/**
+ * Inbox query extras for an analysed insight topic.
+ * Maps standard topics onto `complaint_theme` when possible; otherwise searches
+ * by the topic label. Praise never uses complaint_theme (4–5★ reviews leave it null).
+ */
+const TOPIC_TO_COMPLAINT_THEME: Record<string, string> = {
+  staff: "staff",
+  product_quality: "quality",
+  price: "price",
+  cleanliness: "cleanliness",
+  service_speed: "wait",
+  billing: "price",
+  refunds_returns: "price",
+};
+
+export function insightTopicInboxExtra(
+  topic: string,
+  tone: "praise" | "complaint"
+): Record<string, string> {
+  const id = topic.trim().toLowerCase();
+  if (tone === "complaint") {
+    const theme = TOPIC_TO_COMPLAINT_THEME[id];
+    if (theme) return { theme, stars: "low" };
+    return { q: insightTopicLabel(id).toLowerCase(), stars: "low" };
+  }
+  return { q: insightTopicLabel(id).toLowerCase(), stars: "positive" };
+}
+
 function topics(value: unknown): TopicCount[] {
   return rows(value).flatMap((row) => {
     if (typeof row.topic !== "string" || row.topic.length === 0) return [];

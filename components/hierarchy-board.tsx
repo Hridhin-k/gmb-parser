@@ -3,21 +3,40 @@
 import { useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { Building2, FolderPlus, MapPin } from "lucide-react";
+import { Building2, FolderPlus, MapPin, Upload } from "lucide-react";
 import type { HierarchyView } from "@/lib/services/hierarchy";
 import { ROUTING_LEVELS } from "@/lib/hierarchy";
 import { TONE_VOICES } from "@/lib/onboarding";
 import { cn } from "@/lib/utils";
+import { ConfirmDialog } from "@/components/confirm-dialog";
 
-async function post(body: unknown): Promise<{ error: string | null; id?: string }> {
+async function post(body: unknown): Promise<{
+  error: string | null;
+  id?: string;
+  moved?: number;
+  groupsCreated?: number;
+  skipped?: number;
+}> {
   const response = await fetch("/api/locations/hierarchy", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(body),
   });
-  const payload = (await response.json().catch(() => ({}))) as { error?: string; id?: string };
+  const payload = (await response.json().catch(() => ({}))) as {
+    error?: string;
+    id?: string;
+    moved?: number;
+    groupsCreated?: number;
+    skipped?: number;
+  };
   if (!response.ok) return { error: payload.error ?? "That did not save." };
-  return { error: null, id: payload.id };
+  return {
+    error: null,
+    id: payload.id,
+    moved: payload.moved,
+    groupsCreated: payload.groupsCreated,
+    skipped: payload.skipped,
+  };
 }
 
 function settingLine(label: string, field: { value: string; source: string; overridden: boolean }) {
@@ -85,6 +104,7 @@ export function HierarchyBoard({
   const [notice, setNotice] = useState<string | null>(null);
   const [pending, setPending] = useState(false);
   const [selected, setSelected] = useState<string[]>([]);
+  const [removeOpen, setRemoveOpen] = useState(false);
   const [tagDraft, setTagDraft] = useState("");
   const [creating, setCreating] = useState(false);
   const [groupName, setGroupName] = useState("");
@@ -124,8 +144,28 @@ export function HierarchyBoard({
       return;
     }
     setSelected([]);
-    setNotice("Saved.");
+    if (typeof result.moved === "number") {
+      const parts = [
+        `Moved ${result.moved.toLocaleString("en-US")} ${result.moved === 1 ? "shop" : "shops"}`,
+        result.groupsCreated ? `created ${result.groupsCreated}` : null,
+        result.skipped ? `skipped ${result.skipped} held` : null,
+      ].filter(Boolean);
+      setNotice(`${parts.join(", ")}.`);
+    } else {
+      setNotice("Saved.");
+    }
     router.refresh();
+  }
+
+  async function importCsv(file: File | null) {
+    if (!file) return;
+    const clientId = contextClientId ?? brands[0]?.id ?? "";
+    if (!clientId) {
+      setError("Pick an organisation first, then import the CSV.");
+      return;
+    }
+    const csv = await file.text();
+    await run({ action: "import-csv", clientId, csv });
   }
 
   return (
@@ -134,22 +174,40 @@ export function HierarchyBoard({
         <div>
           <h2 className="font-heading text-lg text-ink">Structure</h2>
           <p className="mt-1 text-sm text-slate">
-            Pick an organisation or group to move shops, set managers, and override reply rules.
+            Pick an organisation or group to move shops, set managers, and override reply rules. Drag-and-drop is not
+            used — select shops and choose a group, or import a location/group CSV.
           </p>
         </div>
         {canManage ? (
-          <button
-            type="button"
-            className="inline-flex h-10 items-center gap-1.5 rounded-full bg-[#163a7a] px-4 text-sm font-semibold text-white hover:bg-[#122f63]"
-            onClick={() => {
-              setCreating((open) => !open);
-              setGroupClientId(contextClientId ?? brands[0]?.id ?? "");
-              setError(null);
-            }}
-          >
-            <FolderPlus className="h-4 w-4" aria-hidden />
-            {creating ? "Close" : "New group"}
-          </button>
+          <div className="flex flex-wrap items-center gap-2">
+            <label className="inline-flex h-10 cursor-pointer items-center gap-1.5 rounded-full border border-[#c9d3e3] bg-white px-4 text-sm font-semibold text-[#163a7a] hover:border-[#163a7a]">
+              <Upload className="h-4 w-4" aria-hidden />
+              Import CSV
+              <input
+                type="file"
+                accept=".csv,text/csv"
+                className="sr-only"
+                disabled={pending}
+                onChange={(event) => {
+                  const file = event.target.files?.[0] ?? null;
+                  event.target.value = "";
+                  void importCsv(file);
+                }}
+              />
+            </label>
+            <button
+              type="button"
+              className="inline-flex h-10 items-center gap-1.5 rounded-full bg-[#163a7a] px-4 text-sm font-semibold text-white hover:bg-[#122f63]"
+              onClick={() => {
+                setCreating((open) => !open);
+                setGroupClientId(contextClientId ?? brands[0]?.id ?? "");
+                setError(null);
+              }}
+            >
+              <FolderPlus className="h-4 w-4" aria-hidden />
+              {creating ? "Close" : "New group"}
+            </button>
+          </div>
         ) : null}
       </div>
 
@@ -413,14 +471,7 @@ export function HierarchyBoard({
                       type="button"
                       disabled={pending || selected.length === 0}
                       className="h-10 rounded-full border border-[#e6ebf2] px-4 text-sm disabled:opacity-40"
-                      onClick={() =>
-                        void run({
-                          action: "move",
-                          locationIds: selected,
-                          groupId: null,
-                          confirmHold: true,
-                        })
-                      }
+                      onClick={() => setRemoveOpen(true)}
                     >
                       Remove from group
                     </button>
@@ -854,6 +905,27 @@ export function HierarchyBoard({
           )}
         </div>
       </div>
+      <ConfirmDialog
+        open={removeOpen}
+        onOpenChange={(open) => setRemoveOpen(open)}
+        title="Remove from group?"
+        description={
+          selected.length === 1
+            ? "This shop leaves the group and stays in the organisation."
+            : `${selected.length} shops leave the group and stay in the organisation.`
+        }
+        confirmLabel="Remove from group"
+        pendingLabel="Removing…"
+        tone="danger"
+        onConfirm={() =>
+          run({
+            action: "move",
+            locationIds: selected,
+            groupId: null,
+            confirmHold: true,
+          })
+        }
+      />
     </section>
   );
 }

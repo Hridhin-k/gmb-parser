@@ -6,6 +6,7 @@ import {
   countsAsSent,
   customerKey,
   customerPageModel,
+  pageCopy,
   parseCustomerCsv,
   phoneMatchKey,
   providerOutcome,
@@ -16,7 +17,7 @@ import {
 } from "@/lib/review-requests";
 
 const emptyEnv: RequestEnv = {
-  resendApiKey: null,
+  brevoApiKey: null,
   fromEmail: null,
   whatsappToken: null,
   whatsappPhoneNumberId: null,
@@ -24,7 +25,7 @@ const emptyEnv: RequestEnv = {
   twilioToken: null,
   twilioFrom: null,
   twilioMessagingService: null,
-  resendWebhookSecret: null,
+  brevoWebhookSecret: null,
   whatsappAppSecret: null,
 };
 
@@ -133,6 +134,12 @@ describe("customer page", () => {
     });
     expect(text).toContain("https://example.com/r/abc#stop");
     expect(text).toContain("Ana");
+  });
+
+  it("provides feedback failure copy for each language", () => {
+    expect(pageCopy("en", "Lulu").feedbackFailed.length).toBeGreaterThan(10);
+    expect(pageCopy("ml", "Lulu").feedbackFailed.length).toBeGreaterThan(10);
+    expect(pageCopy("hi", "Lulu").feedbackFailed.length).toBeGreaterThan(10);
   });
 });
 

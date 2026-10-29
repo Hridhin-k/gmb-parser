@@ -407,6 +407,8 @@ export class ReportService {
     reportId: string | null,
     input: ReportInput
   ): Promise<string> {
+    const { requireTenantFeature } = await import("@/lib/services/platform");
+    await requireTenantFeature(workspaceId, "reports");
     await assertScope(workspaceId, input);
     const spec = specFrom(input);
     const admin = createAdminClient();
@@ -545,8 +547,10 @@ export class ReportService {
     if (error) throw new Error(error.message);
     let delivered = 0;
     let failed = 0;
+    const { tenantFeatureEnabled } = await import("@/lib/services/platform");
     for (const schedule of data ?? []) {
       try {
+        if (!(await tenantFeatureEnabled(schedule.workspace_id, "reports"))) continue;
         const outcome = await runSchedule(schedule, now);
         if (outcome === "delivered") delivered += 1;
         if (outcome === "failed") failed += 1;
@@ -805,6 +809,8 @@ export class AlertService {
   }
 
   static async save(workspaceId: string, userId: string, ruleId: string | null, input: AlertInput): Promise<string> {
+    const { requireTenantFeature } = await import("@/lib/services/platform");
+    await requireTenantFeature(workspaceId, "reports");
     if (!ALERT_KINDS.some((kind) => kind.id === input.kind)) throw new ValidationError("Choose an alert type.");
     await assertScope(workspaceId, input);
     const admin = createAdminClient();
@@ -1128,8 +1134,10 @@ export async function runReportingJobs(now = new Date()): Promise<{ reportsDeliv
   if (error) throw new Error(error.message);
   const reports = await ReportService.runDue(now);
   let alertsOpened = 0;
+  const { tenantFeatureEnabled } = await import("@/lib/services/platform");
   for (const workspace of data ?? []) {
     try {
+      if (!(await tenantFeatureEnabled(workspace.id, "reports"))) continue;
       alertsOpened += await AlertService.evaluateWorkspace(workspace.id, now);
     } catch (err) {
       console.error("[alerts] workspace failed", workspace.id, err instanceof Error ? err.message : "Unknown");

@@ -1,5 +1,5 @@
 import { formatHours } from "@/lib/analytics-metrics";
-import { insightTopicLabel } from "@/lib/insight-dashboard";
+import { insightTopicInboxExtra, insightTopicLabel } from "@/lib/insight-dashboard";
 import { average, reviewWindow, type DashboardFacts } from "@/lib/metrics";
 
 /**
@@ -81,7 +81,8 @@ export interface OverviewStoreRow {
   href: string;
   reviewsHref: string;
   negativeHref: string;
-  assignHref: string;
+  /** Inbox filtered to this outlet’s unanswered reviews. */
+  unansweredHref: string;
 }
 
 export interface OverviewMonthBar {
@@ -264,7 +265,7 @@ function placeRow(
     href: links.location(place),
     reviewsHref: links.reviews({ location: place.id }),
     negativeHref: links.reviews({ location: place.id, stars: "low" }),
-    assignHref: links.reviews({ location: place.id, filter: "unanswered" }),
+    unansweredHref: links.reviews({ location: place.id, filter: "unanswered" }),
   };
 }
 
@@ -379,7 +380,11 @@ export function glanceInsights(raw: unknown): OverviewInsightGlance[] {
 
 const THEME_LIST_LIMIT = 6;
 
-function themeBars(topics: BoardTopic[], insightsHref: string): OverviewThemeBar[] {
+function themeBars(
+  topics: BoardTopic[],
+  reviews: BoardLinks["reviews"],
+  tone: "praise" | "complaint"
+): OverviewThemeBar[] {
   return topics
     .filter((topic) => topic.count > 0 && topic.topic.length > 0)
     .sort((a, b) => b.count - a.count || a.topic.localeCompare(b.topic))
@@ -388,7 +393,7 @@ function themeBars(topics: BoardTopic[], insightsHref: string): OverviewThemeBar
       label: insightTopicLabel(topic.topic),
       count: topic.count,
       reviews: topic.reviews,
-      href: insightsHref,
+      href: reviews(insightTopicInboxExtra(topic.topic, tone)),
     }));
 }
 
@@ -599,8 +604,8 @@ export function buildOverviewBoard(input: {
     attention: input.attention,
     lowest: multiple ? ranked.slice(0, 5) : [],
     rankedCount: ranked.length,
-    themes: themeBars(complaintsTopics, input.links.insights),
-    praiseThemes: themeBars(praise, input.links.insights),
+    themes: themeBars(complaintsTopics, input.links.reviews, "complaint"),
+    praiseThemes: themeBars(praise, input.links.reviews, "praise"),
     themeMix: mixed,
     sentiment: {
       positive: praise.reduce((sum, topic) => sum + topic.count, 0),

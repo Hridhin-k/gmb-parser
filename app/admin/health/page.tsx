@@ -37,7 +37,7 @@ export default async function PlatformHealthPage() {
               <li>Platform invites table: {health.readiness.platformInvitesTable ? "available" : "MISSING — apply migration 20261022001"}</li>
               <li>AI usage ledger: {health.readiness.aiUsageLedger ? "available" : "not available yet"}</li>
               <li>CRON_SECRET: {health.readiness.cronSecretConfigured ? "configured (scheduled jobs can run)" : "NOT configured — all cron routes return 401"}</li>
-              <li>Invite email (Resend): {health.readiness.resendConfigured ? "configured" : "not configured — invites are saved, not emailed"}</li>
+              <li>Invite email (Brevo): {health.readiness.resendConfigured ? "configured" : "not configured — invites are saved, not emailed"}</li>
               <li>Super admins configured: {health.readiness.superAdminsConfigured} · Tenants active/suspended/deleted: {health.tenantsByStatus.active}/{health.tenantsByStatus.suspended}/{health.tenantsByStatus.deleted} · Expired pending invites: {health.invites.expiredPending}</li>
             </ul>
           </section>

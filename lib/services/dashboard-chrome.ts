@@ -4,7 +4,14 @@ import type { GrmMemberRole } from "@/lib/types";
 import { getMemberAccess, visibleClientIds, visibleLocationIds, type MemberAccess } from "@/lib/services/access";
 import { loadAgencyBranding, type AgencyBranding } from "@/lib/services/agency-branding";
 import { listAgencyClients } from "@/lib/services/agency-home";
-import { getActiveAnnouncement, getMaintenance, isSuperAdmin, type PlatformAnnouncementRow } from "@/lib/services/platform";
+import {
+  getActiveAnnouncement,
+  getMaintenance,
+  isSuperAdmin,
+  loadTenantFeatures,
+  type PlatformAnnouncementRow,
+  type TenantFeatures,
+} from "@/lib/services/platform";
 import { loadScopeCatalog } from "@/lib/services/scope-catalog";
 import type { ScopeCatalog } from "@/lib/scope";
 import { getActiveWorkspace, getCurrentUser, getSupportTenantId, tenantGateRedirect } from "@/lib/services/session";
@@ -29,6 +36,7 @@ export interface DashboardChrome {
   maintenance: { enabled: boolean; message: string | null };
   announcement: PlatformAnnouncementRow | null;
   supportTenantId: string | null;
+  features: TenantFeatures;
 }
 
 /**
@@ -59,12 +67,13 @@ async function buildDashboardChrome(
   workspaceId: string,
   supportTenantId: string | null
 ): Promise<DashboardChrome> {
-  const [maintenance, announcement, access, workspaces, branding] = await Promise.all([
+  const [maintenance, announcement, access, workspaces, branding, features] = await Promise.all([
     getMaintenance().catch(() => ({ enabled: false, message: null as string | null })),
     getActiveAnnouncement().catch(() => null),
     getMemberAccess(user.id, workspaceId),
     listAccessibleWorkspaces(user.id),
     loadAgencyBranding(workspaceId),
+    loadTenantFeatures(workspaceId),
   ]);
   const role = (access?.role as GrmMemberRole | undefined) ?? null;
   const [allowedClientIds, locationIds] = await Promise.all([
@@ -97,5 +106,6 @@ async function buildDashboardChrome(
     maintenance,
     announcement,
     supportTenantId,
+    features,
   };
 }

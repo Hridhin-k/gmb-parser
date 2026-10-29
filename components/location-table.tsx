@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Unlink, MapPin } from "lucide-react";
+import { ConfirmDialog } from "@/components/confirm-dialog";
 import Link from "next/link";
 import { SyncButton } from "@/components/sync-button";
 import { ActivityStatus } from "@/components/activity-status";
@@ -46,6 +47,8 @@ export function LocationTable({
   const router = useRouter();
   const [loadingId, setLoadingId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [confirmId, setConfirmId] = useState<string | null>(null);
+  const confirmLocation = locations.find((location) => location.id === confirmId) ?? null;
 
   async function handleDisconnect(locationId: string) {
     setError(null);
@@ -179,7 +182,7 @@ export function LocationTable({
                     <Button
                       variant="ghost"
                       size="sm"
-                      onClick={() => handleDisconnect(loc.id)}
+                      onClick={() => setConfirmId(loc.id)}
                       disabled={loadingId === loc.id}
                       className="text-red-600 hover:bg-red-50 hover:text-red-700"
                       aria-label="Unassign location from client"
@@ -193,6 +196,30 @@ export function LocationTable({
           })}
         </ul>
       )}
+      <ConfirmDialog
+        open={confirmLocation !== null}
+        onOpenChange={(open) => {
+          if (!open) setConfirmId(null);
+        }}
+        title="Disconnect this location?"
+        description={
+          confirmLocation ? (
+            <>
+              <span className="font-medium text-graphite">{confirmLocation.location_title}</span> is
+              removed from this client and moved to unassigned. Reviews already in GRM stay. The
+              Google listing is not deleted.
+            </>
+          ) : (
+            "This location is removed from the client."
+          )
+        }
+        confirmLabel="Disconnect"
+        pendingLabel="Disconnecting…"
+        tone="danger"
+        onConfirm={async () => {
+          if (confirmId) await handleDisconnect(confirmId);
+        }}
+      />
     </div>
   );
 }

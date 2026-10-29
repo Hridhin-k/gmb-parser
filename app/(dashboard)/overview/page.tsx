@@ -128,7 +128,7 @@ export default async function OverviewPage({ searchParams }: OverviewPageProps) 
             href={links.reports}
             className="inline-flex h-9 items-center rounded-full bg-[#163a7a] px-4 text-sm font-medium text-white hover:bg-[#0f2c5e]"
           >
-            Send digest
+            Open reports
           </Link>
         </PageHeader>
         {resolved.dropped ? (

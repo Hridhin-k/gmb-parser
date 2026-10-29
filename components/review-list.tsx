@@ -24,6 +24,7 @@ import type { ResolutionContact } from "@/lib/resolution-contact";
 import { useServerRefresh, useSettleWhenUpdated } from "@/hooks/use-server-refresh";
 import { ACTION_STATUS } from "@/lib/ui-status";
 import { pollBulkJob } from "@/lib/bulk-job-client";
+import { acknowledgeAttention } from "@/lib/attention-client";
 
 interface ReviewItem {
   id: string;
@@ -68,6 +69,8 @@ interface ReviewListProps {
   aiOnly?: boolean;
   contact?: ResolutionContact;
   members?: Array<{ id: string; email: string }>;
+  currentUserId?: string;
+  canModerateNotes?: boolean;
 }
 
 type BulkAction = "generate" | "approve" | "publish" | "discard" | "assign";
@@ -110,7 +113,16 @@ function ReplyStatusPill({ status, source }: { status: string; source?: string }
 
 type ReplyPatch = { status: string; reply: ReplyItem | null };
 
-export function ReviewList({ reviews, replies, canApprove, aiOnly = false, contact, members = [] }: ReviewListProps) {
+export function ReviewList({
+  reviews,
+  replies,
+  canApprove,
+  aiOnly = false,
+  contact,
+  members = [],
+  currentUserId = "",
+  canModerateNotes = false,
+}: ReviewListProps) {
   const { pending: refreshing, refresh, settle } = useServerRefresh();
   useSettleWhenUpdated(refreshing, settle, reviews);
   const [selectedId, setSelectedId] = useState<string | null>(null);
@@ -536,7 +548,12 @@ export function ReviewList({ reviews, replies, canApprove, aiOnly = false, conta
 
               <button
                 type="button"
-                onClick={() => setSelectedId(review.id)}
+                onClick={() => {
+                  setSelectedId(review.id);
+                  if (review.reply_status === "none") {
+                    acknowledgeAttention({ kind: "review", id: review.id, countsAsUnreplied: true });
+                  }
+                }}
                 className="mt-4 flex flex-1 flex-col text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ink/10"
                 aria-label={`Open review by ${name}`}
               >
@@ -604,6 +621,8 @@ export function ReviewList({ reviews, replies, canApprove, aiOnly = false, conta
               aiOnly={aiOnly}
               contact={contact}
               members={members}
+              currentUserId={currentUserId}
+              canModerateNotes={canModerateNotes}
               onClose={() => setSelectedId(null)}
               inboxRevision={inboxRevision}
               onDraft={(reviewId, next) => {

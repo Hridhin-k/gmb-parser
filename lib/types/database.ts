@@ -86,6 +86,8 @@ export type AuditAction =
   | "location_group.updated"
   | "review.assigned"
   | "review.note_added"
+  | "review.note_updated"
+  | "review.note_deleted"
   | "escalation.policy_updated"
   | "escalation.contact_updated"
   | "escalation.opened"

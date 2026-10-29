@@ -42,6 +42,8 @@ interface SettingsBoardProps {
   tone: SettingsTone;
   automation: SettingsAutomation;
   templates: Array<{ id: string; name: string; body: string; scopeLabel: string }>;
+  /** Whether automatic replies are paused for the current settings target. */
+  paused: boolean;
 }
 
 const SAMPLE_REVIEWS = [
@@ -67,7 +69,7 @@ async function post(body: object) {
   return data;
 }
 
-export function SettingsBoard({ section, target, canEdit, tone, automation, templates }: SettingsBoardProps) {
+export function SettingsBoard({ section, target, canEdit, tone, automation, templates, paused }: SettingsBoardProps) {
   const router = useRouter();
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -262,6 +264,7 @@ export function SettingsBoard({ section, target, canEdit, tone, automation, temp
               variant="outline"
               onClick={() => {
                 const scope = target.kind === "client" ? "client" : target.kind === "location" ? "location" : "workspace";
+                const nextPaused = !paused;
                 void fetch("/api/escalations/pause", {
                   method: "POST",
                   headers: { "Content-Type": "application/json" },
@@ -269,16 +272,31 @@ export function SettingsBoard({ section, target, canEdit, tone, automation, temp
                     scope,
                     clientId: target.kind === "client" ? target.id : null,
                     locationId: target.kind === "location" ? target.id : null,
-                    paused: true,
+                    paused: nextPaused,
                   }),
-                }).then(async (response) => {
-                  const data = (await response.json().catch(() => ({}))) as { error?: string };
-                  if (!response.ok) throw new Error(data.error ?? "Could not pause automation.");
-                  toast.success("Automation paused");
-                }).catch((caught: unknown) => setError(caught instanceof Error ? caught.message : "Could not pause automation."));
+                })
+                  .then(async (response) => {
+                    const data = (await response.json().catch(() => ({}))) as { error?: string };
+                    if (!response.ok) {
+                      throw new Error(
+                        data.error ?? (nextPaused ? "Could not pause automation." : "Could not resume automation.")
+                      );
+                    }
+                    toast.success(nextPaused ? "Automation paused" : "Automation resumed");
+                    router.refresh();
+                  })
+                  .catch((caught: unknown) =>
+                    setError(
+                      caught instanceof Error
+                        ? caught.message
+                        : nextPaused
+                          ? "Could not pause automation."
+                          : "Could not resume automation."
+                    )
+                  );
               }}
             >
-              Pause now
+              {paused ? "Resume now" : "Pause now"}
             </Button>
             )}
           </div>

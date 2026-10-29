@@ -9,7 +9,6 @@ import { getActiveRole, getActiveWorkspace } from "@/lib/services/session";
 import { canSyncWorkspace } from "@/lib/services/workspace";
 import { getMemberAccess, visibleClientIds } from "@/lib/services/access";
 import { readPageScope } from "@/lib/services/scope-catalog";
-import { workspaceGrant } from "@/lib/access";
 import { canOpenPath } from "@/lib/shell";
 import { validateFilterString, validatePage } from "@/lib/validation";
 
@@ -90,7 +89,6 @@ async function AgencyHomeSection({
       clientId={clientId}
       rangeParams={dateRangeParams(range, AGENCY_DEFAULT_RANGE)}
       query={query}
-      showUsage={workspaceGrant(role, "manage_people")}
     />
   );
 }

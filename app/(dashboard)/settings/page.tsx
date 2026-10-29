@@ -184,7 +184,7 @@ async function SettingsSection({
   canEditWorkspace: boolean;
   params: Record<string, string | string[] | undefined>;
 }) {
-  const [settings, policy, contact, connections, branding, aiBoard] = await Promise.all([
+  const [settings, policy, contact, connections, branding, aiBoard, pauses] = await Promise.all([
     loadReplySettings(workspaceId, target),
     EscalationService.policy(workspaceId),
     EscalationContactStore.read(workspaceId),
@@ -196,11 +196,20 @@ async function SettingsSection({
       .order("created_at", { ascending: false }),
     canBill ? loadAgencyBranding(workspaceId) : Promise.resolve(null),
     section === "tone" ? loadAiBoard(workspaceId, userId) : Promise.resolve(null),
+    EscalationService.pausedTargets(workspaceId),
   ]);
+  const pausedForTarget =
+    target.kind === "workspace"
+      ? pauses.workspace
+      : target.kind === "client"
+        ? pauses.clientIds.includes(target.id)
+        : target.kind === "location"
+          ? pauses.locationIds.includes(target.id)
+          : false;
 
   const googleError = typeof params.google_error === "string" ? params.google_error : null;
   const methods = authMethodsFromEnv();
-  const emailDelivery = Boolean(process.env.RESEND_API_KEY && process.env.REPORT_FROM_EMAIL);
+  const emailDelivery = Boolean(process.env.BREVO_API_KEY && process.env.REPORT_FROM_EMAIL);
 
   return (
     <div className="space-y-6">
@@ -253,6 +262,7 @@ async function SettingsSection({
             tone={settings.tone}
             automation={settings.automation}
             templates={settings.templates}
+            paused={pausedForTarget}
           />
         </div>
       ) : null}
@@ -265,6 +275,7 @@ async function SettingsSection({
           tone={settings.tone}
           automation={settings.automation}
           templates={settings.templates}
+          paused={pausedForTarget}
         />
       ) : null}
 
@@ -282,12 +293,13 @@ async function SettingsSection({
 
       {section === "notifications" ? (
         <section className="space-y-2 rounded-xl border border-silver bg-white p-4 text-sm text-slate">
+          <p className="font-medium text-graphite">This tab explains how alerts work. Toggle email and in-app alerts on Team and roles.</p>
           <p>The bell lists each profile you cover: reviews with no reply, drafts, failed publishes, and open escalations.</p>
           <p>You also get a notice when a new review arrives on one of those profiles, a complaint is assigned to you, a reminder is due, or a reply fails to publish.</p>
           <p>{emailDelivery ? "Email is sent for an assignment when that person turned email on." : "Email preferences can be saved on Team and roles. Mail is not delivered until a mail provider is configured."}</p>
           <p>WhatsApp and Slack are not configured.</p>
           {canOpenPath("/team", role) ? (
-            <Link href="/team" className="font-medium text-ink underline underline-offset-4">Notification preferences</Link>
+            <Link href="/team" className="font-medium text-ink underline underline-offset-4">Edit notification preferences</Link>
           ) : (
             <p>Your own alert preferences are on Team and roles when that page is available for your role.</p>
           )}
@@ -326,13 +338,15 @@ async function SettingsSection({
 
       {section === "plan" && canBill ? (
         <section className="space-y-2 rounded-xl border border-silver bg-white p-4 text-sm text-slate">
-          <p>Usage is counted from locations and reviews. There is no separate checkout in this workspace.</p>
-          <Link href="/dashboard#usage" className="font-medium text-ink underline underline-offset-4">Open usage</Link>
+          <p className="font-medium text-graphite">Plan and billing are read-only here. There is no in-app checkout.</p>
+          <p>Usage is counted from locations and reviews for this workspace.</p>
+          <Link href="/usage" className="font-medium text-ink underline underline-offset-4">Open usage</Link>
         </section>
       ) : null}
 
       {section === "security" ? (
         <section className="space-y-2 rounded-xl border border-silver bg-white p-4 text-sm text-slate">
+          <p className="font-medium text-graphite">Security is informational. Sign-in methods are controlled by deployment env, not this form.</p>
           <p>Sign-in methods turned on for this app:</p>
           <ul className="space-y-1">
             {methods.map((method) => (

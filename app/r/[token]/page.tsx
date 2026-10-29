@@ -15,7 +15,9 @@ export default async function PublicRequestPage({ params, searchParams }: Public
   const page = await openPublicRequest(token);
   if (!page) notFound();
   const copy = pageCopy(page.language, page.locationName);
-  const sent = query.sent === "1";
+  const sentParam = Array.isArray(query.sent) ? query.sent[0] : query.sent;
+  const sent = sentParam === "1";
+  const sendFailed = sentParam === "0";
   const stopped = query.stopped === "1";
   const qrStop = query.stopped === "qr";
 
@@ -25,6 +27,11 @@ export default async function PublicRequestPage({ params, searchParams }: Public
       <h1 className="mt-2 font-heading text-2xl text-ink">{page.model.question}</h1>
       <p className="mt-2 text-sm text-slate">{page.model.both}</p>
       {sent ? <p className="mt-4 text-sm text-graphite">{copy.thanks}</p> : null}
+      {sendFailed ? (
+        <p className="mt-4 rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-800" role="alert">
+          {copy.feedbackFailed}
+        </p>
+      ) : null}
       {stopped ? <p className="mt-4 text-sm text-graphite">{copy.stopped}</p> : null}
       {qrStop ? (
         <p className="mt-4 text-sm text-graphite">This code is not tied to a phone or email, so there is no message to stop.</p>

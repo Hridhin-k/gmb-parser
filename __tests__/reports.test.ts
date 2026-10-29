@@ -115,7 +115,7 @@ describe("alert rules", () => {
 describe("delivery channels", () => {
   it("leaves email, Slack, and WhatsApp unavailable until they are configured", () => {
     const options = channelOptions({
-      resendApiKey: null,
+      brevoApiKey: null,
       reportFromEmail: null,
       slackWebhookUrl: null,
       whatsappToken: null,

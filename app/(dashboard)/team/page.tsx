@@ -104,7 +104,7 @@ async function TeamMembersSection({
       members={status === "invited" ? [] : members}
       invites={status === "invited" ? invites : roster.invites}
       scopes={scopes}
-      emailDelivery={Boolean(process.env.RESEND_API_KEY && process.env.REPORT_FROM_EMAIL)}
+      emailDelivery={Boolean(process.env.BREVO_API_KEY && process.env.REPORT_FROM_EMAIL)}
     />
   );
 }

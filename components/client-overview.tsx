@@ -656,7 +656,7 @@ function WorstStore({ store, scopeRating }: { store: OverviewStoreRow; scopeRati
         <div className="flex justify-between gap-3">
           <dt className="text-slate">Reply rate</dt>
           <dd>
-            <Link href={store.assignHref} className="tabular-nums text-graphite hover:underline">
+            <Link href={store.unansweredHref} className="tabular-nums text-graphite hover:underline">
               {pct(store.replyRate)}
             </Link>
           </dd>
@@ -670,8 +670,8 @@ function WorstStore({ store, scopeRating }: { store: OverviewStoreRow; scopeRati
         <Link href={store.href} className="inline-flex h-9 items-center rounded-full border border-[#e6ebf2] px-3 text-sm text-graphite hover:border-[#163a7a]">
           Open outlet
         </Link>
-        <Link href={store.assignHref} className="inline-flex h-9 items-center rounded-full border border-[#e6ebf2] px-3 text-sm text-graphite hover:border-[#163a7a]">
-          Assign follow-up
+        <Link href={store.unansweredHref} className="inline-flex h-9 items-center rounded-full border border-[#e6ebf2] px-3 text-sm text-graphite hover:border-[#163a7a]">
+          Open unanswered
         </Link>
       </div>
     </section>

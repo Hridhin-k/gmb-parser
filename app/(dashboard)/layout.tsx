@@ -1,5 +1,6 @@
 import { AppShell } from "@/components/app-shell";
 import { ExitSupportButton } from "@/components/exit-support-button";
+import { SupportViewGuard } from "@/components/support-view";
 import { loadDashboardChrome } from "@/lib/services/dashboard-chrome";
 import { isSuperAdmin } from "@/lib/services/platform";
 import { timed } from "@/lib/timing";
@@ -41,35 +42,41 @@ export default async function DashboardLayout({
     );
   }
   const path = (await headers()).get("x-grm-path") ?? "";
-  if (path && !canOpenPath(path, role)) redirect(homePath(role));
+  if (path && !canOpenPath(path, role, chrome.features)) redirect(homePath(role));
 
   return (
-    <>
+    <SupportViewGuard active={Boolean(supportTenantId)}>
       {supportTenantId ? (
         <div className="flex flex-wrap items-center justify-between gap-2 bg-amber-100 px-4 py-2 text-sm text-amber-900">
-          <span>Support view (read-only) — you are viewing <strong>{chrome.workspaceName}</strong> as a super admin. Changes are blocked.</span>
+          <span>
+            Support view (read-only) — you are viewing <strong>{chrome.workspaceName}</strong> as a
+            super admin. Changes are blocked before they reach the server.
+          </span>
           <ExitSupportButton />
         </div>
       ) : null}
       {announcement ? (
-        <div className={`px-4 py-2 text-sm ${announcement.tone === "warning" ? "bg-amber-100 text-amber-900" : "bg-paper text-graphite"}`}>
+        <div
+          className={`px-4 py-2 text-sm ${announcement.tone === "warning" ? "bg-amber-100 text-amber-900" : "bg-paper text-graphite"}`}
+        >
           <strong>{announcement.title}</strong> — {announcement.body}
         </div>
       ) : null}
-    <AppShell
-      user={user}
-      role={role}
-      workspaceName={chrome.workspaceName}
-      workspaces={chrome.workspaces}
-      activeWorkspaceId={workspaceId}
-      clients={chrome.clients}
-      catalog={chrome.catalog}
-      summary={chrome.summary}
-      logoUrl={chrome.branding.logoUrl}
-      productTitle={chrome.branding.hideProductName ? chrome.workspaceName : "RevuPilot"}
-    >
-      {children}
-    </AppShell>
-    </>
+      <AppShell
+        user={user}
+        role={role}
+        workspaceName={chrome.workspaceName}
+        workspaces={chrome.workspaces}
+        activeWorkspaceId={workspaceId}
+        clients={chrome.clients}
+        catalog={chrome.catalog}
+        summary={chrome.summary}
+        logoUrl={chrome.branding.logoUrl}
+        productTitle={chrome.branding.hideProductName ? chrome.workspaceName : "RevuPilot"}
+        features={chrome.features}
+      >
+        {children}
+      </AppShell>
+    </SupportViewGuard>
   );
 }
