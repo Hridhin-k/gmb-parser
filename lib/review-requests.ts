@@ -25,7 +25,7 @@ export const REQUEST_LANGUAGES = [
 export type RequestLanguage = (typeof REQUEST_LANGUAGES)[number]["id"];
 
 export interface RequestEnv {
-  resendApiKey: string | null;
+  brevoApiKey: string | null;
   fromEmail: string | null;
   whatsappToken: string | null;
   whatsappPhoneNumberId: string | null;
@@ -33,7 +33,8 @@ export interface RequestEnv {
   twilioToken: string | null;
   twilioFrom: string | null;
   twilioMessagingService: string | null;
-  resendWebhookSecret: string | null;
+  /** Optional Brevo webhook secret for delivery/open receipts. */
+  brevoWebhookSecret: string | null;
   whatsappAppSecret: string | null;
 }
 
@@ -50,7 +51,7 @@ export function readRequestEnv(source: Record<string, string | undefined>): Requ
     return raw ? raw : null;
   };
   return {
-    resendApiKey: value("RESEND_API_KEY"),
+    brevoApiKey: value("BREVO_API_KEY"),
     fromEmail: value("REQUEST_FROM_EMAIL") ?? value("REPORT_FROM_EMAIL"),
     whatsappToken: value("WHATSAPP_TOKEN"),
     whatsappPhoneNumberId: value("WHATSAPP_PHONE_NUMBER_ID"),
@@ -58,13 +59,13 @@ export function readRequestEnv(source: Record<string, string | undefined>): Requ
     twilioToken: value("TWILIO_AUTH_TOKEN"),
     twilioFrom: value("TWILIO_FROM_NUMBER"),
     twilioMessagingService: value("TWILIO_MESSAGING_SERVICE_SID"),
-    resendWebhookSecret: value("RESEND_WEBHOOK_SECRET"),
+    brevoWebhookSecret: value("BREVO_WEBHOOK_SECRET"),
     whatsappAppSecret: value("WHATSAPP_APP_SECRET"),
   };
 }
 
 export function requestChannelOptions(env: RequestEnv): RequestChannelOption[] {
-  const email = Boolean(env.resendApiKey && env.fromEmail);
+  const email = Boolean(env.brevoApiKey && env.fromEmail);
   const whatsapp = Boolean(env.whatsappToken && env.whatsappPhoneNumberId);
   const sms = Boolean(env.twilioSid && env.twilioToken && (env.twilioFrom || env.twilioMessagingService));
   return [
@@ -98,8 +99,8 @@ export function requestChannelOptions(env: RequestEnv): RequestChannelOption[] {
 export function receiptCoverage(env: RequestEnv): { delivery: boolean; opens: boolean } {
   const twilio = Boolean(env.twilioSid && env.twilioToken);
   return {
-    delivery: Boolean(env.resendWebhookSecret || env.whatsappAppSecret || twilio),
-    opens: Boolean(env.resendWebhookSecret || env.whatsappAppSecret),
+    delivery: Boolean(env.brevoWebhookSecret || env.whatsappAppSecret || twilio),
+    opens: Boolean(env.brevoWebhookSecret || env.whatsappAppSecret),
   };
 }
 
@@ -348,6 +349,8 @@ export interface PageCopy {
   both: string;
   optOut: string;
   thanks: string;
+  /** Shown when private feedback validation fails (`sent=0`). */
+  feedbackFailed: string;
   stopped: string;
   placeholder: string;
   missingPlace: string;
@@ -364,6 +367,7 @@ export function pageCopy(language: string, locationName: string): PageCopy {
       both: "രണ്ട് വഴികളും എല്ലാവർക്കും കാണാം.",
       optOut: "ഈ അഭ്യർത്ഥനകൾ നിർത്തുക",
       thanks: "നന്ദി. ഈ കുറിപ്പ് ബിസിനസിന് മാത്രമാണ്. Google-ൽ പ്രസിദ്ധീകരിക്കില്ല.",
+      feedbackFailed: "കുറിപ്പ് അയക്കാനായില്ല. ഒരു ചെറിയ സന്ദേശം എഴുതി വീണ്ടും ശ്രമിക്കുക.",
       stopped: "നിങ്ങൾക്ക് ഇനി അഭ്യർത്ഥനകൾ അയക്കില്ല.",
       placeholder: "ഞങ്ങൾ അറിയേണ്ടത് എന്താണ്?",
       missingPlace: "ഈ ലൊക്കേഷന് Google ഒരു പ്ലേസ് ഐഡി പങ്കിട്ടിട്ടില്ല, അതിനാൽ പൊതു റിവ്യൂ ഫോം തുറക്കാനാകില്ല.",
@@ -378,6 +382,7 @@ export function pageCopy(language: string, locationName: string): PageCopy {
       both: "दोनों विकल्प सबको दिखते हैं.",
       optOut: "ये अनुरोध बंद करें",
       thanks: "धन्यवाद. यह नोट व्यवसाय के पास रहता है और Google पर प्रकाशित नहीं होता.",
+      feedbackFailed: "नोट नहीं भेजा जा सका. कृपया एक छोटा संदेश लिखकर फिर कोशिश करें.",
       stopped: "आपको आगे अनुरोध नहीं भेजे जाएंगे.",
       placeholder: "हमें क्या जानना चाहिए?",
       missingPlace: "Google ने इस स्थान की प्लेस आईडी साझा नहीं की है, इसलिए सार्वजनिक समीक्षा फ़ॉर्म नहीं खुल सकता.",
@@ -391,6 +396,7 @@ export function pageCopy(language: string, locationName: string): PageCopy {
     both: "Both options are shown to everyone.",
     optOut: "Stop these requests",
     thanks: "Thank you. This note stays with the business and is not posted on Google.",
+    feedbackFailed: "That note could not be sent. Write a short message and try again.",
     stopped: "You will not be sent further requests.",
     placeholder: "What should we know?",
     missingPlace: "Google has not shared a place ID for this location, so this page cannot open the public review form.",

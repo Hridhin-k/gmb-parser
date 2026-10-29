@@ -58,16 +58,25 @@ export async function PATCH(request: Request) {
   try {
     const membership = await ensurePersonalWorkspace(user);
     if (body.role) {
+      const scopeFields = ["clientId", "groupId", "locationId"] as const;
+      const hasScope = scopeFields.some((key) => key in body);
       await changeMemberRole({
         workspaceId: membership.workspace_id,
         actorId: user.id,
         targetUserId: body.userId,
         role: body.role,
+        scope: hasScope
+          ? {
+              clientId: body.clientId ?? null,
+              groupId: body.groupId ?? null,
+              locationId: body.locationId ?? null,
+            }
+          : undefined,
       });
     }
     const scopeFields = ["clientId", "groupId", "locationId"] as const;
     const hasScope = scopeFields.some((key) => key in body);
-    if (hasScope || body.accessEnabled !== undefined || body.alertEmail !== undefined || body.alertInApp !== undefined) {
+    if (!body.role && (hasScope || body.accessEnabled !== undefined || body.alertEmail !== undefined || body.alertInApp !== undefined)) {
       await updateMemberAccess({
         workspaceId: membership.workspace_id,
         actorId: user.id,
@@ -79,6 +88,15 @@ export async function PATCH(request: Request) {
               locationId: body.locationId ?? null,
             }
           : undefined,
+        accessEnabled: body.accessEnabled,
+        alertEmail: body.alertEmail,
+        alertInApp: body.alertInApp,
+      });
+    } else if (body.accessEnabled !== undefined || body.alertEmail !== undefined || body.alertInApp !== undefined) {
+      await updateMemberAccess({
+        workspaceId: membership.workspace_id,
+        actorId: user.id,
+        targetUserId: body.userId,
         accessEnabled: body.accessEnabled,
         alertEmail: body.alertEmail,
         alertInApp: body.alertInApp,

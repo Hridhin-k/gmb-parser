@@ -7,6 +7,7 @@ import { actingUser } from "@/lib/services/reporting";
 import { bustCatalogCache } from "@/lib/services/catalog-tables";
 import {
   createHierarchyGroup,
+  importHierarchyCsv,
   mergeHierarchyGroups,
   moveHierarchyLocations,
   removeEmptyGroup,
@@ -75,6 +76,11 @@ const bodySchema = z.discriminatedUnion("action", [
     locationId: z.string().uuid(),
     duplicate: z.boolean(),
   }),
+  z.object({
+    action: z.literal("import-csv"),
+    clientId: z.string().uuid(),
+    csv: z.string().min(1).max(500_000),
+  }),
 ]);
 
 export async function POST(request: Request) {
@@ -127,6 +133,14 @@ export async function POST(request: Request) {
         draftsPaused: body.draftsPaused,
       };
       await saveScopeSettings({ ...base, scope: body.scope, targetId: body.targetId, fields });
+    } else if (body.action === "import-csv") {
+      const result = await importHierarchyCsv({
+        ...base,
+        clientId: body.clientId,
+        csv: body.csv,
+      });
+      bustCatalogCache();
+      return NextResponse.json({ ok: true, ...result });
     } else {
       await reviewDuplicate({ ...base, locationId: body.locationId, duplicate: body.duplicate });
     }

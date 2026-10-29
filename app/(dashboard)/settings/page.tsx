@@ -1,3 +1,4 @@
+import { Suspense } from "react";
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { createAdminClient } from "@/lib/supabase/admin";
@@ -7,6 +8,7 @@ import { SettingsBoard } from "@/components/settings-board";
 import { AiConfigPanel } from "@/components/ai-config-panel";
 import { GoogleConnectionCard } from "@/components/google-connection-card";
 import { PageHeader } from "@/components/page-header";
+import { SectionLoading } from "@/components/section-loading";
 import { EscalationContactStore, EscalationService } from "@/lib/services/escalations";
 import { ResolutionContactForm } from "@/components/resolution-contact-form";
 import { listScopeChoices } from "@/lib/services/access";
@@ -92,9 +94,98 @@ export default async function SettingsPage({
       redirect("/settings?section=tone");
     }
   }
-  const [settings, scopes, policy, contact, connections, branding, aiBoard] = await Promise.all([
+
+  const scopeQuery = target.kind === "workspace" ? "" : `&scope=${target.kind}:${target.id}`;
+
+  return (
+    <div className="space-y-6">
+      <PageHeader
+        title="Settings"
+        description="Choose where the settings apply, then the section to edit."
+      />
+      <Suspense fallback={null}>
+        <SettingsScopeTabs workspaceId={workspaceId} section={section} target={target} allowedClients={allowedClients} />
+      </Suspense>
+      <nav className="flex flex-wrap gap-2 border-b border-silver pb-3">
+        {SECTIONS.filter(([id]) => (id !== "plan" && id !== "branding") || canBill).map(([id, label]) => (
+          <Link key={id} href={`/settings?section=${id}${scopeQuery}`} className={`rounded-full px-3 py-1 text-sm ${section === id ? "bg-ink text-white" : "text-graphite"}`}>
+            {label}
+          </Link>
+        ))}
+      </nav>
+      <Suspense fallback={<SectionLoading page="settings" variant="settings" />}>
+        <SettingsSection
+          userId={user.id}
+          workspaceId={workspaceId}
+          role={role}
+          section={section}
+          target={target}
+          canBill={canBill}
+          canEdit={canEdit}
+          canEditWorkspace={canEditWorkspace}
+          params={params}
+        />
+      </Suspense>
+    </div>
+  );
+}
+
+async function SettingsScopeTabs({
+  workspaceId,
+  section,
+  target,
+  allowedClients,
+}: {
+  workspaceId: string;
+  section: string;
+  target: SettingsTarget;
+  allowedClients: string[] | null;
+}) {
+  const scopes = await listScopeChoices(workspaceId);
+  const visibleScopes = allowedClients
+    ? scopes.filter((choice) => choice.kind === "client" && allowedClients.includes(choice.id))
+    : scopes;
+
+  return (
+    <div className="flex flex-wrap gap-2">
+      <Link href={`/settings?section=${section}`} className={`rounded-full border px-3 py-1 text-sm ${target.kind === "workspace" ? "border-ink bg-ink text-white" : "border-silver text-graphite"}`}>
+        Organization
+      </Link>
+      {visibleScopes.slice(0, 12).map((scope) => {
+        const active = target.kind === scope.kind && "id" in target && target.id === scope.id;
+        return (
+          <Link key={scope.id} href={`/settings?section=${section}&scope=${scope.kind}:${scope.id}`} className={`rounded-full border px-3 py-1 text-sm ${active ? "border-ink bg-ink text-white" : "border-silver text-graphite"}`}>
+            {scope.label}
+          </Link>
+        );
+      })}
+    </div>
+  );
+}
+
+async function SettingsSection({
+  userId,
+  workspaceId,
+  role,
+  section,
+  target,
+  canBill,
+  canEdit,
+  canEditWorkspace,
+  params,
+}: {
+  userId: string;
+  workspaceId: string;
+  role: Awaited<ReturnType<typeof getActiveRole>>;
+  section: string;
+  target: SettingsTarget;
+  canBill: boolean;
+  canEdit: boolean;
+  canEditWorkspace: boolean;
+  params: Record<string, string | string[] | undefined>;
+}) {
+  const [settings, policy, contact, connections, branding, aiBoard, pauses] = await Promise.all([
     loadReplySettings(workspaceId, target),
-    listScopeChoices(workspaceId),
     EscalationService.policy(workspaceId),
     EscalationContactStore.read(workspaceId),
     createAdminClient()
@@ -104,44 +195,27 @@ export default async function SettingsPage({
       .neq("status", "revoked")
       .order("created_at", { ascending: false }),
     canBill ? loadAgencyBranding(workspaceId) : Promise.resolve(null),
-    section === "tone" ? loadAiBoard(workspaceId, user.id) : Promise.resolve(null),
+    section === "tone" ? loadAiBoard(workspaceId, userId) : Promise.resolve(null),
+    EscalationService.pausedTargets(workspaceId),
   ]);
+  const pausedForTarget =
+    target.kind === "workspace"
+      ? pauses.workspace
+      : target.kind === "client"
+        ? pauses.clientIds.includes(target.id)
+        : target.kind === "location"
+          ? pauses.locationIds.includes(target.id)
+          : false;
 
   const googleError = typeof params.google_error === "string" ? params.google_error : null;
   const methods = authMethodsFromEnv();
-  const emailDelivery = Boolean(process.env.RESEND_API_KEY && process.env.REPORT_FROM_EMAIL);
-  const scopeQuery = target.kind === "workspace" ? "" : `&scope=${target.kind}:${target.id}`;
-  const visibleScopes = allowedClients
-    ? scopes.filter((choice) => choice.kind === "client" && allowedClients.includes(choice.id))
-    : scopes;
+  const emailDelivery = Boolean(process.env.BREVO_API_KEY && process.env.REPORT_FROM_EMAIL);
 
   return (
     <div className="space-y-6">
-      <PageHeader
-        title="Settings"
-        description={`Editing for ${settings.label}. Applies to ${settings.appliesTo}.`}
-      />
-      <div className="flex flex-wrap gap-2">
-        <Link href={`/settings?section=${section}`} className={`rounded-full border px-3 py-1 text-sm ${target.kind === "workspace" ? "border-ink bg-ink text-white" : "border-silver text-graphite"}`}>
-          Organization
-        </Link>
-        {visibleScopes.slice(0, 12).map((scope) => {
-          const active = target.kind === scope.kind && "id" in target && target.id === scope.id;
-          return (
-            <Link key={scope.id} href={`/settings?section=${section}&scope=${scope.kind}:${scope.id}`} className={`rounded-full border px-3 py-1 text-sm ${active ? "border-ink bg-ink text-white" : "border-silver text-graphite"}`}>
-              {scope.label}
-            </Link>
-          );
-        })}
-      </div>
-      <nav className="flex flex-wrap gap-2 border-b border-silver pb-3">
-        {SECTIONS.filter(([id]) => (id !== "plan" && id !== "branding") || canBill).map(([id, label]) => (
-          <Link key={id} href={`/settings?section=${id}${scopeQuery}`} className={`rounded-full px-3 py-1 text-sm ${section === id ? "bg-ink text-white" : "text-graphite"}`}>
-            {label}
-          </Link>
-        ))}
-      </nav>
-
+      <p className="text-sm text-slate">
+        Editing for {settings.label}. Applies to {settings.appliesTo}.
+      </p>
       {section === "tone" && aiBoard ? (
         <div className="space-y-8">
           <AiConfigPanel
@@ -188,6 +262,7 @@ export default async function SettingsPage({
             tone={settings.tone}
             automation={settings.automation}
             templates={settings.templates}
+            paused={pausedForTarget}
           />
         </div>
       ) : null}
@@ -200,6 +275,7 @@ export default async function SettingsPage({
           tone={settings.tone}
           automation={settings.automation}
           templates={settings.templates}
+          paused={pausedForTarget}
         />
       ) : null}
 
@@ -217,12 +293,13 @@ export default async function SettingsPage({
 
       {section === "notifications" ? (
         <section className="space-y-2 rounded-xl border border-silver bg-white p-4 text-sm text-slate">
+          <p className="font-medium text-graphite">This tab explains how alerts work. Toggle email and in-app alerts on Team and roles.</p>
           <p>The bell lists each profile you cover: reviews with no reply, drafts, failed publishes, and open escalations.</p>
           <p>You also get a notice when a new review arrives on one of those profiles, a complaint is assigned to you, a reminder is due, or a reply fails to publish.</p>
           <p>{emailDelivery ? "Email is sent for an assignment when that person turned email on." : "Email preferences can be saved on Team and roles. Mail is not delivered until a mail provider is configured."}</p>
           <p>WhatsApp and Slack are not configured.</p>
           {canOpenPath("/team", role) ? (
-            <Link href="/team" className="font-medium text-ink underline underline-offset-4">Notification preferences</Link>
+            <Link href="/team" className="font-medium text-ink underline underline-offset-4">Edit notification preferences</Link>
           ) : (
             <p>Your own alert preferences are on Team and roles when that page is available for your role.</p>
           )}
@@ -261,13 +338,15 @@ export default async function SettingsPage({
 
       {section === "plan" && canBill ? (
         <section className="space-y-2 rounded-xl border border-silver bg-white p-4 text-sm text-slate">
-          <p>Usage is counted from locations and reviews. There is no separate checkout in this workspace.</p>
-          <Link href="/dashboard#usage" className="font-medium text-ink underline underline-offset-4">Open usage</Link>
+          <p className="font-medium text-graphite">Plan and billing are read-only here. There is no in-app checkout.</p>
+          <p>Usage is counted from locations and reviews for this workspace.</p>
+          <Link href="/usage" className="font-medium text-ink underline underline-offset-4">Open usage</Link>
         </section>
       ) : null}
 
       {section === "security" ? (
         <section className="space-y-2 rounded-xl border border-silver bg-white p-4 text-sm text-slate">
+          <p className="font-medium text-graphite">Security is informational. Sign-in methods are controlled by deployment env, not this form.</p>
           <p>Sign-in methods turned on for this app:</p>
           <ul className="space-y-1">
             {methods.map((method) => (
@@ -276,7 +355,6 @@ export default async function SettingsPage({
           </ul>
         </section>
       ) : null}
-
     </div>
   );
 }

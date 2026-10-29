@@ -1,11 +1,13 @@
 import { describe, expect, it } from "vitest";
 import {
   canAct,
+  canEditReviewNote,
   clampListScope,
   coerceAssignableRole,
   draftsWithAiOnly,
   inScope,
   reviewPermission,
+  rolePlaceKind,
   roleScopeError,
   workspaceGrant,
 } from "@/lib/access";
@@ -146,5 +148,20 @@ describe("tenant and scope isolation", () => {
     expect(draftsWithAiOnly("store_manager")).toBe(false);
     expect(draftsWithAiOnly("agent")).toBe(false);
     expect(draftsWithAiOnly("owner")).toBe(false);
+  });
+
+  it("asks each manager for one kind of place", () => {
+    expect(rolePlaceKind("brand_manager")).toBe("client");
+    expect(rolePlaceKind("group_manager")).toBe("group");
+    expect(rolePlaceKind("store_manager")).toBe("location");
+    expect(rolePlaceKind("org_admin")).toBeNull();
+    expect(rolePlaceKind("member")).toBeNull();
+  });
+
+  it("lets the author and admins edit a note", () => {
+    expect(canEditReviewNote("member", "author", "author")).toBe(true);
+    expect(canEditReviewNote("store_manager", "other", "author")).toBe(false);
+    expect(canEditReviewNote("org_admin", "other", "author")).toBe(true);
+    expect(canEditReviewNote("owner", "other", "author")).toBe(true);
   });
 });

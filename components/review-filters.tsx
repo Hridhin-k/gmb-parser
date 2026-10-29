@@ -14,6 +14,7 @@ import { MultiSelectField } from "@/components/ui/multi-select-field";
 import type { DateRangeKey } from "@/lib/date-range";
 import { COMPLAINT_THEMES, REVIEW_LANGUAGES } from "@/lib/review-inbox";
 import { serializeParamValues } from "@/lib/review-filter-params";
+import { roleLabel } from "@/lib/access";
 
 const STATUS_FILTERS = [
   { key: "all", label: "All" },
@@ -55,7 +56,7 @@ interface ReviewFiltersProps {
   currentSort?: string;
   currentText?: "" | "has" | "none";
   groups?: Array<{ id: string; name: string }>;
-  members?: Array<{ id: string; email: string }>;
+  members?: Array<{ id: string; email: string; role?: string }>;
 }
 
 /**
@@ -478,13 +479,16 @@ export function ReviewFilters({
               className="sm:w-48"
             />
             <MultiSelectField
-              label="Assignee"
+              label="Assigned to"
               values={draft.assignees}
               options={[
                 { value: "unassigned", label: "Unassigned" },
-                ...members.map((member) => ({ value: member.id, label: member.email })),
+                ...members.map((member) => ({
+                  value: member.id,
+                  label: member.role ? `${member.email} · ${roleLabel(member.role)}` : member.email,
+                })),
               ]}
-              placeholder="Anyone"
+              placeholder="Assigned to"
               onChange={(values) => patch({ assignees: values })}
               className="sm:w-52"
             />

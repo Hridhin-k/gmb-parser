@@ -173,10 +173,23 @@ function Body({ variant }: { variant: Variant }) {
   }
 }
 
-export function createPageLoading(page: keyof typeof PAGE_LOADING, variant: Variant = "list") {
+export function createPageLoading(
+  page: keyof typeof PAGE_LOADING,
+  variant: Variant = "list",
+  /** When true, only header + status — page Suspense owns section bodies. */
+  chromeOnly = true
+) {
   function Loading() {
     const copy = PAGE_LOADING[page];
-    return <PageLoading variant={variant} title={copy.title} detail={copy.detail} tone={copy.tone} />;
+    return (
+      <PageLoading
+        variant={variant}
+        title={copy.title}
+        detail={copy.detail}
+        tone={copy.tone}
+        chromeOnly={chromeOnly}
+      />
+    );
   }
   Loading.displayName = `PageLoading(${page})`;
   return Loading;
@@ -187,17 +200,19 @@ export function PageLoading({
   detail,
   variant = "list",
   tone = "work",
+  chromeOnly = false,
 }: {
   title: string;
   detail: string;
   variant?: Variant;
   tone?: "work" | "google" | "gemini";
+  chromeOnly?: boolean;
 }) {
   return (
     <div className="space-y-6" aria-busy="true">
       <HeaderSkeleton />
       <ActivityStatus title={title} detail={detail} tone={tone} />
-      <Body variant={variant} />
+      {chromeOnly ? null : <Body variant={variant} />}
     </div>
   );
 }

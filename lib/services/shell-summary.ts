@@ -3,6 +3,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import type { ShellProfileAttention } from "@/lib/shell";
 import { mergeProfileAttention, parseShellProfileCounts } from "@/lib/shell-profile";
 import { listUnreadNotices, type ProfileNotice } from "@/lib/services/notifications";
+import { loadSeenAttention } from "@/lib/services/attention";
 import { remember } from "@/lib/ttl-cache";
 
 export interface ShellSummary {
@@ -15,6 +16,7 @@ export interface ShellSummary {
   /** Profiles this person covers that currently need attention. Empty for an organisation-wide view. */
   profiles: ShellProfileAttention[];
   notices: ProfileNotice[];
+  dismissedAlerts: Array<{ id: string; title: string }>;
 }
 
 const EMPTY: ShellSummary = {
@@ -25,6 +27,7 @@ const EMPTY: ShellSummary = {
   expiredConnections: 0,
   profiles: [],
   notices: [],
+  dismissedAlerts: [],
 };
 
 async function count(
@@ -103,27 +106,40 @@ async function loadShellSummary(
 
   if (locationIds) {
     if (locationIds.length === 0) {
-      return { ...EMPTY, notices: await noticesPromise };
+      const seen = userId ? await loadSeenAttention(workspaceId, userId, []) : null;
+      return { ...EMPTY, notices: await noticesPromise, dismissedAlerts: seen?.dismissedAlerts ?? [] };
     }
-    const [profiles, expiredConnections, notices] = await Promise.all([
+    const [profiles, expiredConnections, notices, seen] = await Promise.all([
       profileAttention(workspaceId, locationIds),
       count(allowedClientIds ? connections.in("client_id", allowedClientIds) : connections),
       noticesPromise,
+      loadSeenAttention(workspaceId, userId, locationIds),
     ]);
+    const adjusted = profiles.map((profile) => ({
+      ...profile,
+      unreplied: Math.max(0, profile.unreplied - (seen.unrepliedByLocation.get(profile.id) ?? 0)),
+      escalations: Math.max(0, profile.escalations - (seen.escalationsByLocation.get(profile.id) ?? 0)),
+    }));
     return {
-      unreplied: profiles.reduce((sum, profile) => sum + profile.unreplied, 0),
-      escalations: profiles.reduce((sum, profile) => sum + profile.escalations, 0),
-      drafts: profiles.reduce((sum, profile) => sum + profile.drafts, 0),
-      failed: profiles.reduce((sum, profile) => sum + profile.failed, 0),
+      unreplied: Math.max(0, adjusted.reduce((sum, profile) => sum + profile.unreplied, 0)),
+      escalations: Math.max(0, adjusted.reduce((sum, profile) => sum + profile.escalations, 0)),
+      drafts: adjusted.reduce((sum, profile) => sum + profile.drafts, 0),
+      failed: adjusted.reduce((sum, profile) => sum + profile.failed, 0),
       expiredConnections,
-      profiles,
+      profiles: adjusted.filter(
+        (profile) => profile.unreplied > 0 || profile.escalations > 0 || profile.drafts > 0 || profile.failed > 0
+      ),
       notices,
+      dismissedAlerts: seen.dismissedAlerts,
     };
   }
 
   let scopedLocationIds: string[] | null = null;
   if (allowedClientIds) {
-    if (allowedClientIds.length === 0) return { ...EMPTY, notices: await noticesPromise };
+    if (allowedClientIds.length === 0) {
+      const seen = userId ? await loadSeenAttention(workspaceId, userId, []) : null;
+      return { ...EMPTY, notices: await noticesPromise, dismissedAlerts: seen?.dismissedAlerts ?? [] };
+    }
     const { data, error } = await admin
       .from("grm_google_locations")
       .select("id")
@@ -131,7 +147,10 @@ async function loadShellSummary(
       .in("client_id", allowedClientIds);
     if (error) throw new Error(`Failed to load navigation counts: ${error.message}`);
     scopedLocationIds = (data ?? []).map((location) => location.id);
-    if (scopedLocationIds.length === 0) return { ...EMPTY, notices: await noticesPromise };
+    if (scopedLocationIds.length === 0) {
+      const seen = userId ? await loadSeenAttention(workspaceId, userId, []) : null;
+      return { ...EMPTY, notices: await noticesPromise, dismissedAlerts: seen?.dismissedAlerts ?? [] };
+    }
   }
 
   const reviewsPromise = admin.rpc("grm_location_review_stats", { p_workspace_id: workspaceId });
@@ -140,11 +159,12 @@ async function loadShellSummary(
     .select("id", { count: "exact", head: true })
     .eq("workspace_id", workspaceId)
     .neq("status", "resolved");
-  const [statsResult, escalations, expiredConnections, notices] = await Promise.all([
+  const [statsResult, escalations, expiredConnections, notices, seen] = await Promise.all([
     reviewsPromise,
     count(scopedLocationIds ? escalationsQuery.in("location_id", scopedLocationIds) : escalationsQuery),
     count(allowedClientIds ? connections.in("client_id", allowedClientIds) : connections),
     noticesPromise,
+    loadSeenAttention(workspaceId, userId, scopedLocationIds),
   ]);
   if (statsResult.error) throw new Error(`Failed to load navigation counts: ${statsResult.error.message}`);
   const allowed = scopedLocationIds ? new Set(scopedLocationIds) : null;
@@ -158,5 +178,14 @@ async function loadShellSummary(
     failed += row.failed ?? 0;
   }
 
-  return { unreplied, escalations, drafts, failed, expiredConnections, profiles: [], notices };
+  return {
+    unreplied: Math.max(0, unreplied - seen.unreplied),
+    escalations: Math.max(0, escalations - seen.escalations),
+    drafts,
+    failed,
+    expiredConnections,
+    profiles: [],
+    notices,
+    dismissedAlerts: seen.dismissedAlerts,
+  };
 }

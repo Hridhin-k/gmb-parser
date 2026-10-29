@@ -9,9 +9,9 @@ import { Input } from "@/components/ui/input";
 import type { TenantDetail } from "@/lib/services/platform";
 
 const FLAG_LABELS: Record<string, string> = {
-  automation: "Auto-reply automation cron (enforced)",
-  requests: "Review requests (stored — enforcement on campaign send is a follow-up)",
-  reports: "Scheduled reports & alerts (stored — enforcement on report runs is a follow-up)",
+  automation: "Auto-reply automation cron",
+  requests: "Review requests (nav, APIs, and cron)",
+  reports: "Scheduled reports & alerts (nav, APIs, and cron)",
 };
 
 async function send(url: string, method: string, body?: object) {

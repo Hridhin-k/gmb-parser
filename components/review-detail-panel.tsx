@@ -20,6 +20,8 @@ import { ActivityStatus } from "@/components/activity-status";
 import { Spinner } from "@/components/ui/spinner";
 import { SelectField } from "@/components/ui/select-field";
 import { Input } from "@/components/ui/input";
+import { ConfirmDialog } from "@/components/confirm-dialog";
+import { canEditReviewNote } from "@/lib/access";
 import { languageLabel, themeLabel, workflowState } from "@/lib/review-inbox";
 import { splitGoogleTranslation } from "@/lib/review-text";
 import { REPLY_LANGUAGES, REPLY_TEMPLATES } from "@/lib/reply-adjustments";
@@ -78,6 +80,8 @@ interface ReviewDetailPanelProps {
   aiOnly?: boolean;
   contact?: ResolutionContact;
   members?: Array<{ id: string; email: string }>;
+  currentUserId?: string;
+  canModerateNotes?: boolean;
   onClose: () => void;
   /** Paint the new draft on the inbox card without waiting for a page refresh. */
   onDraft?: (reviewId: string, reply: ReplyForPanel) => void;
@@ -116,6 +120,8 @@ export function ReviewDetailPanel({
   aiOnly = false,
   contact = { phone: null, email: null },
   members = [],
+  currentUserId = "",
+  canModerateNotes = false,
   onClose,
   onDraft,
   inboxRevision = 0,
@@ -139,6 +145,9 @@ export function ReviewDetailPanel({
   const [error, setError] = useState<string | null>(null);
   const [assignee, setAssignee] = useState(review.assigned_to ?? "");
   const [note, setNote] = useState("");
+  const [editingNoteId, setEditingNoteId] = useState<string | null>(null);
+  const [editingNote, setEditingNote] = useState("");
+  const [deleteNoteId, setDeleteNoteId] = useState<string | null>(null);
   const [replyLanguage, setReplyLanguage] = useState("");
   const [templateId, setTemplateId] = useState("");
   const reviewText = review.comment ? splitGoogleTranslation(review.comment) : null;
@@ -160,6 +169,8 @@ export function ReviewDetailPanel({
     setDraftContent(serverReply?.content ?? "");
     setIsEditing(false);
     setIsCreating(false);
+    setEditingNoteId(null);
+    setDeleteNoteId(null);
     // Only when the open review changes. A later server payload must not wipe a newer draft.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [review.id]);
@@ -545,16 +556,93 @@ export function ReviewDetailPanel({
             <p className="text-sm text-slate">No notes yet. Notes stay in GRM and are not posted to Google.</p>
           ) : (
             <ul className="space-y-2">
-              {(review.notes ?? []).map((item) => (
+              {(review.notes ?? []).map((item) => {
+                const canChange = canEditReviewNote(
+                  canModerateNotes ? "admin" : "member",
+                  currentUserId,
+                  item.authorId
+                );
+                return (
                 <li key={item.id} className="rounded-lg border border-silver px-3 py-2">
-                  <p className="text-sm text-graphite">{item.body}</p>
-                  <p className="mt-1 text-xs text-slate">
-                    {members.find((member) => member.id === item.authorId)?.email ?? "Teammate"}
-                    {" · "}
-                    {formatDate(item.createdAt)}
-                  </p>
+                  {editingNoteId === item.id ? (
+                    <form
+                      className="space-y-2"
+                      onSubmit={async (event) => {
+                        event.preventDefault();
+                        if (!editingNote.trim()) return;
+                        setError(null);
+                        setLoading("note");
+                        try {
+                          await apiCall(`/api/reviews/${review.id}/workflow`, "POST", {
+                            action: "note_update",
+                            noteId: item.id,
+                            body: editingNote.trim(),
+                          });
+                          setEditingNoteId(null);
+                          toast.success("Note updated");
+                          refresh();
+                        } catch (caught) {
+                          setError(caught instanceof Error ? caught.message : "Could not update the note.");
+                        } finally {
+                          setLoading(null);
+                        }
+                      }}
+                    >
+                      <Input
+                        value={editingNote}
+                        onChange={(event) => setEditingNote(event.target.value)}
+                        maxLength={2000}
+                        aria-label="Edit internal note"
+                      />
+                      <div className="flex gap-2">
+                        <Button type="submit" size="sm" variant="outline" disabled={loading !== null || !editingNote.trim()}>
+                          {loading === "note" ? "Saving…" : "Save"}
+                        </Button>
+                        <Button type="button" size="sm" variant="ghost" onClick={() => setEditingNoteId(null)}>
+                          Cancel
+                        </Button>
+                      </div>
+                    </form>
+                  ) : (
+                    <>
+                      <p className="text-sm text-graphite">{item.body}</p>
+                      <div className="mt-1 flex items-center justify-between gap-2">
+                        <p className="text-xs text-slate">
+                          {members.find((member) => member.id === item.authorId)?.email ?? "Teammate"}
+                          {" · "}
+                          {formatDate(item.createdAt)}
+                        </p>
+                        {canChange ? (
+                          <div className="flex shrink-0 gap-1">
+                            <Button
+                              type="button"
+                              size="sm"
+                              variant="ghost"
+                              className="h-7 px-2 text-xs"
+                              onClick={() => {
+                                setEditingNoteId(item.id);
+                                setEditingNote(item.body);
+                              }}
+                            >
+                              Edit
+                            </Button>
+                            <Button
+                              type="button"
+                              size="sm"
+                              variant="ghost"
+                              className="h-7 px-2 text-xs text-red-600 hover:text-red-700"
+                              onClick={() => setDeleteNoteId(item.id)}
+                            >
+                              Delete
+                            </Button>
+                          </div>
+                        ) : null}
+                      </div>
+                    </>
+                  )}
                 </li>
-              ))}
+                );
+              })}
             </ul>
           )}
           <form
@@ -590,6 +678,34 @@ export function ReviewDetailPanel({
               {loading === "note" ? "Saving…" : "Add note"}
             </Button>
           </form>
+          <ConfirmDialog
+            open={deleteNoteId !== null}
+            onOpenChange={(open) => {
+              if (!open) setDeleteNoteId(null);
+            }}
+            title="Delete this note?"
+            description="The note is removed from this review. It was never posted to Google."
+            confirmLabel="Delete note"
+            pendingLabel="Deleting…"
+            tone="danger"
+            onConfirm={async () => {
+              if (!deleteNoteId) return;
+              setError(null);
+              setLoading("note");
+              try {
+                await apiCall(`/api/reviews/${review.id}/workflow`, "POST", {
+                  action: "note_delete",
+                  noteId: deleteNoteId,
+                });
+                toast.success("Note deleted");
+                refresh();
+              } catch (caught) {
+                setError(caught instanceof Error ? caught.message : "Could not delete the note.");
+              } finally {
+                setLoading(null);
+              }
+            }}
+          />
         </div>
         <div className="space-y-2">
           <p className="text-xs font-semibold uppercase tracking-[0.08em] text-slate">Activity</p>

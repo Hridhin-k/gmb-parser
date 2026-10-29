@@ -363,8 +363,8 @@ function PauseForm({
     <div className="space-y-3 rounded-xl bg-white p-4 shadow-card">
       <h2 className="text-sm font-medium text-ink">Pause automatic replies</h2>
       <p className="text-xs text-slate">
-        A pause stops background reply generation for the selected scope, including work already waiting on the
-        scheduler. People can still draft, approve, and publish by hand. There is no automatic sender running today.
+        A pause stops automatic drafting and publishing for the selected scope, including work already waiting on
+        the scheduler. People can still draft, approve, and publish by hand.
       </p>
       <button
         type="button"

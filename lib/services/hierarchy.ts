@@ -1082,3 +1082,129 @@ export async function escalationTiming(
   }
   return result;
 }
+
+/**
+ * Import a location,group CSV into the hierarchy for one organisation.
+ * Creates missing city groups and moves matched shops. Does not wipe other groups.
+ */
+export async function importHierarchyCsv(input: {
+  workspaceId: string;
+  userId: string;
+  clientId: string;
+  csv: string;
+}): Promise<{ moved: number; groupsCreated: number; skipped: number }> {
+  const { parseGroupCsv } = await import("@/lib/onboarding");
+  await assertManager(input.userId, input.workspaceId, { kind: "client", id: input.clientId });
+  const rows = parseGroupCsv(input.csv);
+  if (rows.length === 0) throw new ValidationError("The CSV has no location/group rows.");
+
+  const admin = createAdminClient();
+  const [locations, groups] = await Promise.all([
+    admin
+      .from("grm_google_locations")
+      .select("id, location_title, hold_reason")
+      .eq("workspace_id", input.workspaceId)
+      .eq("client_id", input.clientId)
+      .eq("is_active", true),
+    admin
+      .from("grm_groups")
+      .select("id, name, kind")
+      .eq("workspace_id", input.workspaceId)
+      .eq("client_id", input.clientId),
+  ]);
+  if (locations.error) throw new AppError("Could not load locations for CSV import.", "DB_ERROR", 500);
+  if (groups.error) throw new AppError("Could not load groups for CSV import.", "DB_ERROR", 500);
+
+  const byTitle = new Map<string, Array<{ id: string; holdReason: string | null }>>();
+  for (const location of locations.data ?? []) {
+    const key = (location.location_title ?? "").trim().toLowerCase();
+    if (!key) continue;
+    const list = byTitle.get(key) ?? [];
+    list.push({ id: location.id, holdReason: location.hold_reason });
+    byTitle.set(key, list);
+  }
+
+  // Prefer an existing group with the same name; new names become top-level regions.
+  const groupIdByName = new Map(
+    (groups.data ?? []).map((group) => [group.name.trim().toLowerCase(), group.id])
+  );
+
+  const errors: string[] = [];
+  const buckets = new Map<string, string[]>();
+  let skipped = 0;
+
+  rows.forEach((row, index) => {
+    const line = index + 1;
+    if (!row.location || !row.group) {
+      errors.push(`Row ${line} needs both a location and a group.`);
+      return;
+    }
+    if (row.group.length > 120) {
+      errors.push(`Row ${line} group name is longer than 120 characters.`);
+      return;
+    }
+    const matches = byTitle.get(row.location.trim().toLowerCase()) ?? [];
+    if (matches.length === 0) {
+      errors.push(`Row ${line}: no location named “${row.location}” in this organisation.`);
+      return;
+    }
+    if (matches.length > 1) {
+      errors.push(`Row ${line}: “${row.location}” matches ${matches.length} locations.`);
+      return;
+    }
+    const match = matches[0];
+    if (!match) return;
+    if (match.holdReason) {
+      skipped += 1;
+      return;
+    }
+    const name = row.group.trim();
+    const list = buckets.get(name) ?? [];
+    if (!list.includes(match.id)) list.push(match.id);
+    buckets.set(name, list);
+  });
+
+  if (errors.length) throw new ValidationError(errors.slice(0, 8).join(" "));
+  if (buckets.size === 0) {
+    throw new ValidationError("The file did not match any locations that can be grouped.");
+  }
+
+  let groupsCreated = 0;
+  let moved = 0;
+  for (const [name, locationIds] of buckets) {
+    let groupId = groupIdByName.get(name.toLowerCase()) ?? null;
+    if (!groupId) {
+      groupId = await createHierarchyGroup({
+        workspaceId: input.workspaceId,
+        userId: input.userId,
+        name,
+        kind: "region",
+        clientId: input.clientId,
+        parentId: null,
+        locationIds,
+      });
+      groupIdByName.set(name.toLowerCase(), groupId);
+      groupsCreated += 1;
+      moved += locationIds.length;
+      continue;
+    }
+    await moveHierarchyLocations({
+      workspaceId: input.workspaceId,
+      userId: input.userId,
+      locationIds,
+      groupId,
+      confirmHold: true,
+    });
+    moved += locationIds.length;
+  }
+
+  await AuditService.log({
+    workspaceId: input.workspaceId,
+    userId: input.userId,
+    action: "location_group.updated",
+    entityType: "grm_groups",
+    metadata: { mode: "csv-import", clientId: input.clientId, moved, groupsCreated, skipped },
+  });
+
+  return { moved, groupsCreated, skipped };
+}

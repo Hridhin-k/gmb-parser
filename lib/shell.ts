@@ -12,6 +12,7 @@ const CLIENT_AND_RANGE = [
   "/insights",
   "/reports",
   "/dashboard",
+  "/usage",
 ] as const;
 
 const CLIENT_ONLY = ["/requests"] as const;
@@ -60,6 +61,8 @@ export interface ShellAlertInput {
   /** Set for a person scoped to a brand, group, or outlet. Empty for the whole organisation. */
   profiles?: ShellProfileAttention[];
   notices?: ShellNotice[];
+  /** Bell rows this person already opened, hidden while the title is unchanged. */
+  dismissedAlerts?: Array<{ id: string; title: string }>;
 }
 
 export interface ShellAlert {
@@ -149,7 +152,8 @@ export function shellAlerts(summary: ShellAlertInput, role: ShellRole): ShellAle
       href: "/settings",
     });
   }
-  return items;
+  const hidden = new Set((summary.dismissedAlerts ?? []).map((item) => `${item.id}\0${item.title}`));
+  return hidden.size === 0 ? items : items.filter((item) => !hidden.has(`${item.id}\0${item.title}`));
 }
 
 export type ShellNavId =
@@ -183,17 +187,27 @@ export function homePath(role: ShellRole): string {
   return draftsWithAiOnly(role) ? "/reviews" : "/overview";
 }
 
-export function visibleNav(role: ShellRole): ShellNavId[] {
+/** Tenant flags that hide work-nav surfaces. Missing keys stay enabled. */
+export type ShellFeatureFlags = {
+  requests?: boolean;
+  reports?: boolean;
+};
+
+export function visibleNav(role: ShellRole, features: ShellFeatureFlags = {}): ShellNavId[] {
   if (draftsWithAiOnly(role)) return [...MEMBER_NAV];
   const items = [...EVERYONE];
   if (isManager(role)) items.push("clients");
   if (canOpenTeam(role)) items.push("team");
   if (canOpenSettings(role)) items.push("settings");
   if (allows(role, "manage_people")) items.push("usage");
-  return items;
+  return items.filter((id) => {
+    if (id === "requests") return features.requests !== false;
+    if (id === "reports") return features.reports !== false;
+    return true;
+  });
 }
 
-export function canOpenPath(pathname: string, role: ShellRole): boolean {
+export function canOpenPath(pathname: string, role: ShellRole, features: ShellFeatureFlags = {}): boolean {
   if (draftsWithAiOnly(role)) {
     return (
       pathname === "/reviews" ||
@@ -208,7 +222,23 @@ export function canOpenPath(pathname: string, role: ShellRole): boolean {
   if (pathname === "/settings" || pathname.startsWith("/settings/")) return canOpenSettings(role);
   if (pathname === "/audit" || pathname.startsWith("/audit/")) return canOpenTeam(role);
   if (pathname === "/dashboard" || pathname.startsWith("/dashboard/")) return isManager(role);
+  if (pathname === "/usage") return allows(role, "manage_people");
+  if (pathname === "/requests" || pathname.startsWith("/requests/")) return features.requests !== false;
+  if (pathname === "/reports" || pathname.startsWith("/reports/")) return features.reports !== false;
   return true;
+}
+
+/** Bottom tabs on `/m/*`. Filtered with the same gate as layout redirects. */
+export const MOBILE_NAV = [
+  { id: "overview", href: "/m", label: "Overview", badge: null },
+  { id: "approve", href: "/m/approve", label: "Approve", badge: "drafts" as const },
+  { id: "escalations", href: "/m/escalations", label: "Escalations", badge: "escalations" as const },
+] as const;
+
+export type MobileNavBadge = (typeof MOBILE_NAV)[number]["badge"];
+
+export function visibleMobileNav(role: ShellRole) {
+  return MOBILE_NAV.filter((item) => canOpenPath(item.href, role));
 }
 
 export type ScopeMode = "none" | "client" | "client-range";
@@ -224,7 +254,7 @@ export function defaultRangeForPath(pathname: string): DateRangeKey {
   if (pathname === "/overview") return "12m";
   if (pathname === "/analytics") return "12m";
   if (pathname === "/insights") return "12m";
-  if (pathname === "/dashboard" || pathname === "/reports") return "1m";
+  if (pathname === "/dashboard" || pathname === "/reports" || pathname === "/usage") return "1m";
   return "all";
 }
 

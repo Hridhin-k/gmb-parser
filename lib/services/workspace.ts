@@ -763,6 +763,7 @@ export async function changeMemberRole(input: {
   actorId: string;
   targetUserId: string;
   role: GrmMemberRole;
+  scope?: ScopeIds;
 }): Promise<void> {
   if (input.actorId === input.targetUserId) {
     throw new ValidationError("You cannot change your own role.");
@@ -781,19 +782,33 @@ export async function changeMemberRole(input: {
         : "You cannot assign that role."
     );
   }
-  if (target.role === input.role) return;
-  const nextScope = {
+  const nextScope = input.scope ?? {
     clientId: target.scope_client_id,
     groupId: target.scope_group_id,
     locationId: target.scope_location_id,
   };
   const scopeError = roleScopeError(input.role, nextScope);
   if (scopeError) throw new ValidationError(scopeError);
+  if (input.scope) {
+    const actor = await getMemberAccess(input.actorId, input.workspaceId);
+    if (!actor) throw new AuthorizationError("You do not have access to this organization.");
+    await assertScopeAssignment({ actor, scope: input.scope });
+  }
+  if (target.role === input.role && !input.scope) return;
 
   const admin = createAdminClient();
   const { error } = await admin
     .from("grm_workspace_members")
-    .update({ role: input.role })
+    .update({
+      role: input.role,
+      ...(input.scope
+        ? {
+            scope_client_id: input.scope.clientId,
+            scope_group_id: input.scope.groupId,
+            scope_location_id: input.scope.locationId,
+          }
+        : {}),
+    })
     .eq("workspace_id", input.workspaceId)
     .eq("user_id", input.targetUserId);
   if (error) {
@@ -808,7 +823,7 @@ export async function changeMemberRole(input: {
     action: "workspace.member_role_changed",
     entityType: "grm_workspace_members",
     entityId: input.targetUserId,
-    metadata: { role: input.role, previousRole: target.role } as Record<string, unknown>,
+    metadata: { role: input.role, previousRole: target.role, ...(input.scope ?? {}) } as Record<string, unknown>,
   });
   forgetUserNavigation(input.targetUserId);
   forget(`roster:${input.workspaceId}`);
@@ -868,13 +883,44 @@ export async function removeMember(input: {
   forget(`roster:${input.workspaceId}`);
 }
 
+async function trySendWorkspaceInviteEmail(input: {
+  workspaceId: string;
+  email: string;
+  role: string;
+}): Promise<boolean> {
+  const { readDeliveryEnv } = await import("@/lib/reporting");
+  const { sendBrevoEmail } = await import("@/lib/mail");
+  const env = readDeliveryEnv(process.env);
+  const from = process.env.PLATFORM_FROM_EMAIL?.trim() || env.reportFromEmail;
+  if (!env.brevoApiKey || !from) return false;
+  const admin = createAdminClient();
+  const { data: workspace } = await admin.from("grm_workspaces").select("name").eq("id", input.workspaceId).maybeSingle();
+  const workspaceName = workspace?.name?.trim() || "your organization";
+  const appUrl = (process.env.NEXT_PUBLIC_APP_URL ?? "").replace(/\/$/, "");
+  const result = await sendBrevoEmail({
+    apiKey: env.brevoApiKey,
+    from,
+    to: input.email,
+    subject: `You're invited to ${workspaceName} on RevuPilot`,
+    text: [
+      `You're invited to the "${workspaceName}" workspace on RevuPilot as ${input.role}.`,
+      "",
+      `Sign in with Google using this exact email (${input.email}):`,
+      `${appUrl}/login`,
+      "",
+      "The invite is accepted the next time you sign in. It expires in 14 days.",
+    ].join("\n"),
+  });
+  return result.ok;
+}
+
 export async function inviteToWorkspace(input: {
   workspaceId: string;
   inviterId: string;
   email: string;
   role: GrmMemberRole;
   scope?: ScopeIds;
-}): Promise<void> {
+}): Promise<{ emailed: boolean }> {
   const raw = input.email.trim();
   if (!raw.includes("@") && /\d/.test(raw)) {
     throw new ValidationError(
@@ -960,13 +1006,19 @@ export async function inviteToWorkspace(input: {
     });
   }
 
+  const emailed = await trySendWorkspaceInviteEmail({
+    workspaceId: input.workspaceId,
+    email,
+    role: input.role,
+  });
   await AuditService.log({
     workspaceId: input.workspaceId,
     userId: input.inviterId,
     action: "workspace.invite_created",
     entityType: "grm_workspace_invites",
-    metadata: { email, role: input.role } as Record<string, unknown>,
+    metadata: { email, role: input.role, emailed } as Record<string, unknown>,
   });
+  return { emailed };
 }
 
 export async function revokeWorkspaceInvite(input: {
@@ -1007,7 +1059,7 @@ export async function resendWorkspaceInvite(input: {
   workspaceId: string;
   actorId: string;
   inviteId: string;
-}): Promise<{ emailed: false }> {
+}): Promise<{ emailed: boolean }> {
   await requireManager(input.actorId, input.workspaceId);
   const admin = createAdminClient();
   const { data, error } = await admin
@@ -1016,19 +1068,24 @@ export async function resendWorkspaceInvite(input: {
     .eq("id", input.inviteId)
     .eq("workspace_id", input.workspaceId)
     .eq("status", "pending")
-    .select("id")
+    .select("id, email, role")
     .maybeSingle();
   if (error) throw new AppError("Could not resend the invite.", "DB_ERROR", 500, { dbError: error.message });
   if (!data) throw new ValidationError("That invite is no longer pending.");
+  const emailed = await trySendWorkspaceInviteEmail({
+    workspaceId: input.workspaceId,
+    email: data.email,
+    role: data.role,
+  });
   await AuditService.log({
     workspaceId: input.workspaceId,
     userId: input.actorId,
     action: "workspace.invite_resent",
     entityType: "grm_workspace_invites",
     entityId: input.inviteId,
-    metadata: { emailed: false },
+    metadata: { emailed },
   });
-  return { emailed: false };
+  return { emailed };
 }
 
 export async function updateMemberAccess(input: {

@@ -84,7 +84,9 @@ describe("buildOverviewBoard", () => {
     expect(board.worst?.complaint).toBe("Staff");
     expect(board.lowest.find((row) => row.id === "a")?.complaint).toBeNull();
     expect(board.themes.map((theme) => theme.label)).toEqual(["Staff", "Food Quality"]);
-    expect(board.themes[0]?.href).toBe("/insights");
+    expect(board.themes[0]?.href).toBe("/reviews?theme=staff&stars=low");
+    expect(board.themes[1]?.href).toContain("q=food+quality");
+    expect(board.themes[1]?.href).toContain("stars=low");
     expect(board.coverage).toEqual({ analysed: 8, ratingOnly: 3 });
   });
 
@@ -270,8 +272,18 @@ describe("buildOverviewBoard", () => {
     expect(board.kpis.avgResponseHours).toBe(20);
     expect(board.kpis.previousAvgResponseHours).toBe(10);
     expect(board.sentiment).toEqual({ positive: 8, negative: 5 });
-    expect(board.praiseThemes[0]).toMatchObject({ label: "Staff", count: 6, reviews: 5 });
-    expect(board.themes[0]).toMatchObject({ label: "Staff", count: 4, reviews: 3 });
+    expect(board.praiseThemes[0]).toMatchObject({
+      label: "Staff",
+      count: 6,
+      reviews: 5,
+      href: "/reviews?q=staff&stars=positive",
+    });
+    expect(board.themes[0]).toMatchObject({
+      label: "Staff",
+      count: 4,
+      reviews: 3,
+      href: "/reviews?theme=staff&stars=low",
+    });
     expect(board.themeMix[0]).toMatchObject({ label: "Staff", positive: 6, negative: 4, total: 10 });
     expect(board.themeMix[0]?.share).toBeCloseTo(10 / 13);
     expect(board.staff.map((row) => row.name)).toEqual(["Asha", "Ravi"]);

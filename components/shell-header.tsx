@@ -17,6 +17,7 @@ import {
 import type { ScopeCatalog } from "@/lib/scope";
 import type { ShellSummary } from "@/lib/services/shell-summary";
 import { scopedHref, shellAlerts } from "@/lib/shell";
+import { acknowledgeAttention } from "@/lib/attention-client";
 import { createClient } from "@/lib/supabase/client";
 
 interface ShellHeaderProps {
@@ -180,13 +181,8 @@ export function ShellHeader({ user, role, catalog, summary, onOpenMenu }: ShellH
                     key={alert.id}
                     className="cursor-pointer whitespace-normal text-sm"
                     onClick={() => {
-                      void (async () => {
-                        if (alert.id.startsWith("notice:")) {
-                          const noticeId = alert.id.slice("notice:".length);
-                          await fetch(`/api/notifications/${noticeId}/read`, { method: "POST" }).catch(() => null);
-                        }
-                        router.push(alert.href);
-                      })();
+                      acknowledgeAttention({ kind: "alert", id: alert.id, title: alert.title });
+                      router.push(alert.href);
                     }}
                   >
                     {alert.title}

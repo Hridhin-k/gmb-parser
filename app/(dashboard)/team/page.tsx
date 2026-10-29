@@ -1,6 +1,8 @@
+import { Suspense } from "react";
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { PageHeader } from "@/components/page-header";
+import { SectionLoading } from "@/components/section-loading";
 import { WorkspaceMembersCard } from "@/components/workspace-members-card";
 import { roleLabel } from "@/lib/access";
 import { listScopeChoices } from "@/lib/services/access";
@@ -17,22 +19,8 @@ export default async function TeamPage({
   if (!canOpenPath("/team", role)) redirect("/overview");
 
   const [params, { user, workspaceId }] = await Promise.all([searchParams, getActiveWorkspace()]);
-  const [roster, scopes] = await Promise.all([
-    getWorkspaceRoster(workspaceId),
-    listScopeChoices(workspaceId),
-  ]);
   const roleFilter = typeof params.role === "string" ? params.role : "";
   const status = params.status === "inactive" || params.status === "invited" ? params.status : "active";
-  const members = roster.members.filter((member) => {
-    if (roleFilter && member.role !== roleFilter) return false;
-    if (status === "inactive") return !member.accessEnabled;
-    if (status === "invited") return false;
-    return member.accessEnabled;
-  });
-  const invites =
-    status === "active" || status === "inactive"
-      ? []
-      : roster.invites.filter((invite) => !roleFilter || invite.role === roleFilter);
 
   return (
     <div className="space-y-6">
@@ -67,15 +55,56 @@ export default async function TeamPage({
           <span className="rounded-full border border-silver px-3 py-1 text-slate">{roleLabel(roleFilter)}</span>
         ) : null}
       </div>
-      <WorkspaceMembersCard
-        workspaceName={roster.name}
-        currentUserId={user.id}
-        currentRole={role}
-        members={status === "invited" ? [] : members}
-        invites={status === "invited" ? invites : roster.invites}
-        scopes={scopes}
-        emailDelivery={Boolean(process.env.RESEND_API_KEY && process.env.REPORT_FROM_EMAIL)}
-      />
+      <Suspense fallback={<SectionLoading page="team" variant="rows" />}>
+        <TeamMembersSection
+          userId={user.id}
+          workspaceId={workspaceId}
+          role={role}
+          roleFilter={roleFilter}
+          status={status}
+        />
+      </Suspense>
     </div>
+  );
+}
+
+async function TeamMembersSection({
+  userId,
+  workspaceId,
+  role,
+  roleFilter,
+  status,
+}: {
+  userId: string;
+  workspaceId: string;
+  role: Awaited<ReturnType<typeof getActiveRole>>;
+  roleFilter: string;
+  status: "active" | "inactive" | "invited";
+}) {
+  const [roster, scopes] = await Promise.all([
+    getWorkspaceRoster(workspaceId),
+    listScopeChoices(workspaceId),
+  ]);
+  const members = roster.members.filter((member) => {
+    if (roleFilter && member.role !== roleFilter) return false;
+    if (status === "inactive") return !member.accessEnabled;
+    if (status === "invited") return false;
+    return member.accessEnabled;
+  });
+  const invites =
+    status === "active" || status === "inactive"
+      ? []
+      : roster.invites.filter((invite) => !roleFilter || invite.role === roleFilter);
+
+  return (
+    <WorkspaceMembersCard
+      workspaceName={roster.name}
+      currentUserId={userId}
+      currentRole={role}
+      members={status === "invited" ? [] : members}
+      invites={status === "invited" ? invites : roster.invites}
+      scopes={scopes}
+      emailDelivery={Boolean(process.env.BREVO_API_KEY && process.env.REPORT_FROM_EMAIL)}
+    />
   );
 }

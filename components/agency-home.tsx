@@ -1,7 +1,6 @@
 import Link from "next/link";
 import { SyncLocationsButton } from "@/components/sync-locations-button";
 import { SetupChecklist } from "@/components/setup-checklist";
-import { ExportUsageButton } from "@/components/export-usage-button";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import {
@@ -22,8 +21,6 @@ interface AgencyHomeViewProps {
   /** range/from/to search params for the selected time range (empty for the default). */
   rangeParams: Record<string, string>;
   query: string;
-  /** Usage totals are for people who manage the organization. */
-  showUsage: boolean;
 }
 
 function formatRating(value: number | null) {
@@ -71,17 +68,11 @@ export function AgencyHomeView({
   clientId,
   rangeParams,
   query,
-  showUsage,
 }: AgencyHomeViewProps) {
   const { kpis, rows, totalClients, page, pageSize } = data;
   const from = totalClients === 0 ? 0 : (page - 1) * pageSize + 1;
   const to = Math.min(page * pageSize, totalClients);
   const pageCount = Math.max(1, Math.ceil(totalClients / pageSize));
-  const exportParams = new URLSearchParams();
-  if (clientId) exportParams.set("client", clientId);
-  for (const [key, value] of Object.entries(rangeParams)) exportParams.set(key, value);
-  if (query) exportParams.set("q", query);
-  const exportHref = `/api/usage/export${exportParams.size ? `?${exportParams}` : ""}`;
   const queueHref = clientId ? `/clients/${clientId}` : "/clients";
 
   return (
@@ -238,33 +229,8 @@ export function AgencyHomeView({
         </div>
       </Card>
 
-      <Card id={showUsage ? "usage" : undefined} size="sm" className="scroll-mt-6 rounded-xl py-0 shadow-card">
+      <Card size="sm" className="rounded-xl py-0 shadow-card">
         <CardContent className="p-4 sm:p-5">
-        {showUsage ? (
-          <>
-        <h2 className="text-sm font-semibold text-graphite">{data.usageHeading}</h2>
-        <p className="mt-1 text-xs text-slate">Counts of stored locations, reviews, and published replies. No price is calculated.</p>
-        <ul className="mt-3 divide-y divide-silver">
-          {data.usage.length === 0 ? (
-            <li className="py-3 text-sm text-slate">No usage in this period.</li>
-          ) : (
-            data.usage.map((row) => (
-              <li key={row.id} className="flex items-center justify-between gap-4 py-2.5 text-sm">
-                <span className="text-graphite">{row.name}</span>
-                <span className="shrink-0 tabular-nums text-slate">
-                  {row.locations} {row.locations === 1 ? "location" : "locations"} ·{" "}
-                  {row.reviews.toLocaleString("en-US")} {row.reviews === 1 ? "review" : "reviews"} ·{" "}
-                  {row.publishedReplies.toLocaleString("en-US")} published
-                </span>
-              </li>
-            ))
-          )}
-        </ul>
-        <ExportUsageButton href={exportHref} />
-          </>
-        ) : null}
-
-        <div className={showUsage ? "mt-5 border-t border-silver pt-4" : ""}>
           <h3 className="text-sm font-semibold text-graphite">Client approval queue</h3>
           <p className="mt-1 text-sm text-slate">
             {data.approvals === 0
@@ -276,7 +242,6 @@ export function AgencyHomeView({
           <Link href={queueHref} className="mt-1 inline-block text-sm text-ink hover:underline">
             {clientId ? "Open this client" : "Open a client"}
           </Link>
-        </div>
         </CardContent>
       </Card>
     </div>

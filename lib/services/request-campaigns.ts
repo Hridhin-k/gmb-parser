@@ -375,6 +375,8 @@ export async function saveRequestCampaign(
     csv?: string;
   }
 ): Promise<string> {
+  const { requireTenantFeature } = await import("@/lib/services/platform");
+  await requireTenantFeature(workspaceId, "requests");
   const locations = await workspaceLocations(workspaceId, input.locationIds);
   if (locations.length === 0) throw new ValidationError("Choose a location in this workspace.");
   const locationIds = locations.map((location) => location.id);
@@ -523,6 +525,8 @@ async function dispatchMessage(input: {
 }
 
 export async function sendRequestCampaign(workspaceId: string, userId: string, campaignId: string) {
+  const { requireTenantFeature } = await import("@/lib/services/platform");
+  await requireTenantFeature(workspaceId, "requests");
   const admin = createAdminClient();
   const { data: campaign, error } = await admin
     .from("grm_request_campaigns")
@@ -905,6 +909,7 @@ export async function applyProviderReceipt(providerRef: string, kind: "delivered
 
 export async function runRequestJobs(now = new Date()): Promise<{ retried: number; reminded: number }> {
   const admin = createAdminClient();
+  const { tenantFeatureEnabled } = await import("@/lib/services/platform");
   const env = readRequestEnv(process.env);
   const { data: due, error } = await admin
     .from("grm_request_messages")
@@ -917,6 +922,7 @@ export async function runRequestJobs(now = new Date()): Promise<{ retried: numbe
   if (error) throw new Error(error.message);
   let retried = 0;
   for (const message of due ?? []) {
+    if (!(await tenantFeatureEnabled(message.workspace_id, "requests"))) continue;
     const customer = Array.isArray(message.grm_request_customers) ? message.grm_request_customers[0] : message.grm_request_customers;
     const channel = message.channel as Exclude<RequestChannel, "qr">;
     const to = channel === "email" ? customer?.email : customer?.phone;
@@ -954,6 +960,7 @@ export async function runRequestJobs(now = new Date()): Promise<{ retried: numbe
   if (campaignError) throw new Error(campaignError.message);
   let reminded = 0;
   for (const campaign of campaigns ?? []) {
+    if (!(await tenantFeatureEnabled(campaign.workspace_id, "requests"))) continue;
     const cutoff = new Date(now.getTime() - campaign.reminder_after_days * 24 * 60 * 60 * 1000).toISOString();
     const { data: messages } = await admin
       .from("grm_request_messages")

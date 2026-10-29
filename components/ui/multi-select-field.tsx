@@ -62,7 +62,7 @@ export function MultiSelectField({
         <span className="line-clamp-1 flex-1 text-left">{summary}</span>
         <ChevronDown className="pointer-events-none size-4 shrink-0 text-stone" aria-hidden />
       </PopoverTrigger>
-      <PopoverContent align="start" sideOffset={4} className="w-56 gap-0 p-1">
+      <PopoverContent align="start" sideOffset={4} className="w-max min-w-56 max-w-[min(28rem,calc(100vw-2rem))] gap-0 p-1">
         <div role="listbox" aria-multiselectable="true" aria-label={label} className="max-h-64 overflow-y-auto">
           {options.map((option) => {
             const active = values.includes(option.value);
@@ -87,7 +87,7 @@ export function MultiSelectField({
                 >
                   {active ? <Check className="size-3.5" /> : null}
                 </span>
-                <span className="min-w-0 flex-1 truncate">{option.label}</span>
+                <span className="min-w-0 flex-1 break-all">{option.label}</span>
               </button>
             );
           })}

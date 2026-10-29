@@ -1,6 +1,8 @@
+import { Suspense } from "react";
 import { redirect } from "next/navigation";
 import { OnboardingWizardLoader } from "@/components/onboarding-wizard-loader";
 import { PageHeader } from "@/components/page-header";
+import { SectionLoading } from "@/components/section-loading";
 import { googleConnectError } from "@/lib/onboarding";
 import { getOnboardingView } from "@/lib/services/onboarding";
 import { getActiveRole, getActiveWorkspace } from "@/lib/services/session";
@@ -20,6 +22,42 @@ export default async function OnboardingPage({ searchParams }: OnboardingPagePro
   const googleError = typeof params.google_error === "string" ? params.google_error : null;
   const googleConnected = params.google_connected === "true";
 
+  return (
+    <Suspense
+      fallback={
+        <div className="space-y-6">
+          <PageHeader
+            title="Setup"
+            description="Connect Google, import locations, confirm groups, set a reply tone, and invite the team. Progress is saved if you leave."
+          />
+          <SectionLoading page="onboarding" variant="panel" />
+        </div>
+      }
+    >
+      <OnboardingSection
+        workspaceId={workspaceId}
+        requested={requested}
+        googleError={googleError}
+        googleConnected={googleConnected}
+        canInviteAdmin={role === "owner"}
+      />
+    </Suspense>
+  );
+}
+
+async function OnboardingSection({
+  workspaceId,
+  requested,
+  googleError,
+  googleConnected,
+  canInviteAdmin,
+}: {
+  workspaceId: string;
+  requested: string | null;
+  googleError: string | null;
+  googleConnected: boolean;
+  canInviteAdmin: boolean;
+}) {
   let data: Awaited<ReturnType<typeof getOnboardingView>> | null = null;
   let failure: string | null = null;
   try {
@@ -46,7 +84,7 @@ export default async function OnboardingPage({ searchParams }: OnboardingPagePro
       requestedStep={requested}
       notice={googleConnectError(googleError)}
       connected={googleConnected}
-      canInviteAdmin={role === "owner"}
+      canInviteAdmin={canInviteAdmin}
     />
   );
 }

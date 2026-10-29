@@ -1,5 +1,9 @@
 import { describe, expect, it } from "vitest";
-import { insightTrendMonths, parseInsightDashboard } from "@/lib/insight-dashboard";
+import {
+  insightTopicInboxExtra,
+  insightTrendMonths,
+  parseInsightDashboard,
+} from "@/lib/insight-dashboard";
 
 describe("parseInsightDashboard", () => {
   it("maps the database summary into the chart and coverage shapes", () => {
@@ -62,5 +66,20 @@ describe("parseInsightDashboard", () => {
     expect(months).toHaveLength(20);
     expect(months[0]?.month).toBe("2024-01");
     expect(months[months.length - 1]?.month).toBe("2025-08");
+  });
+});
+
+describe("insightTopicInboxExtra", () => {
+  it("maps complaint topics onto inbox theme filters when possible", () => {
+    expect(insightTopicInboxExtra("staff", "complaint")).toEqual({ theme: "staff", stars: "low" });
+    expect(insightTopicInboxExtra("service_speed", "complaint")).toEqual({ theme: "wait", stars: "low" });
+    expect(insightTopicInboxExtra("assortment", "complaint")).toEqual({
+      q: "assortment",
+      stars: "low",
+    });
+  });
+
+  it("searches praise topics instead of complaint_theme", () => {
+    expect(insightTopicInboxExtra("staff", "praise")).toEqual({ q: "staff", stars: "positive" });
   });
 });

@@ -1,9 +1,11 @@
+import { Suspense } from "react";
 import Link from "next/link";
 import { Link2 } from "lucide-react";
 import { CopyReviewLink } from "@/components/copy-review-link";
 import { FreshMetrics } from "@/components/fresh-metrics";
 import { EmptyState } from "@/components/empty-state";
 import { PageHeader } from "@/components/page-header";
+import { SectionLoading } from "@/components/section-loading";
 import { RequestBoard } from "@/components/request-board";
 import { ensureLocationQr, loadRequestBoard, type QrSummary } from "@/lib/services/request-campaigns";
 import { listReviewRequestLocations } from "@/lib/services/review-requests";
@@ -11,6 +13,7 @@ import { readPageScope } from "@/lib/services/scope-catalog";
 import { getActiveRole, getActiveWorkspace } from "@/lib/services/session";
 import { overviewQueryKey } from "@/lib/overview-board";
 import { isManager } from "@/lib/shell";
+import type { ResolvedScope } from "@/lib/scope";
 import { validateFilterString } from "@/lib/validation";
 
 interface RequestsPageProps {
@@ -22,8 +25,39 @@ const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 export default async function RequestsPage({ searchParams }: RequestsPageProps) {
   const [params, { user, workspaceId }, role] = await Promise.all([searchParams, getActiveWorkspace(), getActiveRole()]);
   const resolved = await readPageScope(user.id, workspaceId, params);
-  const clientId = resolved.clientId ?? "";
   const campaignParam = validateFilterString(params.campaign);
+
+  return (
+    <div className="space-y-6">
+      <PageHeader
+        title="Review requests"
+        description="Ask customers to review a location, or to send a private note. Both choices are on the same page. WhatsApp, SMS, and email send only when that provider is configured."
+      />
+
+      <FreshMetrics
+        rendered={overviewQueryKey((key) => (Array.isArray(params[key]) ? params[key][0] : params[key]))}
+        surface="requests"
+      >
+        <Suspense fallback={<SectionLoading page="requests" variant="rows" />}>
+          <RequestsBody workspaceId={workspaceId} role={role} resolved={resolved} campaignParam={campaignParam} />
+        </Suspense>
+      </FreshMetrics>
+    </div>
+  );
+}
+
+async function RequestsBody({
+  workspaceId,
+  role,
+  resolved,
+  campaignParam,
+}: {
+  workspaceId: string;
+  role: Awaited<ReturnType<typeof getActiveRole>>;
+  resolved: ResolvedScope;
+  campaignParam: string;
+}) {
+  const clientId = resolved.clientId ?? "";
   const locations = await listReviewRequestLocations(
     workspaceId,
     resolved.blocked || resolved.level !== "organisation" ? null : clientId || null,
@@ -42,16 +76,7 @@ export default async function RequestsPage({ searchParams }: RequestsPageProps) 
   }
 
   return (
-    <div className="space-y-6">
-      <PageHeader
-        title="Review requests"
-        description="Ask customers to review a location, or to send a private note. Both choices are on the same page. WhatsApp, SMS, and email send only when that provider is configured."
-      />
-
-      <FreshMetrics
-        rendered={overviewQueryKey((key) => (Array.isArray(params[key]) ? params[key][0] : params[key]))}
-        surface="requests"
-      >
+    <>
       {locations.length === 0 ? (
         <EmptyState
           icon={Link2}
@@ -99,7 +124,6 @@ export default async function RequestsPage({ searchParams }: RequestsPageProps) 
           </ul>
         </section>
       ) : null}
-      </FreshMetrics>
-    </div>
+    </>
   );
 }

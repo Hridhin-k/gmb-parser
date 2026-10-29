@@ -1896,6 +1896,29 @@ export type Database = {
         }
         Relationships: []
       }
+      grm_attention_seen: {
+        Row: {
+          workspace_id: string
+          user_id: string
+          kind: string
+          entity_id: string
+          fingerprint: string | null
+          seen_at: string
+        }
+        Insert: {
+          workspace_id: string
+          user_id: string
+          kind: string
+          entity_id: string
+          fingerprint?: string | null
+          seen_at?: string
+        }
+        Update: {
+          fingerprint?: string | null
+          seen_at?: string
+        }
+        Relationships: []
+      }
       grm_escalation_events: {
         Row: {
           id: string

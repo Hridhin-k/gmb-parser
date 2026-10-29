@@ -235,6 +235,24 @@ export function roleScopeError(role: string, scope: ScopeIds): string | null {
   return null;
 }
 
+/** The one place a manager must be given. Admins and members cover the whole organization. */
+export function rolePlaceKind(role: string): "client" | "group" | "location" | null {
+  if (role === "brand_manager") return "client";
+  if (role === "group_manager") return "group";
+  if (role === "store_manager") return "location";
+  return null;
+}
+
+/** The author can change their own note. Owners and admins can change any note. */
+export function canEditReviewNote(
+  role: string | null | undefined,
+  actorId: string,
+  authorId: string
+): boolean {
+  if (actorId === authorId) return true;
+  return role === "owner" || role === "org_admin" || role === "admin";
+}
+
 const NIL_ID = "00000000-0000-0000-0000-000000000000";
 
 export function clampListScope<T extends { clientId: string; locationId: string; groupId?: string }>(
