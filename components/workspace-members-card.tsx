@@ -23,6 +23,13 @@ import { canManageMember } from "@/lib/roles";
 import { roleName, roleSummary } from "@/lib/ui/vocabulary";
 import { cn } from "@/lib/utils";
 
+/** The service labels an unscoped member "Whole organization" / unnamed business "Brand"; show the new vocabulary. */
+function scopeText(label: string | undefined): string {
+  if (!label || label === "Whole organization") return "Whole workspace";
+  if (label === "Brand") return "Business";
+  return label;
+}
+
 interface MemberRow {
   userId: string;
   email: string;
@@ -440,7 +447,7 @@ export function WorkspaceMembersCard({
                           <td className="px-3 py-2.5 text-ink-2" title={roleSummary(invite.role)}>
                             {roleName(invite.role)}
                           </td>
-                          <td className="px-3 py-2.5 text-ink-2">{invite.scopeLabel ?? "Whole workspace"}</td>
+                          <td className="px-3 py-2.5 text-ink-2">{scopeText(invite.scopeLabel)}</td>
                           <td className="px-3 py-2.5">
                             <Badge variant={soon ? "warn" : "info"}>{soon ? "Expires soon" : "Pending"}</Badge>
                             {expires ? <span className="mt-0.5 block text-xs text-ink-3">Expires {expires.toLocaleDateString()}</span> : null}
@@ -595,7 +602,7 @@ export function WorkspaceMembersCard({
                             </span>
                           )}
                         </td>
-                        <td className="max-w-[14rem] truncate px-3 py-2.5 text-ink-2">{member.scopeLabel ?? "Whole workspace"}</td>
+                        <td className="max-w-[14rem] truncate px-3 py-2.5 text-ink-2">{scopeText(member.scopeLabel)}</td>
                         <td className="whitespace-nowrap px-3 py-2.5 text-xs text-ink-2">{alerts}</td>
                         <td className="px-3 py-2.5">
                           {member.twoStep === "on" ? (

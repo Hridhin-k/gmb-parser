@@ -301,7 +301,7 @@ function OnboardingTopBar({
           Save and finish later
         </Link>
       </div>
-      <ol className="-mx-1 flex min-w-0 flex-1 items-center gap-1 overflow-x-auto px-1 pb-0.5 lg:justify-center" aria-label="Setup steps">
+      <ol className="-mx-1 flex min-w-0 flex-1 items-center gap-1 overflow-x-auto px-1 pb-0.5 lg:justify-center-safe" aria-label="Setup steps">
         {STEPS.map((item, position) => {
           const open = stepUnlocked(item.id, unlockView);
           const isCurrent = item.id === current;
