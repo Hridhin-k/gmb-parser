@@ -1,23 +1,25 @@
 import Link from "next/link";
-import { Button } from "@/components/ui/button";
+import { buttonVariants } from "@/components/ui/button";
+import { AuthCard, PubNav, PubPage } from "@/components/pub-shell";
 
 export default function NotFound() {
   return (
-    <div className="flex min-h-screen items-center justify-center bg-paper px-4">
-      <div className="text-center">
-        <p className="text-sm font-semibold text-primary">404</p>
-        <h1 className="mt-2 text-base font-semibold text-ink">
-          Page not found
-        </h1>
-        <p className="mt-1 text-[13px] text-ink-3">
+    <PubPage className="justify-center" nav={<PubNav />}>
+      <AuthCard className="gap-3">
+        <span className="font-mono text-[13px] font-semibold text-brand">404</span>
+        <h1 className="text-lg font-semibold text-ink">Page not found</h1>
+        <p className="text-[15px] leading-relaxed text-ink-2">
           The page you&apos;re looking for doesn&apos;t exist or has been moved.
         </p>
-        <Link href="/overview">
-          <Button variant="outline" size="sm" className="mt-5">
+        <div className="mt-1 flex flex-wrap gap-2">
+          <Link href="/overview" className={buttonVariants()}>
             Back to Overview
-          </Button>
-        </Link>
-      </div>
-    </div>
+          </Link>
+          <Link href="/" className={buttonVariants({ variant: "outline" })}>
+            RevuPilot home
+          </Link>
+        </div>
+      </AuthCard>
+    </PubPage>
   );
 }

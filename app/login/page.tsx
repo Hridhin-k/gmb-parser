@@ -2,6 +2,7 @@ import { redirect } from "next/navigation";
 import { getCurrentUser } from "@/lib/auth/server";
 import { devLoginEnabled, localSignupEnabled } from "@/lib/auth/dev-login";
 import { LoginForm } from "@/components/login-form";
+import { PubNav, PubPage } from "@/components/pub-shell";
 import { authMethodsFromEnv } from "@/lib/auth-methods";
 import { loginErrorMessage, shouldEnterWizard } from "@/lib/onboarding";
 import { hasUserConsent } from "@/lib/services/consent";
@@ -40,14 +41,26 @@ export default async function LoginPage({ searchParams }: LoginPageProps) {
   const errorCode = typeof params.error === "string" ? params.error : null;
   const errorReason = typeof params.reason === "string" ? params.reason : null;
 
+  const cancelled = errorCode === "auth_failed" && errorReason === "access_denied";
+  const openSignup = localSignupEnabled();
+
   return (
-    <div className="flex min-h-dvh items-center justify-center bg-paper px-4 py-10">
+    <PubPage
+      className="justify-center"
+      nav={
+        <PubNav>
+          <span className="hidden sm:inline">{openSignup ? "New here? Sign in with Google to create a workspace." : "Invite-only. Ask your workspace owner for an invite."}</span>
+        </PubNav>
+      }
+    >
       <LoginForm
         methods={authMethodsFromEnv()}
         localLogin={devLoginEnabled()}
-        openSignup={localSignupEnabled()}
+        openSignup={openSignup}
         initialError={loginErrorMessage(errorCode, errorReason)}
+        outcome={cancelled ? "cancelled" : errorCode ? "error" : null}
+        errorRef={errorCode ? [errorCode, errorReason].filter(Boolean).join(" · ") : null}
       />
-    </div>
+    </PubPage>
   );
 }
