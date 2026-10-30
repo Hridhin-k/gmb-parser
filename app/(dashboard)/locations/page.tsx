@@ -9,7 +9,9 @@ import { PageHeader } from "@/components/page-header";
 import { EmptyState } from "@/components/empty-state";
 import { UnassignedLocationsBoard } from "@/components/unassigned-locations-board";
 import { SyncLocationsButton } from "@/components/sync-locations-button";
-import { AlertTriangle, Building2, FolderTree, MapPin } from "lucide-react";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { Building2 } from "lucide-react";
 import { locationDisplayName } from "@/lib/ui/location-place";
 import { loadHierarchy } from "@/lib/services/hierarchy";
 import { HierarchyBoardLoader } from "@/components/hierarchy-board-loader";
@@ -26,7 +28,11 @@ function locationCountFor(client: {
   return (client.grm_google_locations as Array<{ count: number }> | null)?.[0]?.count ?? 0;
 }
 
-export default async function ClientsPage({
+function plural(count: number, one: string, many: string) {
+  return `${count.toLocaleString("en-US")} ${count === 1 ? one : many}`;
+}
+
+export default async function LocationsPage({
   searchParams,
 }: {
   searchParams: Promise<Record<string, string | string[] | undefined>>;
@@ -74,149 +80,108 @@ export default async function ClientsPage({
     ) + hierarchy.loose.length;
   const attentionTotal =
     hierarchy.attention.expired + hierarchy.attention.duplicates + hierarchy.attention.unverified;
+  const showUnassigned = !allowedClientIds && unassignedLocations.length > 0;
 
   return (
-    <div className="space-y-6">
+    <div className="flex flex-col gap-4">
       <PageHeader
-        title="Locations and groups"
-        description="Organise Google profiles into organisations and groups. Groups appear in the scope selector across Overview, Inbox, and Analytics."
+        title="Locations"
+        description={
+          visibleClients.length > 0
+            ? `${plural(visibleClients.length, "business", "businesses")} · ${plural(totalLocations, "location", "locations")} · ${plural(groupCount, "group", "groups")}. Structure, Google connections and verification holds. Groups appear in the scope bar on Overview, Reviews and Analytics.`
+            : "Organise Google profiles into businesses and groups. Groups appear in the scope bar on Overview, Reviews and Analytics."
+        }
       >
         {connectionId && canSync ? (
           <SyncLocationsButton connectionId={connectionId} />
         ) : connectionId || !isManager(role) ? null : (
-          <Link
-            href="/settings"
-            className="inline-flex h-10 items-center rounded-full bg-ink px-4 text-sm font-semibold text-white hover:bg-graphite"
-          >
+          <Button nativeButton={false} render={<Link href="/settings" />}>
             Connect Google
-          </Link>
+          </Button>
         )}
       </PageHeader>
 
       {visibleClients.length > 0 ? (
-        <section className="rounded-2xl border border-[#e6ebf2] bg-white p-5">
-          <p className="text-xs font-semibold uppercase tracking-wide text-[#5c6b82]">Workspace map</p>
-          <dl className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-            <Stat icon={Building2} label="Organisations" value={String(visibleClients.length)} />
-            <Stat icon={MapPin} label="Locations" value={String(totalLocations)} />
-            <Stat icon={FolderTree} label="Groups" value={String(groupCount)} />
-            <Stat
-              icon={AlertTriangle}
-              label="Needs attention"
-              value={String(attentionTotal)}
-              href={attentionTotal > 0 ? "/locations?attention=expired" : undefined}
-              muted={attentionTotal === 0}
-            />
-          </dl>
-        </section>
+        <div className="flex flex-wrap items-center gap-2" aria-label="Connection health">
+          {hierarchy.attention.expired > 0 ? (
+            <Badge variant="bad" render={<Link href="/locations?attention=expired" />}>
+              <span className="size-1.5 rounded-full bg-current" aria-hidden />
+              {hierarchy.attention.expired.toLocaleString("en-US")} with access expired
+            </Badge>
+          ) : null}
+          {hierarchy.attention.unverified > 0 ? (
+            <Badge variant="warn" render={<Link href="/locations?attention=unverified" />}>
+              <span className="size-1.5 rounded-full bg-current" aria-hidden />
+              {plural(hierarchy.attention.unverified, "verification hold", "verification holds")}
+            </Badge>
+          ) : null}
+          {hierarchy.attention.duplicates > 0 ? (
+            <Badge variant="warn" render={<Link href="/locations?attention=duplicate" />}>
+              <span className="size-1.5 rounded-full bg-current" aria-hidden />
+              {plural(hierarchy.attention.duplicates, "possible duplicate", "possible duplicates")}
+            </Badge>
+          ) : null}
+          {attentionTotal === 0 ? (
+            <Badge variant="ok">
+              <span className="size-1.5 rounded-full bg-current" aria-hidden />
+              No connection problems
+            </Badge>
+          ) : null}
+          {showUnassigned ? (
+            <Badge variant="info" render={<a href="#unassigned" />}>
+              <span className="size-1.5 rounded-full bg-current" aria-hidden />
+              {plural(unassignedLocations.length, "unassigned profile", "unassigned profiles")}
+            </Badge>
+          ) : null}
+          <span className="text-xs text-ink-3">The scope bar doesn’t filter this page; use the structure and search.</span>
+        </div>
       ) : null}
-
-      <HierarchyBoardLoader
-        canManage={allows(role, "manage_locations")}
-        canEditRules={allows(role, "edit_rules") && !workspaceGrant(role, "manage_locations")}
-        brands={visibleClients.map((client) => ({ id: client.id, name: client.name }))}
-        tree={hierarchy}
-      />
-
-      {!allowedClientIds && unassignedLocations.length > 0 && (
-        <UnassignedLocationsBoard
-          connectionId={connectionId}
-          clients={visibleClients.map((c) => ({ id: c.id, name: c.name }))}
-          locations={unassignedLocations.map((l) => ({
-            id: l.id,
-            location_title: locationDisplayName({
-              title: l.location_title,
-              address: l.address_formatted,
-            }),
-            address_formatted: l.address_formatted,
-          }))}
-        />
-      )}
 
       {visibleClients.length === 0 ? (
         <EmptyState
           icon={Building2}
-          title="No clients yet"
+          title="No businesses yet"
           description={
             connectionId
-              ? "Click Sync profiles. We will create one client per organisation and put every shop under it."
+              ? "Sync profiles. We will create one business per Google organisation and put every location under it."
               : isManager(role)
                 ? "Connect a Google account in Settings first, then sync profiles."
                 : "An owner needs to connect Google before locations show up here."
           }
+        >
+          {!connectionId && isManager(role) ? (
+            <Button nativeButton={false} render={<Link href="/settings" />}>
+              Connect Google
+            </Button>
+          ) : null}
+        </EmptyState>
+      ) : null}
+
+      {visibleClients.length > 0 || hierarchy.loose.length > 0 ? (
+        <HierarchyBoardLoader
+          canManage={allows(role, "manage_locations")}
+          canEditRules={allows(role, "edit_rules") && !workspaceGrant(role, "manage_locations")}
+          brands={visibleClients.map((client) => ({ id: client.id, name: client.name, count: locationCountFor(client) }))}
+          tree={hierarchy}
         />
-      ) : (
-        <section className="rounded-2xl border border-[#e6ebf2] bg-white p-5">
-          <div className="flex flex-wrap items-start justify-between gap-3">
-            <div>
-              <h2 className="font-heading text-lg text-ink">Organisations</h2>
-              <p className="mt-1 text-sm text-slate">
-                Open a client page for profile details, or use the structure board above to manage groups.
-              </p>
-            </div>
-          </div>
-          <ul className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-            {visibleClients.map((client) => {
-              const count = locationCountFor(client);
-              return (
-                <li key={client.id}>
-                  <Link
-                    href={`/businesses/${client.id}`}
-                    className="flex h-full items-start justify-between gap-3 rounded-xl border border-[#e6ebf2] bg-[#f4f7fb]/40 p-4 transition-colors hover:border-[#163a7a] hover:bg-[#f4f7fb]"
-                  >
-                    <div className="min-w-0">
-                      <p className="truncate text-base font-medium text-ink">{client.name}</p>
-                      <p className="mt-1 text-sm text-slate">
-                        {count === 0
-                          ? "No locations yet"
-                          : `${count} location${count === 1 ? "" : "s"}`}
-                      </p>
-                    </div>
-                    <span className="inline-flex shrink-0 items-center gap-1 rounded-full bg-white px-2.5 py-1 text-xs font-semibold text-[#163a7a] ring-1 ring-[#e6ebf2]">
-                      <MapPin className="h-3 w-3" aria-hidden />
-                      {count}
-                    </span>
-                  </Link>
-                </li>
-              );
-            })}
-          </ul>
-        </section>
-      )}
+      ) : null}
+
+      {showUnassigned ? (
+        <div id="unassigned" className="scroll-mt-20">
+          <UnassignedLocationsBoard
+            connectionId={connectionId}
+            clients={visibleClients.map((c) => ({ id: c.id, name: c.name }))}
+            locations={unassignedLocations.map((l) => ({
+              id: l.id,
+              location_title: locationDisplayName({
+                title: l.location_title,
+                address: l.address_formatted,
+              }),
+              address_formatted: l.address_formatted,
+            }))}
+          />
+        </div>
+      ) : null}
     </div>
   );
-}
-
-function Stat({
-  icon: Icon,
-  label,
-  value,
-  href,
-  muted = false,
-}: {
-  icon: typeof Building2;
-  label: string;
-  value: string;
-  href?: string;
-  muted?: boolean;
-}) {
-  const body = (
-    <>
-      <dt className="flex items-center gap-1.5 text-xs text-slate">
-        <Icon className="h-3.5 w-3.5" aria-hidden />
-        {label}
-      </dt>
-      <dd className={`mt-2 font-heading text-2xl leading-none ${muted ? "text-slate" : "text-ink"}`}>
-        {value}
-      </dd>
-    </>
-  );
-  if (href) {
-    return (
-      <Link href={href} className="rounded-xl border border-[#e6ebf2] px-3 py-3 hover:border-[#163a7a]">
-        {body}
-      </Link>
-    );
-  }
-  return <div className="rounded-xl border border-[#e6ebf2] px-3 py-3">{body}</div>;
 }

@@ -7,8 +7,9 @@ import { PageHeader } from "@/components/page-header";
 import { EmptyState } from "@/components/empty-state";
 import { AuditLogFilters } from "@/components/audit-log-filters";
 import { PendingRegion, TransitionScope } from "@/components/transition-scope";
-import { ClipboardList } from "lucide-react";
-import { cn } from "@/lib/utils";
+import { AuditLogTable, type AuditTableRow } from "@/components/audit-log-table";
+import { Button } from "@/components/ui/button";
+import { ClipboardList, Download } from "lucide-react";
 import { parseDateRange } from "@/lib/date-range";
 import { PaginationBar } from "@/components/pagination-bar";
 import { validatePage } from "@/lib/validation";
@@ -36,15 +37,24 @@ const ACTION_LABELS: Record<string, { label: string; tone: Tone }> = {
     tone: "neutral",
   },
   "google_sync.completed": { label: "Imported Google locations", tone: "info" },
-  "client.created": { label: "Created a client", tone: "info" },
+  "client.created": { label: "Created a business", tone: "info" },
+  "client.updated": { label: "Updated a business", tone: "info" },
   "location.connected": {
-    label: "Assigned a location to a client",
+    label: "Assigned a location to a business",
     tone: "good",
   },
   "location.disconnected": {
-    label: "Removed a location from a client",
+    label: "Removed a location from a business",
     tone: "neutral",
   },
+  "location.moved": { label: "Moved locations", tone: "info" },
+  "location.tagged": { label: "Tagged a location", tone: "info" },
+  "location.manager_set": { label: "Set a store manager", tone: "info" },
+  "location.settings_updated": { label: "Changed reply rules", tone: "info" },
+  "location.duplicate_reviewed": { label: "Reviewed a duplicate", tone: "neutral" },
+  "location_group.created": { label: "Created a group", tone: "info" },
+  "location_group.renamed": { label: "Renamed a group", tone: "info" },
+  "location_group.merged": { label: "Merged groups", tone: "neutral" },
   "locations.reset_unassigned": {
     label: "Reset unassigned locations",
     tone: "neutral",
@@ -62,6 +72,16 @@ const ACTION_LABELS: Record<string, { label: string; tone: Tone }> = {
   "reply.published": { label: "Published a reply to Google", tone: "good" },
   "reply.publish_failed": { label: "Reply publish failed", tone: "bad" },
   "reply.deleted": { label: "Deleted a reply", tone: "neutral" },
+  "reply.submitted": { label: "Submitted a reply for approval", tone: "info" },
+  "reply.publish_uncertain": { label: "Publish outcome uncertain", tone: "neutral" },
+  "reply.guardrail_blocked": { label: "Reply blocked by a guardrail", tone: "bad" },
+  "escalation.opened": { label: "Opened an escalation", tone: "info" },
+  "escalation.assigned": { label: "Assigned an escalation", tone: "info" },
+  "escalation.commented": { label: "Commented on an escalation", tone: "info" },
+  "escalation.resolved": { label: "Resolved an escalation", tone: "good" },
+  "request.saved": { label: "Saved a review request", tone: "info" },
+  "request.sent": { label: "Sent a review request", tone: "good" },
+  "request.deleted": { label: "Deleted a review request", tone: "neutral" },
   "workspace.invite_created": { label: "Invited someone", tone: "info" },
   "workspace.invite_accepted": { label: "Joined from an invite", tone: "good" },
   "workspace.invite_revoked": { label: "Cancelled an invite", tone: "neutral" },
@@ -71,12 +91,21 @@ const ACTION_LABELS: Record<string, { label: string; tone: Tone }> = {
   },
   "workspace.member_removed": { label: "Removed a member", tone: "neutral" },
   "workspace.member_left": { label: "Left the workspace", tone: "neutral" },
+  "workspace.member_scope_changed": { label: "Changed a member's scope", tone: "info" },
+  "workspace.member_activated": { label: "Turned access on", tone: "good" },
+  "workspace.member_deactivated": { label: "Turned access off", tone: "neutral" },
+  "workspace.invite_resent": { label: "Resent an invite", tone: "info" },
+  "workspace.notifications_updated": { label: "Changed alert settings", tone: "info" },
 };
 
 const ENTITY_LABELS: Record<string, string> = {
-  grm_clients: "Client",
+  grm_clients: "Business",
   grm_google_connections: "Google account",
   grm_google_locations: "Location",
+  grm_groups: "Group",
+  grm_location_groups: "Group",
+  grm_escalations: "Escalation",
+  request_campaign: "Review request",
   grm_review_ai_drafts: "AI draft",
   grm_review_replies: "Reply",
   grm_reviews: "Review",
@@ -84,12 +113,30 @@ const ENTITY_LABELS: Record<string, string> = {
   grm_workspace_members: "Member",
 };
 
-const TONE_CLASSES: Record<Tone, string> = {
-  good: "bg-green-50 text-green-700",
-  bad: "bg-red-50 text-red-700",
-  neutral: "bg-paper text-graphite",
-  info: "bg-paper text-ink",
+const TONE_VARIANT: Record<Tone, AuditTableRow["tone"]> = {
+  good: "ok",
+  bad: "bad",
+  neutral: "default",
+  info: "info",
 };
+
+/** Link an audit entry to its object when a page for it exists. */
+function objectHref(entityType: string, entityId: string | null): string | null {
+  if (!entityId || !/^[0-9a-f-]{36}$/i.test(entityId)) return null;
+  switch (entityType) {
+    case "grm_clients":
+      return `/businesses/${entityId}`;
+    case "grm_google_locations":
+      return `/locations?location=${entityId}`;
+    case "grm_groups":
+    case "grm_location_groups":
+      return `/locations?group=${entityId}`;
+    case "grm_escalations":
+      return `/escalations/${entityId}`;
+    default:
+      return null;
+  }
+}
 
 const METADATA_LABELS: Record<string, string> = {
   reviewsSynced: "New reviews",
@@ -114,22 +161,10 @@ function readableAction(action: string) {
   );
 }
 
-function MetadataLine({ metadata }: { metadata: Record<string, unknown> }) {
-  const entries = Object.entries(metadata).filter(
-    ([k, v]) =>
-      k in METADATA_LABELS && v !== null && v !== undefined && v !== "",
-  );
-  if (entries.length === 0) return null;
-  return (
-    <p className="mt-1 flex flex-wrap gap-x-3 gap-y-0.5 text-xs text-slate">
-      {entries.map(([k, v]) => (
-        <span key={k}>
-          {METADATA_LABELS[k]}:{" "}
-          <span className="text-graphite">{String(v)}</span>
-        </span>
-      ))}
-    </p>
-  );
+function metadataDetails(metadata: Record<string, unknown>) {
+  return Object.entries(metadata)
+    .filter(([k, v]) => k in METADATA_LABELS && v !== null && v !== undefined && v !== "")
+    .map(([k, v]) => ({ label: METADATA_LABELS[k], value: String(v) }));
 }
 
 interface AuditPageProps {
@@ -190,109 +225,114 @@ export default async function AuditPage({ searchParams }: AuditPageProps) {
     range.key !== "all"
   );
 
+  const tableRows: AuditTableRow[] = rows.map((log) => {
+    const action = readableAction(log.action);
+    const actorEmail = log.user_id ? emailById.get(log.user_id) : null;
+    return {
+      id: log.id,
+      time: log.created_at,
+      timeLabel: formatDate(log.created_at),
+      actor: log.user_id ? (actorEmail ?? "Former member") : "System",
+      actorKind: log.user_id ? (actorEmail ? "person" : "former") : "system",
+      action: log.action,
+      actionLabel: action.label,
+      tone: TONE_VARIANT[action.tone],
+      objectLabel: ENTITY_LABELS[log.entity_type] ?? log.entity_type,
+      objectId: log.entity_id ?? null,
+      objectHref: objectHref(log.entity_type, log.entity_id ?? null),
+      details: metadataDetails((log.metadata ?? {}) as Record<string, unknown>),
+    };
+  });
+
   return (
-    <div className="space-y-6">
+    <div className="flex flex-col gap-4">
       <PageHeader
         title="Audit log"
-        description="Every connection, sync, draft, approval, and publish in this workspace, with who did it."
-      />
+        description="Who did what, to which object, and when: every connection, sync, draft, approval and publish in this workspace. Read-only."
+      >
+        <Button variant="outline" disabled title="Exporting the audit log is not available yet">
+          <Download aria-hidden />
+          Export CSV
+        </Button>
+      </PageHeader>
 
       <TransitionScope>
-        <AuditLogFilters
-          currentAction={actionFilter}
-          currentUser={userFilter}
-          currentEntity={entityFilter}
-          currentRange={{ key: range.key, from: range.from, to: range.to }}
-          actionOptions={Object.entries(ACTION_LABELS).map(([value, v]) => ({
-            value,
-            label: v.label,
-          }))}
-          entityOptions={Object.entries(ENTITY_LABELS).map(
-            ([value, label]) => ({
-              value,
-              label,
-            }),
-          )}
-          memberOptions={roster.members.map((m) => ({
-            value: m.userId,
-            label: m.email,
-          }))}
-        />
-
-        <PendingRegion label="Filtering activity…">
-          {rows.length === 0 ? (
-            <EmptyState
-              icon={ClipboardList}
-              title={
-                hasFilters ? "No entries match your filters" : "No activity yet"
-              }
-              description={
-                hasFilters
-                  ? "Try a wider date range or clear the filters."
-                  : "Entries appear here as your team connects accounts, syncs, and replies."
-              }
+        <section className="min-w-0 overflow-hidden rounded-lg border border-line bg-white">
+          <div className="border-b border-line px-4 py-2.5">
+            <AuditLogFilters
+              currentAction={actionFilter}
+              currentUser={userFilter}
+              currentEntity={entityFilter}
+              currentRange={{ key: range.key, from: range.from, to: range.to }}
+              actionOptions={Object.entries(ACTION_LABELS).map(([value, v]) => ({
+                value,
+                label: v.label,
+              }))}
+              entityOptions={Object.entries(ENTITY_LABELS).map(([value, label]) => ({
+                value,
+                label,
+              }))}
+              memberOptions={roster.members.map((m) => ({
+                value: m.userId,
+                label: m.email,
+              }))}
             />
-          ) : (
-            <div className="overflow-hidden rounded-xl bg-white shadow-card">
-              <ul className="divide-y divide-silver">
-                {rows.map((log) => {
-                  const action = readableAction(log.action);
-                  const actor = log.user_id
-                    ? (emailById.get(log.user_id) ?? "Former member")
-                    : "System";
-                  return (
-                    <li
-                      key={log.id}
-                      className="flex flex-col gap-2 px-4 py-3.5 sm:flex-row sm:items-start sm:gap-4 sm:px-5"
-                    >
-                      <time
-                        dateTime={log.created_at}
-                        className="shrink-0 text-xs tabular-nums text-slate sm:w-40 sm:pt-0.5"
-                      >
-                        {formatDate(log.created_at)}
-                      </time>
-                      <div className="min-w-0 flex-1">
-                        <div className="flex flex-wrap items-center gap-2">
-                          <span
-                            className={cn(
-                              "rounded-full px-2.5 py-0.5 text-xs font-medium",
-                              TONE_CLASSES[action.tone],
-                            )}
-                          >
-                            {action.label}
-                          </span>
-                          <span className="text-xs text-slate">
-                            {ENTITY_LABELS[log.entity_type] ?? log.entity_type}
-                          </span>
-                        </div>
-                        <MetadataLine
-                          metadata={
-                            (log.metadata ?? {}) as Record<string, unknown>
-                          }
-                        />
-                      </div>
-                      <p className="truncate text-sm text-graphite sm:max-w-[220px] sm:text-right">
-                        {actor}
-                      </p>
-                    </li>
-                  );
-                })}
-              </ul>
-              <div className="border-t border-silver px-5 py-2.5 text-xs text-slate">
-                Showing {fromEntry}–{toEntry} of {totalEntries} entries
-              </div>
-              {totalPages > 1 ? (
-                <PaginationBar
-                  basePath="/audit"
-                  currentPage={currentPage}
-                  totalPages={totalPages}
-                  searchParams={paginationParams}
+          </div>
+
+          <PendingRegion label="Filtering activity…">
+            {rows.length === 0 ? (
+              <EmptyState
+                bare
+                icon={ClipboardList}
+                title={hasFilters ? "No entries match your filters" : "No activity yet"}
+                description={
+                  hasFilters
+                    ? "Try a wider date range or clear the filters."
+                    : "Entries appear here as your team connects accounts, syncs, and replies."
+                }
+              />
+            ) : (
+              <>
+                <AuditLogTable
+                  rows={tableRows}
+                  summary={`Showing ${fromEntry.toLocaleString("en-US")}–${toEntry.toLocaleString("en-US")} of ${totalEntries.toLocaleString("en-US")} entries · newest first`}
                 />
-              ) : null}
-            </div>
-          )}
-        </PendingRegion>
+                {totalPages > 1 ? (
+                  <div className="border-t border-line px-3">
+                    <PaginationBar
+                      basePath="/audit"
+                      currentPage={currentPage}
+                      totalPages={totalPages}
+                      searchParams={paginationParams}
+                    />
+                  </div>
+                ) : null}
+              </>
+            )}
+          </PendingRegion>
+        </section>
       </TransitionScope>
+
+      <div className="grid gap-4 md:grid-cols-3">
+        <section className="rounded-lg border border-line bg-white p-4">
+          <h2 className="text-sm font-semibold text-ink">Actors</h2>
+          <p className="mt-1 text-xs text-ink-3">
+            People are shown by email. Automatic work such as syncs appears as System; someone who has left shows as Former member.
+          </p>
+        </section>
+        <section className="rounded-lg border border-line bg-white p-4">
+          <h2 className="text-sm font-semibold text-ink">Objects</h2>
+          <p className="mt-1 text-xs text-ink-3">
+            Businesses, locations, groups and escalations link to their page. Other objects show their type and a short ID.
+          </p>
+        </section>
+        <section className="rounded-lg border border-line bg-white p-4">
+          <h2 className="text-sm font-semibold text-ink">Search</h2>
+          <p className="mt-1 text-xs text-ink-3">
+            The search box covers the entries on the current page. Use the action, item, person and date filters to narrow the whole log.
+          </p>
+        </section>
+      </div>
     </div>
   );
 }

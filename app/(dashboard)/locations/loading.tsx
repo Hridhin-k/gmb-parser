@@ -1,3 +1,11 @@
-import { createPageLoading } from "@/components/page-loading";
+import { PageLoading } from "@/components/page-loading";
 
-export default createPageLoading("clients", "clients");
+export default function Loading() {
+  return (
+    <PageLoading
+      variant="clients"
+      title="Loading locations…"
+      detail="Reading businesses, groups and Google connection status for this workspace."
+    />
+  );
+}
