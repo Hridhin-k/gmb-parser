@@ -3,22 +3,63 @@
 import { useState, type FormEvent } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
+import { Eye } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Badge } from "@/components/ui/badge";
+import { Banner } from "@/components/ui/banner";
+import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
+import { SelectField } from "@/components/ui/select-field";
+import { Textarea } from "@/components/ui/textarea";
+import { ConfirmDialog } from "@/components/confirm-dialog";
+import { AdminCard } from "@/components/platform-admin-ui";
 import type { TenantDetail } from "@/lib/services/platform";
 
-const FLAG_LABELS: Record<string, string> = {
-  automation: "Auto-reply automation cron (enforced)",
-  requests: "Review requests (stored — enforcement on campaign send is a follow-up)",
-  reports: "Scheduled reports & alerts (stored — enforcement on report runs is a follow-up)",
+const FLAG_LABELS: Record<string, { label: string; detail: string }> = {
+  automation: { label: "Auto-reply automation cron", detail: "Enforced: off stops the tenant's automation cron." },
+  requests: { label: "Review requests", detail: "Stored. Enforcement on campaign send is not built yet." },
+  reports: { label: "Scheduled reports & alerts", detail: "Stored. Enforcement on report runs is not built yet." },
 };
+
+const PLANS = ["trial", "starter", "growth", "enterprise", "lifetime"];
 
 async function send(url: string, method: string, body?: object) {
   const response = await fetch(url, { method, headers: { "Content-Type": "application/json" }, body: body ? JSON.stringify(body) : undefined });
   const data = (await response.json().catch(() => ({}))) as { error?: string };
   if (!response.ok) throw new Error(data.error ?? "Something went wrong.");
   return data;
+}
+
+/** Enters the read-only support view. Styled amber so it can't be mistaken for a normal action. */
+export function SupportViewButton({ tenantId, disabled }: { tenantId: string; disabled?: boolean }) {
+  const router = useRouter();
+  const [viewing, setViewing] = useState(false);
+  async function supportView() {
+    setViewing(true);
+    try {
+      await send(`/api/platform/tenants/${tenantId}/impersonate`, "POST");
+      router.replace("/overview");
+      router.refresh();
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Could not enter support view.");
+      setViewing(false);
+    }
+  }
+  return (
+    <Button
+      type="button"
+      variant="outline"
+      loading={viewing}
+      disabled={disabled}
+      title={disabled ? "Deleted tenants can't be viewed" : "Opens this workspace as its users see it. Every action is disabled."}
+      onClick={supportView}
+      className="border-[#f59e0b] bg-demo text-demo-ink hover:bg-[#fde68a]"
+    >
+      {viewing ? null : <Eye aria-hidden />}
+      Open support view
+      <Badge variant="readonly" className="h-[18px] px-1.5 text-[11px]">Read-only</Badge>
+    </Button>
+  );
 }
 
 export function TenantSettingsCard({ detail }: { detail: TenantDetail }) {
@@ -32,7 +73,6 @@ export function TenantSettingsCard({ detail }: { detail: TenantDetail }) {
   const [note, setNote] = useState(t.adminNote ?? "");
   const [flags, setFlags] = useState<Record<string, boolean>>(t.featureFlags);
   const [saving, setSaving] = useState(false);
-  const [viewing, setViewing] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   async function save(event: FormEvent) {
@@ -58,64 +98,129 @@ export function TenantSettingsCard({ detail }: { detail: TenantDetail }) {
     }
   }
 
-  async function supportView() {
-    setViewing(true);
+  const planOptions = (PLANS.includes(plan) ? PLANS : [plan, ...PLANS]).map((p) => ({ value: p, label: p.charAt(0).toUpperCase() + p.slice(1) }));
+  const fieldLabel = "flex flex-col gap-1 text-xs font-medium text-ink-2";
+
+  return (
+    <AdminCard
+      id="plan"
+      title="Plan, limits & flags"
+      description="Leave a limit blank for unlimited / platform default."
+    >
+      <form onSubmit={save} className="flex flex-col gap-4">
+        <div className="grid gap-3 sm:grid-cols-2">
+          <div className={fieldLabel}>
+            <span>Plan</span>
+            <SelectField id="tenant-plan" label="Plan" value={plan} onValueChange={setPlan} options={planOptions} />
+          </div>
+          <label className={fieldLabel}>Plan / trial ends
+            <Input type="date" value={planExpiresAt} onChange={(e) => setPlanExpiresAt(e.target.value)} />
+          </label>
+          <label className={fieldLabel}>
+            <span>AI budget (USD / month) <span className="font-normal text-ink-3">· enforced before AI calls</span></span>
+            <Input type="number" min="0" step="0.01" value={aiBudget} onChange={(e) => setAiBudget(e.target.value)} placeholder="Platform default" />
+          </label>
+          <label className={fieldLabel}>
+            <span>Max members <span className="font-normal text-ink-3">· enforced on team invites</span></span>
+            <Input type="number" min="1" value={maxMembers} onChange={(e) => setMaxMembers(e.target.value)} placeholder="Unlimited" />
+          </label>
+          <label className={fieldLabel}>
+            <span>Max locations <span className="font-normal text-ink-3">· usage guidance only</span></span>
+            <Input type="number" min="1" value={maxLocations} onChange={(e) => setMaxLocations(e.target.value)} placeholder="Unlimited" />
+          </label>
+        </div>
+        <fieldset className="flex flex-col gap-2 rounded-md border border-line-2 p-3">
+          <legend className="px-1 text-xs font-medium text-ink-2">Feature flags</legend>
+          {Object.entries(FLAG_LABELS).map(([key, { label, detail }]) => (
+            <label key={key} className="flex items-start gap-2.5 text-[13px] text-ink">
+              <Checkbox className="mt-0.5" checked={flags[key] !== false} onCheckedChange={(checked) => setFlags({ ...flags, [key]: checked === true })} />
+              <span>
+                {label}
+                <span className="block text-xs text-ink-3">{detail}</span>
+              </span>
+            </label>
+          ))}
+        </fieldset>
+        <label className={fieldLabel}>
+          <span>Admin note <span className="font-normal text-ink-3">· only platform staff see this</span></span>
+          <Textarea value={note} onChange={(e) => setNote(e.target.value)} maxLength={2000} rows={3} />
+        </label>
+        {error ? <Banner tone="bad" title="Settings weren't saved.">{error}</Banner> : null}
+        <div>
+          <Button type="submit" loading={saving}>{saving ? "Saving…" : "Save settings"}</Button>
+        </div>
+      </form>
+    </AdminCard>
+  );
+}
+
+type TenantAction = "suspend" | "reactivate" | "delete" | "restore";
+
+/** Status changes for one tenant, using the same endpoint as the tenants list. */
+export function TenantActionsCard({ tenantId, name, status }: { tenantId: string; name: string; status: string }) {
+  const router = useRouter();
+  const [busy, setBusy] = useState<TenantAction | null>(null);
+  const [confirm, setConfirm] = useState<"suspend" | "delete" | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  async function run(action: TenantAction) {
+    setBusy(action);
+    setError(null);
     try {
-      await send(`/api/platform/tenants/${t.id}/impersonate`, "POST");
-      router.replace("/overview");
+      await send(`/api/platform/tenants/${tenantId}`, "POST", { action });
+      toast.success(
+        action === "suspend" ? `${name} suspended` : action === "delete" ? `${name} deleted` : action === "restore" ? `${name} restored` : `${name} reactivated`
+      );
       router.refresh();
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Could not enter support view.");
-      setViewing(false);
+      setError(e instanceof Error ? e.message : "Something went wrong.");
+    } finally {
+      setBusy(null);
     }
   }
 
   return (
-    <Card>
-      <CardHeader>
-        <CardTitle className="text-[22px] text-graphite" style={{ fontFamily: "var(--font-heading), sans-serif" }}>Plan, limits & flags</CardTitle>
-        <p className="mt-1 text-sm font-light text-slate">AI budget overrides the platform default and is enforced before AI calls. Member cap is enforced on team invites. Location cap is shown as usage guidance. Leaving a limit blank means unlimited / platform default.</p>
-      </CardHeader>
-      <CardContent>
-        <form onSubmit={save} className="space-y-4">
-          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-            <label className="space-y-1 text-sm text-graphite">Plan
-              <select value={plan} onChange={(e) => setPlan(e.target.value)} className="w-full rounded-md border border-line bg-white px-2 py-2 text-sm">
-                {["trial", "starter", "growth", "enterprise", "lifetime"].map((p) => <option key={p} value={p}>{p}</option>)}
-              </select>
-            </label>
-            <label className="space-y-1 text-sm text-graphite">Plan / trial ends
-              <Input type="date" value={planExpiresAt} onChange={(e) => setPlanExpiresAt(e.target.value)} />
-            </label>
-            <label className="space-y-1 text-sm text-graphite">AI budget (USD / month)
-              <Input type="number" min="0" step="0.01" value={aiBudget} onChange={(e) => setAiBudget(e.target.value)} placeholder="Platform default" />
-            </label>
-            <label className="space-y-1 text-sm text-graphite">Max locations (guidance)
-              <Input type="number" min="1" value={maxLocations} onChange={(e) => setMaxLocations(e.target.value)} placeholder="Unlimited" />
-            </label>
-            <label className="space-y-1 text-sm text-graphite">Max members (enforced)
-              <Input type="number" min="1" value={maxMembers} onChange={(e) => setMaxMembers(e.target.value)} placeholder="Unlimited" />
-            </label>
+    <AdminCard title="Tenant access" description="Status changes apply to every member at their next sign-in and are written to the audit log." tone="bad">
+      <div className="flex flex-col divide-y divide-line-2 text-[13px]">
+        {status === "active" ? (
+          <div className="flex flex-wrap items-center justify-between gap-2 pb-3">
+            <span className="text-ink-2">Suspend tenant: members are blocked at sign-in, data is kept.</span>
+            <Button type="button" variant="destructive" size="sm" loading={busy === "suspend"} onClick={() => setConfirm("suspend")}>Suspend…</Button>
           </div>
-          <label className="block space-y-1 text-sm text-graphite">Admin note (only super admins see this)
-            <textarea value={note} onChange={(e) => setNote(e.target.value)} maxLength={2000} rows={3} className="w-full rounded-md border border-line px-2 py-2 text-sm" />
-          </label>
-          <fieldset className="space-y-2">
-            <legend className="text-sm font-medium text-graphite">Feature flags</legend>
-            {Object.entries(FLAG_LABELS).map(([key, label]) => (
-              <label key={key} className="flex items-center gap-2 text-sm text-graphite">
-                <input type="checkbox" checked={flags[key] !== false} onChange={(e) => setFlags({ ...flags, [key]: e.target.checked })} />
-                {label} <span className="text-xs text-slate">(off blocks the tenant&apos;s cron/API use where enforced)</span>
-              </label>
-            ))}
-          </fieldset>
-          {error ? <p className="text-sm text-red-600" role="alert">{error}</p> : null}
-          <div className="flex flex-wrap gap-2">
-            <Button type="submit" loading={saving}>{saving ? "Saving…" : "Save settings"}</Button>
-            <Button type="button" variant="outline" loading={viewing} onClick={supportView}>View as tenant (read-only)</Button>
+        ) : null}
+        {status === "suspended" ? (
+          <div className="flex flex-wrap items-center justify-between gap-2 pb-3">
+            <span className="text-ink-2">Reactivate tenant: members can sign in again.</span>
+            <Button type="button" variant="outline" size="sm" loading={busy === "reactivate"} onClick={() => run("reactivate")}>Reactivate</Button>
           </div>
-        </form>
-      </CardContent>
-    </Card>
+        ) : null}
+        {status !== "deleted" ? (
+          <div className="flex flex-wrap items-center justify-between gap-2 pt-3 first:pt-0">
+            <span className="text-ink-2">Delete tenant: soft delete, restorable, all data retained.</span>
+            <Button type="button" variant="destructive" size="sm" loading={busy === "delete"} onClick={() => setConfirm("delete")}>Delete…</Button>
+          </div>
+        ) : (
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <span className="text-ink-2">This tenant is deleted. Restoring brings back sign-in with all data intact.</span>
+            <Button type="button" variant="outline" size="sm" loading={busy === "restore"} onClick={() => run("restore")}>Restore</Button>
+          </div>
+        )}
+      </div>
+      {error ? <Banner tone="bad" className="mt-3">{error}</Banner> : null}
+      <ConfirmDialog
+        open={confirm !== null}
+        onOpenChange={(open) => { if (!open) setConfirm(null); }}
+        title={confirm === "delete" ? `Delete ${name}?` : `Suspend ${name}?`}
+        description={
+          confirm === "delete"
+            ? "This is a soft delete: the tenant disappears and nobody can sign in, but all data is retained and you can restore it later."
+            : "Every member of this tenant will be blocked at sign-in. Data is kept and you can reactivate the tenant at any time."
+        }
+        confirmLabel={confirm === "delete" ? "Delete tenant" : "Suspend tenant"}
+        pendingLabel="Working…"
+        tone="danger"
+        onConfirm={async () => { if (confirm) await run(confirm); }}
+      />
+    </AdminCard>
   );
 }

@@ -1,4 +1,6 @@
 import { PlatformOpsBoard } from "@/components/platform-ops-board";
+import { PageHeader } from "@/components/page-header";
+import { buttonVariants } from "@/components/ui/button";
 import { getCurrentUser } from "@/lib/services/session";
 import { getMaintenance, listAccessRequests, listAnnouncements } from "@/lib/services/platform";
 
@@ -10,11 +12,14 @@ export default async function PlatformOpsPage() {
     getMaintenance().catch(() => ({ enabled: false, message: null as string | null })),
   ]);
   return (
-    <div className="space-y-6">
-      <div>
-        <h1 className="text-[28px] leading-[1.2] text-graphite" style={{ fontFamily: "var(--font-heading), sans-serif" }}>Platform ops</h1>
-        <p className="mt-1 text-sm font-light text-slate">Bulk invites, access-request approvals, announcements, and maintenance mode.</p>
-      </div>
+    <div className="flex flex-col gap-4">
+      <PageHeader
+        title="Operations"
+        description="Access-request approvals, bulk invites, announcements and maintenance mode. Announcements and maintenance are visible to every tenant, so each has a preview."
+      >
+        <a href="#maintenance" className={buttonVariants({ variant: "outline" })}>Maintenance</a>
+        <a href="#announcement" className={buttonVariants({ variant: "default" })}>New announcement</a>
+      </PageHeader>
       <PlatformOpsBoard requests={requests} announcements={announcements} maintenance={maintenance} />
     </div>
   );

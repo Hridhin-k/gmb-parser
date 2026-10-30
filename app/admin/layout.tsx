@@ -1,6 +1,5 @@
-import { SignOutButton } from "@/components/sign-out-button";
 import { redirect } from "next/navigation";
-import Link from "next/link";
+import { PlatformAdminSidebar } from "@/components/platform-admin-sidebar";
 import { getCurrentUser } from "@/lib/services/session";
 import { isSuperAdmin } from "@/lib/services/platform";
 
@@ -9,27 +8,25 @@ export default async function AdminLayout({ children }: { children: React.ReactN
   if (!user) redirect("/login");
   if (!isSuperAdmin(user)) redirect("/overview");
   return (
-    <div className="min-h-dvh bg-paper">
-      <header className="border-b border-line bg-white">
-        <div className="mx-auto flex max-w-6xl items-center justify-between px-4 py-3 sm:px-6">
-          <div className="flex items-center gap-3">
-            <div className="flex h-8 w-8 items-center justify-center rounded-full bg-ink text-xs font-semibold text-white">G</div>
-            <div>
-              <p className="text-sm font-medium text-graphite">RevuPilot Platform</p>
-              <p className="text-xs text-slate">Super admin · invite-only tenancy</p>
-            </div>
-          </div>
-          <div className="flex items-center gap-4 text-sm">
-            <span className="hidden text-slate sm:inline">{user.email}</span>
-            <Link href="/admin" className="text-ink underline underline-offset-4">Tenants</Link>
-            <Link href="/admin/health" className="text-ink underline underline-offset-4">Health</Link>
-            <Link href="/admin/users" className="text-ink underline underline-offset-4">Users</Link>
-            <Link href="/admin/ops" className="text-ink underline underline-offset-4">Ops</Link>
-            <SignOutButton className="text-ink underline underline-offset-4" />
-          </div>
-        </div>
-      </header>
-      <main className="mx-auto max-w-6xl px-4 py-8 sm:px-6">{children}</main>
+    <div className="flex min-h-dvh flex-col bg-paper lg:flex-row">
+      <PlatformAdminSidebar email={user.email ?? "Platform admin"} />
+      <div className="flex min-w-0 flex-1 flex-col">
+        <header className="hidden min-h-[52px] items-center gap-3 border-b border-line bg-white px-5 lg:flex">
+          <span className="text-[13px] font-medium text-ink">RevuPilot platform</span>
+          <span className="text-xs text-ink-3">Invite-only tenancy · changes here affect customer workspaces</span>
+          <form action="/admin" method="get" role="search" className="ml-auto">
+            <label htmlFor="admin-tenant-search" className="sr-only">Search tenants or owners</label>
+            <input
+              id="admin-tenant-search"
+              name="q"
+              type="search"
+              placeholder="Search tenants or owner email…"
+              className="h-8 w-80 rounded-md border border-line bg-paper px-3 text-[13px] text-ink outline-none placeholder:text-ink-3 focus-visible:border-brand focus-visible:bg-white focus-visible:ring-2 focus-visible:ring-brand-line"
+            />
+          </form>
+        </header>
+        <main className="mx-auto w-full max-w-[1440px] px-4 py-5 sm:px-6">{children}</main>
+      </div>
     </div>
   );
 }
