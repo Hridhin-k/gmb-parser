@@ -1,11 +1,10 @@
 import { Star } from "lucide-react";
 import { cn } from "@/lib/utils";
 
-/** Fill colour for a 1–5 rating. 4–5 green, 3 yellow, 1–2 red. */
+/** Ratings use one amber star colour; status colours stay reserved for status. */
 export function starFillClass(rating: number): string {
-  if (rating >= 4) return "fill-green-500 text-green-500";
-  if (rating >= 3) return "fill-yellow-400 text-yellow-500";
-  return "fill-red-500 text-red-500";
+  void rating;
+  return "fill-star text-star";
 }
 
 const SIZE = {
@@ -31,7 +30,7 @@ export function StarRating({
       {Array.from({ length: 5 }, (_, i) => (
         <Star
           key={i}
-          className={cn(SIZE[size], i < rating ? starFillClass(rating) : "fill-silver text-silver")}
+          className={cn(SIZE[size], i < rating ? starFillClass(rating) : "fill-[#d6dae1] text-[#d6dae1]")}
           aria-hidden
         />
       ))}

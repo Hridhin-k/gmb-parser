@@ -51,7 +51,7 @@ export function PendingRegion({
             role="status"
             aria-live="polite"
             aria-atomic="true"
-            className="mt-3 inline-flex h-fit items-center gap-2 rounded-full bg-ink px-3.5 py-1.5 text-xs font-medium text-white shadow-card-hover motion-safe:animate-in motion-safe:fade-in-0 motion-safe:slide-in-from-top-1"
+            className="mt-3 inline-flex h-fit items-center gap-2 rounded-md bg-ink px-3 py-1.5 text-xs font-medium text-white shadow-overlay motion-safe:animate-in motion-safe:fade-in-0 motion-safe:slide-in-from-top-1"
           >
             <Spinner size="sm" />
             {label}

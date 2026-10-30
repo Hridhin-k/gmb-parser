@@ -98,7 +98,7 @@ export function SyncLocationsButton({
           size="sm"
           onClick={() => handleSync(true)}
           disabled={syncing}
-          className="text-xs text-slate"
+          className="text-xs text-ink-3"
         >
           Force refresh
         </Button>
@@ -111,12 +111,12 @@ export function SyncLocationsButton({
         />
       ) : null}
       {summary && (
-        <p className="text-xs text-graphite" role="status">
+        <p className="text-xs text-ink" role="status">
           {summary}
         </p>
       )}
       {error && (
-        <p className="text-xs text-red-600" role="alert">
+        <p className="text-xs text-bad" role="alert">
           {error}
         </p>
       )}

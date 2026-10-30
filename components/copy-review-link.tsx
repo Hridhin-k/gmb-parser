@@ -37,7 +37,7 @@ export function CopyReviewLink({ url }: { url: string }) {
       </div>
       {state === "failed" ? (
         <div className="w-full sm:w-80">
-          <label className="block text-xs text-slate">
+          <label className="block text-xs text-ink-3">
             Copy this link
             <Input readOnly value={url} className="mt-1" onFocus={(event) => event.currentTarget.select()} />
           </label>

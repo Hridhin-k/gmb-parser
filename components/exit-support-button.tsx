@@ -7,7 +7,7 @@ export function ExitSupportButton() {
   return (
     <button
       type="button"
-      className="rounded-md border border-amber-900/30 px-3 py-1 text-sm font-medium"
+      className="inline-flex h-7 items-center rounded-md border border-demo-ink px-2.5 text-xs font-semibold text-demo-ink hover:bg-white/40"
       onClick={async () => {
         await fetch("/api/platform/tenants/00000000-0000-0000-0000-000000000000/impersonate", { method: "DELETE" }).catch(() => undefined);
         router.replace("/admin");

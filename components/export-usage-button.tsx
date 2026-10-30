@@ -48,7 +48,7 @@ export function ExportUsageButton({ href }: { href: string }) {
         />
       ) : null}
       {state === "error" ? (
-        <p className="text-sm text-red-600" role="alert">
+        <p className="text-sm text-bad" role="alert">
           The invoice file could not be built. Try again in a moment.
         </p>
       ) : null}

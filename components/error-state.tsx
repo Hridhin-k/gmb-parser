@@ -25,27 +25,27 @@ export function ErrorState({
       <div
         className={
           screen
-            ? "mx-auto flex h-12 w-12 items-center justify-center rounded-full bg-red-50"
-            : "flex h-10 w-10 items-center justify-center rounded-full bg-red-50"
+            ? "mx-auto flex h-12 w-12 items-center justify-center rounded-full bg-bad-tint"
+            : "flex h-10 w-10 items-center justify-center rounded-full bg-bad-tint"
         }
       >
-        <AlertTriangle className={screen ? "h-6 w-6 text-red-500" : "h-5 w-5 text-red-500"} aria-hidden />
+        <AlertTriangle className={screen ? "h-6 w-6 text-bad" : "h-5 w-5 text-bad"} aria-hidden />
       </div>
       <Heading
         className={
           screen
-            ? "mt-4 text-base font-semibold text-graphite"
-            : "mt-3 text-[13px] font-medium text-graphite"
+            ? "mt-4 text-[15px] font-semibold text-bad"
+            : "mt-3 text-[15px] font-semibold text-bad"
         }
       >
         {title}
       </Heading>
-      <p className="mt-1 max-w-sm text-[13px] text-slate">{message}</p>
+      <p className="mt-1 max-w-sm text-[13px] text-ink-3">{message}</p>
       {digest ? (
-        <p className="mt-2 font-mono text-[11px] text-slate">Reference: {digest}</p>
+        <p className="mt-2 font-mono text-[11px] text-ink-3">Reference: {digest}</p>
       ) : null}
       <Button
-        variant="outline"
+        variant="default"
         size={screen ? "default" : "sm"}
         className={screen ? "mt-5" : "mt-4"}
         onClick={onRetry}
