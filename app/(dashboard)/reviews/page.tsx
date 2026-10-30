@@ -5,16 +5,19 @@ import { EscalationContactStore } from "@/lib/services/escalations";
 import { canApproveReplies, canSyncWorkspace, getWorkspaceRoster } from "@/lib/services/workspace";
 import { draftsWithAiOnly } from "@/lib/access";
 import { getActiveRole, getActiveWorkspace } from "@/lib/services/session";
-import { PageHeader } from "@/components/page-header";
+import { PageHeader, PageTabs } from "@/components/page-header";
 import { EmptyState } from "@/components/empty-state";
 import { SyncButton } from "@/components/sync-button";
-import { ReviewFilters } from "@/components/review-filters";
+import { ReviewFilters, ReviewSortMenu } from "@/components/review-filters";
+import { REVIEW_STATUS_OPTIONS, REVIEW_STATUS_TABS, activeStatusTab, statusLabel } from "@/components/reviews-status";
+import { Banner } from "@/components/ui/banner";
+import { buttonVariants } from "@/components/ui/button";
 import { FreshMetrics } from "@/components/fresh-metrics";
 import { PendingRegion, TransitionScope } from "@/components/transition-scope";
 import { ReviewList } from "@/components/review-list";
 import { PaginationBar } from "@/components/pagination-bar";
 import Link from "next/link";
-import { Download, MessageSquareText } from "lucide-react";
+import { Download, MessageSquareText, SearchX } from "lucide-react";
 import {
   validatePage,
   validateFilterString,
@@ -141,132 +144,213 @@ export default async function ReviewsPage({ searchParams }: ReviewsPageProps) {
   periodQuery.delete("focusTo");
   const periodHref = periodQuery.size ? `/reviews?${periodQuery.toString()}` : "/reviews";
 
-  const hasAnyFilter =
+  // Local filters only. Scope and period come from the top bar and are not
+  // "filters" the user can clear here.
+  const hasLocalFilter =
     statusParams.length > 0 ||
     ratingParams.length > 0 ||
     !!starsParam ||
     !!searchParam ||
-    !!clientParam ||
-    !!locationParam ||
-    hasRange ||
     focus !== null ||
     hasComment ||
     !!textParam ||
     languageParams.length > 0 ||
     themeParams.length > 0 ||
-    assigneeParams.length > 0 ||
-    !!groupParam;
+    assigneeParams.length > 0;
+  const hasAnyFilter = hasLocalFilter || !!clientParam || !!locationParam || hasRange || !!groupParam;
+
+  const hrefWith = (mutate: (query: URLSearchParams) => void) => {
+    const query = new URLSearchParams(queryForPagination);
+    mutate(query);
+    return query.size ? `/reviews?${query.toString()}` : "/reviews";
+  };
+  const activeTab = activeStatusTab(statusParams);
+  const tabs = REVIEW_STATUS_TABS.map((tab) => {
+    const active = activeTab === tab.key;
+    return {
+      label: tab.label,
+      href: hrefWith((query) => {
+        if (tab.key === "all") query.delete("filter");
+        else query.set("filter", tab.key);
+      }),
+      active,
+      count: active ? data.totalReviewCount : null,
+      tone: tab.key === "failed" ? ("bad" as const) : ("default" as const),
+    };
+  });
+  // Keep scope and period; drop every local filter (and the status tab).
+  const clearFiltersHref = hrefWith((query) => {
+    for (const key of [
+      "filter",
+      "rating",
+      "stars",
+      "q",
+      "comment",
+      "text",
+      "language",
+      "theme",
+      "assignee",
+      "sort",
+      "focusFrom",
+      "focusTo",
+    ]) {
+      query.delete(key);
+    }
+  });
+  const wholePeriodHref = hrefWith((query) => {
+    query.delete("range");
+    query.delete("from");
+    query.delete("to");
+    query.delete("focusFrom");
+    query.delete("focusTo");
+  });
+  const members = roster.members.map((member) => ({ id: member.userId, email: member.email }));
+  const canSync = data.hasConnections && canSyncWorkspace(role);
+  const firstShown = (currentPage - 1) * data.pageSize + 1;
+  const lastShown = Math.min(data.totalReviewCount, firstShown + data.reviews.length - 1);
+  const filterSummary = [
+    statusParams.length > 0 ? statusParams.map(statusLabel).join(" or ") : null,
+    shownRatings.length > 0 ? `${[...shownRatings].sort((a, b) => a - b).join(", ")}★` : null,
+    searchParam ? `“${searchParam}”` : null,
+    textParam === "has" || hasComment ? "Has review text" : textParam === "none" ? "Rating only" : null,
+    languageParams.length > 0 ? `${languageParams.length} language${languageParams.length === 1 ? "" : "s"}` : null,
+    themeParams.length > 0 ? `${themeParams.length} theme${themeParams.length === 1 ? "" : "s"}` : null,
+    assigneeParams.length > 0 ? `${assigneeParams.length} assignee${assigneeParams.length === 1 ? "" : "s"}` : null,
+    focus ? focus.label : null,
+    range.label,
+    resolved.title,
+  ].filter(Boolean);
 
   return (
-    <div className="space-y-6">
+    <div className="flex flex-col gap-3">
       <PageHeader
-        title="Inbox"
-        description="Every review across your locations. Filter, draft, approve, and publish."
+        title="Reviews"
+        description={
+          <>
+            {resolved.title} · {range.label}
+            {data.totalReviewCount > 0 ? (
+              <>
+                {" · "}
+                <span className="tabular-nums">{data.totalReviewCount.toLocaleString("en-US")}</span> matching
+              </>
+            ) : null}
+          </>
+        }
       >
-        <div className="flex flex-wrap gap-2">
-          {data.totalReviewCount > 0 && (
-            <a
-              href={`/api/reviews/export?${queryForPagination.toString()}`}
-              className="inline-flex h-9 items-center gap-1.5 rounded-full border border-silver bg-white px-4 text-sm font-medium text-graphite hover:border-ink"
-            >
-              <Download className="h-3.5 w-3.5" aria-hidden />
-              Export CSV
-            </a>
-          )}
-          {data.hasConnections && canSyncWorkspace(role) ? (
-            <SyncButton syncAll label="Sync all" size="sm" />
-          ) : null}
-        </div>
+        {data.totalReviewCount > 0 && (
+          <a
+            href={`/api/reviews/export?${queryForPagination.toString()}`}
+            className={buttonVariants({ variant: "outline" })}
+          >
+            <Download className="size-3.5" aria-hidden />
+            Export CSV
+          </a>
+        )}
+        {canSync ? <SyncButton syncAll label="Sync all" size="default" /> : null}
       </PageHeader>
 
       <TransitionScope>
+        <PageTabs tabs={tabs} />
+
         <ReviewFilters
           currentFilters={statusParams}
           currentRatings={shownRatings}
           currentSearch={searchParam}
-          currentRange={{ key: range.key, from: range.from, to: range.to }}
           currentHasComment={hasComment}
-          clients={data.clients}
-          locations={data.locations}
-          currentClientId={clientParam}
-          currentLocationId={locationParam}
-          hideScope
-          showInboxFilters
           currentLanguages={languageParams}
           currentThemes={themeParams}
           currentAssignees={assigneeParams}
-          currentGroupId={groupParam}
           currentSort={sortParam}
           currentText={textParam}
-          groups={data.groups}
-          members={roster.members.map((member) => ({ id: member.userId, email: member.email }))}
-          statusFilters={[
-            { key: "all", label: "All" },
-            { key: "unanswered", label: "Needs reply" },
-            { key: "escalated", label: "Escalated" },
-            { key: "draft", label: "Draft ready" },
-            { key: "approved", label: "Ready to publish" },
-            { key: "failed", label: "Failed" },
-            { key: "published", label: "Replied" },
-            { key: "reopened", label: "Reopened" },
-            { key: "answered", label: "Any reply" },
-          ]}
+          members={members}
+          statusFilters={REVIEW_STATUS_OPTIONS}
+          resultCount={data.totalReviewCount}
         />
 
         {focus ? (
-          <p className="text-sm text-slate">
-            This list is {focus.label}. The date above stays {range.label}.{" "}
-            <Link href={periodHref} className="font-medium text-ink underline">
-              Show the whole period
-            </Link>
-          </p>
+          <Banner
+            tone="info"
+            title={`This list is ${focus.label}.`}
+            actions={
+              <Link href={periodHref} className={buttonVariants({ variant: "outline", size: "sm" })}>
+                Show the whole period
+              </Link>
+            }
+          >
+            The period in the top bar stays {range.label}.
+          </Banner>
         ) : null}
 
         <FreshMetrics
           rendered={overviewQueryKey((key) => (Array.isArray(params[key]) ? params[key][0] : params[key]))}
           surface="reviews"
         >
-        <PendingRegion label="Fetching reviews for the selected locations…" className="space-y-4">
-          {data.reviews.length === 0 ? (
-            <EmptyState
-              icon={MessageSquareText}
-              title={
-                hasAnyFilter
-                  ? "No reviews match your filters"
-                  : "No reviews synced"
-              }
-              description={
-                hasAnyFilter
-                  ? "Try a wider time range, or clear the filters."
-                  : data.hasConnections
-                    ? "Sync reviews from the dashboard to pull Google reviews here."
-                    : "Connect a Google account in Settings first."
-              }
-            />
-          ) : (
-            <>
-              <p className="text-[12px] tabular-nums text-slate">
-                {data.totalReviewCount} matching
-              </p>
-              <ReviewList
-                reviews={data.reviews}
-                replies={data.replies}
-                canApprove={canApprove}
-                aiOnly={draftsWithAiOnly(role)}
-                contact={contact}
-                members={roster.members.map((member) => ({ id: member.userId, email: member.email }))}
-              />
-              {totalPages > 1 && (
-                <PaginationBar
-                  basePath="/reviews"
-                  currentPage={currentPage}
-                  totalPages={totalPages}
-                  searchParams={queryForPagination}
+          <PendingRegion label="Fetching reviews for the selected locations…" className="flex flex-col gap-3">
+            {data.reviews.length === 0 ? (
+              hasAnyFilter && (hasLocalFilter || data.hasConnections) ? (
+                <EmptyState
+                  icon={SearchX}
+                  title="No reviews match these filters"
+                  description={
+                    <>
+                      <span className="block">{filterSummary.join(" · ")}</span>
+                      <span className="mt-1 block">Clear a filter, or widen the period in the top bar.</span>
+                    </>
+                  }
+                >
+                  {hasLocalFilter ? (
+                    <Link href={clearFiltersHref} className={buttonVariants({ size: "sm" })}>
+                      Clear filters
+                    </Link>
+                  ) : null}
+                  {hasRange || focus ? (
+                    <Link href={wholePeriodHref} className={buttonVariants({ variant: "outline", size: "sm" })}>
+                      Show all time
+                    </Link>
+                  ) : null}
+                </EmptyState>
+              ) : data.hasConnections ? (
+                <EmptyState
+                  icon={MessageSquareText}
+                  title="No reviews synced yet"
+                  description="Reviews appear here once Google sends them. Sync now to pull the latest reviews for your connected locations."
+                >
+                  {canSync ? <SyncButton syncAll label="Sync reviews now" size="sm" /> : null}
+                </EmptyState>
+              ) : (
+                <EmptyState
+                  icon={MessageSquareText}
+                  title="No reviews yet"
+                  description="Connect a Google Business Profile account to bring your reviews into this list."
+                >
+                  <Link href="/settings" className={buttonVariants({ size: "sm" })}>
+                    Connect Google in Settings
+                  </Link>
+                </EmptyState>
+              )
+            ) : (
+              <>
+                <ReviewList
+                  reviews={data.reviews}
+                  replies={data.replies}
+                  canApprove={canApprove}
+                  aiOnly={draftsWithAiOnly(role)}
+                  contact={contact}
+                  members={members}
+                  sortControl={<ReviewSortMenu currentSort={sortParam} />}
+                  rangeLabel={`${firstShown.toLocaleString("en-US")}–${lastShown.toLocaleString("en-US")} of ${data.totalReviewCount.toLocaleString("en-US")}`}
                 />
-              )}
-            </>
-          )}
-        </PendingRegion>
+                {totalPages > 1 && (
+                  <PaginationBar
+                    basePath="/reviews"
+                    currentPage={currentPage}
+                    totalPages={totalPages}
+                    searchParams={queryForPagination}
+                  />
+                )}
+              </>
+            )}
+          </PendingRegion>
         </FreshMetrics>
       </TransitionScope>
     </div>
