@@ -2,6 +2,11 @@
 
 import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
+import { Sparkles } from "lucide-react";
+import { Badge } from "@/components/ui/badge";
+import { Banner } from "@/components/ui/banner";
+import { Button } from "@/components/ui/button";
+import { Spinner } from "@/components/ui/spinner";
 
 export interface ReportStatusView {
   reportId: string;
@@ -115,76 +120,104 @@ export function InsightReportPanel({
     }
   }
 
+  const label = running
+    ? "Generating…"
+    : starting
+      ? "Starting…"
+      : stale
+        ? "Restart generation"
+        : report?.status === "failed"
+          ? "Retry report"
+          : hasSavedReport
+            ? "Regenerate report"
+            : "Generate report";
+  const statusBadge = !report ? (
+    hasSavedReport ? <Badge variant="ok">Saved</Badge> : <Badge>Not generated</Badge>
+  ) : stale ? (
+    <Badge variant="warn">Stopped</Badge>
+  ) : running ? (
+    <Badge variant="info">
+      <Spinner size="xs" />
+      Running
+    </Badge>
+  ) : report.status === "completed" ? (
+    <Badge variant="ok">Completed</Badge>
+  ) : report.status === "partial" ? (
+    <Badge variant="warn">Partial</Badge>
+  ) : report.status === "failed" ? (
+    <Badge variant="bad">Failed</Badge>
+  ) : null;
+
   return (
-    <div className="rounded-xl border border-silver bg-white p-4">
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <div>
-          <h2 className="text-base font-medium text-graphite">Insight report</h2>
-          <p className="mt-1 text-sm text-slate">
+    <div className="flex flex-col gap-3">
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div className="min-w-0">
+          <div className="flex flex-wrap items-center gap-2">
+            <h2 className="text-sm font-semibold text-ink">Insight report</h2>
+            {statusBadge}
+          </div>
+          <p className="mt-1 text-[13px] text-ink-3">
             {hasSavedReport
               ? "A saved report exists for these filters. Regenerating reuses it when the underlying reviews have not changed."
               : "Generate an evidence-backed report for this scope and range. Missing review analysis runs first, automatically."}
           </p>
         </div>
-        <button
+        <Button
           type="button"
+          variant="ai"
           onClick={start}
-          disabled={starting || running}
-          className="rounded-lg bg-graphite px-4 py-2 text-sm font-medium text-white disabled:cursor-not-allowed disabled:opacity-50"
+          loading={starting || running}
+          title={
+            hasSavedReport
+              ? "Uses AI only for reviews that are new or changed since the saved report; otherwise the saved report is reused at no cost."
+              : "Uses AI to analyse any pending reviews, then writes the report from the saved evidence."
+          }
         >
-          {running
-            ? "Generating…"
-            : starting
-              ? "Starting…"
-              : stale
-                ? "Restart generation"
-                : report?.status === "failed"
-                  ? "Retry report"
-                  : hasSavedReport
-                    ? "Regenerate report"
-                    : "Generate report"}
-        </button>
+          {running || starting ? null : <Sparkles aria-hidden />}
+          {label}
+        </Button>
       </div>
-      {message ? <p className="mt-3 text-sm text-red-600">{message}</p> : null}
+      {message ? (
+        <Banner tone="bad" role="alert">
+          {message}
+        </Banner>
+      ) : null}
       {report && running ? (
-        <div className="mt-3 space-y-1 text-sm text-slate">
-          <p>
-            <span className="font-medium text-graphite">Generating report</span>
+        <div className="rounded-md border border-ai-line bg-ai-tint px-3 py-2 text-xs text-ink-3">
+          <p className="text-[13px]">
+            <span className="font-medium text-[#5b21b6]">Generating report</span>
             {report.phase ? ` — ${phaseLabel(report.phase)}` : ""}
           </p>
           {typeof report.eligible === "number" && report.eligible > 0 ? (
-            <p>
+            <p className="mt-1 tabular-nums">
               Written reviews in scope {report.eligible.toLocaleString()} · analysed{" "}
               {(report.analysed ?? 0).toLocaleString()} · pending{" "}
               {(report.pending ?? 0).toLocaleString()} · failed{" "}
               {(report.failed ?? 0).toLocaleString()}
             </p>
           ) : null}
-          <p>
+          <p className="mt-1">
             Progress comes from the server job, not an estimate. You can leave this page and come
-            back — the job keeps running and this panel picks it up again.
+            back — the job keeps running and this panel picks it up again. The saved report below stays readable until the new one lands.
           </p>
         </div>
       ) : null}
       {stale ? (
-        <p className="mt-3 text-sm text-amber-800">
-          The previous generation appears to have stopped — its worker is no longer reporting
-          progress (this happens if the server restarted). Restart it: completed review analysis
+        <Banner tone="warn" title="The previous generation appears to have stopped.">
+          Its worker is no longer reporting progress (this happens if the server restarted). Restart it: completed review analysis
           is reused, so only the missing work runs again.
-        </p>
+        </Banner>
       ) : null}
       {report && report.status === "partial" ? (
-        <p className="mt-3 text-sm text-amber-800">
-          The last generation finished with failures: some reviews could not be analysed and are
-          excluded. The saved report below is labelled partial — retry to complete coverage.
-        </p>
+        <Banner tone="warn" title="The last generation finished with failures.">
+          Some reviews could not be analysed and are excluded. The saved report below is labelled partial — retry to complete coverage.
+        </Banner>
       ) : null}
       {report && report.status === "failed" ? (
-        <p className="mt-3 text-sm text-red-600">
-          The last report generation failed
-          {report.error ? `: ${report.error}` : ""}. Use “Retry report” — completed review
-          analysis is reused, so a retry only does the missing work.
-        </p>
+        <Banner tone="bad" title="The last report generation failed.">
+          {report.error ? `${report.error}. ` : ""}Use “Retry report” — completed review analysis is reused, so a retry only does the
+          missing work.
+        </Banner>
       ) : null}
     </div>
   );

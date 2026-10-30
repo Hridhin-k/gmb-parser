@@ -2,6 +2,11 @@
 
 import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
+import { Sparkles } from "lucide-react";
+import { Badge } from "@/components/ui/badge";
+import { Banner } from "@/components/ui/banner";
+import { Button } from "@/components/ui/button";
+import { Spinner } from "@/components/ui/spinner";
 
 export interface AnalysisRunStatus {
   runId: string;
@@ -110,69 +115,130 @@ export function InsightAnalyzer({ scopeParams, initialRun, pendingCount }: Insig
     }
   }
 
+  const tokens = run ? run.inputTokens + run.outputTokens : 0;
+  const progress =
+    run && run.batchesTotal > 0 ? Math.min(100, Math.round((run.batchesCompleted / run.batchesTotal) * 100)) : null;
+  const statusBadge = !run ? null : stale ? (
+    <Badge variant="warn">Stopped</Badge>
+  ) : run.status === "running" ? (
+    <Badge variant="info">
+      <Spinner size="xs" />
+      Running
+    </Badge>
+  ) : run.status === "completed" ? (
+    <Badge variant="ok">Completed</Badge>
+  ) : run.status === "partial" ? (
+    <Badge variant="warn">Partial</Badge>
+  ) : (
+    <Badge variant="bad">Failed</Badge>
+  );
+
   return (
-    <div className="rounded-xl border border-silver bg-white p-4">
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <div>
-          <h2 className="text-base font-medium text-graphite">Review analysis</h2>
-          <p className="mt-1 text-sm text-slate">
+    <div className="flex flex-col gap-3">
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div className="min-w-0">
+          <div className="flex flex-wrap items-center gap-2">
+            <h2 className="text-sm font-semibold text-ink">Review analysis</h2>
+            {statusBadge}
+          </div>
+          <p className="mt-1 text-[13px] text-ink-3">
             {pendingCount > 0
               ? `${pendingCount} written review${pendingCount === 1 ? "" : "s"} still need analysis in this scope and range.`
               : "Every written review in this scope and range has a current analysis."}
           </p>
         </div>
-        <button
+        <Button
           type="button"
+          variant="ai"
           onClick={start}
-          disabled={starting || running || (pendingCount === 0 && !stale)}
-          className="rounded-lg bg-graphite px-4 py-2 text-sm font-medium text-white disabled:cursor-not-allowed disabled:opacity-50"
+          loading={starting || running}
+          disabled={pendingCount === 0 && !stale}
+          title={
+            pendingCount === 0 && !stale
+              ? "Nothing to analyse: every written review already has a current analysis."
+              : `Analyses only the ${pendingCount.toLocaleString()} pending review${pendingCount === 1 ? "" : "s"}; earlier analysis is reused at no extra AI cost.${
+                  tokens > 0 ? ` The last run used ${run!.inputTokens.toLocaleString()} input and ${run!.outputTokens.toLocaleString()} output tokens.` : ""
+                }`
+          }
         >
-          {running ? "Analysing…" : starting ? "Starting…" : stale ? "Restart analysis" : "Analyse reviews"}
-        </button>
+          {running || starting ? null : <Sparkles aria-hidden />}
+          {running ? "Analysing…" : starting ? "Starting…" : stale ? "Restart analysis" : pendingCount > 0 ? `Analyse ${pendingCount.toLocaleString()} review${pendingCount === 1 ? "" : "s"}` : "Analyse reviews"}
+        </Button>
       </div>
 
-      {message ? <p className="mt-3 text-sm text-red-600">{message}</p> : null}
+      {message ? (
+        <Banner tone="bad" role="alert">
+          {message}
+        </Banner>
+      ) : null}
       {stale ? (
-        <p className="mt-3 text-sm text-amber-800">
-          The previous analysis appears to have stopped — its worker is no longer reporting
-          progress. Restart it: reviews already analysed are reused, only the remainder runs.
-        </p>
+        <Banner tone="warn" title="The previous analysis appears to have stopped.">
+          Its worker is no longer reporting progress. Restart it: reviews already analysed are reused, only the remainder runs.
+        </Banner>
       ) : null}
 
       {run ? (
-        <div className="mt-4 space-y-2 text-sm text-slate">
+        <div className="flex flex-col gap-2 text-xs text-ink-3">
+          {run.status === "running" ? (
+            <div className="rounded-md border border-ai-line bg-ai-tint px-3 py-2">
+              <div className="flex flex-wrap items-center justify-between gap-2 text-[13px]">
+                <span className="font-medium text-[#5b21b6]">Analysing new reviews</span>
+                {run.batchesTotal > 0 ? (
+                  <span className="tabular-nums">
+                    Batch {run.batchesCompleted}/{run.batchesTotal} (from the server)
+                  </span>
+                ) : null}
+              </div>
+              {progress !== null ? (
+                <div
+                  className="mt-1.5 h-1.5 overflow-hidden rounded-[3px] bg-white"
+                  role="progressbar"
+                  aria-label="Analysis progress"
+                  aria-valuemin={0}
+                  aria-valuemax={100}
+                  aria-valuenow={progress}
+                >
+                  <div className="h-full rounded-[3px] bg-ai" style={{ width: `${progress}%` }} />
+                </div>
+              ) : null}
+            </div>
+          ) : null}
+          <dl className="grid grid-cols-2 gap-x-4 gap-y-1 sm:grid-cols-4">
+            <RunStat label="Reused" value={run.alreadyAnalysed} />
+            <RunStat label="Newly analysed" value={run.newlyAnalysed} />
+            <RunStat label="Pending" value={run.pending} />
+            <RunStat label="Failed" value={run.failed} tone={run.failed > 0 ? "bad" : undefined} />
+          </dl>
           <p>
-            Status:{" "}
-            <span className="font-medium text-graphite">
-              {run.status === "running"
-                ? "Analysing new reviews"
-                : run.status === "completed"
-                  ? "Completed"
-                  : run.status === "partial"
-                    ? "Completed with failures — some reviews failed and can be retried"
-                    : "Failed"}
-            </span>
-            {run.batchesTotal > 0
-              ? ` · Batches ${run.batchesCompleted}/${run.batchesTotal} (from the server)`
-              : ""}
-            {run.retries > 0 ? ` · Retries ${run.retries}` : ""}
-          </p>
-          <p>
-            Reused from earlier analysis {run.alreadyAnalysed} · Newly analysed {run.newlyAnalysed}{" "}
-            · Pending {run.pending} · Failed {run.failed}
-            {run.inputTokens + run.outputTokens > 0
-              ? ` · Tokens ${run.inputTokens.toLocaleString()} in / ${run.outputTokens.toLocaleString()} out`
+            {run.status === "completed"
+              ? "Last run completed."
+              : run.status === "partial"
+                ? "Completed with failures — some reviews failed and can be retried."
+                : run.status === "running"
+                  ? "Existing results below stay readable while this runs."
+                  : "Last run failed."}
+            {run.retries > 0 ? ` Retries ${run.retries}.` : ""}
+            {tokens > 0
+              ? ` Tokens ${run.inputTokens.toLocaleString()} in / ${run.outputTokens.toLocaleString()} out.`
               : ""}
           </p>
           {run.status === "partial" ? (
             <p>
-              The failed reviews are recorded. Press “Analyse reviews” again to retry only those —
-              completed reviews are not repeated.
+              The failed reviews are recorded. Run the analysis again to retry only those — completed reviews are not repeated.
             </p>
           ) : null}
-          {run.error ? <p className="text-red-600">{run.error}</p> : null}
+          {run.error ? <p className="text-bad">{run.error}</p> : null}
         </div>
       ) : null}
+    </div>
+  );
+}
+
+function RunStat({ label, value, tone }: { label: string; value: number; tone?: "bad" }) {
+  return (
+    <div className="flex items-baseline justify-between gap-2 sm:block">
+      <dt>{label}</dt>
+      <dd className={`text-[13px] font-semibold tabular-nums ${tone === "bad" ? "text-bad" : "text-ink"}`}>{value.toLocaleString()}</dd>
     </div>
   );
 }
