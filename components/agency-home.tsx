@@ -61,7 +61,7 @@ function pageHref(
   if (query) search.set("q", query);
   if (page > 1) search.set("page", String(page));
   const qs = search.toString();
-  return qs ? `/dashboard?${qs}` : "/dashboard";
+  return qs ? `/portfolio?${qs}` : "/portfolio";
 }
 
 export function AgencyHomeView({
@@ -82,7 +82,7 @@ export function AgencyHomeView({
   for (const [key, value] of Object.entries(rangeParams)) exportParams.set(key, value);
   if (query) exportParams.set("q", query);
   const exportHref = `/api/usage/export${exportParams.size ? `?${exportParams}` : ""}`;
-  const queueHref = clientId ? `/clients/${clientId}` : "/clients";
+  const queueHref = clientId ? `/businesses/${clientId}` : "/locations";
 
   return (
     <div className="space-y-4">
@@ -111,7 +111,7 @@ export function AgencyHomeView({
         hasPublished={data.hasPublished}
       />
 
-      <form action="/dashboard" className="flex flex-wrap gap-2">
+      <form action="/portfolio" className="flex flex-wrap gap-2">
         <input
           name="q"
           defaultValue={query}
@@ -205,7 +205,7 @@ export function AgencyHomeView({
                         variant="outline"
                         size="sm"
                         nativeButton={false}
-                        render={<Link href={`/clients/${row.id}`} />}
+                        render={<Link href={`/businesses/${row.id}`} />}
                       >
                         Open
                       </Button>

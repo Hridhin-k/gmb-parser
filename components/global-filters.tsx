@@ -125,8 +125,10 @@ export function GlobalFilters({ catalog, showDate = true }: { catalog: ScopeCata
     );
   }
 
+  const dirty = scopeDraft !== null || rangeDraft !== null;
+
   return (
-    <div className="flex min-w-0 flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center">
+    <div className="flex min-w-0 flex-wrap items-center gap-1.5" aria-label="Scope and period">
       <ScopeSelector
         catalog={catalog}
         request={
@@ -142,12 +144,14 @@ export function GlobalFilters({ catalog, showDate = true }: { catalog: ScopeCata
           defaultKey={rangeDefault}
           disabled={applying !== null}
           onChange={chooseRange}
-          selectClassName="sm:w-44"
+          selectClassName="h-8 w-auto min-w-[8.5rem]"
         />
       ) : null}
-      <Button type="button" className="h-10" disabled={applying !== null} onClick={applyFilters}>
-        Go
-      </Button>
+      {dirty ? (
+        <Button type="button" size="sm" className="h-8" loading={applying !== null} onClick={applyFilters}>
+          Apply
+        </Button>
+      ) : null}
     </div>
   );
 }

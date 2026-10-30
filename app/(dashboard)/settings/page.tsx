@@ -262,7 +262,7 @@ export default async function SettingsPage({
       {section === "plan" && canBill ? (
         <section className="space-y-2 rounded-xl border border-silver bg-white p-4 text-sm text-slate">
           <p>Usage is counted from locations and reviews. There is no separate checkout in this workspace.</p>
-          <Link href="/dashboard#usage" className="font-medium text-ink underline underline-offset-4">Open usage</Link>
+          <Link href="/portfolio/usage" className="font-medium text-ink underline underline-offset-4">Open usage</Link>
         </section>
       ) : null}
 

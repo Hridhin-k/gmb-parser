@@ -12,6 +12,8 @@ const CLIENT_AND_RANGE = [
   "/insights",
   "/reports",
   "/dashboard",
+  "/portfolio",
+  "/portfolio/usage",
 ] as const;
 
 const CLIENT_ONLY = ["/requests"] as const;
@@ -208,6 +210,7 @@ export function canOpenPath(pathname: string, role: ShellRole): boolean {
   if (pathname === "/settings" || pathname.startsWith("/settings/")) return canOpenSettings(role);
   if (pathname === "/audit" || pathname.startsWith("/audit/")) return canOpenTeam(role);
   if (pathname === "/dashboard" || pathname.startsWith("/dashboard/")) return isManager(role);
+  if (pathname === "/portfolio" || pathname.startsWith("/portfolio/")) return isManager(role);
   return true;
 }
 
@@ -225,6 +228,7 @@ export function defaultRangeForPath(pathname: string): DateRangeKey {
   if (pathname === "/analytics") return "12m";
   if (pathname === "/insights") return "12m";
   if (pathname === "/dashboard" || pathname === "/reports") return "1m";
+  if (pathname === "/portfolio" || pathname === "/portfolio/usage") return "1m";
   return "all";
 }
 

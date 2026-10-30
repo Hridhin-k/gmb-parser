@@ -62,7 +62,7 @@ export default async function RequestsPage({ searchParams }: RequestsPageProps) 
               : "Connect Google and sync profiles. Each location can then have a request page and a QR code."
           }
         >
-          <Link href="/clients" className="inline-flex h-9 items-center rounded-full bg-ink px-4 text-sm font-medium text-white hover:bg-graphite">
+          <Link href="/locations" className="inline-flex h-9 items-center rounded-full bg-ink px-4 text-sm font-medium text-white hover:bg-graphite">
             Open locations
           </Link>
         </EmptyState>

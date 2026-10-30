@@ -104,7 +104,7 @@ export default async function ClientsPage({
               icon={AlertTriangle}
               label="Needs attention"
               value={String(attentionTotal)}
-              href={attentionTotal > 0 ? "/clients?attention=expired" : undefined}
+              href={attentionTotal > 0 ? "/locations?attention=expired" : undefined}
               muted={attentionTotal === 0}
             />
           </dl>
@@ -161,7 +161,7 @@ export default async function ClientsPage({
               return (
                 <li key={client.id}>
                   <Link
-                    href={`/clients/${client.id}`}
+                    href={`/businesses/${client.id}`}
                     className="flex h-full items-start justify-between gap-3 rounded-xl border border-[#e6ebf2] bg-[#f4f7fb]/40 p-4 transition-colors hover:border-[#163a7a] hover:bg-[#f4f7fb]"
                   >
                     <div className="min-w-0">

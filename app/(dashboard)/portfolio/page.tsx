@@ -16,7 +16,7 @@ interface DashboardPageProps {
 
 export default async function DashboardPage({ searchParams }: DashboardPageProps) {
   const role = await getActiveRole();
-  if (!canOpenPath("/dashboard", role)) redirect("/overview");
+  if (!canOpenPath("/portfolio", role)) redirect("/overview");
 
   const [params, { user, workspaceId }] = await Promise.all([
     searchParams,

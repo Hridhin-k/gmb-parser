@@ -124,7 +124,7 @@ export default async function ClientDetailPage({
     <div className="space-y-10">
       <div className="flex items-center gap-2">
         <Link
-          href="/clients"
+          href="/locations"
           className="flex items-center gap-1 text-sm font-medium text-ink underline decoration-stone/50 underline-offset-4 hover:decoration-ink"
         >
           <ArrowLeft className="h-3.5 w-3.5" />
@@ -179,7 +179,7 @@ export default async function ClientDetailPage({
       {connectedLocations.length === 0 && (
         <div className="rounded-xl border border-silver bg-paper px-5 py-4 text-sm text-graphite">
           No locations on this client yet. On the{" "}
-          <Link href="/clients" className="font-medium underline">
+          <Link href="/locations" className="font-medium underline">
             Locations
           </Link>{" "}
           page, assign profiles from the Unassigned pool to{" "}

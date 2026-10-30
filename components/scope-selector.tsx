@@ -18,6 +18,7 @@ import {
   type ScopeChoice,
 } from "@/lib/scope";
 import { cn } from "@/lib/utils";
+import { modernizeCopy, scopeKindLabel } from "@/lib/ui/vocabulary";
 
 function KindIcon({ kind }: { kind: ScopeChoice["kind"] }) {
   const className = "size-3.5 shrink-0";
@@ -110,46 +111,39 @@ export function ScopeSelector({
 
   const described = summary.trail ? `${summary.eyebrow}. ${summary.title}. ${summary.trail}` : `${summary.eyebrow}. ${summary.title}`;
 
+  const kindLabel = scopeKindLabel(summary.eyebrow);
+  const locationCount = scope.locationIds.length;
+
   return (
-    <div className="min-w-0 w-full sm:w-auto sm:min-w-[18rem] sm:max-w-md">
+    <div className="min-w-0">
       <Popover open={open} onOpenChange={setOpen}>
         <PopoverTrigger
-          className="flex w-full items-center gap-3 rounded-xl border-2 border-[#163a7a] bg-white px-3 py-2 text-left shadow-[0_1px_0_rgba(22,58,122,0.12)] outline-none hover:bg-[#f4f7fc] focus-visible:ring-2 focus-visible:ring-[#163a7a]/30"
-          aria-label={`Scope. ${described}`}
+          className="flex h-8 max-w-full items-center gap-1.5 rounded-md border border-line bg-white px-2.5 text-left text-[13px] font-medium text-ink outline-none hover:bg-paper focus-visible:ring-2 focus-visible:ring-brand-line data-popup-open:border-brand-line data-popup-open:bg-brand-tint"
+          aria-label={`Scope. ${modernizeCopy(described)}`}
+          title={summary.trail ? modernizeCopy(summary.trail) : undefined}
         >
-          <span className="flex size-10 shrink-0 items-center justify-center rounded-lg bg-[#163a7a] text-white">
-            <Building2 className="size-4" aria-hidden />
-          </span>
-          <span className="min-w-0 flex-1">
-            <span className="block text-[10px] font-semibold uppercase tracking-[0.14em] text-[#163a7a]">
-              {summary.eyebrow}
-            </span>
-            <span className="block truncate text-sm font-semibold text-ink sm:text-base">{summary.title}</span>
-            {summary.trail ? (
-              <span className="hidden truncate text-xs text-slate sm:block">{summary.trail}</span>
-            ) : (
-              <span className="hidden text-xs text-slate sm:block">
-                {scope.level === "organisation" ? "All outlets" : "Selected place"}
-              </span>
-            )}
-          </span>
-          <ChevronDown className="size-4 shrink-0 text-[#163a7a]" aria-hidden />
+          <span className="shrink-0 font-normal text-ink-3">{kindLabel}</span>
+          <span className="min-w-0 truncate">{summary.title}</span>
+          {scope.level !== "location" && locationCount > 0 ? (
+            <span className="shrink-0 font-normal text-ink-3">· {locationCount.toLocaleString("en-US")}</span>
+          ) : null}
+          <ChevronDown className="size-3.5 shrink-0 text-ink-3" aria-hidden />
         </PopoverTrigger>
         <PopoverContent
           align="start"
           sideOffset={8}
           className="w-[min(24rem,calc(100vw-1.5rem))] max-w-[calc(100vw-1.5rem)] gap-0 overflow-hidden p-0"
         >
-          <div className="border-b border-silver p-2">
+          <div className="border-b border-line p-2">
             <label className="relative block">
-              <span className="sr-only">Search organisations, groups, and outlets</span>
-              <Search className="pointer-events-none absolute left-3 top-1/2 size-3.5 -translate-y-1/2 text-slate" aria-hidden />
+              <span className="sr-only">Search businesses, groups and locations</span>
+              <Search className="pointer-events-none absolute left-3 top-1/2 size-3.5 -translate-y-1/2 text-ink-3" aria-hidden />
               <input
                 value={query}
                 onChange={(event) => setQuery(event.target.value)}
                 onKeyDown={onSearchKeyDown}
-                placeholder="Search organisations, groups, outlets"
-                className="h-10 w-full rounded-lg border border-silver bg-[#f7f9fc] pl-9 pr-3 text-sm text-ink outline-none placeholder:text-stone focus-visible:border-[#163a7a] focus-visible:ring-2 focus-visible:ring-[#163a7a]/20"
+                placeholder={`Search ${catalog.locations.length.toLocaleString("en-US")} locations, groups…`}
+                className="h-[34px] w-full rounded-md border border-line bg-white pl-9 pr-3 text-[13px] text-ink outline-none placeholder:text-stone focus-visible:border-brand focus-visible:ring-2 focus-visible:ring-brand-line"
               />
             </label>
           </div>
@@ -161,9 +155,9 @@ export function ScopeSelector({
             className="max-h-[min(24rem,70vh)] overflow-y-auto p-1"
           >
             {catalog.locations.length === 0 && catalog.clients.length === 0 ? (
-              <p className="px-3 py-6 text-sm text-slate">No outlets yet. Import locations before choosing a scope.</p>
+              <p className="px-3 py-6 text-sm text-ink-3">No locations yet. Import locations before choosing a scope.</p>
             ) : rows.length === 0 ? (
-              <p className="px-3 py-6 text-sm text-slate">Nothing matches that search.</p>
+              <p className="px-3 py-6 text-sm text-ink-3">Nothing matches that search.</p>
             ) : (
               rows.map((choice) => {
                 const selected = choiceMatchesScope(choice, scope);
@@ -176,17 +170,17 @@ export function ScopeSelector({
                     aria-selected={selected}
                     onClick={() => choose(choice)}
                     className={cn(
-                      "flex w-full items-center gap-2 rounded-lg px-2 py-2 text-left text-sm outline-none hover:bg-[#f4f7fc] focus-visible:bg-[#f4f7fc] focus-visible:ring-2 focus-visible:ring-[#163a7a]/25",
-                      selected && "bg-[#e8eef8]"
+                      "flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-[13px] text-ink-2 outline-none hover:bg-paper focus-visible:bg-paper focus-visible:ring-2 focus-visible:ring-brand-line",
+                      selected && "bg-brand-tint text-brand"
                     )}
                     style={{ paddingLeft: `${0.5 + choice.depth * 0.875}rem` }}
                   >
                     <KindIcon kind={choice.kind} />
                     <span className="min-w-0 flex-1">
-                      <span className="block truncate font-medium text-ink">{choice.label}</span>
-                      <span className="block truncate text-xs text-slate">
-                        {choice.kind}
-                        {choice.detail ? ` · ${choice.detail}` : ""}
+                      <span className="block truncate font-medium">{choice.label}</span>
+                      <span className="block truncate text-xs text-ink-3">
+                        {scopeKindLabel(choice.kind)}
+                        {choice.detail ? ` · ${modernizeCopy(choice.detail)}` : ""}
                       </span>
                     </span>
                   </button>
@@ -197,13 +191,13 @@ export function ScopeSelector({
         </PopoverContent>
       </Popover>
       {scope.dropped ? (
-        <p className="mt-1 text-xs text-slate" role="status">
+        <p className="sr-only" role="status">
           That place is not available. Showing {scope.title}.
         </p>
       ) : null}
       {scope.blocked ? (
-        <p className="mt-1 text-xs text-slate" role="status">
-          Your saved place is no longer in this organisation.
+        <p className="sr-only" role="status">
+          Your saved place is no longer in this business.
         </p>
       ) : null}
     </div>

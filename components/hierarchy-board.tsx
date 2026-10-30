@@ -163,7 +163,7 @@ export function HierarchyBoard({
               <div className="flex flex-col gap-1">
                 {tree.attention.expired > 0 && (
                   <NavLink
-                    href="/clients?attention=expired"
+                    href="/locations?attention=expired"
                     active={selectedPanel?.kind === "attention" && selectedPanel.id === "expired"}
                   >
                     <span>Access expired</span>
@@ -172,7 +172,7 @@ export function HierarchyBoard({
                 )}
                 {tree.attention.duplicates > 0 && (
                   <NavLink
-                    href="/clients?attention=duplicate"
+                    href="/locations?attention=duplicate"
                     active={selectedPanel?.kind === "attention" && selectedPanel.id === "duplicate"}
                   >
                     <span>Possible duplicates</span>
@@ -184,7 +184,7 @@ export function HierarchyBoard({
                 )}
                 {tree.attention.unverified > 0 && (
                   <NavLink
-                    href="/clients?attention=unverified"
+                    href="/locations?attention=unverified"
                     active={selectedPanel?.kind === "attention" && selectedPanel.id === "unverified"}
                   >
                     <span>Unverified</span>
@@ -210,11 +210,11 @@ export function HierarchyBoard({
                 tree.ungrouped.find((row) => row.clientId === brand.id)?.count ?? 0;
               return (
                 <div key={brand.id} className="space-y-1">
-                  <NavLink href={`/clients?brand=${brand.id}`} active={brandActive}>
+                  <NavLink href={`/locations?brand=${brand.id}`} active={brandActive}>
                     <span className="truncate font-medium">{brand.name}</span>
                   </NavLink>
                   <NavLink
-                    href={`/clients?ungrouped=${brand.id}`}
+                    href={`/locations?ungrouped=${brand.id}`}
                     active={ungroupedActive}
                     indent
                   >
@@ -226,7 +226,7 @@ export function HierarchyBoard({
                     return (
                       <div key={region.id} className="space-y-1">
                         <NavLink
-                          href={`/clients?group=${region.id}`}
+                          href={`/locations?group=${region.id}`}
                           active={regionActive}
                           indent
                         >
@@ -238,7 +238,7 @@ export function HierarchyBoard({
                           return (
                             <NavLink
                               key={city.id}
-                              href={`/clients?group=${city.id}`}
+                              href={`/locations?group=${city.id}`}
                               active={cityActive}
                               indent
                             >
@@ -263,7 +263,7 @@ export function HierarchyBoard({
               {tree.loose.map((group) => {
                 const active = selectedPanel?.id === group.id;
                 return (
-                  <NavLink key={group.id} href={`/clients?group=${group.id}`} active={active}>
+                  <NavLink key={group.id} href={`/locations?group=${group.id}`} active={active}>
                     <span className="truncate">{group.name}</span>
                     <Count value={group.count} active={active} />
                   </NavLink>
@@ -348,7 +348,7 @@ export function HierarchyBoard({
                   setGroupManagerId("");
                   setLocationQuery("");
                   setNotice("Group saved.");
-                  if (result.id) router.push(`/clients?group=${result.id}`);
+                  if (result.id) router.push(`/locations?group=${result.id}`);
                   router.refresh();
                 })();
               }}
@@ -473,7 +473,7 @@ export function HierarchyBoard({
                           <td className="px-3 py-2.5">
                             <Link
                               className="font-medium text-[#163a7a] underline-offset-2 hover:underline"
-                              href={`/clients?location=${row.id}`}
+                              href={`/locations?location=${row.id}`}
                             >
                               {row.name}
                             </Link>
@@ -843,7 +843,7 @@ export function HierarchyBoard({
               </p>
               {brands[0] ? (
                 <Link
-                  href={`/clients?brand=${brands[0].id}`}
+                  href={`/locations?brand=${brands[0].id}`}
                   className="mt-4 inline-flex h-9 items-center gap-1.5 rounded-full bg-[#163a7a] px-4 text-sm font-semibold text-white"
                 >
                   <MapPin className="h-3.5 w-3.5" aria-hidden />

@@ -47,12 +47,13 @@ export function DateRangeFilter({
   }
 
   return (
-    <div className="flex shrink-0 flex-wrap items-center gap-2">
+    <div className="flex shrink-0 flex-wrap items-center gap-1.5">
       <SelectField
-        label="Time range"
+        label="Period"
         value={value.key}
         disabled={disabled}
         className={selectClassName}
+        size="sm"
         onValueChange={(next) => selectKey(next as DateRangeKey)}
         options={DATE_RANGE_OPTIONS.map((option) => ({
           value: option.key,
@@ -69,7 +70,7 @@ export function DateRangeFilter({
             className={dateClassName}
             onChange={(day) => setDay("from", day)}
           />
-          <span className="text-xs text-slate">to</span>
+          <span className="text-xs text-ink-3">to</span>
           <DatePicker
             label="To"
             value={value.to}
