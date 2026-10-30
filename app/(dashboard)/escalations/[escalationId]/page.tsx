@@ -7,6 +7,14 @@ import { getActiveRole, getActiveWorkspace } from "@/lib/services/session";
 import { canApproveReplies, getWorkspaceRoster } from "@/lib/services/workspace";
 import { draftsWithAiOnly } from "@/lib/access";
 
+function stamp<T extends { dueAt: string }>(item: T, timezone: string) {
+  return {
+    ...item,
+    ...slaClock(item.dueAt, Date.now()),
+    dueLabel: formatInTimezone(item.dueAt, timezone),
+  };
+}
+
 export default async function EscalationCasePage({
   params,
 }: {
@@ -30,11 +38,7 @@ export default async function EscalationCasePage({
     parentGroupId: item.parentGroupId ?? null,
     locationId: item.locationId,
   };
-  const stamped = {
-    ...item,
-    ...slaClock(item.dueAt, Date.now()),
-    dueLabel: formatInTimezone(item.dueAt, policy.timezone),
-  };
+  const stamped = stamp(item, policy.timezone);
 
   return (
     <TransitionScope>

@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useSyncExternalStore } from "react";
+import { Mic } from "lucide-react";
 
 interface SpeechAlternative {
   transcript: string;
@@ -69,12 +70,14 @@ export function SpeakButton({
         type="button"
         onClick={listen}
         disabled={disabled || listening}
-        className="h-11 rounded-full border border-silver bg-white px-4 text-sm text-ink"
+        aria-live="polite"
+        className="inline-flex h-12 items-center gap-1.5 rounded-md border border-line bg-white px-4 text-[15px] font-medium text-ink disabled:opacity-50"
       >
+        <Mic className="size-4" aria-hidden />
         {listening ? "Listening…" : "Speak"}
       </button>
       {error ? (
-        <p className="mt-2 text-sm text-slate" role="alert">
+        <p className="mt-2 text-[13px] text-warn" role="alert">
           {error}
         </p>
       ) : null}
