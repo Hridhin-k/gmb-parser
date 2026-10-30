@@ -38,12 +38,12 @@ export function FailureBanner({
     <div
       role="alert"
       className={cn(
-        "rounded-lg border border-red-200 bg-red-50 px-3 py-2.5 text-sm text-red-800",
+        "rounded-lg border border-bad-line bg-bad-tint px-3 py-2.5 text-[13px] text-[#9b1c1c]",
         className
       )}
     >
-      <p className="font-medium">{title}</p>
-      <p className="mt-0.5 text-[13px] font-normal text-red-700">{detail}</p>
+      <p className="font-semibold">{title}</p>
+      <p className="mt-0.5 text-[13px] font-normal text-[#9b1c1c]">{detail}</p>
       {onRetry ? (
         <Button type="button" variant="outline" size="sm" className="mt-2" onClick={onRetry}>
           {retryLabel}
@@ -58,7 +58,7 @@ export function ScopeUpdating({ copy }: { copy: StatusCopy }) {
   return (
     <div className="space-y-3" aria-busy="true">
       <ActivityStatus title={copy.title} detail={copy.detail} tone={copy.tone ?? "work"} />
-      <p className="rounded-xl border border-[#e6ebf2] bg-white px-4 py-6 text-sm text-slate" role="status">
+      <p className="rounded-lg border border-line bg-white px-4 py-6 text-[13px] text-ink-3" role="status">
         Previous figures for another scope stay hidden so they are not mistaken for this selection.
       </p>
     </div>

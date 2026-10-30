@@ -1,6 +1,9 @@
 import { redirect } from "next/navigation";
 import { OnboardingWizardLoader } from "@/components/onboarding-wizard-loader";
 import { PageHeader } from "@/components/page-header";
+import { Banner } from "@/components/ui/banner";
+import { buttonVariants } from "@/components/ui/button";
+import Link from "next/link";
 import { googleConnectError } from "@/lib/onboarding";
 import { getOnboardingView } from "@/lib/services/onboarding";
 import { getActiveRole, getActiveWorkspace } from "@/lib/services/session";
@@ -32,11 +35,24 @@ export default async function OnboardingPage({ searchParams }: OnboardingPagePro
       <div className="space-y-4">
         <PageHeader
           title="Setup"
-          description="Connect Google, import locations, confirm groups, set a reply tone, and invite the team."
+          description="Connect Google, import locations, organise groups, set a reply tone, and invite the team."
         />
-        <p className="rounded-xl border border-silver bg-white px-4 py-3 text-sm text-graphite" role="alert">
-          {failure ?? "Setup could not be loaded."}
-        </p>
+        <Banner
+          tone="bad"
+          title="Setup could not be loaded."
+          actions={
+            <>
+              <Link href="/onboarding" className={buttonVariants({ variant: "outline", size: "sm" })}>
+                Try again
+              </Link>
+              <Link href="/overview" className={buttonVariants({ variant: "ghost", size: "sm" })}>
+                Go to Overview
+              </Link>
+            </>
+          }
+        >
+          {failure ?? "Please try again in a moment."}
+        </Banner>
       </div>
     );
   }

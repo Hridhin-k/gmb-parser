@@ -1,11 +1,24 @@
 "use client";
 
 import { useState, type ReactNode } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
-import { AlertTriangle } from "lucide-react";
+import { ArrowUpDown, CheckCircle2, ShieldAlert, SearchX } from "lucide-react";
 import { EmptyState } from "@/components/empty-state";
+import { PageTabs } from "@/components/page-header";
+import { PaginationBar } from "@/components/pagination-bar";
+import { StarRating } from "@/components/star-rating";
+import { Badge } from "@/components/ui/badge";
+import { Banner } from "@/components/ui/banner";
+import { Button, buttonVariants } from "@/components/ui/button";
+import { Checkbox } from "@/components/ui/checkbox";
+import { Input } from "@/components/ui/input";
+import { KpiGrid, KpiTile } from "@/components/ui/kpi";
+import { SelectField } from "@/components/ui/select-field";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import {
+  ESCALATION_LEVELS,
   ESCALATION_TIMEZONES,
   escalationStatusLabel,
   ticketKey,
@@ -21,10 +34,20 @@ interface Member {
   scopeLabel: string;
 }
 
+type Bucket = "needs_human" | "in_progress" | "past_sla" | "resolved";
+
+export type EscalationBoardItem = EscalationQueueItem & {
+  remaining: string | null;
+  overdue: string | null;
+  dueLabel: string;
+  /** SLA ends within the next few hours. Computed on the server. */
+  dueSoon?: boolean;
+};
+
 interface BoardProps {
-  bucket: "needs_human" | "in_progress" | "past_sla" | "resolved";
-  counts: Record<BoardProps["bucket"], number>;
-  items: Array<EscalationQueueItem & { remaining: string | null; overdue: string | null; dueLabel: string }>;
+  bucket: Bucket;
+  counts: Record<Bucket, number>;
+  items: EscalationBoardItem[];
   policy: EscalationPolicy;
   pauses: { workspace: boolean; clientIds: string[]; locationIds: string[] };
   clients: Array<{ id: string; name: string }>;
@@ -32,21 +55,26 @@ interface BoardProps {
   members: Member[];
   canManage: boolean;
   query: string;
+  /** Current text search (`q`), if any. */
+  search?: string;
   page: number;
+  /** Total cases in the current tab. */
+  total?: number;
   totalPages: number;
 }
 
-const TABS = [
+const TABS: Array<{ id: Bucket; label: string }> = [
   { id: "needs_human", label: "Needs human" },
   { id: "in_progress", label: "In progress" },
   { id: "past_sla", label: "Past SLA" },
   { id: "resolved", label: "Resolved" },
-] as const;
+];
 
 export function EscalationBoard(props: BoardProps) {
   const router = useRouter();
   const [error, setError] = useState<string | null>(null);
   const [pending, setPending] = useState(false);
+  const [starting, setStarting] = useState<string | null>(null);
 
   async function send(url: string, body: unknown) {
     setPending(true);
@@ -55,7 +83,12 @@ export function EscalationBoard(props: BoardProps) {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(body),
-    });
+    }).catch(() => null);
+    if (!response) {
+      setPending(false);
+      setError("No connection. Nothing was saved. Check your network and try again.");
+      return;
+    }
     const payload = (await response.json().catch(() => ({}))) as {
       error?: string;
       created?: number;
@@ -80,6 +113,28 @@ export function EscalationBoard(props: BoardProps) {
     router.refresh();
   }
 
+  async function start(item: EscalationBoardItem) {
+    setStarting(item.id);
+    setError(null);
+    const response = await fetch(`/api/escalations/${item.id}`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ action: "start" }),
+    }).catch(() => null);
+    setStarting(null);
+    if (!response) {
+      setError("No connection. The case was not started. Try again.");
+      return;
+    }
+    if (!response.ok) {
+      const payload = (await response.json().catch(() => ({}))) as { error?: string };
+      setError(payload.error ?? "That case could not be started.");
+      return;
+    }
+    toast.success(`${ticketKey(item.ticketNo)} is in progress.`);
+    router.refresh();
+  }
+
   const hrefFor = (bucket: string, page = 1) => {
     const params = new URLSearchParams(props.query);
     params.set("queue", bucket);
@@ -89,103 +144,282 @@ export function EscalationBoard(props: BoardProps) {
     return text ? `/escalations?${text}` : "/escalations";
   };
 
+  const clearSearchHref = (() => {
+    const params = new URLSearchParams(props.query);
+    params.delete("q");
+    params.delete("page");
+    params.set("queue", props.bucket);
+    return `/escalations?${params.toString()}`;
+  })();
+
+  const pageParams = new URLSearchParams(props.query);
+  pageParams.set("queue", props.bucket);
+  const sortedByOpened = new URLSearchParams(props.query).get("sort") === "opened";
+  const open = props.counts.needs_human + props.counts.in_progress + props.counts.past_sla;
+
   return (
-    <div className="space-y-6">
+    <div className="space-y-4">
+      <KpiGrid className="lg:grid-cols-4">
+        <KpiTile
+          label="Needs human"
+          value={props.counts.needs_human.toLocaleString("en-US")}
+          detail="Not started, inside the due window"
+          href={hrefFor("needs_human")}
+        />
+        <KpiTile
+          label="In progress"
+          value={props.counts.in_progress.toLocaleString("en-US")}
+          detail="Started, inside the due window"
+          href={hrefFor("in_progress")}
+        />
+        <KpiTile
+          label="Overdue"
+          value={props.counts.past_sla.toLocaleString("en-US")}
+          detail={props.counts.past_sla > 0 ? "Open and past the SLA" : "Nothing past the SLA"}
+          href={hrefFor("past_sla")}
+          tone={props.counts.past_sla > 0 ? "bad" : undefined}
+        />
+        <KpiTile
+          label="Resolved"
+          value={props.counts.resolved.toLocaleString("en-US")}
+          detail="Resolution recorded"
+          href={hrefFor("resolved")}
+          tone={props.counts.resolved > 0 ? "ok" : undefined}
+        />
+      </KpiGrid>
+
       {error ? (
-        <p className="rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700" role="alert">
+        <Banner tone="bad" title="Not saved.">
           {error}
-        </p>
+        </Banner>
       ) : null}
 
-      <div className="flex flex-wrap items-center gap-2">
-        {TABS.map((tab) => (
-          <a
-            key={tab.id}
-            href={hrefFor(tab.id)}
-            className={
-              props.bucket === tab.id
-                ? "rounded-md bg-ink px-3 py-1.5 text-sm text-white"
-                : "rounded-md border border-line px-3 py-1.5 text-sm text-ink"
-            }
-            aria-current={props.bucket === tab.id ? "page" : undefined}
-          >
-            {tab.label} ({props.counts[tab.id]})
-          </a>
-        ))}
-        <a href={sortHref(props.query, props.bucket)} className="text-sm text-slate underline">
-          {props.query.includes("sort=opened") ? "Sort by due time" : "Sort by opened time"}
-        </a>
-      </div>
+      <PageTabs
+        tabs={TABS.map((tab) => ({
+          label: tab.label,
+          href: hrefFor(tab.id),
+          active: props.bucket === tab.id,
+          count: props.counts[tab.id],
+          tone: tab.id === "past_sla" && props.counts.past_sla > 0 ? "bad" : "default",
+        }))}
+      >
+        <Link
+          href={sortHref(props.query, props.bucket)}
+          className="inline-flex items-center gap-1 text-xs text-ink-3 hover:text-ink"
+        >
+          <ArrowUpDown className="size-3.5" aria-hidden />
+          {sortedByOpened ? "Sorted by opened time · sort by due" : "Sorted by SLA deadline · sort by opened"}
+        </Link>
+      </PageTabs>
+
+      {props.search ? (
+        <div className="flex flex-wrap items-center gap-2 text-[13px] text-ink-2">
+          <span>
+            Matching <span className="font-medium text-ink">“{props.search}”</span>
+          </span>
+          <Link href={clearSearchHref} className="text-brand hover:underline">
+            Clear search
+          </Link>
+        </div>
+      ) : null}
 
       {props.items.length === 0 ? (
-        <EmptyState
-          icon={AlertTriangle}
-          title="Nothing in this queue"
-          description={emptyQueueCopy(props.bucket, props.counts, hrefFor)}
-        />
+        props.search ? (
+          <EmptyState
+            icon={SearchX}
+            title="No cases match"
+            description={`Nothing in ${TABS.find((tab) => tab.id === props.bucket)?.label ?? "this queue"} matches “${props.search}”.`}
+          >
+            <Link href={clearSearchHref} className={buttonVariants({ variant: "outline" })}>
+              Clear filters
+            </Link>
+          </EmptyState>
+        ) : (
+          <EmptyState
+            icon={props.bucket === "resolved" ? CheckCircle2 : ShieldAlert}
+            title={props.bucket === "past_sla" ? "Nothing is overdue" : "Nothing in this queue"}
+            description={emptyQueueCopy(props.bucket, props.counts, hrefFor)}
+          >
+            {props.bucket !== "resolved" && open === 0 && props.canManage ? (
+              <a href="#rules" className={buttonVariants({ variant: "outline" })}>
+                Review complaint rules
+              </a>
+            ) : null}
+          </EmptyState>
+        )
       ) : (
-        <div className="overflow-x-auto rounded-xl bg-white shadow-card">
-          <table className="w-full min-w-[40rem] text-left text-sm">
-            <thead>
-              <tr className="text-xs text-slate">
-                <th className="px-4 py-3 font-medium">Key</th>
-                <th className="px-4 py-3 font-medium">Case</th>
-                <th className="px-4 py-3 font-medium">Status</th>
-                <th className="px-4 py-3 font-medium">Assignee</th>
-                <th className="px-4 py-3 font-medium">Due</th>
-              </tr>
-            </thead>
-            <tbody>
+        <div className="overflow-hidden rounded-lg border border-line bg-white">
+          <Table className="min-w-[56rem]">
+            <TableHeader>
+              <TableRow>
+                <TableHead className="w-24">Level</TableHead>
+                <TableHead>Case</TableHead>
+                <TableHead>Location</TableHead>
+                <TableHead>Owner</TableHead>
+                <TableHead>SLA</TableHead>
+                <TableHead>Status</TableHead>
+                <TableHead className="text-right">Next action</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
               {props.items.map((item) => (
-                <tr key={item.id} id={`case-${item.id}`} className="scroll-mt-24 border-t border-silver">
-                  <td className="px-4 py-3 font-medium text-ink">
-                    <a href={`/escalations/${item.id}`} className="hover:underline">
-                      {ticketKey(item.ticketNo)}
-                    </a>
-                  </td>
-                  <td className="px-4 py-3">
-                    <a href={`/escalations/${item.id}`} className="text-ink hover:underline">
-                      {item.reviewerName} · {item.starRating}★
-                    </a>
-                    <p className="mt-0.5 text-xs text-slate">
-                      {item.locationName}
-                      {themeLabel(item.theme) ? ` · ${themeLabel(item.theme)}` : ""}
-                    </p>
-                  </td>
-                  <td className="px-4 py-3 text-ink">{escalationStatusLabel(item.status)}</td>
-                  <td className="px-4 py-3 text-slate">{memberLabel(props.members, item.assignedTo)}</td>
-                  <td className="px-4 py-3 text-slate">
-                    {item.dueLabel}
-                    {item.overdue ? <span className="mt-0.5 block text-red-700">{item.overdue} overdue</span> : null}
-                    {item.remaining ? <span className="mt-0.5 block">{item.remaining} left</span> : null}
-                  </td>
-                </tr>
+                <TableRow key={item.id} id={`case-${item.id}`} className="scroll-mt-24">
+                  <TableCell>
+                    <LevelBadge level={item.level} />
+                  </TableCell>
+                  <TableCell className="max-w-[22rem]">
+                    <Link href={`/escalations/${item.id}`} className="text-ink hover:text-brand">
+                      <span className="font-semibold">{ticketKey(item.ticketNo)}</span>
+                      <span className="text-ink-2"> · {item.reviewerName}</span>
+                    </Link>
+                    <div className="mt-0.5 flex flex-wrap items-center gap-1.5 text-xs text-ink-3">
+                      <StarRating rating={item.starRating} />
+                      {themeLabel(item.theme) ? <span>{themeLabel(item.theme)}</span> : null}
+                      {item.comment ? <span className="truncate">“{item.comment}”</span> : null}
+                    </div>
+                  </TableCell>
+                  <TableCell>
+                    <span className="text-ink">{item.locationName}</span>
+                    {item.groupName || item.clientName ? (
+                      <span className="block text-xs text-ink-3">
+                        {[item.groupName, item.clientName].filter(Boolean).join(" · ")}
+                      </span>
+                    ) : null}
+                  </TableCell>
+                  <TableCell>
+                    <Owner members={props.members} userId={item.assignedTo} />
+                  </TableCell>
+                  <TableCell>
+                    <SlaBadge item={item} />
+                    <span className="mt-1 block text-xs text-ink-3">{item.dueLabel}</span>
+                  </TableCell>
+                  <TableCell>
+                    <StatusBadge status={item.status} />
+                  </TableCell>
+                  <TableCell className="text-right">
+                    <NextAction item={item} starting={starting === item.id} onStart={() => void start(item)} />
+                  </TableCell>
+                </TableRow>
               ))}
-            </tbody>
-          </table>
+            </TableBody>
+          </Table>
+          <div className="flex flex-wrap items-center justify-between gap-2 border-t border-line px-3 text-xs text-ink-3">
+            <span className="py-2">
+              {typeof props.total === "number"
+                ? `${props.total.toLocaleString("en-US")} ${props.total === 1 ? "case" : "cases"} in ${TABS.find((tab) => tab.id === props.bucket)?.label ?? "this queue"}`
+                : null}
+            </span>
+            {props.totalPages > 1 ? (
+              <PaginationBar
+                basePath="/escalations"
+                currentPage={props.page}
+                totalPages={props.totalPages}
+                searchParams={pageParams}
+              />
+            ) : null}
+          </div>
         </div>
       )}
 
-      {props.totalPages > 1 ? (
-        <div className="flex gap-2 text-sm">
-          {props.page > 1 ? <a href={hrefFor(props.bucket, props.page - 1)}>Previous</a> : null}
-          {props.page < props.totalPages ? <a href={hrefFor(props.bucket, props.page + 1)}>Next</a> : null}
-        </div>
-      ) : null}
-
       {props.canManage ? (
-        <div className="grid gap-4 lg:grid-cols-2">
-          <PolicyForm policy={props.policy} disabled={pending} onSave={(policy) => send("/api/escalations/policy", policy)} />
-          <PauseForm
-            pauses={props.pauses}
-            clients={props.clients}
-            locations={props.locations}
-            disabled={pending}
-            onChange={(body) => send("/api/escalations/pause", body)}
-          />
-        </div>
+        <section id="rules" className="scroll-mt-24 space-y-3 pt-2">
+          <div>
+            <h2 className="text-sm font-semibold text-ink">Rules and pauses</h2>
+            <p className="mt-0.5 text-xs text-ink-3">
+              Which reviews open a case, when they are due, and where automatic replies are paused.
+            </p>
+          </div>
+          <div className="grid gap-4 lg:grid-cols-2">
+            <PolicyForm policy={props.policy} disabled={pending} onSave={(policy) => send("/api/escalations/policy", policy)} />
+            <PauseForm
+              pauses={props.pauses}
+              clients={props.clients}
+              locations={props.locations}
+              disabled={pending}
+              onChange={(body) => send("/api/escalations/pause", body)}
+            />
+          </div>
+        </section>
       ) : null}
     </div>
+  );
+}
+
+function LevelBadge({ level }: { level: string }) {
+  const label = ESCALATION_LEVELS.find((item) => item.id === level)?.label ?? level;
+  return <Badge variant={level === "leadership" ? "bad" : level === "regional" ? "warn" : "default"}>{label}</Badge>;
+}
+
+function StatusBadge({ status }: { status: string }) {
+  return (
+    <Badge variant={status === "resolved" ? "ok" : status === "in_progress" ? "info" : "default"}>
+      {escalationStatusLabel(status)}
+    </Badge>
+  );
+}
+
+function SlaBadge({ item }: { item: EscalationBoardItem }) {
+  if (item.status === "resolved") return <Badge variant="ok">Resolved</Badge>;
+  if (item.overdue) return <Badge variant="bad">Overdue {item.overdue}</Badge>;
+  if (item.remaining) {
+    return <Badge variant={item.dueSoon ? "warn" : "default"}>Due in {item.remaining}</Badge>;
+  }
+  return <Badge>Due</Badge>;
+}
+
+function NextAction({
+  item,
+  starting,
+  onStart,
+}: {
+  item: EscalationBoardItem;
+  starting: boolean;
+  onStart: () => void;
+}) {
+  const href = `/escalations/${item.id}`;
+  if (item.status === "resolved") {
+    return (
+      <Link href={href} className={buttonVariants({ variant: "ghost", size: "sm" })}>
+        View
+      </Link>
+    );
+  }
+  if (item.status === "needs_human" && !item.overdue) {
+    return (
+      <span className="inline-flex items-center gap-1.5">
+        <Button type="button" size="sm" variant="outline" loading={starting} onClick={onStart}>
+          Start
+        </Button>
+        <Link href={href} className={buttonVariants({ variant: "ghost", size: "sm" })}>
+          Open
+        </Link>
+      </span>
+    );
+  }
+  return (
+    <Link
+      href={href}
+      className={buttonVariants({ variant: item.overdue ? "default" : "outline", size: "sm" })}
+    >
+      {item.assignedTo ? "Open case" : "Open and assign"}
+    </Link>
+  );
+}
+
+function Owner({ members, userId }: { members: Member[]; userId: string | null }) {
+  if (!userId) return <span className="text-warn">Unassigned</span>;
+  const member = members.find((item) => item.userId === userId);
+  if (!member) return <span className="text-ink-3">A former member</span>;
+  return (
+    <span className="inline-flex min-w-0 items-center gap-2">
+      <span
+        aria-hidden
+        className="inline-flex size-6 shrink-0 items-center justify-center rounded-full bg-brand-tint text-[10px] font-semibold uppercase text-brand"
+      >
+        {member.email.slice(0, 2)}
+      </span>
+      <span className="truncate text-ink-2">{member.email}</span>
+    </span>
   );
 }
 
@@ -199,11 +433,7 @@ function sortHref(query: string, bucket: string): string {
   return text ? `/escalations?${text}` : "/escalations";
 }
 
-function memberLabel(members: Member[], userId: string | null): string {
-  if (!userId) return "nobody";
-  const member = members.find((item) => item.userId === userId);
-  return member ? member.email : "a former member";
-}
+const FIELD_LABEL = "flex flex-col gap-1 text-xs font-medium text-ink-2";
 
 function PolicyForm({
   policy,
@@ -219,7 +449,7 @@ function PolicyForm({
   const [reminders, setReminders] = useState(policy.reminderHours.join(", "));
   return (
     <form
-      className="space-y-3 rounded-xl bg-white p-4 shadow-card"
+      className="space-y-3 rounded-lg border border-line bg-white p-4"
       onSubmit={(event) => {
         event.preventDefault();
         const extraKeywords = keywords
@@ -233,81 +463,70 @@ function PolicyForm({
         onSave({ ...draft, extraKeywords, reminderHours });
       }}
     >
-      <h2 className="text-sm font-medium text-ink">Complaint rules</h2>
-      <label className="block text-xs text-slate">
-        Stars at or below
-        <input
-          type="number"
-          min={1}
-          max={5}
-          className="mt-1 block w-24 rounded-md border border-line px-2 py-1.5 text-sm"
-          value={draft.maxStars}
-          onChange={(event) => setDraft({ ...draft, maxStars: Number(event.target.value) })}
-        />
-      </label>
-      <label className="flex items-center gap-2 text-sm text-ink">
-        <input
-          type="checkbox"
-          checked={draft.flagProfanity}
-          onChange={(event) => setDraft({ ...draft, flagProfanity: event.target.checked })}
-        />
-        Flag profanity
-      </label>
-      <label className="flex items-center gap-2 text-sm text-ink">
-        <input
-          type="checkbox"
-          checked={draft.flagLegalSafety}
-          onChange={(event) => setDraft({ ...draft, flagLegalSafety: event.target.checked })}
-        />
-        Flag legal or safety wording
-      </label>
-      <label className="block text-xs text-slate">
+      <h3 className="text-sm font-semibold text-ink">Complaint rules</h3>
+      <div className="grid gap-3 sm:grid-cols-2">
+        <label className={FIELD_LABEL}>
+          Stars at or below
+          <Input
+            type="number"
+            min={1}
+            max={5}
+            className="w-24"
+            value={draft.maxStars}
+            onChange={(event) => setDraft({ ...draft, maxStars: Number(event.target.value) })}
+          />
+        </label>
+        <label className={FIELD_LABEL}>
+          Due after hours
+          <Input
+            type="number"
+            min={1}
+            max={168}
+            className="w-24"
+            value={draft.dueHours}
+            onChange={(event) => setDraft({ ...draft, dueHours: Number(event.target.value) })}
+          />
+        </label>
+      </div>
+      <div className="flex flex-col gap-2">
+        <label className="flex items-center gap-2 text-[13px] text-ink">
+          <Checkbox
+            checked={draft.flagProfanity}
+            onCheckedChange={(checked) => setDraft({ ...draft, flagProfanity: checked === true })}
+          />
+          Flag profanity
+        </label>
+        <label className="flex items-center gap-2 text-[13px] text-ink">
+          <Checkbox
+            checked={draft.flagLegalSafety}
+            onCheckedChange={(checked) => setDraft({ ...draft, flagLegalSafety: checked === true })}
+          />
+          Flag legal or safety wording
+        </label>
+      </div>
+      <label className={FIELD_LABEL}>
         Extra keywords, comma separated
-        <input
-          className="mt-1 block w-full rounded-md border border-line px-2 py-1.5 text-sm"
-          value={keywords}
-          onChange={(event) => setKeywords(event.target.value)}
-        />
+        <Input value={keywords} onChange={(event) => setKeywords(event.target.value)} />
       </label>
-      <label className="block text-xs text-slate">
+      <label className={FIELD_LABEL}>
         Reminder hours
-        <input
-          className="mt-1 block w-full rounded-md border border-line px-2 py-1.5 text-sm"
-          value={reminders}
-          onChange={(event) => setReminders(event.target.value)}
-        />
+        <Input value={reminders} onChange={(event) => setReminders(event.target.value)} />
       </label>
-      <label className="block text-xs text-slate">
-        Due after hours
-        <input
-          type="number"
-          min={1}
-          max={168}
-          className="mt-1 block w-24 rounded-md border border-line px-2 py-1.5 text-sm"
-          value={draft.dueHours}
-          onChange={(event) => setDraft({ ...draft, dueHours: Number(event.target.value) })}
-        />
-      </label>
-      <label className="block text-xs text-slate">
-        Timezone for due times
-        <select
-          className="mt-1 block rounded-md border border-line bg-white px-2 py-1.5 text-sm"
-          value={draft.timezone}
-          onChange={(event) =>
-            setDraft({ ...draft, timezone: event.target.value as EscalationPolicy["timezone"] })
-          }
-        >
-          {ESCALATION_TIMEZONES.map((zone) => (
-            <option key={zone.id} value={zone.id}>
-              {zone.label}
-            </option>
-          ))}
-        </select>
-      </label>
-      <button type="submit" disabled={disabled} className="rounded-md bg-ink px-3 py-1.5 text-sm text-white">
-        {disabled ? "Saving…" : "Save rules"}
-      </button>
-      <p className="text-xs text-slate">
+      <div className={FIELD_LABEL}>
+        <span aria-hidden>Timezone for due times</span>
+        <SelectField
+        label="Timezone for due times"
+        value={draft.timezone}
+        onValueChange={(value) => setDraft({ ...draft, timezone: value as EscalationPolicy["timezone"] })}
+        options={ESCALATION_TIMEZONES.map((zone) => ({ value: zone.id, label: zone.label }))}
+      />
+      </div>
+      <div className="flex flex-wrap items-center gap-3">
+        <Button type="submit" loading={disabled}>
+          {disabled ? "Saving…" : "Save rules"}
+        </Button>
+      </div>
+      <p className="text-xs leading-relaxed text-ink-3">
         Saving scans recent synced reviews and opens cases that match these rules. Complaints already past the due
         window appear under Past SLA. Reminders are recorded in GRM. No email is sent.
       </p>
@@ -315,22 +534,17 @@ function PolicyForm({
   );
 }
 
-function emptyQueueCopy(
-  bucket: BoardProps["bucket"],
-  counts: BoardProps["counts"],
-  hrefFor: (bucket: string) => string
-): ReactNode {
+function emptyQueueCopy(bucket: Bucket, counts: Record<Bucket, number>, hrefFor: (bucket: string) => string): ReactNode {
   const past = counts.past_sla;
-  const open =
-    counts.needs_human + counts.in_progress + counts.past_sla;
+  const open = counts.needs_human + counts.in_progress + counts.past_sla;
   if (bucket === "needs_human" && past > 0) {
     return (
       <>
         No cases are still inside the due window. {past} matching complaint
         {past === 1 ? " is" : "s are"} already overdue — open{" "}
-        <a href={hrefFor("past_sla")} className="font-medium text-[#163a7a] underline">
+        <Link href={hrefFor("past_sla")} className="font-medium text-brand underline">
           Past SLA
-        </a>
+        </Link>
         . Publishing a reply does not close an escalation.
       </>
     );
@@ -340,6 +554,9 @@ function emptyQueueCopy(
   }
   if (bucket === "resolved") {
     return "No resolved cases in this view. Resolve a case from Needs human, In progress, or Past SLA.";
+  }
+  if (bucket === "past_sla") {
+    return "Every open case in this view is still inside its due window.";
   }
   return "A review appears here when it matches the star threshold, profanity, legal or safety wording, or an extra keyword. Publishing a reply does not close an escalation.";
 }
@@ -359,85 +576,79 @@ function PauseForm({
 }) {
   const [clientId, setClientId] = useState(clients[0]?.id ?? "");
   const [locationId, setLocationId] = useState(locations[0]?.id ?? "");
+  const clientPaused = pauses.clientIds.includes(clientId);
+  const locationPaused = pauses.locationIds.includes(locationId);
   return (
-    <div className="space-y-3 rounded-xl bg-white p-4 shadow-card">
-      <h2 className="text-sm font-medium text-ink">Pause automatic replies</h2>
-      <p className="text-xs text-slate">
+    <div className="space-y-3 rounded-lg border border-line bg-white p-4">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <h3 className="text-sm font-semibold text-ink">Pause automatic replies</h3>
+        {pauses.workspace ? <Badge variant="warn">Workspace paused</Badge> : null}
+      </div>
+      <p className="text-xs leading-relaxed text-ink-3">
         A pause stops background reply generation for the selected scope, including work already waiting on the
         scheduler. People can still draft, approve, and publish by hand. There is no automatic sender running today.
       </p>
-      <button
-        type="button"
-        disabled={disabled}
-        className="rounded-md border border-line px-3 py-1.5 text-sm"
-        onClick={() =>
-          onChange({ scope: "workspace", clientId: null, locationId: null, paused: !pauses.workspace })
-        }
-      >
-        {pauses.workspace ? "Resume workspace" : "Pause workspace"}
-      </button>
+      <div className="flex flex-wrap items-center gap-2 border-t border-line-2 pt-3">
+        <span className="min-w-0 flex-1 text-[13px] text-ink">Whole workspace</span>
+        <Button
+          type="button"
+          size="sm"
+          variant={pauses.workspace ? "secondary" : "outline"}
+          disabled={disabled}
+          onClick={() => onChange({ scope: "workspace", clientId: null, locationId: null, paused: !pauses.workspace })}
+        >
+          {pauses.workspace ? "Resume workspace" : "Pause workspace"}
+        </Button>
+      </div>
       {clients.length > 0 ? (
-        <div className="flex flex-wrap items-end gap-2">
-          <select
-            aria-label="Client to pause"
-            className="rounded-md border border-line bg-white px-2 py-1.5 text-sm"
+        <div className="flex flex-wrap items-end gap-2 border-t border-line-2 pt-3">
+          <SelectField
+            label="Business"
             value={clientId}
-            onChange={(event) => setClientId(event.target.value)}
-          >
-            {clients.map((client) => (
-              <option key={client.id} value={client.id}>
-                {client.name}
-              </option>
-            ))}
-          </select>
-          <button
+            onValueChange={setClientId}
+            options={clients.map((client) => ({
+              value: client.id,
+              label: pauses.clientIds.includes(client.id) ? `${client.name} (paused)` : client.name,
+            }))}
+            className="min-w-0 flex-1"
+            size="sm"
+          />
+          <Button
             type="button"
+            size="sm"
+            variant={clientPaused ? "secondary" : "outline"}
             disabled={disabled || !clientId}
-            className="rounded-md border border-line px-3 py-1.5 text-sm"
-            onClick={() =>
-              onChange({
-                scope: "client",
-                clientId,
-                locationId: null,
-                paused: !pauses.clientIds.includes(clientId),
-              })
-            }
+            onClick={() => onChange({ scope: "client", clientId, locationId: null, paused: !clientPaused })}
           >
-            {pauses.clientIds.includes(clientId) ? "Resume client" : "Pause client"}
-          </button>
+            {clientPaused ? "Resume business" : "Pause business"}
+          </Button>
         </div>
       ) : null}
       {locations.length > 0 ? (
-        <div className="flex flex-wrap items-end gap-2">
-          <select
-            aria-label="Location to pause"
-            className="rounded-md border border-line bg-white px-2 py-1.5 text-sm"
+        <div className="flex flex-wrap items-end gap-2 border-t border-line-2 pt-3">
+          <SelectField
+            label="Location"
             value={locationId}
-            onChange={(event) => setLocationId(event.target.value)}
-          >
-            {locations.map((location) => (
-              <option key={location.id} value={location.id}>
-                {location.name}
-              </option>
-            ))}
-          </select>
-          <button
+            onValueChange={setLocationId}
+            options={locations.map((location) => ({
+              value: location.id,
+              label: pauses.locationIds.includes(location.id) ? `${location.name} (paused)` : location.name,
+            }))}
+            className="min-w-0 flex-1"
+            size="sm"
+          />
+          <Button
             type="button"
+            size="sm"
+            variant={locationPaused ? "secondary" : "outline"}
             disabled={disabled || !locationId}
-            className="rounded-md border border-line px-3 py-1.5 text-sm"
-            onClick={() =>
-              onChange({
-                scope: "location",
-                clientId: null,
-                locationId,
-                paused: !pauses.locationIds.includes(locationId),
-              })
-            }
+            onClick={() => onChange({ scope: "location", clientId: null, locationId, paused: !locationPaused })}
           >
-            {pauses.locationIds.includes(locationId) ? "Resume location" : "Pause location"}
-          </button>
+            {locationPaused ? "Resume location" : "Pause location"}
+          </Button>
         </div>
       ) : null}
     </div>
   );
 }
+

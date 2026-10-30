@@ -1,4 +1,6 @@
 import { PlatformUsersBoard } from "@/components/platform-users-board";
+import { PageHeader } from "@/components/page-header";
+import { Banner } from "@/components/ui/banner";
 import { getCurrentUser } from "@/lib/services/session";
 import { listGlobalUsers } from "@/lib/services/platform";
 import { toUserMessage } from "@/lib/errors";
@@ -18,18 +20,15 @@ export default async function PlatformUsersPage({ searchParams }: PageProps) {
     failure = toUserMessage(error);
   }
   return (
-    <div className="space-y-6">
-      <div>
-        <h1 className="text-[28px] leading-[1.2] text-graphite" style={{ fontFamily: "var(--font-heading), sans-serif" }}>Users</h1>
-        <p className="mt-1 text-sm font-light text-slate">Every auth user across tenants, paged from the auth service. Blocking is platform-wide by email and is checked at login — memberships and data are kept.</p>
-      </div>
+    <div className="flex flex-col gap-4">
+      <PageHeader
+        title="Users"
+        description={`${data ? `${data.total.toLocaleString("en-US")} sign-in identities across all tenants. ` : ""}A user can belong to several workspaces. Blocking is platform-wide and separate from a tenant turning off someone's access.`}
+      />
       {failure || !data ? (
-        <p className="rounded-xl border border-silver bg-white px-4 py-3 text-sm text-graphite" role="alert">{failure ?? "Users could not be loaded."}</p>
+        <Banner tone="bad" title="Users could not be loaded.">{failure ?? null}</Banner>
       ) : (
-        <>
-          {data.blocked.length > 0 ? <p className="text-sm text-slate">Currently blocked: {data.blocked.map((b) => b.email).join(", ")}</p> : null}
-          <PlatformUsersBoard users={data.users} initialQuery={q} total={data.total} page={data.page} pageSize={data.pageSize} />
-        </>
+        <PlatformUsersBoard users={data.users} blocked={data.blocked} initialQuery={q} total={data.total} page={data.page} pageSize={data.pageSize} />
       )}
     </div>
   );

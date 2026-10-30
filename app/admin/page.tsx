@@ -1,4 +1,8 @@
 import { PlatformAdminBoard } from "@/components/platform-admin-board";
+import { PageHeader } from "@/components/page-header";
+import { Banner } from "@/components/ui/banner";
+import { buttonVariants } from "@/components/ui/button";
+import { KpiGrid, KpiTile } from "@/components/ui/kpi";
 import { getCurrentUser } from "@/lib/services/session";
 import { loadPlatformOverview } from "@/lib/services/platform";
 import { toUserMessage } from "@/lib/errors";
@@ -19,33 +23,34 @@ export default async function AdminPage({ searchParams }: PageProps) {
   } catch (error) {
     failure = toUserMessage(error);
   }
+  const n = (value: number) => value.toLocaleString("en-US");
   return (
-    <div className="space-y-6">
-      <div>
-        <h1 className="text-[28px] leading-[1.2] text-graphite" style={{ fontFamily: "var(--font-heading), sans-serif" }}>Platform dashboard</h1>
-        <p className="mt-1 text-sm font-light text-slate">Manage SaaS tenants. Only invited tenant owners can create a workspace; suspended and deleted tenants are blocked at sign-in.</p>
-      </div>
+    <div className="flex flex-col gap-4">
+      <PageHeader
+        title="Tenants"
+        description={
+          overview
+            ? `${n(overview.stats.tenants)} workspaces · ${n(overview.stats.members)} members. Only invited owners can create a workspace; suspended and deleted tenants are blocked at sign-in.`
+            : "Manage SaaS tenants and the invites that create them."
+        }
+      >
+        <a href="/admin/ops#access-requests" className={buttonVariants({ variant: "outline" })}>Access requests</a>
+        <a href="#invite-tenant" className={buttonVariants({ variant: "default" })}>Invite a tenant</a>
+      </PageHeader>
       {failure || !overview ? (
-        <p className="rounded-xl border border-silver bg-white px-4 py-3 text-sm text-graphite" role="alert">
-          {failure ?? "Platform data could not be loaded."} Apply migration <code>20261022001_platform_invite_only.sql</code> if this is a new database.
-        </p>
+        <Banner tone="bad" title="Platform data could not be loaded.">
+          {failure ?? null} Apply migration <code>20261022001_platform_invite_only.sql</code> if this is a new database.
+        </Banner>
       ) : (
         <>
-          <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6">
-            {[
-              ["Tenants", overview.stats.tenants],
-              ["Active", overview.stats.active],
-              ["Suspended", overview.stats.suspended],
-              ["Deleted", overview.stats.deleted],
-              ["Pending invites", overview.stats.pendingInvites],
-              ["Reviews", overview.stats.reviews.toLocaleString()],
-            ].map(([label, value]) => (
-              <div key={label} className="rounded-xl border border-silver bg-white px-4 py-3">
-                <p className="text-2xl font-medium text-graphite">{value}</p>
-                <p className="text-xs text-slate">{label}</p>
-              </div>
-            ))}
-          </div>
+          <KpiGrid>
+            <KpiTile label="Tenants" value={n(overview.stats.tenants)} detail="All workspaces, incl. grandfathered" />
+            <KpiTile label="Active" value={n(overview.stats.active)} tone={overview.stats.active > 0 ? "ok" : undefined} detail="Members can sign in" />
+            <KpiTile label="Suspended" value={n(overview.stats.suspended)} tone={overview.stats.suspended > 0 ? "warn" : undefined} detail="Blocked at sign-in, data kept" />
+            <KpiTile label="Deleted" value={n(overview.stats.deleted)} detail="Soft-deleted, restorable" />
+            <KpiTile label="Pending invites" value={n(overview.stats.pendingInvites)} href="#invites" detail="Waiting for the owner to sign in" />
+            <KpiTile label="Reviews" value={n(overview.stats.reviews)} detail="Across every tenant" />
+          </KpiGrid>
           <PlatformAdminBoard
             invites={overview.invites}
             inviteTotal={overview.inviteTotal}

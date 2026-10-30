@@ -2,29 +2,36 @@ import type { Metadata } from "next";
 import { LegalDocument } from "@/components/legal-document";
 
 export const metadata: Metadata = {
-  title: "Privacy Policy — GRM",
+  title: "Privacy Policy — RevuPilot",
 };
 
 export default function PrivacyPage() {
   return (
-    <LegalDocument title="Privacy Policy" updated="Updated 27 October 2026">
+    <LegalDocument title="Privacy Policy" updated="Updated 27 October 2026"
+      contents={[
+        { id: "p1", label: "Two Google accounts" },
+        { id: "p2", label: "What we store" },
+        { id: "p3", label: "AI" },
+        { id: "p4", label: "Who can see it" },
+        { id: "p5", label: "How long it stays" },
+        { id: "p6", label: "Your choices" },
+      ]}
+    >
       <p>
-        GRM is a Google review workspace operated by Explained Digital. This
+        RevuPilot is a Google review workspace operated by Explained Digital. This
         policy describes what the app stores, who can see it, and where it is
         sent — including reply drafts, profile summaries, and the per-review
         topic extraction described below.
       </p>
 
-      <section>
-        <h2 style={{ fontFamily: "var(--font-heading), sans-serif" }}>
-          Two Google accounts
-        </h2>
+      <section id="p1">
+        <h2>Two Google accounts</h2>
         <p className="mt-3">
           Signing in and connecting a Business Profile are separate.
         </p>
         <ul>
           <li>
-            <strong>Sign-in.</strong> Continue with Google opens your GRM
+            <strong>Sign-in.</strong> Continue with Google opens your RevuPilot
             workspace. We receive the Google account identity Supabase Auth
             returns for that login, including the email address and a user id.
           </li>
@@ -33,16 +40,14 @@ export default function PrivacyPage() {
             Google asks for permission to manage the Business Profiles that
             account already owns or manages. We store that Google email and
             the OAuth tokens. Tokens are encrypted at rest. This connection is
-            what lets GRM list locations and reviews. A personal Gmail that
+            what lets RevuPilot list locations and reviews. A personal Gmail that
             does not manage those businesses will sync empty.
           </li>
         </ul>
       </section>
 
-      <section>
-        <h2 style={{ fontFamily: "var(--font-heading), sans-serif" }}>
-          What we store
-        </h2>
+      <section id="p2">
+        <h2>What we store</h2>
         <ul>
           <li>
             Workspace membership: who belongs, their role (owner, admin, or
@@ -50,7 +55,7 @@ export default function PrivacyPage() {
           </li>
           <li>
             Invites: the email address and role an owner or admin enters.
-            GRM does not send that invite by email. The person sees the
+            RevuPilot does not send that invite by email. The person sees the
             workspace the next time they sign in with that exact Google email.
           </li>
           <li>
@@ -60,7 +65,7 @@ export default function PrivacyPage() {
             published on Google.
           </li>
           <li>
-            Work you do in GRM: reply drafts, who approved them, publish
+            Work you do in RevuPilot: reply drafts, who approved them, publish
             attempts, failures, and the audit log of those actions.
           </li>
           <li>
@@ -69,17 +74,15 @@ export default function PrivacyPage() {
         </ul>
         <p className="mt-3">
           Reviewer names and comments come from Google. Reviewers do not
-          create an account in GRM, and GRM does not contact them except by
+          create an account in RevuPilot, and RevuPilot does not contact them except by
           publishing a reply you choose to send back through Google.
         </p>
       </section>
 
-      <section>
-        <h2 style={{ fontFamily: "var(--font-heading), sans-serif" }}>
-          AI
-        </h2>
+      <section id="p3">
+        <h2>AI</h2>
         <p className="mt-3">
-          GRM uses the configured AI provider, OpenAI or Google, for reply
+          RevuPilot uses the configured AI provider, OpenAI or Google, for reply
           drafts, settings previews, review topic extraction and insight
           summaries. The provider and model may differ by task.
         </p>
@@ -91,7 +94,7 @@ export default function PrivacyPage() {
             included.
           </li>
           <li>
-            The draft stays inside GRM. It is not on Google until a person
+            The draft stays inside RevuPilot. It is not on Google until a person
             publishes it. Owners and admins approve. Members can draft and,
             after approval, publish. A failed publish can be retried; that
             retry is not a new approval.
@@ -109,10 +112,8 @@ export default function PrivacyPage() {
         </ul>
       </section>
 
-      <section>
-        <h2 style={{ fontFamily: "var(--font-heading), sans-serif" }}>
-          Who can see it
-        </h2>
+      <section id="p4">
+        <h2>Who can see it</h2>
         <ul>
           <li>
             People in the same workspace see the same clients, locations,
@@ -133,24 +134,20 @@ export default function PrivacyPage() {
         </ul>
       </section>
 
-      <section>
-        <h2 style={{ fontFamily: "var(--font-heading), sans-serif" }}>
-          How long it stays
-        </h2>
+      <section id="p5">
+        <h2>How long it stays</h2>
         <p className="mt-3">
           Synced reviews, drafts, and the audit log stay for as long
           as the workspace does. Disconnecting Google in Settings stops new
-          syncs for that connection. Revoking GRM in your Google Account
+          syncs for that connection. Revoking RevuPilot in your Google Account
           settings stops the connection from refreshing. Deleting a draft in
-          the app removes that reply from GRM; it does not delete a reply
+          the app removes that reply from RevuPilot; it does not delete a reply
           already published on Google.
         </p>
       </section>
 
-      <section>
-        <h2 style={{ fontFamily: "var(--font-heading), sans-serif" }}>
-          Your choices
-        </h2>
+      <section id="p6">
+        <h2>Your choices</h2>
         <ul>
           <li>Sign in only if you agree to this policy and the Terms.</li>
           <li>Connect only a Google account you are allowed to manage.</li>
@@ -161,7 +158,7 @@ export default function PrivacyPage() {
         <p className="mt-3">
           To ask what a workspace holds, or to ask for it to be removed,
           email{" "}
-          <a className="font-medium text-ink underline decoration-stone/50 underline-offset-4 hover:decoration-ink" href="mailto:hridhin@explaineddigital.com">
+          <a className="font-medium text-brand hover:underline" href="mailto:hridhin@explaineddigital.com">
             hridhin@explaineddigital.com
           </a>
           . If you were invited, the workspace owner can also see the same

@@ -51,7 +51,7 @@ export function SetupChecklist({
       title: "Connect Google",
       body: "Sign in with the Google account that manages your Business Profiles.",
       action: (
-        <Link href="/settings" className="font-medium text-ink underline decoration-stone/50 underline-offset-4 hover:decoration-ink">
+        <Link href="/settings" className="font-medium text-brand underline decoration-brand-line underline-offset-4 hover:decoration-ink">
           Open settings
         </Link>
       ),
@@ -82,7 +82,7 @@ export function SetupChecklist({
       action: hasReviews ? (
         <Link
           href="/reviews?filter=unanswered"
-          className="font-medium text-ink underline decoration-stone/50 underline-offset-4 hover:decoration-ink"
+          className="font-medium text-brand underline decoration-brand-line underline-offset-4 hover:decoration-ink"
         >
           Show reviews that need a reply
         </Link>
@@ -101,18 +101,18 @@ export function SetupChecklist({
   return (
     <section
       aria-labelledby="setup-heading"
-      className="rounded-xl bg-white shadow-card p-5 sm:p-6"
+      className="rounded-lg border border-line bg-white p-4 sm:p-5"
     >
       <div className="flex items-start justify-between gap-3">
         <div>
           <h2
             id="setup-heading"
-            className="text-[22px] leading-[1.3] text-graphite"
+            className="text-[15px] font-semibold text-ink"
             style={{ fontFamily: "var(--font-heading), sans-serif" }}
           >
             Get set up
           </h2>
-          <p className="mt-1 text-sm font-light text-slate">
+          <p className="mt-1 text-[13px] text-ink-3">
             {completed} of {steps.length} done
           </p>
         </div>
@@ -121,7 +121,7 @@ export function SetupChecklist({
           variant="ghost"
           size="icon"
           onClick={dismiss}
-          className="text-slate"
+          className="text-ink-3"
           aria-label="Hide setup checklist"
         >
           <X className="h-4 w-4" aria-hidden />
@@ -137,7 +137,7 @@ export function SetupChecklist({
         aria-label="Setup progress"
       >
         <div
-          className="h-full rounded-full bg-ink transition-all"
+          className="h-full rounded-full bg-brand transition-all"
           style={{ width: `${(completed / steps.length) * 100}%` }}
         />
       </div>
@@ -147,15 +147,15 @@ export function SetupChecklist({
           <li
             key={step.title}
             className={cn(
-              "flex flex-col gap-2 rounded-xl border p-4",
-              step.done ? "border-silver bg-paper" : "border-silver bg-white"
+              "flex flex-col gap-2 rounded-lg border p-3.5",
+              step.done ? "border-line bg-paper" : "border-line bg-white"
             )}
           >
             <div className="flex items-center gap-2">
               <span
                 className={cn(
                   "flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-xs font-semibold",
-                  step.done ? "bg-green-500 text-white" : "bg-paper text-ink"
+                  step.done ? "bg-ok text-white" : "border border-line bg-white text-ink"
                 )}
               >
                 {step.done ? <Check className="h-3.5 w-3.5" aria-hidden /> : i + 1}
@@ -163,13 +163,13 @@ export function SetupChecklist({
               <p
                 className={cn(
                   "text-sm font-semibold",
-                  step.done ? "text-slate line-through" : "text-graphite"
+                  step.done ? "text-ink-3 line-through" : "text-ink"
                 )}
               >
                 {step.title}
               </p>
             </div>
-            <p className="text-[13px] font-light leading-relaxed text-graphite">{step.body}</p>
+            <p className="text-[13px] leading-relaxed text-ink-2">{step.body}</p>
             {!step.done && step.action ? <div className="mt-auto text-sm">{step.action}</div> : null}
           </li>
         ))}

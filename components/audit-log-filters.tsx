@@ -54,31 +54,34 @@ export function AuditLogFilters({
     currentAction || currentUser || currentEntity || currentRange.key !== "all";
 
   return (
-    <div className="grid grid-cols-1 gap-2 sm:flex sm:flex-wrap sm:items-center">
+    <div className="grid grid-cols-1 gap-2 sm:flex sm:flex-wrap sm:items-center" role="group" aria-label="Filter the audit log">
       <SelectField
         label="Filter by action"
         value={currentAction}
         placeholder="All actions"
+        size="sm"
         className="sm:w-auto"
         onValueChange={(next) => updateParam("action", next)}
         options={[{ value: "", label: "All actions" }, ...actionOptions]}
       />
 
       <SelectField
-        label="Filter by item type"
+        label="Filter by object type"
         value={currentEntity}
-        placeholder="All items"
+        placeholder="All objects"
+        size="sm"
         className="sm:w-auto"
         onValueChange={(next) => updateParam("entity", next)}
-        options={[{ value: "", label: "All items" }, ...entityOptions]}
+        options={[{ value: "", label: "All objects" }, ...entityOptions]}
       />
 
       {memberOptions.length > 1 && (
         <SelectField
-          label="Filter by team member"
+          label="Filter by actor"
           value={currentUser}
           placeholder="Everyone"
-          className="sm:w-auto"
+          size="sm"
+        className="sm:w-auto"
           onValueChange={(next) => updateParam("user", next)}
           options={[{ value: "", label: "Everyone" }, ...memberOptions]}
         />

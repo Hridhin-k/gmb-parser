@@ -6,9 +6,9 @@ import { cn } from "@/lib/utils";
 type ActivityTone = "ai" | "google" | "work";
 
 const TONE: Record<ActivityTone, { box: string; tile: string }> = {
-  ai: { box: "border-action-blue/20 bg-info-banner-bg", tile: "bg-white text-action-blue" },
-  google: { box: "border-silver bg-white", tile: "bg-paper" },
-  work: { box: "border-silver bg-white", tile: "bg-paper text-ink" },
+  ai: { box: "border-ai-line bg-ai-tint", tile: "bg-white text-ai" },
+  google: { box: "border-line bg-white", tile: "bg-paper" },
+  work: { box: "border-line bg-white", tile: "bg-paper text-brand" },
 };
 
 function ToneIcon({ tone }: { tone: ActivityTone }) {
@@ -41,7 +41,7 @@ export function ActivityStatus({
     >
       <span
         className={cn(
-          "mt-px flex size-7 shrink-0 items-center justify-center rounded-full shadow-control",
+          "mt-px flex size-6 shrink-0 items-center justify-center rounded-full",
           TONE[tone].tile
         )}
         aria-hidden
@@ -49,8 +49,8 @@ export function ActivityStatus({
         <ToneIcon tone={tone} />
       </span>
       <span className="min-w-0">
-        <span className="block text-sm font-medium text-ink">{title}</span>
-        <span className="mt-0.5 block text-xs font-normal leading-relaxed text-slate">
+        <span className="block text-[13px] font-semibold text-ink">{title}</span>
+        <span className="mt-0.5 block text-xs font-normal leading-relaxed text-ink-3">
           {detail}
         </span>
       </span>

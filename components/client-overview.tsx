@@ -1,95 +1,40 @@
 import type { ReactNode } from "react";
 import Link from "next/link";
+import { BarChart3 } from "lucide-react";
 import { formatHours } from "@/lib/analytics-metrics";
 import { HBarChart, MonthVolumeChart, STAR_COLORS } from "@/components/charts";
 import { SentimentDonut } from "@/components/insights-dashboard";
+import { EmptyState } from "@/components/empty-state";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { Delta, KpiGrid, KpiTile } from "@/components/ui/kpi";
 import { formatFriendlyDateTime } from "@/lib/format-date";
 import { formatPercent as pct } from "@/lib/format";
-import type { OverviewBoard, OverviewInsightGlance, OverviewStoreRow, OverviewThemeBar } from "@/lib/overview-board";
+import type {
+  OverviewAttentionRow,
+  OverviewBoard,
+  OverviewInsightGlance,
+  OverviewStoreRow,
+  OverviewThemeBar,
+} from "@/lib/overview-board";
 import { cn } from "@/lib/utils";
 
-const HEADING = { fontFamily: "var(--font-heading), sans-serif" };
-
-function points(current: number | null, previous: number | null): number | null {
-  if (current === null || previous === null) return null;
-  return (current - previous) * 100;
+/** One line in "Recent changes". Built by the page from data it already loads. */
+export interface OverviewRecentChange {
+  id: string;
+  tone: "ok" | "bad" | "ai" | "brand" | "neutral";
+  title: string;
+  detail?: string;
+  /** ISO timestamp. */
+  at: string;
+  href?: string;
 }
 
-function Delta({
-  current,
-  previous,
-  format,
-  suffix,
-  higherIsBetter = true,
-}: {
-  current: number | null;
-  previous: number | null;
-  format: (diff: number) => string;
-  suffix: string;
-  higherIsBetter?: boolean;
-}) {
-  if (current === null || previous === null) return <span className="text-xs text-slate">No earlier period</span>;
-  const diff = current - previous;
-  const formatted = format(Math.abs(diff));
-  if (Math.abs(diff) < 1e-9 || formatted === "0" || formatted === "0.0" || formatted === "0.00") {
-    return <span className="text-xs text-slate">0 {suffix}</span>;
-  }
-  const good = higherIsBetter ? diff > 0 : diff < 0;
-  return (
-    <span className={cn("text-xs font-medium", good ? "text-emerald-700" : "text-rose-600")}>
-      {diff > 0 ? "+" : "−"}
-      {format(Math.abs(diff))} {suffix}
-    </span>
-  );
-}
+const n = (value: number) => value.toLocaleString("en-US");
 
-function Panel({ title, action, children }: { title: string; action?: ReactNode; children: ReactNode }) {
-  return (
-    <section className="flex h-full flex-col rounded-xl border border-[#e6ebf2] bg-white p-4 shadow-[0_1px_2px_rgba(16,24,40,0.04)] sm:p-5">
-      <div className="flex items-start justify-between gap-3">
-        <h2 className="text-base text-graphite" style={HEADING}>
-          {title}
-        </h2>
-        {action}
-      </div>
-      <div className="flex min-h-0 flex-1 flex-col">{children}</div>
-    </section>
-  );
-}
-
-function Kpi({
-  href,
-  label,
-  value,
-  detail,
-}: {
-  href: string;
-  label: string;
-  value: string;
-  detail: ReactNode;
-}) {
-  return (
-    <Link href={href} className="flex h-full flex-col rounded-xl border border-[#e6ebf2] bg-white p-4 shadow-[0_1px_2px_rgba(16,24,40,0.04)] hover:border-[#163a7a]">
-      <p className="text-xs text-slate">{label}</p>
-      <p className="mt-2 text-[28px] leading-none text-graphite" style={HEADING}>
-        {value}
-      </p>
-      <div className="mt-auto pt-2">{detail}</div>
-    </Link>
-  );
-}
-
-function HoursDelta({ current, previous }: { current: number; previous: number | null }) {
-  if (previous === null) return <span className="text-xs text-slate">No earlier period</span>;
-  const diff = current - previous;
-  if (Math.abs(diff) < 1) return <span className="text-xs text-slate">Under 1h vs previous period</span>;
-  const good = diff < 0;
-  return (
-    <span className={cn("text-xs font-medium", good ? "text-emerald-700" : "text-rose-600")}>
-      {diff > 0 ? "+" : "−"}
-      {formatHours(Math.abs(diff))} vs previous period
-    </span>
-  );
+function round(value: number, digits: number): number {
+  const factor = 10 ** digits;
+  return Math.round(value * factor) / factor;
 }
 
 function changeLabel(value: number | null): string {
@@ -102,393 +47,637 @@ function ratingLabel(value: number | null): string {
   return value === null ? "—" : value.toFixed(2);
 }
 
+function Panel({
+  title,
+  action,
+  children,
+  flush,
+  className,
+}: {
+  title: ReactNode;
+  action?: ReactNode;
+  children: ReactNode;
+  /** No inner padding: lists and tables run edge to edge. */
+  flush?: boolean;
+  className?: string;
+}) {
+  return (
+    <section className={cn("flex min-w-0 flex-col overflow-hidden rounded-lg border border-line bg-white", className)}>
+      <div className="flex flex-wrap items-center justify-between gap-2 border-b border-line-2 px-4 py-3">
+        <h2 className="text-sm font-semibold text-ink">{title}</h2>
+        {action ? <div className="text-xs text-ink-3">{action}</div> : null}
+      </div>
+      <div className={cn("flex min-h-0 flex-1 flex-col", !flush && "p-4")}>{children}</div>
+    </section>
+  );
+}
+
+function PanelLink({ href, children }: { href: string; children: ReactNode }) {
+  return (
+    <Link href={href} className="text-xs font-medium text-brand hover:underline">
+      {children}
+    </Link>
+  );
+}
+
+const ATTENTION_TAG: Record<string, { label: string; variant: "bad" | "warn" | "ai" | "default" | "info"; action: string }> = {
+  "oldest-overdue": { label: "Overdue", variant: "bad", action: "Open case" },
+  overdue: { label: "Overdue", variant: "bad", action: "Open queue" },
+  "recent-negative": { label: "Complaints", variant: "bad", action: "Reply first" },
+  drafts: { label: "Approval", variant: "ai", action: "Approve" },
+  unreplied: { label: "Needs reply", variant: "default", action: "Reply" },
+  failed: { label: "Failed", variant: "bad", action: "Retry" },
+  connections: { label: "Connection", variant: "bad", action: "Reconnect" },
+  held: { label: "Hold", variant: "warn", action: "Review" },
+  inactive: { label: "Paused", variant: "default", action: "Review" },
+};
+
+function AttentionList({ items }: { items: OverviewAttentionRow[] }) {
+  if (items.length === 0) {
+    return <p className="px-4 py-4 text-[13px] text-ink-3">Nothing in this scope needs attention.</p>;
+  }
+  return (
+    <ul className="divide-y divide-line-2">
+      {items.map((item) => {
+        const tag = ATTENTION_TAG[item.id] ?? { label: "Attention", variant: "default" as const, action: "Open" };
+        return (
+          <li key={item.id}>
+            <Link
+              href={item.href}
+              className="flex flex-wrap items-center gap-x-3 gap-y-1.5 px-4 py-2.5 text-[13px] text-ink-2 hover:bg-[#fafbfc]"
+            >
+              <Badge variant={tag.variant} className="w-[92px] justify-start">
+                {tag.label}
+              </Badge>
+              <span className="min-w-0 flex-1">
+                <b className="font-semibold text-ink">{item.title}</b>
+                <span className="text-ink-3"> · {item.detail}</span>
+              </span>
+              <span className="inline-flex h-7 items-center rounded-md border border-line bg-white px-2.5 text-xs font-medium text-ink">
+                {tag.action}
+              </span>
+            </Link>
+          </li>
+        );
+      })}
+    </ul>
+  );
+}
+
+interface Recommendation {
+  id: string;
+  title: string;
+  detail: string;
+  href: string;
+  action: string;
+  ai?: boolean;
+}
+
+function recommendations(board: OverviewBoard, lowUnansweredHref: string | undefined): Recommendation[] {
+  const items: Recommendation[] = [];
+  const { kpis } = board;
+  if (board.worst) {
+    items.push({
+      id: "worst",
+      title: `Follow up at ${board.worst.name}`,
+      detail: `Lowest rated here at ${board.worst.rating.toFixed(2)}${
+        board.worst.complaint ? `; most common complaint is ${board.worst.complaint.toLowerCase()}` : ""
+      }.`,
+      href: board.worst.assignHref,
+      action: "Assign follow-up",
+    });
+  }
+  const topComplaint = board.themes[0];
+  if (topComplaint) {
+    items.push({
+      id: "theme",
+      title: `Read the “${topComplaint.label}” complaints`,
+      detail: `${n(topComplaint.count)} complaint ${topComplaint.count === 1 ? "mention" : "mentions"} in this period, the largest theme.`,
+      href: topComplaint.href,
+      action: "Open reviews",
+    });
+  }
+  if (lowUnansweredHref && kpis.unreplied > 0 && (kpis.negativeShare ?? 0) > 0) {
+    items.push({
+      id: "low-unanswered",
+      title: "Reply to 1–3 star reviews first",
+      detail: `${n(kpis.unreplied)} reviews have no reply; start with the low ratings.`,
+      href: lowUnansweredHref,
+      action: "Open reviews",
+    });
+  }
+  if (!board.report && kpis.reviews > 0) {
+    items.push({
+      id: "report",
+      title: board.coverage.analysed > 0 ? "Write an AI report for this period" : "Analyse review text",
+      detail:
+        board.coverage.analysed > 0
+          ? `${n(board.coverage.analysed)} reviews are analysed but no written report is saved.`
+          : "No review text in this period has been analysed yet.",
+      href: board.insightsHref,
+      action: "Open insights",
+      ai: true,
+    });
+  }
+  return items.slice(0, 3);
+}
+
+const TONE_DOT: Record<OverviewRecentChange["tone"], string> = {
+  ok: "bg-ok",
+  bad: "bg-bad",
+  ai: "bg-ai",
+  brand: "bg-brand",
+  neutral: "bg-[#aeb6c2]",
+};
+
 export function ClientOverviewView({
   board,
   reviewsHref,
   negativeHref,
   unansweredHref,
   escalationsHref,
+  lowUnansweredHref,
+  unrepliedByLocation,
+  recent,
+  auditHref,
+  hideLocationRanking,
 }: {
   board: OverviewBoard;
   reviewsHref: string;
   negativeHref: string;
   unansweredHref: string;
   escalationsHref: string;
+  /** Reviews of 1–3 stars without a reply, for "Recommended next". */
+  lowUnansweredHref?: string;
+  /** Unreplied reviews in the period, per location id. */
+  unrepliedByLocation?: Record<string, number>;
+  recent?: OverviewRecentChange[];
+  /** Audit log link, when the viewer can open it. */
+  auditHref?: string | null;
+  /** One-location scope: skip the ranking table. */
+  hideLocationRanking?: boolean;
 }) {
   const { kpis } = board;
   const starMax = Math.max(1, ...board.starMix.map((row) => row.count));
+  const ratingDiff =
+    kpis.avgRating !== null && kpis.previousAvgRating !== null ? round(kpis.avgRating - kpis.previousAvgRating, 2) : null;
+  const reviewDiff = kpis.previousReviews !== null ? kpis.reviews - kpis.previousReviews : null;
+  const negativeDiff =
+    kpis.negativeShare !== null && kpis.previousNegativeShare !== null
+      ? round((kpis.negativeShare - kpis.previousNegativeShare) * 100, 0)
+      : null;
+  const hoursDiff =
+    kpis.avgResponseHours !== null && kpis.previousAvgResponseHours !== null
+      ? kpis.avgResponseHours - kpis.previousAvgResponseHours
+      : null;
+  const recommended = recommendations(board, lowUnansweredHref);
+  const vsPrevious = (delta: ReactNode) =>
+    delta ? (
+      <>
+        {delta} <span>vs previous period</span>
+      </>
+    ) : (
+      "No earlier period"
+    );
+
   return (
     <div className="space-y-4">
-      <section className="rounded-xl border border-[#e6ebf2] bg-white px-4 py-4 shadow-[0_1px_2px_rgba(16,24,40,0.04)] sm:px-5">
-        <p className="text-xs font-semibold uppercase tracking-[0.08em] text-[#163a7a]">{board.periodLabel}</p>
-        <div className="mt-2 space-y-1.5">
-          {board.brief.map((line) => (
-            <p key={line} className="text-sm leading-6 text-graphite">
-              {line}
-            </p>
-          ))}
-        </div>
-      </section>
-
-      <div className="grid grid-cols-2 items-stretch gap-3 xl:grid-cols-6">
-        <Kpi
+      <KpiGrid>
+        <KpiTile
+          href={reviewsHref}
+          label="Reviews"
+          value={n(kpis.reviews)}
+          detail={vsPrevious(reviewDiff === null ? null : <Delta value={reviewDiff} />)}
+        />
+        <KpiTile
           href={reviewsHref}
           label="Average rating"
           value={ratingLabel(kpis.avgRating)}
-          detail={
-            <Delta
-              current={kpis.avgRating}
-              previous={kpis.previousAvgRating}
-              format={(diff) => diff.toFixed(2)}
-              suffix="vs previous period"
-            />
-          }
+          detail={vsPrevious(ratingDiff === null ? null : <Delta value={ratingDiff} />)}
         />
-        <Kpi
-          href={reviewsHref}
-          label="Reviews"
-          value={kpis.reviews.toLocaleString("en-US")}
-          detail={
-            <Delta
-              current={kpis.reviews}
-              previous={kpis.previousReviews}
-              format={(diff) => diff.toLocaleString("en-US")}
-              suffix="vs previous period"
-            />
-          }
+        <KpiTile
+          href={unansweredHref}
+          label="Needs reply"
+          value={n(kpis.unreplied)}
+          detail={`Reply rate ${pct(kpis.replyRate)}`}
         />
-        <Kpi
+        <KpiTile
           href={negativeHref}
           label="1–3 star share"
           value={pct(kpis.negativeShare)}
-          detail={
-            <Delta
-              current={points(kpis.negativeShare, kpis.previousNegativeShare)}
-              previous={kpis.previousNegativeShare === null ? null : 0}
-              format={(diff) => diff.toFixed(0)}
-              suffix="points vs previous period"
-              higherIsBetter={false}
-            />
-          }
+          detail={vsPrevious(negativeDiff === null ? null : <Delta value={negativeDiff} suffix=" pts" goodWhen="down" />)}
         />
-        <Kpi
-          href={unansweredHref}
-          label="Reply rate"
-          value={pct(kpis.replyRate)}
-          detail={
-            <span className="block text-xs text-slate">
-              {kpis.unreplied.toLocaleString("en-US")} without a reply
-            </span>
-          }
-        />
-        <Kpi
+        <KpiTile
           href={unansweredHref}
           label="Average reply time"
           value={formatHours(kpis.avgResponseHours)}
           detail={
-            kpis.avgResponseHours === null ? (
-              <span className="text-xs text-slate">No reply timestamps in this period</span>
+            kpis.avgResponseHours === null
+              ? "No reply timestamps in this period"
+              : hoursDiff === null
+                ? "No earlier period"
+                : Math.abs(hoursDiff) < 1
+                  ? "Under 1h vs previous period"
+                  : (
+                      <>
+                        <span className={hoursDiff < 0 ? "text-ok" : "text-bad"}>
+                          {hoursDiff > 0 ? "▲" : "▼"} {formatHours(Math.abs(hoursDiff))}
+                        </span>{" "}
+                        vs previous period
+                      </>
+                    )
+          }
+        />
+        <KpiTile
+          href={escalationsHref}
+          label="Open escalations"
+          value={n(kpis.openEscalations)}
+          tone={kpis.overdueEscalations > 0 ? "bad" : undefined}
+          detail={
+            kpis.overdueEscalations > 0 ? (
+              <span className="text-bad">{n(kpis.overdueEscalations)} past SLA</span>
             ) : (
-              <span className="block text-xs text-slate">
-                <HoursDelta current={kpis.avgResponseHours} previous={kpis.previousAvgResponseHours} />
-                <span className="mt-0.5 block">Among replies with a timestamp</span>
-              </span>
+              "None past SLA"
             )
           }
         />
-        <Kpi
-          href={escalationsHref}
-          label="Open escalations"
-          value={kpis.openEscalations.toLocaleString("en-US")}
-          detail={
-            <span className="text-xs text-slate">
-              {kpis.overdueEscalations.toLocaleString("en-US")} past SLA
-            </span>
-          }
-        />
-      </div>
+      </KpiGrid>
 
-      <div className="grid items-stretch gap-4 xl:grid-cols-12">
-        <div className="xl:col-span-8">
-          <Panel title="Reviews by month">
+      <div className="grid items-start gap-4 xl:grid-cols-[3fr_2fr]">
+        <div className="flex min-w-0 flex-col gap-4">
+          <Panel title="Needs attention" action="Live problems in this scope" flush>
+            <AttentionList items={board.attention} />
+          </Panel>
+
+          <Panel title="Reviews by month" action={<PanelLink href={board.analyticsHref}>Open analytics</PanelLink>}>
             {kpis.reviews === 0 ? (
-              <p className="mt-4 text-sm text-slate">No reviews in this period.</p>
+              <EmptyState
+                bare
+                icon={BarChart3}
+                title="No reviews in this period"
+                description="Trends appear once reviews arrive for this scope. Pick a longer period in the top bar, or work from the inbox."
+              >
+                <Button size="sm" variant="outline" nativeButton={false} render={<Link href={reviewsHref} />}>
+                  Open inbox
+                </Button>
+              </EmptyState>
             ) : (
-              <div className="mt-4">
+              <div>
                 <MonthVolumeChart months={board.months} />
-                {board.trendCaption ? <p className="mt-3 text-sm text-slate">{board.trendCaption}</p> : null}
+                {board.trendCaption ? <p className="mt-3 text-xs text-ink-3">{board.trendCaption}</p> : null}
               </div>
             )}
           </Panel>
+
+          {board.brief.length > 0 ? (
+            <section className="rounded-lg border border-line bg-white px-4 py-3">
+              <p className="text-xs font-medium text-ink-3">In this period · {board.periodLabel}</p>
+              <div className="mt-1.5 space-y-1">
+                {board.brief.map((line) => (
+                  <p key={line} className="text-[13px] leading-6 text-ink-2">
+                    {line}
+                  </p>
+                ))}
+              </div>
+            </section>
+          ) : null}
         </div>
-        <div className="xl:col-span-4">
-          <Panel title="Star mix">
-            {kpis.reviews === 0 ? (
-              <p className="mt-4 text-sm text-slate">No reviews in this period.</p>
+
+        <div className="flex min-w-0 flex-col gap-4">
+          <Panel title="Recommended next">
+            {recommended.length === 0 ? (
+              <p className="text-[13px] text-ink-3">No suggestions for this scope and period.</p>
             ) : (
-              <div className="mt-4">
-                <HBarChart
-                  max={starMax}
-                  rows={board.starMix.map((row) => ({
-                    label: `${row.stars}★`,
-                    value: row.count,
-                    color: STAR_COLORS[row.stars - 1] ?? STAR_COLORS[0],
-                    href: row.href,
-                    suffix: kpis.reviews > 0 ? `· ${Math.round((row.count / kpis.reviews) * 100)}%` : undefined,
-                    lines: ["Share of reviews in this period"],
-                  }))}
-                />
-              </div>
+              <ul className="flex flex-col gap-2">
+                {recommended.map((item) => (
+                  <li key={item.id}>
+                    <Link
+                      href={item.href}
+                      className={cn(
+                        "flex flex-wrap items-center justify-between gap-2 rounded-lg border px-3 py-2.5 hover:border-brand-line",
+                        item.ai ? "border-ai-line bg-[#fbf9ff]" : "border-line"
+                      )}
+                    >
+                      <span className="min-w-0 flex-1">
+                        <b className="block text-[13px] font-semibold text-ink">{item.title}</b>
+                        <span className="text-xs text-ink-3">{item.detail}</span>
+                      </span>
+                      <span
+                        className={cn(
+                          "inline-flex h-7 items-center rounded-md border px-2.5 text-xs font-medium",
+                          item.ai ? "border-ai-line bg-ai-tint text-ai" : "border-line bg-white text-ink"
+                        )}
+                      >
+                        {item.ai ? "✦ " : ""}
+                        {item.action}
+                      </span>
+                    </Link>
+                  </li>
+                ))}
+              </ul>
             )}
-            <p className="mt-auto pt-3 text-xs text-slate">
-              4–5 stars are positive, 3 stars are neutral, and 1–2 stars are negative. 1–3 star share, above, counts 1, 2, and 3 stars together.
-            </p>
           </Panel>
+
+          <Panel title="Recent changes" action={auditHref ? <PanelLink href={auditHref}>Audit log</PanelLink> : undefined} flush>
+            {!recent || recent.length === 0 ? (
+              <p className="px-4 py-4 text-[13px] text-ink-3">No syncs, reports or escalation deadlines to show yet.</p>
+            ) : (
+              <ol className="space-y-2.5 px-4 py-3 text-xs text-ink-2">
+                {recent.map((item) => {
+                  const body = (
+                    <>
+                      <b className="font-semibold text-ink">{item.title}</b>
+                      {item.detail ? <> · {item.detail}</> : null} ·{" "}
+                      <time dateTime={item.at} className="text-ink-3">
+                        {formatFriendlyDateTime(item.at)}
+                      </time>
+                    </>
+                  );
+                  return (
+                    <li key={item.id} className="flex gap-2.5">
+                      <span className={cn("mt-1 size-2 shrink-0 rounded-full", TONE_DOT[item.tone])} aria-hidden />
+                      {item.href ? (
+                        <Link href={item.href} className="min-w-0 hover:underline">
+                          {body}
+                        </Link>
+                      ) : (
+                        <span className="min-w-0">{body}</span>
+                      )}
+                    </li>
+                  );
+                })}
+              </ol>
+            )}
+          </Panel>
+
+          {hideLocationRanking ? null : (
+            <Panel
+              title="Locations needing most help"
+              action={board.lowest.length > 0 ? <PanelLink href={board.analyticsHref}>Compare all {board.rankedCount}</PanelLink> : undefined}
+              flush
+            >
+              {board.lowest.length === 0 ? (
+                <p className="px-4 py-4 text-[13px] text-ink-3">
+                  A ranking appears when this scope has two or more locations with reviews.
+                </p>
+              ) : (
+                <div className="overflow-x-auto">
+                  <table className="w-full min-w-[22rem] text-left text-[13px]">
+                    <thead className="bg-[#fafbfc] text-xs text-ink-3">
+                      <tr>
+                        <th className="px-4 py-2 font-medium">Location</th>
+                        <th className="px-2 py-2 text-right font-medium">Rating</th>
+                        <th className="px-2 py-2 text-right font-medium">1–3★</th>
+                        <th className="px-4 py-2 text-right font-medium">Unanswered</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {board.lowest.map((store) => (
+                        <tr key={store.id} className="border-t border-line-2">
+                          <td className="px-4 py-2">
+                            <Link href={store.href} className="font-medium text-ink hover:text-brand">
+                              {store.name}
+                            </Link>
+                            <p className="text-xs text-ink-3">
+                              {n(store.reviews)} reviews{store.complaint ? ` · ${store.complaint}` : ""}
+                            </p>
+                          </td>
+                          <td className="px-2 py-2 text-right tabular-nums">
+                            {store.rating.toFixed(2)}{" "}
+                            {store.ratingChange !== null && Math.abs(store.ratingChange) >= 0.005 ? (
+                              <span
+                                className={store.ratingChange < 0 ? "text-bad" : "text-ok"}
+                                title={`${changeLabel(store.ratingChange)} vs previous period`}
+                              >
+                                {store.ratingChange < 0 ? "▼" : "▲"}
+                              </span>
+                            ) : null}
+                          </td>
+                          <td className="px-2 py-2 text-right tabular-nums">
+                            <Link href={store.negativeHref} className="hover:text-brand hover:underline">
+                              {pct(store.negativeShare)}
+                            </Link>
+                          </td>
+                          <td className="px-4 py-2 text-right tabular-nums">
+                            {unrepliedByLocation?.[store.id] !== undefined ? (
+                              <Link href={store.assignHref} className="hover:text-brand hover:underline">
+                                {n(unrepliedByLocation[store.id] ?? 0)}
+                              </Link>
+                            ) : (
+                              "—"
+                            )}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                  <p className="border-t border-line-2 px-4 py-2 text-xs text-ink-3">
+                    Lowest average rating first. Arrows compare with the previous period of the same length.
+                  </p>
+                </div>
+              )}
+            </Panel>
+          )}
         </div>
       </div>
 
       <AiInsight board={board} />
 
-      {board.lowest.length > 0 ? (
-            <Panel title="Lowest rated outlets" action={<Link href={board.analyticsHref} className="text-xs font-medium text-[#2563eb] hover:underline">See all {board.rankedCount}</Link>}>
-              <div className="mt-3 overflow-x-auto">
-                <table className="w-full min-w-[36rem] text-left text-sm">
-                  <thead>
-                    <tr className="text-xs text-slate">
-                      <th className="pb-2 font-medium">Outlet</th>
-                      <th className="pb-2 font-medium">Rating</th>
-                      <th className="pb-2 font-medium">Change</th>
-                      <th className="pb-2 font-medium">1–3 stars</th>
-                      <th className="pb-2 font-medium">Main complaint</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {board.lowest.map((store) => (
-                      <tr key={store.id} className="border-t border-[#eef2f7]">
-                        <td className="py-2.5 pr-3">
-                          <Link href={store.href} className="font-medium text-graphite hover:text-[#163a7a]">
-                            {store.name}
-                          </Link>
-                          <p className="text-xs text-slate">{store.reviews.toLocaleString("en-US")} reviews</p>
-                        </td>
-                        <td className="py-2.5 tabular-nums">{store.rating.toFixed(2)}</td>
-                        <td className="py-2.5 tabular-nums">{changeLabel(store.ratingChange)}</td>
-                        <td className="py-2.5">
-                          <Link href={store.negativeHref} className="tabular-nums text-graphite hover:text-[#163a7a]">
-                            {pct(store.negativeShare)}
-                          </Link>
-                        </td>
-                        <td className="py-2.5 text-slate">{store.complaint ?? "—"}</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-              <p className="mt-auto pt-3 text-xs text-slate">
-                Sorted by average rating, lowest first. Change is against the previous period of the same length. Main complaint is that outlet&apos;s most common negative topic from analysed reviews. A dash means none was found.
-              </p>
-            </Panel>
-          ) : (
-            <Panel title="Lowest rated outlets">
-              <p className="mt-3 text-sm text-slate">A ranking appears when this scope has two or more outlets with reviews.</p>
-            </Panel>
-          )}
-
       <div className="grid items-stretch gap-4 xl:grid-cols-2">
+        <Panel title="Star mix">
+          {kpis.reviews === 0 ? (
+            <p className="text-[13px] text-ink-3">No reviews in this period.</p>
+          ) : (
+            <HBarChart
+              max={starMax}
+              rows={board.starMix.map((row) => ({
+                label: `${row.stars}★`,
+                value: row.count,
+                color: STAR_COLORS[row.stars - 1] ?? STAR_COLORS[0],
+                href: row.href,
+                suffix: kpis.reviews > 0 ? `· ${Math.round((row.count / kpis.reviews) * 100)}%` : undefined,
+                lines: ["Share of reviews in this period"],
+              }))}
+            />
+          )}
+          <p className="mt-auto pt-3 text-xs text-ink-3">
+            4–5 stars are positive, 3 stars are neutral, and 1–2 stars are negative. 1–3 star share counts 1, 2, and 3 stars
+            together.
+          </p>
+        </Panel>
         {board.worst ? (
           <WorstStore store={board.worst} scopeRating={kpis.avgRating} />
         ) : (
-          <Panel title="This outlet">
-            <p className="mt-3 text-sm text-slate">
+          <Panel title="This location">
+            <p className="text-[13px] text-ink-3">
               {board.rankedCount === 0
-                ? "No outlet in this scope has a review in the period."
-                : "This scope is one outlet, so there is no ranking against other outlets."}
+                ? "No location in this scope has a review in the period."
+                : "This scope is one location, so there is no ranking against other locations."}
             </p>
           </Panel>
         )}
-        <Panel title="Needs attention">
-          {board.attention.length === 0 ? (
-            <p className="mt-3 text-sm text-slate">Nothing in this scope needs attention.</p>
-          ) : (
-            <ul className="mt-2 divide-y divide-[#eef2f7]">
-              {board.attention.map((item) => (
-                <li key={item.id}>
-                  <Link href={item.href} className="block py-3 hover:text-[#163a7a]">
-                    <p className="text-sm font-medium text-graphite">{item.title}</p>
-                    <p className="mt-0.5 text-xs text-slate">{item.detail}</p>
-                  </Link>
-                </li>
-              ))}
-            </ul>
-          )}
-        </Panel>
       </div>
     </div>
   );
 }
 
-const GLANCE_TONE: Record<OverviewInsightGlance["kind"], string> = {
-  concern: "bg-rose-50 text-rose-700",
-  strength: "bg-emerald-50 text-emerald-700",
-  action: "bg-sky-50 text-sky-700",
+const GLANCE_TONE: Record<OverviewInsightGlance["kind"], "bad" | "ok" | "info"> = {
+  concern: "bad",
+  strength: "ok",
+  action: "info",
 };
 
 function AiInsight({ board }: { board: OverviewBoard }) {
   const mentions = board.sentiment.positive + board.sentiment.negative;
   const generated = board.report?.finishedAt ? formatFriendlyDateTime(board.report.finishedAt) : "";
-  const coverage = `${board.coverage.analysed.toLocaleString("en-US")} reviews analysed${
-    board.coverage.ratingOnly > 0 ? `, ${board.coverage.ratingOnly.toLocaleString("en-US")} with no text` : ""
+  const coverage = `${n(board.coverage.analysed)} reviews analysed${
+    board.coverage.ratingOnly > 0 ? `, ${n(board.coverage.ratingOnly)} with no text` : ""
   }`;
   const maxStaff = Math.max(1, ...board.staff.map((row) => row.count));
   return (
-    <section className="rounded-xl border border-[#e6ebf2] bg-white p-4 shadow-[0_1px_2px_rgba(16,24,40,0.04)] sm:p-5">
-      <div className="flex items-start justify-between gap-3">
-        <div>
-          <p className="text-xs font-semibold uppercase tracking-[0.08em] text-[#163a7a]">AI insight</p>
-          <h2 className="mt-1 text-base text-graphite" style={HEADING}>
-            What customers are saying
-          </h2>
-          <p className="mt-1 text-xs text-slate">
+    <section className="overflow-hidden rounded-lg border border-ai-line bg-white">
+      <div className="flex flex-wrap items-start justify-between gap-3 border-b border-ai-line bg-[#fbf9ff] px-4 py-3">
+        <div className="min-w-0">
+          <div className="flex flex-wrap items-center gap-2">
+            <Badge variant="ai">AI insight</Badge>
+            <h2 className="text-sm font-semibold text-ink">What customers are saying</h2>
+          </div>
+          <p className="mt-1 text-xs text-ink-3">
             {coverage}
             {generated ? ` · saved report ${generated}` : ""}
             {board.report?.status === "partial" ? " · partial coverage" : ""}
           </p>
         </div>
-        <Link href={board.insightsHref} className="shrink-0 text-xs font-medium text-[#2563eb] hover:underline">
-          Open insights
-        </Link>
+        <PanelLink href={board.insightsHref}>Open insights</PanelLink>
       </div>
 
-      {mentions === 0 && !board.report && board.severe.count === 0 ? (
-        <p className="mt-4 text-sm text-slate">
-          No analysed review text for this period. Open insights to run analysis.
-        </p>
-      ) : (
-        <div className="mt-4 grid items-start gap-5 xl:grid-cols-12">
-          <div className="xl:col-span-4">
-            {mentions > 0 ? (
-              <div className="flex items-center gap-4">
-                <SentimentDonut positive={board.sentiment.positive} negative={board.sentiment.negative} centerLabel="praise" />
-                <ul className="min-w-0 flex-1 space-y-2 text-sm">
-                  <li className="flex items-center justify-between gap-3">
-                    <span className="flex items-center gap-2 text-slate">
-                      <span className="h-2 w-2 rounded-full bg-emerald-500" /> Praise
-                    </span>
-                    <span className="tabular-nums text-graphite">{board.sentiment.positive.toLocaleString("en-US")}</span>
-                  </li>
-                  <li className="flex items-center justify-between gap-3">
-                    <span className="flex items-center gap-2 text-slate">
-                      <span className="h-2 w-2 rounded-full bg-rose-500" /> Complaints
-                    </span>
-                    <span className="tabular-nums text-graphite">{board.sentiment.negative.toLocaleString("en-US")}</span>
-                  </li>
-                </ul>
-              </div>
-            ) : (
-              <p className="text-sm text-slate">No praise or complaint mentions in analysed reviews for this period.</p>
-            )}
-            {mentions > 0 ? (
-              <p className="mt-3 text-xs text-slate">
-                Share of praise among praise and complaint mentions in analysed text. Positive (4–5★) in the chart counts reviews.
-              </p>
-            ) : null}
-            {board.severe.count > 0 ? (
-              <div className="mt-4 rounded-lg border border-red-200 bg-red-50 p-3">
-                <p className="text-xs font-semibold uppercase tracking-wide text-red-700">
-                  {`${board.severe.count.toLocaleString("en-US")} serious ${board.severe.count === 1 ? "incident" : "incidents"}`}
-                </p>
-                {board.severe.excerpt ? (
-                  <p className="mt-1 line-clamp-4 text-sm italic text-graphite">“{board.severe.excerpt}”</p>
-                ) : null}
-                {board.severe.stars !== null ? (
-                  <p className="mt-1 text-xs text-slate">{board.severe.stars}★ review · customer allegation, verify before acting</p>
-                ) : (
-                  <p className="mt-1 text-xs text-slate">Customer allegation, verify before acting.</p>
-                )}
-              </div>
-            ) : null}
-            {board.staff.length > 0 ? (
-              <div className="mt-4">
-                <p className="text-xs font-medium uppercase tracking-wide text-slate">Staff named in praise</p>
-                <ul className="mt-2 space-y-2">
-                  {board.staff.map((row) => (
-                    <li key={row.name}>
-                      <div className="flex items-baseline justify-between gap-2 text-sm">
-                        <span className="text-graphite">{row.name}</span>
-                        <span className="text-xs text-slate">{row.count.toLocaleString("en-US")}</span>
-                      </div>
-                      <div className="mt-1 h-1.5 overflow-hidden rounded-full bg-[#eef2f7]" aria-hidden="true">
-                        <div className="h-full bg-emerald-500" style={{ width: `${(row.count / maxStaff) * 100}%` }} />
-                      </div>
+      <div className="p-4">
+        {mentions === 0 && !board.report && board.severe.count === 0 ? (
+          <EmptyState
+            bare
+            title="No analysed review text for this period"
+            description="Open Insights to analyse the written reviews in this scope."
+          >
+            <Button size="sm" variant="ai" nativeButton={false} render={<Link href={board.insightsHref} />}>
+              ✦ Open insights
+            </Button>
+          </EmptyState>
+        ) : (
+          <div className="grid items-start gap-5 xl:grid-cols-12">
+            <div className="xl:col-span-4">
+              {mentions > 0 ? (
+                <div className="flex items-center gap-4">
+                  <SentimentDonut positive={board.sentiment.positive} negative={board.sentiment.negative} centerLabel="praise" />
+                  <ul className="min-w-0 flex-1 space-y-2 text-[13px]">
+                    <li className="flex items-center justify-between gap-3">
+                      <span className="flex items-center gap-2 text-ink-3">
+                        <span className="size-2 rounded-full bg-ok" /> Praise
+                      </span>
+                      <span className="tabular-nums text-ink">{n(board.sentiment.positive)}</span>
                     </li>
-                  ))}
-                </ul>
-              </div>
-            ) : null}
-          </div>
-          <div className="xl:col-span-8">
-            {board.report && board.report.cards.length > 0 ? (
-              <ul className="space-y-3">
-                {board.report.cards.map((card) => (
-                  <InsightGlance key={card.kind} card={card} />
-                ))}
-              </ul>
-            ) : board.analysis.length > 0 ? (
-              <div>
-                <p className="text-sm text-slate">
-                  Counted from analysed review text. A written AI report has not been saved for this period.
+                    <li className="flex items-center justify-between gap-3">
+                      <span className="flex items-center gap-2 text-ink-3">
+                        <span className="size-2 rounded-full bg-bad" /> Complaints
+                      </span>
+                      <span className="tabular-nums text-ink">{n(board.sentiment.negative)}</span>
+                    </li>
+                  </ul>
+                </div>
+              ) : (
+                <p className="text-[13px] text-ink-3">No praise or complaint mentions in analysed reviews for this period.</p>
+              )}
+              {mentions > 0 ? (
+                <p className="mt-3 text-xs text-ink-3">
+                  Share of praise among praise and complaint mentions in analysed text. Positive (4–5★) in the chart counts
+                  reviews.
                 </p>
-                <ul className="mt-3 space-y-3">
-                  {board.analysis.map((card) => (
+              ) : null}
+              {board.severe.count > 0 ? (
+                <div className="mt-4 rounded-lg border border-bad-line bg-bad-tint p-3">
+                  <p className="text-xs font-semibold text-bad">
+                    {`${n(board.severe.count)} serious ${board.severe.count === 1 ? "incident" : "incidents"}`}
+                  </p>
+                  {board.severe.excerpt ? (
+                    <p className="mt-1 line-clamp-4 text-[13px] italic text-ink-2">“{board.severe.excerpt}”</p>
+                  ) : null}
+                  <p className="mt-1 text-xs text-ink-3">
+                    {board.severe.stars !== null
+                      ? `${board.severe.stars}★ review · customer allegation, verify before acting`
+                      : "Customer allegation, verify before acting."}
+                  </p>
+                </div>
+              ) : null}
+              {board.staff.length > 0 ? (
+                <div className="mt-4">
+                  <p className="text-xs font-medium text-ink-3">Staff named in praise</p>
+                  <ul className="mt-2 space-y-2">
+                    {board.staff.map((row) => (
+                      <li key={row.name}>
+                        <div className="flex items-baseline justify-between gap-2 text-[13px]">
+                          <span className="text-ink">{row.name}</span>
+                          <span className="text-xs text-ink-3">{n(row.count)}</span>
+                        </div>
+                        <div className="mt-1 h-1.5 overflow-hidden rounded-full bg-paper" aria-hidden="true">
+                          <div className="h-full bg-ok" style={{ width: `${(row.count / maxStaff) * 100}%` }} />
+                        </div>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              ) : null}
+            </div>
+            <div className="xl:col-span-8">
+              {board.report && board.report.cards.length > 0 ? (
+                <ul className="space-y-3">
+                  {board.report.cards.map((card) => (
                     <InsightGlance key={card.kind} card={card} />
                   ))}
                 </ul>
-              </div>
-            ) : (
-              <p className="text-sm text-slate">
-                {board.report
-                  ? "The saved report for this period has no written insight cards yet."
-                  : "No saved AI report for this period. Open insights to write one from the analysed reviews."}
-              </p>
-            )}
-            {board.report?.status === "partial" ? (
-              <p className="mt-3 text-xs text-amber-800">
-                This saved report does not cover every written review in the period.
-              </p>
-            ) : null}
+              ) : board.analysis.length > 0 ? (
+                <div>
+                  <p className="text-[13px] text-ink-3">
+                    Counted from analysed review text. A written AI report has not been saved for this period.
+                  </p>
+                  <ul className="mt-3 space-y-3">
+                    {board.analysis.map((card) => (
+                      <InsightGlance key={card.kind} card={card} />
+                    ))}
+                  </ul>
+                </div>
+              ) : (
+                <p className="text-[13px] text-ink-3">
+                  {board.report
+                    ? "The saved report for this period has no written insight cards yet."
+                    : "No saved AI report for this period. Open insights to write one from the analysed reviews."}
+                </p>
+              )}
+              {board.report?.status === "partial" ? (
+                <p className="mt-3 text-xs text-warn">This saved report does not cover every written review in the period.</p>
+              ) : null}
+            </div>
           </div>
-        </div>
-      )}
+        )}
 
-      {board.praiseThemes.length > 0 || board.themes.length > 0 ? (
-        <div className="mt-5 border-t border-[#eef2f7] pt-4">
-          <h3 className="text-sm text-graphite" style={HEADING}>
-            Themes in analysed reviews
-          </h3>
-          <p className="mt-1 text-xs text-slate">
-            Praise and complaints are ranked separately. A theme can lead praise and still be a smaller complaint. Complaint counts match Analytics.
-          </p>
-          <div className="mt-4 grid gap-5 md:grid-cols-2">
-            <ThemeRank
-              title="Most praised"
-              themes={board.praiseThemes}
-              tone="praise"
-              empty="No praise mentions in analysed reviews."
-            />
-            <ThemeRank
-              title="Complaint themes"
-              themes={board.themes}
-              tone="complaint"
-              empty="No complaint mentions in analysed reviews."
-              action={
-                <Link href={complaintThemesHref(board.analyticsHref)} className="text-xs font-medium text-[#2563eb] hover:underline">
-                  All complaint themes
-                </Link>
-              }
-            />
+        {board.praiseThemes.length > 0 || board.themes.length > 0 ? (
+          <div className="mt-5 border-t border-line-2 pt-4">
+            <h3 className="text-sm font-semibold text-ink">Themes in analysed reviews</h3>
+            <p className="mt-1 text-xs text-ink-3">
+              Praise and complaints are ranked separately. A theme can lead praise and still be a smaller complaint. Complaint
+              counts match Analytics.
+            </p>
+            <div className="mt-4 grid gap-5 md:grid-cols-2">
+              <ThemeRank title="Most praised" themes={board.praiseThemes} tone="praise" empty="No praise mentions in analysed reviews." />
+              <ThemeRank
+                title="Complaint themes"
+                themes={board.themes}
+                tone="complaint"
+                empty="No complaint mentions in analysed reviews."
+                action={<PanelLink href={complaintThemesHref(board.analyticsHref)}>All complaint themes</PanelLink>}
+              />
+            </div>
           </div>
-        </div>
-      ) : null}
+        ) : null}
+      </div>
     </section>
   );
 }
@@ -503,9 +692,9 @@ function complaintThemesHref(href: string): string {
 
 function mentionLine(count: number, reviews: number, tone: "praise" | "complaint"): string {
   const kind = tone === "praise" ? "praise" : "complaint";
-  const mentions = `${count.toLocaleString("en-US")} ${kind} ${count === 1 ? "mention" : "mentions"}`;
+  const mentions = `${n(count)} ${kind} ${count === 1 ? "mention" : "mentions"}`;
   if (reviews > 0 && reviews !== count) {
-    return `${mentions} in ${reviews.toLocaleString("en-US")} ${reviews === 1 ? "review" : "reviews"}`;
+    return `${mentions} in ${n(reviews)} ${reviews === 1 ? "review" : "reviews"}`;
   }
   return mentions;
 }
@@ -524,29 +713,27 @@ function ThemeRank({
   action?: ReactNode;
 }) {
   const max = Math.max(1, ...themes.map((theme) => theme.count));
-  const bar = tone === "praise" ? "bg-emerald-500" : "bg-rose-400";
+  const bar = tone === "praise" ? "bg-ok" : "bg-bad";
   return (
     <div>
       <div className="flex items-baseline justify-between gap-3">
-        <h4 className="text-sm text-graphite" style={HEADING}>
-          {title}
-        </h4>
+        <h4 className="text-[13px] font-semibold text-ink">{title}</h4>
         {action}
       </div>
       {themes.length === 0 ? (
-        <p className="mt-3 text-sm text-slate">{empty}</p>
+        <p className="mt-3 text-[13px] text-ink-3">{empty}</p>
       ) : (
         <ul className="mt-3 space-y-3">
           {themes.map((theme) => (
             <li key={theme.label}>
-              <div className="flex items-baseline justify-between gap-2 text-sm">
-                <Link href={theme.href} className="text-graphite hover:underline">
+              <div className="flex items-baseline justify-between gap-2 text-[13px]">
+                <Link href={theme.href} className="text-ink hover:underline">
                   {theme.label}
                 </Link>
-                <span className="text-right text-xs text-slate">{mentionLine(theme.count, theme.reviews, tone)}</span>
+                <span className="text-right text-xs text-ink-3">{mentionLine(theme.count, theme.reviews, tone)}</span>
               </div>
-              <div className="mt-1 h-2 overflow-hidden rounded-full bg-[#eef2f7]" aria-hidden="true">
-                <div className={`h-full ${bar}`} style={{ width: `${(theme.count / max) * 100}%` }} />
+              <div className="mt-1 h-1.5 overflow-hidden rounded-full bg-paper" aria-hidden="true">
+                <div className={cn("h-full opacity-80", bar)} style={{ width: `${(theme.count / max) * 100}%` }} />
               </div>
             </li>
           ))}
@@ -558,19 +745,17 @@ function ThemeRank({
 
 function InsightGlance({ card }: { card: OverviewInsightGlance }) {
   return (
-    <li className="rounded-lg border border-[#eef2f7] p-3">
+    <li className="rounded-lg border border-line p-3">
       <div className="flex flex-wrap items-center gap-2">
-        <span className={cn("rounded-full px-2 py-0.5 text-[11px] font-semibold uppercase tracking-wide", GLANCE_TONE[card.kind])}>
-          {card.label}
-        </span>
-        {card.severity ? <span className="text-[11px] text-slate">Severity {card.severity}/5</span> : null}
+        <Badge variant={GLANCE_TONE[card.kind]}>{card.label}</Badge>
+        {card.severity ? <span className="text-[11px] text-ink-3">Severity {card.severity}/5</span> : null}
       </div>
-      <p className="mt-2 text-sm font-medium text-graphite">{card.title}</p>
-      <p className="mt-1 text-sm leading-6 text-slate">{card.detail}</p>
-      {card.excerpt ? <p className="mt-2 line-clamp-3 text-xs italic text-slate">“{card.excerpt}”</p> : null}
+      <p className="mt-2 text-[13px] font-semibold text-ink">{card.title}</p>
+      <p className="mt-1 text-[13px] leading-6 text-ink-2">{card.detail}</p>
+      {card.excerpt ? <p className="mt-2 line-clamp-3 text-xs italic text-ink-3">“{card.excerpt}”</p> : null}
       {card.supportingReviews > 0 ? (
-        <p className="mt-2 text-xs text-slate">
-          {card.supportingReviews.toLocaleString("en-US")} supporting review{card.supportingReviews === 1 ? "" : "s"}
+        <p className="mt-2 text-xs text-ink-3">
+          {n(card.supportingReviews)} supporting review{card.supportingReviews === 1 ? "" : "s"}
         </p>
       ) : null}
     </li>
@@ -579,54 +764,56 @@ function InsightGlance({ card }: { card: OverviewInsightGlance }) {
 
 function WorstStore({ store, scopeRating }: { store: OverviewStoreRow; scopeRating: number | null }) {
   return (
-    <section className="flex h-full flex-col rounded-xl border border-[#163a7a] bg-white p-4 shadow-[0_1px_2px_rgba(16,24,40,0.04)] sm:p-5">
-      <p className="text-xs font-semibold uppercase tracking-[0.08em] text-[#163a7a]">Lowest rated outlet</p>
-      <h2 className="mt-2 text-lg text-graphite" style={HEADING}>
+    <section className="flex h-full flex-col rounded-lg border border-line bg-white p-4">
+      <div className="flex flex-wrap items-center gap-2">
+        <Badge variant="warn">Lowest rated location</Badge>
+        <span className="text-xs text-ink-3">
+          {store.groupName ? `${store.groupName} · ` : ""}
+          {store.rank} of {store.rankedCount} · {n(store.reviews)} reviews
+        </span>
+      </div>
+      <h2 className="mt-2 text-sm font-semibold text-ink">
         <Link href={store.href} className="hover:underline">
           {store.name}
         </Link>
       </h2>
-      <p className="mt-1 text-xs text-slate">
-        {store.groupName ? `${store.groupName} · ` : ""}
-        {store.rank} of {store.rankedCount} · {store.reviews.toLocaleString("en-US")} reviews
+      <p className="mt-2 text-[22px] font-semibold leading-tight tabular-nums text-ink">
+        {store.rating.toFixed(2)}{" "}
+        <span className="text-xs font-normal text-ink-3">{changeLabel(store.ratingChange)} vs the previous period</span>
       </p>
-      <p className="mt-4 text-[32px] leading-none text-graphite" style={HEADING}>
-        {store.rating.toFixed(2)}
-      </p>
-      <p className="mt-2 text-sm text-slate">{changeLabel(store.ratingChange)} vs the previous period</p>
-      <dl className="mt-4 space-y-2 text-sm">
+      <dl className="mt-3 space-y-1.5 text-[13px]">
         <div className="flex justify-between gap-3">
-          <dt className="text-slate">Scope average</dt>
-          <dd className="tabular-nums text-graphite">{ratingLabel(scopeRating)}</dd>
+          <dt className="text-ink-3">Scope average</dt>
+          <dd className="tabular-nums text-ink">{ratingLabel(scopeRating)}</dd>
         </div>
         <div className="flex justify-between gap-3">
-          <dt className="text-slate">1–3 star share</dt>
+          <dt className="text-ink-3">1–3 star share</dt>
           <dd>
-            <Link href={store.negativeHref} className="tabular-nums text-graphite hover:underline">
+            <Link href={store.negativeHref} className="tabular-nums text-ink hover:underline">
               {pct(store.negativeShare)}
             </Link>
           </dd>
         </div>
         <div className="flex justify-between gap-3">
-          <dt className="text-slate">Reply rate</dt>
+          <dt className="text-ink-3">Reply rate</dt>
           <dd>
-            <Link href={store.assignHref} className="tabular-nums text-graphite hover:underline">
+            <Link href={store.assignHref} className="tabular-nums text-ink hover:underline">
               {pct(store.replyRate)}
             </Link>
           </dd>
         </div>
         <div className="flex justify-between gap-3">
-          <dt className="text-slate">Main complaint</dt>
-          <dd className="text-right text-graphite">{store.complaint ?? "—"}</dd>
+          <dt className="text-ink-3">Main complaint</dt>
+          <dd className="text-right text-ink">{store.complaint ?? "—"}</dd>
         </div>
       </dl>
       <div className="mt-auto flex flex-wrap gap-2 pt-4">
-        <Link href={store.href} className="inline-flex h-9 items-center rounded-full border border-[#e6ebf2] px-3 text-sm text-graphite hover:border-[#163a7a]">
-          Open outlet
-        </Link>
-        <Link href={store.assignHref} className="inline-flex h-9 items-center rounded-full border border-[#e6ebf2] px-3 text-sm text-graphite hover:border-[#163a7a]">
+        <Button size="sm" variant="outline" nativeButton={false} render={<Link href={store.href} />}>
+          Open location
+        </Button>
+        <Button size="sm" variant="outline" nativeButton={false} render={<Link href={store.assignHref} />}>
           Assign follow-up
-        </Link>
+        </Button>
       </div>
     </section>
   );

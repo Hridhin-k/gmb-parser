@@ -24,19 +24,28 @@ export default async function DashboardLayout({
   const { user, workspaceId, role, access, maintenance, announcement, supportTenantId } = chrome;
   if (maintenance.enabled && !isSuperAdmin(user)) {
     return (
-      <main className="mx-auto max-w-lg px-6 py-16">
-        <h1 className="text-2xl font-medium text-graphite">RevuPilot is under maintenance</h1>
-        <p className="mt-3 text-sm text-slate">{maintenance.message ?? "We're making improvements. Please check back shortly."}</p>
+      <main className="flex min-h-dvh items-center justify-center bg-paper p-6">
+        <div className="w-full max-w-md rounded-xl border border-line bg-white p-8">
+        <span className="inline-flex h-[22px] items-center rounded-sm bg-info-tint px-2 text-xs font-medium text-info">Maintenance</span>
+        <h1 className="mt-3 text-lg font-semibold text-ink">RevuPilot is under maintenance</h1>
+        <p className="mt-2 text-[13px] text-ink-3">{maintenance.message ?? "We're making improvements. Queued actions resume automatically afterwards. Please check back shortly."}</p>
+        </div>
       </main>
     );
   }
   if (access && !access.enabled) {
     return (
-      <main className="mx-auto max-w-lg px-6 py-16">
-        <h1 className="text-2xl font-medium text-graphite">Access is turned off</h1>
-        <p className="mt-3 text-sm text-slate">
-          An organization admin has to turn your access back on before you can open this workspace.
-        </p>
+      <main className="flex min-h-dvh items-center justify-center bg-paper p-6">
+        <div className="w-full max-w-md rounded-xl border border-line bg-white p-8">
+          <span className="inline-flex h-[22px] items-center rounded-sm bg-bad-tint px-2 text-xs font-medium text-bad">Access disabled</span>
+          <h1 className="mt-3 text-lg font-semibold text-ink">Your access to {chrome.workspaceName} is turned off</h1>
+          <p className="mt-2 text-[13px] text-ink-3">
+            A workspace admin has to turn your access back on before you can open this workspace. Your history is kept.
+          </p>
+          <a href="/login" className="mt-4 inline-flex h-[34px] items-center rounded-md border border-line px-3 text-[13px] font-medium text-ink hover:bg-paper">
+            Use a different account
+          </a>
+        </div>
       </main>
     );
   }
@@ -46,19 +55,21 @@ export default async function DashboardLayout({
   return (
     <>
       {chrome.localDemo ? (
-        <div className="border-b border-amber-200 bg-amber-50 px-4 py-2 text-sm text-amber-950" role="status">
-          <strong>Local demo · sample reviews.</strong> Google sync and publishing are disabled. AI drafts and analysis use your configured provider.
+        <div className="flex flex-wrap items-center gap-2.5 border-b border-[#f59e0b] bg-demo px-4 py-2 text-[13px] text-demo-ink" role="status">
+          <span className="inline-flex h-[22px] items-center rounded-sm border border-dashed border-[#f59e0b] px-2 text-xs font-semibold">Demo workspace</span>
+          <span>Sample reviews. Google sync and publishing are simulated; AI drafts and analysis use your configured provider.</span>
         </div>
       ) : null}
       {supportTenantId ? (
-        <div className="flex flex-wrap items-center justify-between gap-2 bg-amber-100 px-4 py-2 text-sm text-amber-900">
-          <span>Support view (read-only) — you are viewing <strong>{chrome.workspaceName}</strong> as a super admin. Changes are blocked.</span>
+        <div className="flex flex-wrap items-center gap-2.5 border-b border-[#f59e0b] bg-[#fde68a] px-4 py-2 text-[13px] font-medium text-demo-ink" role="status">
+          <span className="inline-flex h-[22px] items-center rounded-sm bg-white/60 px-2 text-xs font-semibold">Read-only support view</span>
+          <span className="min-w-0 flex-1">You are viewing <strong>{chrome.workspaceName}</strong> as platform support. Every action is disabled and page views are logged.</span>
           <ExitSupportButton />
         </div>
       ) : null}
       {announcement ? (
-        <div className={`px-4 py-2 text-sm ${announcement.tone === "warning" ? "bg-amber-100 text-amber-900" : "bg-paper text-graphite"}`}>
-          <strong>{announcement.title}</strong> — {announcement.body}
+        <div className={`border-b px-4 py-2 text-[13px] ${announcement.tone === "warning" ? "border-warn-line bg-warn-tint text-[#7c3a06]" : "border-info-line bg-info-tint text-[#0b5a6f]"}`} role="status">
+          <strong className="font-semibold">{announcement.title}</strong> {announcement.body}
         </div>
       ) : null}
     <AppShell

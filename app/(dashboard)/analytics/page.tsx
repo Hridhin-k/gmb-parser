@@ -1,4 +1,7 @@
-import { Download } from "lucide-react";
+import Link from "next/link";
+import { CalendarClock, Download } from "lucide-react";
+import { buttonVariants } from "@/components/ui/button";
+import { modernizeCopy } from "@/lib/ui/vocabulary";
 import { AnalyticsBoard } from "@/components/analytics-board";
 import { ANALYTICS_SECTIONS, type AnalyticsSection } from "@/lib/analytics-sections";
 import { FreshMetrics } from "@/components/fresh-metrics";
@@ -82,22 +85,36 @@ export default async function AnalyticsPage({ searchParams }: AnalyticsPageProps
   if (groupId) exportParams.set("group", groupId);
   if (locationId) exportParams.set("location", locationId);
 
+  const comparison =
+    compare === "onboarding" ? "before vs since onboarding" : range.start ? "vs the previous period" : "no earlier period";
+  const scheduleHref = (() => {
+    const scoped = new URLSearchParams();
+    if (clientId) scoped.set("client", clientId);
+    if (groupId) scoped.set("group", groupId);
+    if (locationId) scoped.set("location", locationId);
+    const text = scoped.toString();
+    return text ? `/reports?${text}` : "/reports";
+  })();
+
   return (
-    <div className="flex flex-col gap-6">
+    <div className="flex flex-col gap-4">
       <PageHeader
         title="Analytics"
-        description="The same review totals as Overview, split into performance, themes, profile, automation, and team."
+        description={`${modernizeCopy(resolved.title)} · ${context.locations.length.toLocaleString("en-US")} ${
+          context.locations.length === 1 ? "location" : "locations"
+        } · ${range.label}, ${comparison}`}
       >
-        <a
-          href={`/api/reviews/export?${exportParams.toString()}`}
-          className="inline-flex h-9 items-center gap-1.5 rounded-full border border-silver bg-white px-4 text-sm font-medium text-navy hover:border-action-blue hover:bg-info-banner-bg"
-        >
-          <Download className="h-3.5 w-3.5" aria-hidden />
+        <Link href={scheduleHref} className={buttonVariants({ variant: "outline" })}>
+          <CalendarClock aria-hidden />
+          Schedule as report
+        </Link>
+        <a href={`/api/reviews/export?${exportParams.toString()}`} className={buttonVariants({ variant: "default" })}>
+          <Download aria-hidden />
           Export CSV
         </a>
       </PageHeader>
       <TransitionScope>
-        <PendingRegion label="Calculating review trends for the selected locations…" className="mt-6">
+        <PendingRegion label="Calculating review trends for the selected locations…">
           <FreshMetrics
             rendered={overviewQueryKey((key) => (Array.isArray(params[key]) ? params[key][0] : params[key]))}
             surface="analytics"

@@ -10,8 +10,8 @@ interface PaginationBarProps {
 }
 
 const LINK =
-  "rounded-full border border-silver bg-white px-4 py-2 font-medium text-graphite hover:border-ink";
-const DISABLED = "rounded-full border border-silver px-4 py-2 text-silver";
+  "inline-flex h-7 items-center rounded-md border border-line bg-white px-2.5 text-xs font-medium text-ink hover:bg-paper";
+const DISABLED = "inline-flex h-7 items-center rounded-md border border-line-2 px-2.5 text-xs text-stone";
 
 export function PaginationBar({
   basePath,
@@ -34,8 +34,12 @@ export function PaginationBar({
   return (
     <nav
       aria-label="Pagination"
-      className="flex items-center justify-center gap-3 py-2 text-sm text-slate"
+      className="flex flex-wrap items-center justify-between gap-2 px-1 py-2 text-xs text-ink-3"
     >
+      <span className="tabular-nums">
+        Page {currentPage.toLocaleString("en-US")} of {totalPages.toLocaleString("en-US")}
+      </span>
+      <span className="flex items-center gap-1.5">
       {prev ? (
         <Link href={hrefFor(prev)} className={LINK}>
           Previous
@@ -43,9 +47,6 @@ export function PaginationBar({
       ) : (
         <span className={DISABLED}>Previous</span>
       )}
-      <span className="tabular-nums">
-        Page {currentPage} of {totalPages}
-      </span>
       {next ? (
         <Link href={hrefFor(next)} className={LINK}>
           Next
@@ -53,6 +54,7 @@ export function PaginationBar({
       ) : (
         <span className={DISABLED}>Next</span>
       )}
+      </span>
     </nav>
   );
 }

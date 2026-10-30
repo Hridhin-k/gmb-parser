@@ -2,33 +2,72 @@
 @import "tw-animate-css";
 
 /*
- * Dashboard palette: navy primary, cool paper, and chart colors for
- * ratings, sentiment, and reply health. Text stays graphite for reading.
+ * RevuPilot design system (see the "RevuPilot Redesign" Design artifact).
+ * Neutral foundation, one accent (Pilot Blue), semantic hues for success,
+ * warning, failure, info, and a dedicated violet for AI-generated content.
+ * Legacy token names (ink, graphite, slate, navy…) are kept and remapped so
+ * every screen picks up the new palette.
  */
 
 @theme inline {
-  --font-heading: var(--font-heading);
+  --font-heading: var(--font-inter), ui-sans-serif, system-ui, -apple-system, sans-serif;
   --font-display: var(--font-heading);
   --color-background: var(--background);
   --color-foreground: var(--foreground);
   --font-sans: var(--font-inter), ui-sans-serif, system-ui, -apple-system, sans-serif;
   --font-mono: ui-monospace, SFMono-Regular, Menlo, monospace;
 
-  --color-ink: #0f274f;
-  --color-graphite: #1e293b;
-  --color-slate: #64748b;
-  --color-stone: #94a3b8;
-  --color-silver: #e2e8f0;
-  --color-paper: #f3f6fb;
-  --color-action-blue: #2563eb;
-  --color-info-banner-bg: #eff6ff;
-  --color-success: #059669;
-  --color-navy: #163a7a;
-  --color-sky: #38bdf8;
-  --color-positive: #10b981;
-  --color-neutral: #f59e0b;
-  --color-negative: #f43f5e;
-  --color-warn: #f97316;
+  /* Neutrals */
+  --color-ink: #14181f;
+  --color-ink-2: #3f4756;
+  --color-ink-3: #687283;
+  --color-graphite: #1d232d;
+  --color-slate: #687283;
+  --color-stone: #8a93a3;
+  --color-silver: #e4e7ec;
+  --color-line: #e4e7ec;
+  --color-line-2: #eef0f3;
+  --color-paper: #f5f6f8;
+  --color-ground: #f5f6f8;
+  --color-surface: #ffffff;
+
+  /* Primary accent */
+  --color-brand: #1f4ed8;
+  --color-brand-hover: #1a41b5;
+  --color-brand-tint: #edf1fd;
+  --color-brand-line: #c3d0f7;
+  --color-action-blue: #1f4ed8;
+  --color-navy: #1f4ed8;
+  --color-sky: #3b82f6;
+  --color-info-banner-bg: #e3f4f8;
+
+  /* Semantic */
+  --color-ok: #15803d;
+  --color-ok-tint: #e7f5ec;
+  --color-ok-line: #bfe3cc;
+  --color-warn: #b45309;
+  --color-warn-tint: #fdf2e3;
+  --color-warn-line: #f3d7ae;
+  --color-bad: #b91c1c;
+  --color-bad-tint: #fceaea;
+  --color-bad-line: #f3c4c4;
+  --color-ai: #6d28d9;
+  --color-ai-tint: #f2ecfd;
+  --color-ai-line: #d9ccf5;
+  --color-info: #0e7490;
+  --color-info-tint: #e3f4f8;
+  --color-info-line: #b9e0ea;
+  --color-star: #d97706;
+  --color-admin: #1b1f2a;
+  --color-admin-2: #2a3246;
+  --color-demo: #fef3c7;
+  --color-demo-ink: #78350f;
+
+  /* Chart / sentiment */
+  --color-success: #15803d;
+  --color-positive: #15803d;
+  --color-neutral: #d97706;
+  --color-negative: #b91c1c;
 
   --color-sidebar-ring: var(--sidebar-ring);
   --color-sidebar-border: var(--sidebar-border);
@@ -60,81 +99,84 @@
   --color-card-foreground: var(--card-foreground);
   --color-card: var(--card);
 
+  /* 4 tags · 6 controls · 8 cards · 10 dialogs · 12 mobile cards */
   --radius-sm: 4px;
   --radius-md: 6px;
   --radius-lg: 8px;
-  --radius-xl: 12px;
-  --radius-2xl: 16px;
-  --radius-3xl: 24px;
-  --radius-4xl: 28px;
+  --radius-xl: 10px;
+  --radius-2xl: 12px;
+  --radius-3xl: 16px;
+  --radius-4xl: 20px;
 
-  --shadow-card: 0 0 0 1px rgba(34, 42, 53, 0.08), 0 4px 8px 0 rgba(34, 42, 53, 0.05);
-  --shadow-card-hover:
-    0 1px 5px -4px rgba(19, 19, 22, 0.7), 0 0 0 1px rgba(34, 42, 53, 0.1),
-    0 4px 8px 0 rgba(34, 42, 53, 0.05);
-  --shadow-button: inset 0 2px 0 0 rgba(255, 255, 255, 0.15);
-  --shadow-control: 0 1px 3px 0 rgba(0, 0, 0, 0.1), 0 0 2px 0 rgba(0, 0, 0, 0.06);
+  /* Flat by default: 1px borders. Only overlays cast a shadow. */
+  --shadow-card: 0 0 0 1px #e4e7ec;
+  --shadow-card-hover: 0 0 0 1px #c3d0f7;
+  --shadow-button: none;
+  --shadow-control: none;
+  --shadow-overlay: 0 8px 24px rgba(20, 24, 31, 0.12), 0 0 0 1px #e4e7ec;
 
+  /* Type scale (Inter). Data 13, forms 14, public/mobile 15. */
   --text-caption: 12px;
   --text-caption--line-height: 1.4;
-  --text-caption--letter-spacing: -0.24px;
-  --text-body-sm: 14px;
+  --text-caption--letter-spacing: 0;
+  --text-data: 13px;
+  --text-data--line-height: 1.45;
+  --text-body-sm: 13px;
   --text-body-sm--line-height: 1.5;
-  --text-body-sm--letter-spacing: -0.2px;
-  --text-body: 16px;
+  --text-body-sm--letter-spacing: 0;
+  --text-body: 14px;
   --text-body--line-height: 1.5;
-  --text-body--letter-spacing: -0.19px;
-  --text-subheading: 18px;
+  --text-body--letter-spacing: 0;
+  --text-subheading: 16px;
   --text-subheading--line-height: 1.4;
-  --text-subheading--letter-spacing: -0.2px;
-  --text-heading-sm: 20px;
-  --text-heading-sm--line-height: 1.3;
-  --text-heading-sm--letter-spacing: 0.2px;
-  --text-heading: 24px;
+  --text-subheading--letter-spacing: -0.005em;
+  --text-heading-sm: 16px;
+  --text-heading-sm--line-height: 1.35;
+  --text-heading-sm--letter-spacing: -0.005em;
+  --text-heading: 20px;
   --text-heading--line-height: 1.3;
-  --text-heading--letter-spacing: 0.24px;
-  --text-heading-lg: 48px;
-  --text-heading-lg--line-height: 1.1;
-  --text-heading-lg--letter-spacing: 0.48px;
-  --text-display: 64px;
+  --text-heading--letter-spacing: -0.01em;
+  --text-heading-lg: 36px;
+  --text-heading-lg--line-height: 1.15;
+  --text-heading-lg--letter-spacing: -0.02em;
+  --text-display: 44px;
   --text-display--line-height: 1.1;
-  --text-display--letter-spacing: 0.64px;
+  --text-display--letter-spacing: -0.025em;
 }
 
 :root {
-  --font-heading: var(--font-cal-sans), "Poppins", ui-sans-serif, system-ui, sans-serif;
-  --background: #f3f6fb;
-  --foreground: #1e293b;
+  --background: #f5f6f8;
+  --foreground: #14181f;
   --card: #ffffff;
-  --card-foreground: #1e293b;
+  --card-foreground: #14181f;
   --popover: #ffffff;
-  --popover-foreground: #1e293b;
-  --primary: #163a7a;
+  --popover-foreground: #14181f;
+  --primary: #1f4ed8;
   --primary-foreground: #ffffff;
-  --secondary: #e8eef8;
-  --secondary-foreground: #163a7a;
-  --muted: #eef2f7;
-  --muted-foreground: #64748b;
-  --accent: #dbeafe;
-  --accent-foreground: #163a7a;
-  --destructive: #e11d48;
-  --border: #e2e8f0;
-  --input: #e2e8f0;
-  --ring: #2563eb;
-  --chart-1: #2563eb;
-  --chart-2: #10b981;
-  --chart-3: #f59e0b;
-  --chart-4: #f43f5e;
-  --chart-5: #38bdf8;
+  --secondary: #edf1fd;
+  --secondary-foreground: #1f4ed8;
+  --muted: #f5f6f8;
+  --muted-foreground: #687283;
+  --accent: #edf1fd;
+  --accent-foreground: #1f4ed8;
+  --destructive: #b91c1c;
+  --border: #e4e7ec;
+  --input: #e4e7ec;
+  --ring: #1f4ed8;
+  --chart-1: #1f4ed8;
+  --chart-2: #15803d;
+  --chart-3: #d97706;
+  --chart-4: #b91c1c;
+  --chart-5: #6d28d9;
   --radius: 8px;
-  --sidebar: #163a7a;
-  --sidebar-foreground: #ffffff;
-  --sidebar-primary: #ffffff;
-  --sidebar-primary-foreground: #163a7a;
-  --sidebar-accent: rgba(255, 255, 255, 0.12);
-  --sidebar-accent-foreground: #ffffff;
-  --sidebar-border: rgba(255, 255, 255, 0.12);
-  --sidebar-ring: #38bdf8;
+  --sidebar: #ffffff;
+  --sidebar-foreground: #3f4756;
+  --sidebar-primary: #1f4ed8;
+  --sidebar-primary-foreground: #ffffff;
+  --sidebar-accent: #edf1fd;
+  --sidebar-accent-foreground: #1f4ed8;
+  --sidebar-border: #e4e7ec;
+  --sidebar-ring: #c3d0f7;
 }
 
 @layer base {
@@ -145,29 +187,33 @@
     @apply scroll-smooth;
   }
   body {
-    @apply bg-paper font-sans text-graphite antialiased;
-    letter-spacing: -0.011em;
+    @apply bg-paper font-sans text-ink antialiased;
+    font-size: 13px;
+    line-height: 1.45;
   }
   h1,
   .font-heading,
   .font-display {
     font-family: var(--font-heading);
-    font-weight: 400;
-    letter-spacing: 0.01em;
-    /* Cal Sans ships one (semibold-looking) weight; never fake a bolder one. */
-    font-synthesis-weight: none;
+    font-weight: 600;
+    letter-spacing: -0.01em;
   }
   h1 {
     @apply text-ink;
+  }
+  .tabular-nums,
+  td,
+  [data-num] {
+    font-variant-numeric: tabular-nums;
   }
   ::placeholder {
     color: var(--color-stone);
   }
   *:focus-visible {
-    @apply outline-2 outline-offset-2 outline-action-blue;
+    @apply outline-2 outline-offset-2 outline-brand-line;
   }
   ::selection {
-    background-color: #bfdbfe;
+    background-color: #c3d0f7;
   }
 
   /*

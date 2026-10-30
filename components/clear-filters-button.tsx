@@ -17,7 +17,7 @@ export function ClearFiltersButton({ onClear, disabled, className }: ClearFilter
       variant="ghost"
       onClick={onClear}
       disabled={disabled}
-      className={cn("shrink-0 px-3 text-slate", className)}
+      className={cn("shrink-0 px-2 text-ink-3", className)}
     >
       <X className="h-3.5 w-3.5" aria-hidden />
       Clear filters

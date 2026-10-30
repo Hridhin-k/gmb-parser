@@ -1,5 +1,4 @@
 import { redirect } from "next/navigation";
-import { AgencyHomeView } from "@/components/agency-home";
 import { getAgencyHome } from "@/lib/services/agency-home";
 import { AGENCY_DEFAULT_RANGE, dateRangeParams, parseDateRange } from "@/lib/date-range";
 import { getActiveRole, getActiveWorkspace } from "@/lib/services/session";
@@ -10,18 +9,17 @@ import { workspaceGrant } from "@/lib/access";
 import { canOpenPath } from "@/lib/shell";
 import { validateFilterString, validatePage } from "@/lib/validation";
 
-interface DashboardPageProps {
-  searchParams: Promise<Record<string, string | string[] | undefined>>;
-}
+export type PortfolioSearchParams = Record<string, string | string[] | undefined>;
 
-export default async function DashboardPage({ searchParams }: DashboardPageProps) {
+/**
+ * Shared loader for the Portfolio tabs (Businesses and Usage & budgets).
+ * Same role check, scope, access filter and agency-home call for both tabs.
+ */
+export async function loadPortfolio(searchParams: Promise<PortfolioSearchParams>, path: "/portfolio" | "/portfolio/usage") {
   const role = await getActiveRole();
-  if (!canOpenPath("/dashboard", role)) redirect("/overview");
+  if (!canOpenPath(path, role)) redirect("/overview");
 
-  const [params, { user, workspaceId }] = await Promise.all([
-    searchParams,
-    getActiveWorkspace(),
-  ]);
+  const [params, { user, workspaceId }] = await Promise.all([searchParams, getActiveWorkspace()]);
 
   const resolved = await readPageScope(user.id, workspaceId, params);
   const clientId = resolved.clientId ?? "";
@@ -40,15 +38,14 @@ export default async function DashboardPage({ searchParams }: DashboardPageProps
     locationIds: resolved.locationIds,
   });
 
-  return (
-    <AgencyHomeView
-      workspaceId={workspaceId}
-      canSync={canSyncWorkspace(role)}
-      data={data}
-      clientId={clientId}
-      rangeParams={dateRangeParams(range, AGENCY_DEFAULT_RANGE)}
-      query={query}
-      showUsage={workspaceGrant(role, "manage_people")}
-    />
-  );
+  return {
+    workspaceId,
+    canSync: canSyncWorkspace(role),
+    data,
+    clientId,
+    rangeLabel: range.label,
+    rangeParams: dateRangeParams(range, AGENCY_DEFAULT_RANGE),
+    query,
+    showUsage: workspaceGrant(role, "manage_people"),
+  };
 }

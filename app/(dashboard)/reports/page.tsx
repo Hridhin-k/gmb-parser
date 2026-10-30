@@ -1,8 +1,10 @@
 import Link from "next/link";
 import { Download } from "lucide-react";
 import { FreshMetrics } from "@/components/fresh-metrics";
-import { ReportsBoard } from "@/components/reports-board";
-import { PageHeader } from "@/components/page-header";
+import { ReportsBoard, type ReportsTab } from "@/components/reports-board";
+import { Panel } from "@/components/analytics-panel";
+import { buttonVariants } from "@/components/ui/button";
+import { modernizeCopy } from "@/lib/ui/vocabulary";
 import { dateRangeParams, parseDateRange } from "@/lib/date-range";
 import { channelOptions, readDeliveryEnv } from "@/lib/reporting";
 import { countExportableReviews } from "@/lib/services/review-export";
@@ -22,6 +24,8 @@ interface ReportsPageProps {
 }
 
 const DEFAULT_RANGE = "1m";
+// Kept here, not imported from the client board: a server file only sees client references.
+const TABS: readonly ReportsTab[] = ["reports", "alerts", "history", "failures"];
 
 export default async function ReportsPage({ searchParams }: ReportsPageProps) {
   const [params, { user, workspaceId }, role] = await Promise.all([
@@ -107,24 +111,19 @@ export default async function ReportsPage({ searchParams }: ReportsPageProps) {
     href: scopedHref(alert.href, current, "/reports"),
   }));
 
-  return (
-    <div className="space-y-6">
-      <PageHeader
-        title="Reports and alerts"
-        description="Schedule a report from stored reviews, and turn on alert rules. Email, Slack, and WhatsApp send only when that provider is configured."
-      />
+  const requestedTab = typeof params.tab === "string" ? params.tab : "reports";
+  const tab: ReportsTab = (TABS as readonly string[]).includes(requestedTab) ? (requestedTab as ReportsTab) : "reports";
+  const initialEdit = typeof params.edit === "string" ? params.edit : null;
+  const canExportUsage = workspaceGrant(role, "manage_people");
 
-      <FreshMetrics
-        rendered={overviewQueryKey((key) => (Array.isArray(params[key]) ? params[key][0] : params[key]))}
-        surface="reports"
-      >
-      <section className="rounded-xl bg-white p-4 shadow-card sm:p-5">
-        <h2 className="text-sm font-semibold text-graphite">Exports for the dates above</h2>
-        <ul className="mt-3 divide-y divide-silver">
-          <li className="flex flex-col gap-3 py-3 sm:flex-row sm:items-center sm:justify-between">
-            <div>
-              <p className="text-sm font-medium text-graphite">Reviews</p>
-              <p className="mt-0.5 text-sm text-slate">
+  const aside = (
+    <>
+      <Panel title="Exports for the dates above" hint={`${modernizeCopy(resolved.title)} · ${range.label}`}>
+        <ul className="flex flex-col divide-y divide-line-2">
+          <li className="flex flex-wrap items-center justify-between gap-2 pb-3">
+            <div className="min-w-0">
+              <p className="text-[13px] font-medium text-ink">Reviews</p>
+              <p className="text-xs text-ink-3">
                 {reviewCount === 0
                   ? "No reviews in this period."
                   : `${reviewCount.toLocaleString("en-US")} ${reviewCount === 1 ? "review" : "reviews"} as a spreadsheet.`}
@@ -133,49 +132,59 @@ export default async function ReportsPage({ searchParams }: ReportsPageProps) {
             {reviewCount > 0 ? (
               <a
                 href={reviewExport.size ? `/api/reviews/export?${reviewExport.toString()}` : "/api/reviews/export"}
-                className="inline-flex h-9 items-center gap-1.5 rounded-full border border-silver bg-white px-4 text-sm font-medium text-graphite hover:border-ink"
+                className={buttonVariants({ variant: "outline", size: "sm" })}
               >
-                <Download className="size-3.5" aria-hidden />
-                Export CSV
+                <Download aria-hidden />
+                CSV
               </a>
             ) : null}
           </li>
-          {workspaceGrant(role, "manage_people") ? (
-            <li className="flex flex-col gap-3 py-3 sm:flex-row sm:items-center sm:justify-between">
-              <div>
-                <p className="text-sm font-medium text-graphite">Usage</p>
-                <p className="mt-0.5 text-sm text-slate">Stored locations, reviews, and published replies. No prices.</p>
+          {canExportUsage ? (
+            <li className="flex flex-wrap items-center justify-between gap-2 pt-3">
+              <div className="min-w-0">
+                <p className="text-[13px] font-medium text-ink">Usage</p>
+                <p className="text-xs text-ink-3">Stored locations, reviews, and published replies. No prices.</p>
               </div>
               <a
                 href={`/api/usage/export${usageExport.size ? `?${usageExport}` : ""}`}
-                className="inline-flex h-9 items-center gap-1.5 rounded-full border border-silver bg-white px-4 text-sm font-medium text-graphite hover:border-ink"
+                className={buttonVariants({ variant: "outline", size: "sm" })}
               >
-                <Download className="size-3.5" aria-hidden />
-                Export CSV
+                <Download aria-hidden />
+                CSV
               </a>
             </li>
           ) : null}
         </ul>
-      </section>
-
-      <section className="rounded-xl bg-white p-4 shadow-card sm:p-5">
-        <h2 className="text-sm font-semibold text-graphite">Needs attention</h2>
+      </Panel>
+      <Panel title="Needs attention">
         {attention.length === 0 ? (
-          <p className="mt-3 text-sm text-slate">Nothing needs attention right now.</p>
+          <p className="text-[13px] text-ink-3">Nothing needs attention right now.</p>
         ) : (
-          <ul className="mt-3 divide-y divide-silver">
+          <ul className="flex flex-col divide-y divide-line-2">
             {attention.map((alert) => (
-              <li key={alert.id} className="py-3">
-                <Link href={alert.href} className="text-sm font-medium text-ink hover:underline">
+              <li key={alert.id} className="py-2 first:pt-0 last:pb-0">
+                <Link href={alert.href} className="text-[13px] font-medium text-ink hover:text-brand">
                   {alert.title}
                 </Link>
               </li>
             ))}
           </ul>
         )}
-      </section>
+      </Panel>
+    </>
+  );
 
+  return (
+    <FreshMetrics
+      rendered={overviewQueryKey((key) => (Array.isArray(params[key]) ? params[key][0] : params[key]))}
+      surface="reports"
+    >
       <ReportsBoard
+        tab={tab}
+        query={current.toString()}
+        initialEdit={initialEdit}
+        description="Scheduled summaries and rule-based alerts. Each report keeps its own scope. Email, Slack and WhatsApp send only when that provider is configured."
+        aside={aside}
         canManage={isManager(role)}
         channels={channelOptions(readDeliveryEnv(process.env))}
         members={roster.members.map((member) => member.email)}
@@ -191,7 +200,6 @@ export default async function ReportsPage({ searchParams }: ReportsPageProps) {
             : alerts.events
         }
       />
-      </FreshMetrics>
-    </div>
+    </FreshMetrics>
   );
 }

@@ -2,7 +2,9 @@
 
 import { useState, type FormEvent } from "react";
 import { Button } from "@/components/ui/button";
+import { Banner } from "@/components/ui/banner";
 import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
 
 export function RequestAccessForm() {
   const [company, setCompany] = useState("");
@@ -30,15 +32,51 @@ export function RequestAccessForm() {
   }
 
   if (state === "sent") {
-    return <p className="mt-6 rounded-md border border-silver bg-paper px-3 py-2 text-sm text-graphite" role="status">Request sent. If the platform team approves it, sign in again with this email to create your organization.</p>;
+    return (
+      <Banner tone="ok" title="Request sent." role="status">
+        If the platform team approves it, sign in again with this email to create your workspace.
+      </Banner>
+    );
   }
   return (
-    <form onSubmit={submit} className="mt-6 space-y-2">
-      <p className="text-sm font-medium text-graphite">Request access</p>
-      <Input value={company} onChange={(e) => setCompany(e.target.value)} placeholder="Company / organization (optional)" aria-label="Company" maxLength={255} />
-      <textarea value={message} onChange={(e) => setMessage(e.target.value)} placeholder="Anything the platform team should know? (optional)" aria-label="Message" maxLength={1000} rows={3} className="w-full rounded-md border border-line px-2 py-2 text-sm" />
-      {error ? <p className="text-sm text-red-600" role="alert">{error}</p> : null}
-      <Button type="submit" loading={state === "sending"} className="w-full">{state === "sending" ? "Sending…" : "Request access"}</Button>
+    <form onSubmit={submit} className="flex flex-col gap-3 rounded-lg border border-line bg-paper p-4">
+      <p className="text-sm font-semibold text-ink">Request access from the platform team</p>
+      <div className="flex flex-col gap-1.5">
+        <label htmlFor="request-company" className="text-[13px] font-medium text-ink">
+          Company <span className="font-normal text-ink-3">(optional)</span>
+        </label>
+        <Input
+          id="request-company"
+          value={company}
+          onChange={(e) => setCompany(e.target.value)}
+          placeholder="Business or agency name"
+          maxLength={255}
+          className="bg-white"
+        />
+      </div>
+      <div className="flex flex-col gap-1.5">
+        <label htmlFor="request-message" className="text-[13px] font-medium text-ink">
+          Message <span className="font-normal text-ink-3">(optional)</span>
+        </label>
+        <Textarea
+          id="request-message"
+          value={message}
+          onChange={(e) => setMessage(e.target.value)}
+          placeholder="Anything the platform team should know?"
+          maxLength={1000}
+          rows={3}
+          className="bg-white"
+        />
+      </div>
+      {error ? (
+        <Banner tone="bad" title="Not sent.">
+          {error}
+        </Banner>
+      ) : null}
+      <Button type="submit" size="lg" loading={state === "sending"} className="w-full">
+        {state === "sending" ? "Sending…" : "Request access"}
+      </Button>
+      <p className="text-xs text-ink-3">Your request goes to the platform team with the account shown above.</p>
     </form>
   );
 }

@@ -1,3 +1,3 @@
 import { createPageLoading } from "@/components/page-loading";
 
-export default createPageLoading("team", "settings");
+export default createPageLoading("team", "list");

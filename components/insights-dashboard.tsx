@@ -1,4 +1,3 @@
-import Link from "next/link";
 import type { ObservationAggregates } from "@/lib/review-intelligence";
 import type { InsightRecord } from "@/lib/insight-report";
 import { monthlySeriesMetrics } from "@/lib/chart-metrics";
@@ -34,21 +33,21 @@ export function SentimentDonut({
   return (
     <div className="relative h-36 w-36 shrink-0" role="img" aria-label={`${pct}% of praise and complaint mentions are ${centerLabel}`}>
       <svg viewBox="0 0 128 128" className="h-36 w-36 -rotate-90">
-        <circle cx="64" cy="64" r={r} fill="none" stroke="#e2e8f0" strokeWidth="13" />
+        <circle cx="64" cy="64" r={r} fill="none" stroke="#EEF0F3" strokeWidth="13" />
         <circle
           cx="64"
           cy="64"
           r={r}
           fill="none"
-          stroke="#10b981"
+          stroke="#15803D"
           strokeWidth="13"
-          strokeLinecap="round"
+          strokeLinecap="butt"
           strokeDasharray={`${filled} ${c - filled}`}
         />
       </svg>
       <div className="absolute inset-0 flex flex-col items-center justify-center">
-        <span className="text-3xl font-semibold text-graphite">{pct}%</span>
-        <span className="text-[11px] font-medium uppercase tracking-wide text-slate">{centerLabel}</span>
+        <span className="text-[26px] font-semibold tabular-nums tracking-[-0.02em] text-ink">{pct}%</span>
+        <span className="text-[11px] font-medium text-ink-3">{centerLabel}</span>
       </div>
     </div>
   );
@@ -57,7 +56,7 @@ export function SentimentDonut({
 export function SentimentTrend({ byMonth }: { byMonth: ObservationAggregates["byMonth"] }) {
   const months = [...byMonth].sort((a, b) => a.month.localeCompare(b.month)).slice(-12);
   if (months.length < 2) {
-    return <p className="mt-3 text-sm text-slate">Not enough monthly history in this range yet.</p>;
+    return <p className="py-6 text-center text-[13px] text-ink-3">Not enough monthly history in this range yet.</p>;
   }
   const max = Math.max(1, ...months.map((m) => Math.max(m.positive, m.negative)));
   const w = 640;
@@ -77,31 +76,33 @@ export function SentimentTrend({ byMonth }: { byMonth: ObservationAggregates["by
   );
   return (
     <div>
-      <svg viewBox={`0 0 ${w} ${h}`} className="mt-2 w-full" role="img" aria-label="Monthly positive and negative observations">
+      <svg viewBox={`0 0 ${w} ${h}`} className="w-full" role="img" aria-label="Monthly positive and negative observations">
         {[0.25, 0.5, 0.75, 1].map((f) => (
           <g key={f}>
-            <line x1={pad} x2={w - pad} y1={y(max * f)} y2={y(max * f)} stroke="#eef2f7" strokeWidth="1" />
-            <text x={w - pad} y={y(max * f) - 3} textAnchor="end" fontSize="9" fill="#94a3b8">
+            <line x1={pad} x2={w - pad} y1={y(max * f)} y2={y(max * f)} stroke="#EEF0F3" strokeWidth="1" />
+            <text x={w - pad} y={y(max * f) - 3} textAnchor="end" fontSize="10" fill="#687283">
               {Math.round(max * f).toLocaleString()}
             </text>
           </g>
         ))}
-        <polyline points={line("positive")} fill="none" stroke="#10b981" strokeWidth="2.5" strokeLinejoin="round" />
-        <polyline points={line("negative")} fill="none" stroke="#f43f5e" strokeWidth="2.5" strokeLinejoin="round" />
+        <line x1={pad} x2={w - pad} y1={y(0)} y2={y(0)} stroke="#E4E7EC" strokeWidth="1" />
+        <polyline points={line("positive")} fill="none" stroke="#15803D" strokeWidth="2" strokeLinejoin="round" />
+        <polyline points={line("negative")} fill="none" stroke="#B91C1C" strokeWidth="2" strokeLinejoin="round" />
         {months.map((m, i) => (
           <g key={m.month}>
-            <circle cx={x(i)} cy={y(m.positive)} r="3" fill="#10b981" />
-            <circle cx={x(i)} cy={y(m.negative)} r="3" fill="#f43f5e" />
+            <circle cx={x(i)} cy={y(m.positive)} r="2.5" fill="#15803D" />
+            <circle cx={x(i)} cy={y(m.negative)} r="2.5" fill="#B91C1C" />
           </g>
         ))}
       </svg>
-      <div className="flex justify-between text-[11px] text-slate">
+      <div className="flex justify-between text-[11px] text-ink-3" aria-hidden>
         <span>{monthName(months[0].month)}</span>
-        <span className="flex items-center gap-3">
-          <span className="flex items-center gap-1"><span className="inline-block h-2 w-2 rounded-full bg-emerald-500" /> Positive</span>
-          <span className="flex items-center gap-1"><span className="inline-block h-2 w-2 rounded-full bg-rose-500" /> Negative</span>
-        </span>
         <span>{monthName(months[months.length - 1].month)}</span>
+      </div>
+      <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-xs text-ink-3">
+        <span className="inline-flex items-center gap-1.5"><span className="h-0.5 w-4 bg-ok" aria-hidden /> Positive mentions</span>
+        <span className="inline-flex items-center gap-1.5"><span className="h-0.5 w-4 bg-bad" aria-hidden /> Negative mentions</span>
+        <span className="ml-auto">Right axis: mentions per month</span>
       </div>
       <MetricStrip
         items={[
@@ -186,22 +187,22 @@ function ThemeRankList({
 }) {
   if (rows.length === 0) return null;
   const max = Math.max(1, ...rows.map((row) => row.count));
-  const bar = tone === "praise" ? "bg-emerald-500" : "bg-rose-400";
+  const bar = tone === "praise" ? "bg-ok" : "bg-bad";
   const kind = tone === "praise" ? "praise" : "complaint";
   return (
     <div>
-      <p className="text-xs font-medium uppercase tracking-wide text-slate">{title}</p>
+      <p className="text-xs font-medium text-ink-3">{title}</p>
       <ul className="mt-2 space-y-2.5">
         {rows.map((row) => (
           <li key={row.topic}>
-            <div className="flex items-baseline justify-between gap-2 text-sm">
-              <span className="capitalize text-graphite">{topicLabel(row.topic)}</span>
-              <span className="text-right text-xs text-slate">
+            <div className="flex items-baseline justify-between gap-2 text-[13px]">
+              <span className="capitalize text-ink-2">{topicLabel(row.topic)}</span>
+              <span className="text-right text-xs tabular-nums text-ink-3">
                 {row.count.toLocaleString()} {kind} {row.count === 1 ? "mention" : "mentions"}
               </span>
             </div>
-            <div className="mt-1 h-1.5 overflow-hidden rounded-full bg-paper" aria-hidden="true">
-              <div className={`h-full ${bar}`} style={{ width: `${(row.count / max) * 100}%` }} />
+            <div className="mt-1 h-2 overflow-hidden rounded-[3px] bg-line-2" aria-hidden="true">
+              <div className={`h-full rounded-[3px] ${bar}`} style={{ width: `${(row.count / max) * 100}%` }} />
             </div>
           </li>
         ))}
@@ -213,12 +214,12 @@ function ThemeRankList({
 export function TopThemes({ aggregates, limit = 5 }: { aggregates: ObservationAggregates; limit?: number }) {
   const praise = rankedThemes(aggregates.positive, limit);
   const complaints = rankedThemes(aggregates.negative, limit);
-  if (praise.length === 0 && complaints.length === 0) return <p className="mt-3 text-sm text-slate">No themes yet.</p>;
+  if (praise.length === 0 && complaints.length === 0) return <p className="py-6 text-center text-[13px] text-ink-3">No themes yet.</p>;
   return (
-    <div className="mt-3 space-y-4">
+    <div className="space-y-4">
       <ThemeRankList title="Most praised" rows={praise} tone="praise" />
       <ThemeRankList title="Complaint themes" rows={complaints} tone="complaint" />
-      <p className="text-xs text-slate">
+      <p className="text-xs text-ink-3">
         Ranked separately. Complaint counts match Analytics. A mention is one topic in analysed text, not a star rating.
       </p>
     </div>
@@ -242,12 +243,12 @@ export function LocationPerformance({
     }))
     .sort((a, b) => b.reviews - a.reviews)
     .slice(0, limit);
-  if (rows.length === 0) return <p className="mt-3 text-sm text-slate">No outlet data in this scope yet.</p>;
+  if (rows.length === 0) return <p className="py-6 text-center text-[13px] text-ink-3">No location data in this scope yet.</p>;
   return (
-    <div className="mt-3 overflow-x-auto">
-      <table className="w-full min-w-[430px] text-sm">
+    <div className="overflow-x-auto">
+      <table className="w-full min-w-[430px] text-[13px]">
         <thead>
-          <tr className="text-left text-[11px] uppercase tracking-wide text-slate">
+          <tr className="border-b border-line text-left text-xs text-ink-3">
             <th className="pb-2 font-medium">Location</th>
             <th className="pb-2 font-medium">Analysed</th>
             <th className="pb-2 font-medium">Positive</th>
@@ -259,28 +260,28 @@ export function LocationPerformance({
           {rows.map((row) => {
             const pct = row.sentimentTotal > 0 ? Math.round((row.positive / row.sentimentTotal) * 100) : 0;
             return (
-              <tr key={row.locationId} className="border-t border-paper">
-                <td className="max-w-[170px] truncate py-2 pr-2 font-medium text-graphite">
-                  {outletNames.get(row.locationId) ?? "Outlet"}
+              <tr key={row.locationId} className="border-b border-line-2 last:border-0">
+                <td className="max-w-[170px] truncate py-2 pr-2 font-medium text-ink">
+                  {outletNames.get(row.locationId) ?? "Location"}
                 </td>
-                <td className="py-2 pr-2 text-slate">{row.reviews.toLocaleString()}</td>
+                <td className="py-2 pr-2 tabular-nums text-ink-2">{row.reviews.toLocaleString()}</td>
                 <td className="py-2 pr-2">
                   <span className="flex items-center gap-2">
-                    <span className="w-9 text-emerald-600">{pct}%</span>
-                    <span className="h-1.5 w-16 overflow-hidden rounded-full bg-paper">
-                      <span className="block h-full bg-emerald-500" style={{ width: `${pct}%` }} />
+                    <span className="w-9 tabular-nums text-ok">{pct}%</span>
+                    <span className="h-2 w-16 overflow-hidden rounded-[3px] bg-line-2">
+                      <span className="block h-full rounded-[3px] bg-ok" style={{ width: `${pct}%` }} />
                     </span>
-                    <span className="text-xs tabular-nums text-slate">{row.positive.toLocaleString()} mentions</span>
+                    <span className="text-xs tabular-nums text-ink-3">{row.positive.toLocaleString()} mentions</span>
                   </span>
                 </td>
-                <td className="py-2 pr-2 text-rose-600">{row.negative.toLocaleString()}</td>
+                <td className="py-2 pr-2 tabular-nums text-bad">{row.negative.toLocaleString()}</td>
                 <td className="py-2">
                   {row.severe > 0 ? (
-                    <span className="inline-flex rounded-full border border-red-200 bg-red-50 px-2 py-0.5 text-xs font-medium text-red-700">
+                    <span className="inline-flex h-[20px] items-center rounded-sm bg-bad-tint px-1.5 text-xs font-medium tabular-nums text-bad">
                       {row.severe}
                     </span>
                   ) : (
-                    <span className="text-slate">0</span>
+                    <span className="text-ink-3">0</span>
                   )}
                 </td>
               </tr>
@@ -303,7 +304,7 @@ const KEY_INSIGHT_STYLES: Array<{
     key: "concern",
     label: "Rising concern",
     href: "#negative",
-    classes: "bg-rose-50 text-rose-600",
+    classes: "bg-bad-tint text-bad",
     pick: (list) =>
       list.find((i) => i.sentiment === "negative" && i.category !== "serious_incident") ??
       list.find((i) => i.category === "serious_incident"),
@@ -312,21 +313,21 @@ const KEY_INSIGHT_STYLES: Array<{
     key: "driver",
     label: "Positive driver",
     href: "#positive",
-    classes: "bg-emerald-50 text-emerald-600",
+    classes: "bg-ok-tint text-ok",
     pick: (list) => list.find((i) => i.sentiment === "positive"),
   },
   {
     key: "emerging",
     label: "Emerging signal",
     href: "#trends",
-    classes: "bg-violet-50 text-violet-600",
+    classes: "bg-info-tint text-info",
     pick: (list) => list.find((i) => i.category === "trend") ?? list.find((i) => i.category === "relationship"),
   },
   {
     key: "action",
     label: "Recommendation",
     href: "#actions",
-    classes: "bg-sky-50 text-sky-600",
+    classes: "bg-brand-tint text-brand",
     pick: (list) =>
       list.find((i) => i.suggestedAction && i.sentiment === "negative") ??
       list.find((i) => i.suggestedAction),
@@ -337,19 +338,19 @@ export function KeyInsights({ insights }: { insights: InsightRecord[] }) {
   const cards = KEY_INSIGHT_STYLES.map((style) => ({ style, insight: style.pick(insights) })).filter(
     (c) => c.insight
   );
-  if (cards.length === 0) return <p className="mt-3 text-sm text-slate">Generate a report to surface key insights.</p>;
+  if (cards.length === 0) return <p className="py-6 text-center text-[13px] text-ink-3">Generate a report to surface key insights.</p>;
   return (
-    <ul className="mt-3 space-y-2">
+    <ul className="space-y-2">
       {cards.map(({ style, insight }) => (
         <li key={style.key}>
-          <a href={style.href} className="flex gap-3 rounded-lg border border-paper p-2.5 transition hover:border-silver hover:bg-paper/60">
-            <span className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-sm font-semibold ${style.classes}`}>
+          <a href={style.href} className="flex gap-3 rounded-md border border-line-2 p-2.5 transition-colors hover:border-brand-line">
+            <span className={`flex size-7 shrink-0 items-center justify-center rounded-md text-xs font-semibold ${style.classes}`}>
               {style.label.slice(0, 1)}
             </span>
             <span className="min-w-0">
-              <span className="block text-[11px] font-semibold uppercase tracking-wide text-slate">{style.label}</span>
-              <span className="mt-0.5 line-clamp-2 block text-sm font-medium text-graphite">{insight!.title}</span>
-              <span className="mt-0.5 block text-xs text-slate">
+              <span className="block text-xs font-medium text-ink-3">{style.label}</span>
+              <span className="mt-0.5 line-clamp-2 block text-[13px] font-medium text-ink">{insight!.title}</span>
+              <span className="mt-0.5 block text-xs tabular-nums text-ink-3">
                 {insight!.supportingReviews.toLocaleString()} supporting review
                 {insight!.supportingReviews === 1 ? "" : "s"}
                 {insight!.severity ? ` · severity ${insight!.severity}/5` : ""}
@@ -364,22 +365,22 @@ export function KeyInsights({ insights }: { insights: InsightRecord[] }) {
 
 export function StaffPraised({ aggregates, limit = 5 }: { aggregates: ObservationAggregates; limit?: number }) {
   const rows = aggregates.staffPraise.slice(0, limit);
-  if (rows.length === 0) return <p className="mt-3 text-sm text-slate">No staff named in praise yet.</p>;
+  if (rows.length === 0) return <p className="py-6 text-center text-[13px] text-ink-3">No staff named in praise yet.</p>;
   const max = Math.max(1, ...rows.map((r) => r.count));
   // Share is of every staff-praise mention, including names below the cut.
   const totalPraise = aggregates.staffPraise.reduce((s, r) => s + r.count, 0);
   return (
-    <ul className="mt-3 space-y-2.5">
+    <ul className="space-y-2.5">
       {rows.map((row) => (
         <li key={row.name}>
-          <div className="flex items-baseline justify-between text-sm">
-            <span className="text-graphite">{row.name}</span>
-            <span className="text-xs text-slate">
+          <div className="flex items-baseline justify-between text-[13px]">
+            <span className="text-ink-2">{row.name}</span>
+            <span className="text-xs tabular-nums text-ink-3">
               {row.count} mentions{totalPraise > 0 ? ` · ${Math.round((row.count / totalPraise) * 100)}% of staff praise` : ""}
             </span>
           </div>
-          <div className="mt-1 h-1.5 overflow-hidden rounded-full bg-paper" aria-hidden="true">
-            <div className="h-full bg-emerald-500" style={{ width: `${(row.count / max) * 100}%` }} />
+          <div className="mt-1 h-2 overflow-hidden rounded-[3px] bg-line-2" aria-hidden="true">
+            <div className="h-full rounded-[3px] bg-ok" style={{ width: `${(row.count / max) * 100}%` }} />
           </div>
         </li>
       ))}
@@ -399,10 +400,10 @@ export function SectionCard({
   className?: string;
 }) {
   return (
-    <div className={`rounded-2xl border border-silver bg-white p-4 shadow-[0_1px_2px_rgba(16,24,40,0.04)] ${className}`}>
-      <div className="flex items-baseline justify-between gap-2">
-        <h2 className="text-base font-medium text-graphite">{title}</h2>
-        {hint ? <span className="text-xs text-slate">{hint}</span> : null}
+    <div className={`min-w-0 rounded-lg border border-line bg-white p-4 ${className}`}>
+      <div className="mb-3 flex flex-wrap items-baseline justify-between gap-2">
+        <h2 className="text-sm font-semibold text-ink">{title}</h2>
+        {hint ? <span className="text-xs text-ink-3">{hint}</span> : null}
       </div>
       {children}
     </div>
