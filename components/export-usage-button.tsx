@@ -4,8 +4,17 @@ import { useState } from "react";
 import { ActivityStatus } from "@/components/activity-status";
 import { Button } from "@/components/ui/button";
 import { FileSpreadsheet } from "lucide-react";
+import { cn } from "@/lib/utils";
 
-export function ExportUsageButton({ href }: { href: string }) {
+export function ExportUsageButton({
+  href,
+  variant = "default",
+  className,
+}: {
+  href: string;
+  variant?: "default" | "outline";
+  className?: string;
+}) {
   const [state, setState] = useState<"idle" | "working" | "error">("idle");
 
   async function download() {
@@ -30,25 +39,19 @@ export function ExportUsageButton({ href }: { href: string }) {
   }
 
   return (
-    <div className="mt-3 space-y-2">
-      <Button
-        type="button"
-        variant="outline"
-        size="sm"
-        onClick={() => void download()}
-        loading={state === "working"}
-      >
+    <div className={cn("flex flex-col items-stretch gap-2 sm:items-end", className)}>
+      <Button type="button" variant={variant} onClick={() => void download()} loading={state === "working"}>
         <FileSpreadsheet aria-hidden />
         {state === "working" ? "Preparing file…" : "Export for invoicing"}
       </Button>
       {state === "working" ? (
         <ActivityStatus
           title="Building the invoice file"
-          detail="Collecting each client’s location count and reviews for the period selected above."
+          detail="Collecting each business’s location count and reviews for the selected period."
         />
       ) : null}
       {state === "error" ? (
-        <p className="text-sm text-bad" role="alert">
+        <p className="text-xs text-bad" role="alert">
           The invoice file could not be built. Try again in a moment.
         </p>
       ) : null}

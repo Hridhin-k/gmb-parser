@@ -57,7 +57,7 @@ export function AgencyClientForm({ clientId, canAssignManager, managers, initial
         };
         void post(`/api/clients/${clientId}`, body)
           .then(() => {
-            toast.success("Client saved");
+            toast.success("Business details saved");
             router.refresh();
           })
           .catch((caught: unknown) => setError(caught instanceof Error ? caught.message : "Could not save the client."))
@@ -65,24 +65,24 @@ export function AgencyClientForm({ clientId, canAssignManager, managers, initial
       }}
     >
       <div className="grid gap-3 sm:grid-cols-2">
-        <label className="text-sm text-slate">Name
+        <label className="text-xs font-medium text-ink-3">Name
           <Input name="name" required defaultValue={initial?.name ?? ""} className="mt-1" />
         </label>
-        <label className="text-sm text-slate">Contact email
+        <label className="text-xs font-medium text-ink-3">Contact email
           <Input name="contactEmail" type="email" defaultValue={initial?.contactEmail ?? ""} className="mt-1" />
         </label>
-        <label className="text-sm text-slate">Website
+        <label className="text-xs font-medium text-ink-3">Website
           <Input name="website" placeholder="https://" defaultValue={initial?.website ?? ""} className="mt-1" />
         </label>
-        <label className="text-sm text-slate">Client brand name
+        <label className="text-xs font-medium text-ink-3">Brand name
           <Input name="brandName" defaultValue={initial?.brandName ?? ""} className="mt-1" />
         </label>
-        <label className="text-sm text-slate sm:col-span-2">Client logo URL
+        <label className="text-xs font-medium text-ink-3 sm:col-span-2">Logo URL
           <Input name="logoUrl" placeholder="https://" defaultValue={initial?.logoUrl ?? ""} className="mt-1" />
         </label>
         {canAssignManager ? (
-          <label className="text-sm text-slate sm:col-span-2">Account manager
-            <select name="manager" defaultValue={initial?.accountManagerUserId ?? ""} className="mt-1 w-full rounded-md border border-silver bg-white px-2 py-2 text-sm text-graphite">
+          <label className="text-xs font-medium text-ink-3 sm:col-span-2">Account manager
+            <select name="manager" defaultValue={initial?.accountManagerUserId ?? ""} className="mt-1 h-[34px] w-full rounded-md border border-line bg-white px-2 text-[13px] text-ink focus-visible:ring-2 focus-visible:ring-brand-line focus-visible:outline-none">
               <option value="">No account manager</option>
               {managers.map((manager) => (
                 <option key={manager.id} value={manager.id}>{manager.email}</option>
@@ -91,29 +91,31 @@ export function AgencyClientForm({ clientId, canAssignManager, managers, initial
           </label>
         ) : null}
       </div>
-      {error ? <p className="text-sm text-red-700">{error}</p> : null}
-      <div className="flex flex-wrap gap-2">
-        <Button type="submit" disabled={pending}>{pending ? "Saving…" : "Save client"}</Button>
+      {error ? <p className="text-[13px] text-bad" role="alert">{error}</p> : null}
+      <div className="flex flex-wrap justify-end gap-2">
         <Button
-            type="button"
-            variant="outline"
-            onClick={() => {
-              setError(null);
-              void post(`/api/clients/${clientId}`, { action: "onboarding" })
-                .then((data) => {
-                  setLink(data.url ?? null);
-                  toast.success("Link ready to copy. Mail is not sent.");
-                })
-                .catch((caught: unknown) => setError(caught instanceof Error ? caught.message : "Could not create the link."));
-            }}
-          >
-            Create connection link
-          </Button>
+          type="button"
+          variant="outline"
+          onClick={() => {
+            setError(null);
+            void post(`/api/clients/${clientId}`, { action: "onboarding" })
+              .then((data) => {
+                setLink(data.url ?? null);
+                toast.success("Link ready to copy. Mail is not sent.");
+              })
+              .catch((caught: unknown) => setError(caught instanceof Error ? caught.message : "Could not create the link."));
+          }}
+        >
+          Create connection link
+        </Button>
+        <Button type="submit" disabled={pending} loading={pending}>
+          {pending ? "Saving…" : "Save details"}
+        </Button>
       </div>
       {link ? (
-        <p className="break-all text-sm text-graphite">
+        <p className="rounded-md border border-line bg-paper px-3 py-2 text-[13px] break-all text-ink">
           {link}
-          <span className="mt-1 block text-xs text-slate">This link expires in 7 days. It is not emailed. The client signs in at Google and is never asked for a password here.</span>
+          <span className="mt-1 block text-xs text-ink-3">This link expires in 7 days. It is not emailed. The client signs in at Google and is never asked for a password here.</span>
         </p>
       ) : null}
     </form>

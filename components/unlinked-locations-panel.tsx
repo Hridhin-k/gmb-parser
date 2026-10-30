@@ -53,45 +53,46 @@ export function UnlinkedLocationsPanel({
   if (locations.length === 0) return null;
 
   return (
-    <div className="rounded-xl border border-silver bg-paper">
+    <section className="overflow-hidden rounded-lg border border-info-line bg-info-tint">
       <button
         type="button"
-        className="flex w-full items-center justify-between px-4 py-3 text-left"
+        className="flex w-full items-center justify-between gap-3 px-4 py-3 text-left"
         onClick={() => setExpanded((v) => !v)}
         aria-expanded={expanded}
       >
-        <div className="min-w-0 pr-3">
-          <p className="text-sm font-medium text-blue-900">
+        <div className="min-w-0">
+          <p className="text-[13px] font-semibold text-ink">
             {locations.length} unassigned location
             {locations.length !== 1 ? "s" : ""} you can add here
           </p>
-          <p className="text-xs text-blue-700">
-            Assign these Google profiles to this client. A client can have
-            multiple locations.
+          <p className="text-xs text-ink-2">
+            Assign these Google profiles to this business. A business can have many locations.
           </p>
         </div>
         {expanded ? (
-          <ChevronUp className="h-4 w-4 text-blue-700" />
+          <ChevronUp className="size-4 shrink-0 text-info" aria-hidden />
         ) : (
-          <ChevronDown className="h-4 w-4 text-blue-700" />
+          <ChevronDown className="size-4 shrink-0 text-info" aria-hidden />
         )}
       </button>
 
       {expanded && (
-        <div className="border-t border-blue-200 px-4 pb-4 pt-2 space-y-2">
+        <div className="space-y-2 border-t border-info-line px-4 pt-2 pb-4">
           {error && (
-            <p className="text-sm text-red-600">{error}</p>
+            <p className="text-[13px] text-bad" role="alert">
+              {error}
+            </p>
           )}
           {locations.map((loc) => (
             <div
               key={loc.id}
-              className="flex items-center justify-between rounded-md bg-white px-3 py-2.5 shadow-sm"
+              className="flex items-center justify-between gap-3 rounded-md border border-line bg-white px-3 py-2.5"
             >
               <div className="min-w-0">
-                <p className="truncate text-sm font-medium text-graphite">
+                <p className="truncate text-[13px] font-medium text-ink">
                   {loc.location_title}
                 </p>
-                <p className="truncate text-xs text-slate">
+                <p className="truncate text-xs text-ink-3">
                   {loc.address_formatted ??
                     loc.grm_google_accounts?.account_display_name ??
                     loc.google_location_name}
@@ -100,18 +101,18 @@ export function UnlinkedLocationsPanel({
               <Button
                 size="sm"
                 variant="outline"
-                className="ml-3 shrink-0"
+                className="shrink-0"
                 onClick={() => handleConnect(loc.id)}
                 loading={loadingId === loc.id}
                 disabled={loadingId === loc.id}
               >
-                <Link2 className="h-3.5 w-3.5" aria-hidden />
+                <Link2 className="size-3.5" aria-hidden />
                 {loadingId === loc.id ? "Assigning…" : "Assign"}
               </Button>
             </div>
           ))}
         </div>
       )}
-    </div>
+    </section>
   );
 }
