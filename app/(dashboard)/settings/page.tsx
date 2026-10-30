@@ -1,4 +1,5 @@
 import Link from "next/link";
+import type { ReactNode } from "react";
 import { redirect } from "next/navigation";
 import { createAdminClient } from "@/lib/db/client";
 import { allows, workspaceGrant } from "@/lib/access";
@@ -7,6 +8,12 @@ import { SettingsBoard } from "@/components/settings-board";
 import { AiConfigPanel } from "@/components/ai-config-panel";
 import { GoogleConnectionCard } from "@/components/google-connection-card";
 import { PageHeader } from "@/components/page-header";
+import { SettingsNav, type SettingsNavItem } from "@/components/settings-nav";
+import { SettingsScopePicker } from "@/components/settings-scope-picker";
+import { SettingsAiTabs } from "@/components/settings-ai-tabs";
+import { Badge } from "@/components/ui/badge";
+import { Banner } from "@/components/ui/banner";
+import { buttonVariants } from "@/components/ui/button";
 import { EscalationContactStore, EscalationService } from "@/lib/services/escalations";
 import { ResolutionContactForm } from "@/components/resolution-contact-form";
 import { listScopeChoices } from "@/lib/services/access";
@@ -29,14 +36,45 @@ const ERROR_MESSAGES: Record<string, string> = {
 
 const SECTIONS = [
   ["tone", "AI configuration"],
-  ["templates", "Templates"],
-  ["sla", "SLAs and routing"],
+  ["templates", "Reply templates"],
+  ["sla", "SLAs and escalations"],
   ["notifications", "Notifications"],
-  ["integrations", "Integrations"],
-  ["branding", "Branding"],
-  ["plan", "Plan and billing"],
+  ["integrations", "Google integrations"],
+  ["branding", "Agency branding"],
+  ["plan", "Plan and usage"],
   ["security", "Security"],
 ] as const;
+
+type SectionId = (typeof SECTIONS)[number][0];
+
+const SECTION_GROUP: Record<SectionId, SettingsNavItem["group"]> = {
+  tone: "Replies and AI",
+  templates: "Replies and AI",
+  sla: "Replies and AI",
+  notifications: "Replies and AI",
+  integrations: "Replies and AI",
+  branding: "Workspace",
+  plan: "Workspace",
+  security: "Workspace",
+};
+
+/** Settings that can be overridden per business, group or location. */
+const SCOPED_SECTIONS: readonly string[] = ["tone", "templates"];
+
+function Panel({ title, description, children, actions }: { title: string; description?: ReactNode; children: ReactNode; actions?: ReactNode }) {
+  return (
+    <section className="space-y-3 rounded-lg border border-line bg-white p-4">
+      <div className="flex flex-wrap items-start justify-between gap-2">
+        <div className="min-w-0">
+          <h2 className="text-sm font-semibold text-ink">{title}</h2>
+          {description ? <p className="mt-0.5 text-xs text-ink-3">{description}</p> : null}
+        </div>
+        {actions}
+      </div>
+      {children}
+    </section>
+  );
+}
 
 function parseTarget(raw: string | undefined): SettingsTarget {
   if (!raw || raw === "workspace") return { kind: "workspace" };
@@ -56,9 +94,11 @@ export default async function SettingsPage({
   if (!canOpenPath("/settings", role)) redirect("/overview");
 
   const [params, { user, workspaceId }] = await Promise.all([searchParams, getActiveWorkspace()]);
-  const requested = typeof params.section === "string" ? params.section : "tone";
+  const googleReturn = typeof params.google_error === "string" || params.google_connected === "true";
+  const requested =
+    typeof params.section === "string" ? params.section : googleReturn ? "integrations" : "tone";
   const canBill = allows(role, "manage_people");
-  const section = SECTIONS.some(([id]) => id === requested) ? requested : "tone";
+  const section: SectionId = SECTIONS.some(([id]) => id === requested) ? (requested as SectionId) : "tone";
   if ((section === "plan" || section === "branding") && !canBill) redirect("/settings?section=tone");
   const target = parseTarget(typeof params.scope === "string" ? params.scope : undefined);
   const access = await getMemberAccess(user.id, workspaceId);
@@ -115,168 +155,366 @@ export default async function SettingsPage({
     ? scopes.filter((choice) => choice.kind === "client" && allowedClients.includes(choice.id))
     : scopes;
 
-  return (
-    <div className="space-y-6">
-      <PageHeader
-        title="Settings"
-        description={`Editing for ${settings.label}. Applies to ${settings.appliesTo}.`}
-      />
-      <div className="flex flex-wrap gap-2">
-        <Link href={`/settings?section=${section}`} className={`rounded-full border px-3 py-1 text-sm ${target.kind === "workspace" ? "border-ink bg-ink text-white" : "border-silver text-graphite"}`}>
-          Organization
-        </Link>
-        {visibleScopes.slice(0, 12).map((scope) => {
-          const active = target.kind === scope.kind && "id" in target && target.id === scope.id;
-          return (
-            <Link key={scope.id} href={`/settings?section=${section}&scope=${scope.kind}:${scope.id}`} className={`rounded-full border px-3 py-1 text-sm ${active ? "border-ink bg-ink text-white" : "border-silver text-graphite"}`}>
-              {scope.label}
-            </Link>
-          );
-        })}
-      </div>
-      <nav className="flex flex-wrap gap-2 border-b border-silver pb-3">
-        {SECTIONS.filter(([id]) => (id !== "plan" && id !== "branding") || canBill).map(([id, label]) => (
-          <Link key={id} href={`/settings?section=${id}${scopeQuery}`} className={`rounded-full px-3 py-1 text-sm ${section === id ? "bg-ink text-white" : "text-graphite"}`}>
-            {label}
-          </Link>
-        ))}
-      </nav>
+  const navItems: SettingsNavItem[] = SECTIONS.filter(([id]) => (id !== "plan" && id !== "branding") || canBill).map(
+    ([id, label]) => ({
+      id,
+      label,
+      group: SECTION_GROUP[id],
+      href: `/settings?section=${id}${SCOPED_SECTIONS.includes(id) ? scopeQuery : ""}`,
+    })
+  );
+  const sectionLabel = SECTIONS.find(([id]) => id === section)?.[1] ?? "Settings";
+  const scoped = SCOPED_SECTIONS.includes(section);
+  const scopeLabel = settings.label === "the organization" ? "the workspace" : settings.label;
+  const connectionRows = (connections.data ?? []).map((connection) => ({ ...connection, status: connection.status as string }));
+  const ownFields = [...Object.values(settings.tone), ...Object.values(settings.automation)].filter((field) => field.overridden).length;
+  const totalFields = Object.keys(settings.tone).length + Object.keys(settings.automation).length;
 
-      {section === "tone" && aiBoard ? (
-        <div className="space-y-8">
-          <AiConfigPanel
-            canEdit={canEdit}
-            target={target}
-            active={{
-              version: aiBoard.active.version,
-              label: aiBoard.active.label,
-              snapshot: {
-                org: aiBoard.active.snapshot.org,
-              },
-            }}
-            versions={aiBoard.versions.map((row) => ({
-              version: row.version,
-              status: row.status,
-              label: row.label,
-              createdAt: row.createdAt,
-            }))}
-            knowledge={aiBoard.knowledge
-              .filter((row) => {
-                if (target.kind === "workspace") {
-                  return !row.clientId && !row.groupId && !row.locationId;
-                }
-                if (target.kind === "client") return row.clientId === target.id;
-                if (target.kind === "group") return row.groupId === target.id;
-                return row.locationId === target.id;
-              })
-              .map((row) => ({
-                id: row.id,
-                kind: row.kind as AiKnowledgeKind,
-                title: row.title,
-                body: row.body,
-                enabled: row.enabled,
-                clientId: row.clientId,
-                groupId: row.groupId,
-                locationId: row.locationId,
-                metadata: row.metadata,
-              }))}
+  const descriptions: Record<SectionId, ReactNode> = {
+    tone: `How AI drafts are written for ${scopeLabel}. Businesses, groups and locations can override individual settings; each row says where its value comes from.`,
+    templates: `Hand-written replies your team can insert in one click, for ${scopeLabel}. Templates work with AI off.`,
+    sla: "Response-time targets and the rule that turns complaints into escalations with an owner.",
+    notifications: "What reaches you and where. Alert rules for reports live in Reports.",
+    integrations: "Google accounts that give access to your Business Profiles, and how to recover when one breaks.",
+    branding: "How your agency appears to your team and clients.",
+    plan: "What this workspace is counted on, and where to see usage.",
+    security: "How people sign in to this workspace.",
+  };
+
+  const headerAction: Partial<Record<SectionId, ReactNode>> = {
+    sla: (
+      <Link href="/escalations" className={buttonVariants({ variant: "outline" })}>
+        Open escalations
+      </Link>
+    ),
+    plan: (
+      <Link href="/portfolio/usage" className={buttonVariants({ variant: "default" })}>
+        Open usage
+      </Link>
+    ),
+  };
+
+  return (
+    <div className="flex flex-col gap-5 lg:flex-row lg:items-start lg:gap-6">
+      <SettingsNav items={navItems} active={section} />
+      <div className="min-w-0 flex-1 space-y-4">
+        <PageHeader
+          title={sectionLabel}
+          breadcrumbs={[{ label: "Settings", href: "/settings" }, { label: sectionLabel }]}
+          description={descriptions[section]}
+        >
+          {headerAction[section]}
+        </PageHeader>
+
+        {scoped ? (
+          <SettingsScopePicker
+            section={section}
+            current={target}
+            choices={visibleScopes}
+            appliesTo={settings.appliesTo.replace(/\bbrand\b/g, "business")}
           />
+        ) : null}
+
+        {section === "tone" && aiBoard ? (
+          <div className="grid items-start gap-4 xl:grid-cols-[minmax(0,1fr)_280px]">
+            <div className="min-w-0">
+              <SettingsAiTabs
+                tabs={(() => {
+                  const props = {
+                    canEdit,
+                    target,
+                    active: {
+                      version: aiBoard.active.version,
+                      label: aiBoard.active.label,
+                      snapshot: {
+                        org: aiBoard.active.snapshot.org,
+                      },
+                    },
+                    versions: aiBoard.versions.map((row) => ({
+                      version: row.version,
+                      status: row.status,
+                      label: row.label,
+                      createdAt: row.createdAt,
+                    })),
+                    knowledge: aiBoard.knowledge
+                      .filter((row) => {
+                        if (target.kind === "workspace") {
+                          return !row.clientId && !row.groupId && !row.locationId;
+                        }
+                        if (target.kind === "client") return row.clientId === target.id;
+                        if (target.kind === "group") return row.groupId === target.id;
+                        return row.locationId === target.id;
+                      })
+                      .map((row) => ({
+                        id: row.id,
+                        kind: row.kind as AiKnowledgeKind,
+                        title: row.title,
+                        body: row.body,
+                        enabled: row.enabled,
+                        clientId: row.clientId,
+                        groupId: row.groupId,
+                        locationId: row.locationId,
+                        metadata: row.metadata,
+                      })),
+                  };
+                  const board = {
+                    target,
+                    canEdit,
+                    tone: settings.tone,
+                    automation: settings.automation,
+                    templates: settings.templates,
+                  };
+                  return [
+                    { id: "voice", label: "Voice and automation", content: <SettingsBoard section="tone" {...board} /> },
+                    { id: "knowledge", label: "Knowledge", count: props.knowledge.length, content: <AiConfigPanel {...props} part="knowledge" /> },
+                    { id: "context", label: "Workspace context", content: <AiConfigPanel {...props} part="context" /> },
+                    {
+                      id: "preview",
+                      label: "Preview",
+                      content: (
+                        <div className="space-y-4">
+                          <AiConfigPanel {...props} part="preview" />
+                          <SettingsBoard section="preview" {...board} />
+                        </div>
+                      ),
+                    },
+                    { id: "history", label: "History", count: props.versions.length, content: <AiConfigPanel {...props} part="versions" /> },
+                  ];
+                })()}
+              />
+            </div>
+            <aside className="space-y-3">
+              <Panel title="How inheritance works">
+                <div className="space-y-2 text-xs text-ink-3">
+                  <p>
+                    Workspace defaults apply everywhere. A business, group or location can override any single setting; the
+                    nearest override wins.
+                  </p>
+                  {target.kind !== "workspace" ? (
+                    <p>
+                      <b className="font-medium text-ink">{ownFields}</b> of {totalFields} reply settings are set for{" "}
+                      {scopeLabel}. The rest are inherited. Use “Reset to inherited” to clear them.
+                    </p>
+                  ) : null}
+                  {!allowedClients ? (
+                    <p>
+                      <b className="font-medium text-ink">{settings.overrides}</b>{" "}
+                      {settings.overrides === 1 ? "business, group or location has" : "businesses, groups or locations have"} their
+                      own reply settings.
+                    </p>
+                  ) : null}
+                </div>
+              </Panel>
+              {!canEdit ? (
+                <Banner tone="neutral">You can view these settings. Saving needs permission to edit rules for this place.</Banner>
+              ) : null}
+            </aside>
+          </div>
+        ) : null}
+
+        {section === "templates" ? (
           <SettingsBoard
-            section="tone"
+            section="templates"
             target={target}
             canEdit={canEdit}
             tone={settings.tone}
             automation={settings.automation}
             templates={settings.templates}
           />
-        </div>
-      ) : null}
+        ) : null}
 
-      {section === "templates" ? (
-        <SettingsBoard
-          section="templates"
-          target={target}
-          canEdit={canEdit}
-          tone={settings.tone}
-          automation={settings.automation}
-          templates={settings.templates}
-        />
-      ) : null}
+        {section === "sla" ? (
+          <>
+            <Panel title="Escalation rule" description={`Applies to the whole workspace. Times are in ${policy.timezone}.`}>
+              <div className="overflow-x-auto rounded-md border border-line">
+                <table className="w-full min-w-[520px] text-left text-[13px]">
+                  <thead className="border-b border-line bg-paper text-xs text-ink-3">
+                    <tr>
+                      <th className="px-3 py-2 font-medium">When</th>
+                      <th className="px-3 py-2 font-medium">Then</th>
+                      <th className="px-3 py-2 font-medium">Source</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-line">
+                    <tr>
+                      <td className="px-3 py-2.5 text-ink">Review at {policy.maxStars} stars or below</td>
+                      <td className="px-3 py-2.5 text-ink-2">Open an escalation, due in <b className="font-medium text-ink">{policy.dueHours} h</b></td>
+                      <td className="px-3 py-2.5"><Badge variant="brand">Workspace</Badge></td>
+                    </tr>
+                    <tr>
+                      <td className="px-3 py-2.5 text-ink">Escalation still open</td>
+                      <td className="px-3 py-2.5 text-ink-2">
+                        Reminder recorded in the app at {policy.reminderHours.join(" and ")} hours. No email or text is sent.
+                      </td>
+                      <td className="px-3 py-2.5"><Badge variant="brand">Workspace</Badge></td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+              <div className="flex flex-wrap gap-2 text-xs">
+                <Badge variant={policy.flagProfanity ? "ok" : "default"}>Flag profanity · {policy.flagProfanity ? "On" : "Off"}</Badge>
+                <Badge variant={policy.flagLegalSafety ? "ok" : "default"}>Flag legal and safety language · {policy.flagLegalSafety ? "On" : "Off"}</Badge>
+                <Badge variant="default">
+                  Extra keywords · {policy.extraKeywords.length ? policy.extraKeywords.join(", ") : "none"}
+                </Badge>
+              </div>
+              <Banner
+                tone="info"
+                title="Overrides."
+                actions={
+                  <Link href="/locations" className={buttonVariants({ variant: "outline", size: "sm" })}>
+                    Open Locations
+                  </Link>
+                }
+              >
+                Business, group and location SLA overrides are set on Locations and groups. A nearer override replaces this
+                workspace rule.
+              </Banner>
+            </Panel>
+            <ResolutionContactForm contact={contact} canEdit={canEditWorkspace} />
+            <p className="text-xs text-ink-3">Keyword routing rules and per-group escalation owners are not available yet.</p>
+          </>
+        ) : null}
 
-      {section === "sla" ? (
-        <>
-          <section className="space-y-3 rounded-xl border border-silver bg-white p-4 text-sm text-graphite">
-            <p>Complaints at {policy.maxStars} stars or below open an escalation. The due time is {policy.dueHours} hours in {policy.timezone}.</p>
-            <p>Reminders are recorded in the app at {policy.reminderHours.join(" and ")} hours. No email or text is sent.</p>
-            <p>Brand, group, and location SLA overrides stay on Locations and groups. A nearer override replaces this organization rule.</p>
-            <Link href="/escalations" className="font-medium text-ink underline underline-offset-4">Open escalations</Link>
-          </section>
-          <ResolutionContactForm contact={contact} canEdit={canEditWorkspace} />
-        </>
-      ) : null}
+        {section === "notifications" ? (
+          <>
+            <Panel title="What you're told about" description="The bell lists each profile you cover: reviews with no reply, drafts, failed publishes and open escalations.">
+              <div className="overflow-x-auto rounded-md border border-line">
+                <table className="w-full min-w-[560px] text-left text-[13px]">
+                  <thead className="border-b border-line bg-paper text-xs text-ink-3">
+                    <tr>
+                      <th className="px-3 py-2 font-medium">Event</th>
+                      <th className="px-3 py-2 font-medium">In app</th>
+                      <th className="px-3 py-2 font-medium">Email</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-line">
+                    {[
+                      ["New review on a profile you cover", false],
+                      ["Complaint assigned to you", true],
+                      ["Escalation reminder due", false],
+                      ["Reply failed to publish", false],
+                    ].map(([event, email]) => (
+                      <tr key={String(event)}>
+                        <td className="px-3 py-2.5 text-ink">{event}</td>
+                        <td className="px-3 py-2.5"><Badge variant="ok">On</Badge></td>
+                        <td className="px-3 py-2.5 text-xs text-ink-3">
+                          {email ? (emailDelivery ? "When the person turned email on" : "Mail provider not configured") : "—"}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+              <p className="text-xs text-ink-3">
+                {emailDelivery
+                  ? "Email is sent for an assignment when that person turned email on."
+                  : "Email preferences can be saved on Team and roles. Mail is not delivered until a mail provider is configured."}
+              </p>
+              {canOpenPath("/team", role) ? (
+                <Link href="/team" className={buttonVariants({ variant: "outline", size: "sm" })}>
+                  Notification preferences
+                </Link>
+              ) : (
+                <p className="text-xs text-ink-3">Your own alert preferences are on Team and roles when that page is available for your role.</p>
+              )}
+            </Panel>
+            <Panel title="Other channels">
+              <ul className="divide-y divide-line rounded-md border border-line">
+                {["Slack", "WhatsApp"].map((name) => (
+                  <li key={name} className="flex items-center justify-between gap-2 px-3 py-2.5">
+                    <span className="text-[13px] text-ink">{name}</span>
+                    <Badge variant="default">Not configured</Badge>
+                  </li>
+                ))}
+              </ul>
+            </Panel>
+          </>
+        ) : null}
 
-      {section === "notifications" ? (
-        <section className="space-y-2 rounded-xl border border-silver bg-white p-4 text-sm text-slate">
-          <p>The bell lists each profile you cover: reviews with no reply, drafts, failed publishes, and open escalations.</p>
-          <p>You also get a notice when a new review arrives on one of those profiles, a complaint is assigned to you, a reminder is due, or a reply fails to publish.</p>
-          <p>{emailDelivery ? "Email is sent for an assignment when that person turned email on." : "Email preferences can be saved on Team and roles. Mail is not delivered until a mail provider is configured."}</p>
-          <p>WhatsApp and Slack are not configured.</p>
-          {canOpenPath("/team", role) ? (
-            <Link href="/team" className="font-medium text-ink underline underline-offset-4">Notification preferences</Link>
-          ) : (
-            <p>Your own alert preferences are on Team and roles when that page is available for your role.</p>
-          )}
-        </section>
-      ) : null}
+        {section === "integrations" ? (
+          <>
+            <GoogleConnectionCard
+              connections={connectionRows}
+              initialMessage={googleError ? ERROR_MESSAGES[googleError] ?? ERROR_MESSAGES.unknown : null}
+              initialSuccess={params.google_connected === "true"}
+            />
+            <Panel title="Other integrations">
+              <ul className="divide-y divide-line rounded-md border border-line">
+                {["Slack", "WhatsApp"].map((name) => (
+                  <li key={name} className="flex items-center justify-between gap-2 px-3 py-2.5">
+                    <span className="text-[13px] text-ink">{name}</span>
+                    <Badge variant="default">Not configured</Badge>
+                  </li>
+                ))}
+              </ul>
+            </Panel>
+          </>
+        ) : null}
 
-      {section === "integrations" ? (
-        <GoogleConnectionCard
-          connections={(connections.data ?? []).map((connection) => ({ ...connection, status: connection.status as string }))}
-          initialMessage={googleError ? ERROR_MESSAGES[googleError] ?? ERROR_MESSAGES.unknown : null}
-          initialSuccess={params.google_connected === "true"}
-        />
-      ) : null}
+        {section === "branding" && canBill && branding ? (
+          <BrandingForm
+            logoUrl={branding.logoUrl ?? ""}
+            hideProductName={branding.hideProductName}
+            customDomain={branding.customDomain ?? ""}
+            domainToken={branding.domainToken}
+            domainLabel={domainStatus({ domain: branding.customDomain, verifiedAt: branding.domainVerifiedAt }).label}
+            domainActive={domainStatus({ domain: branding.customDomain, verifiedAt: branding.domainVerifiedAt }).active}
+            senderEmail={branding.senderEmail ?? ""}
+            senderLabel={senderStatus({
+              email: branding.senderEmail,
+              mailConfigured: emailDelivery,
+              configuredFrom: process.env.REPORT_FROM_EMAIL ?? null,
+            }).label}
+            senderActive={senderStatus({
+              email: branding.senderEmail,
+              mailConfigured: emailDelivery,
+              configuredFrom: process.env.REPORT_FROM_EMAIL ?? null,
+            }).active}
+          />
+        ) : null}
 
-      {section === "branding" && canBill && branding ? (
-        <BrandingForm
-          logoUrl={branding.logoUrl ?? ""}
-          hideProductName={branding.hideProductName}
-          customDomain={branding.customDomain ?? ""}
-          domainToken={branding.domainToken}
-          domainLabel={domainStatus({ domain: branding.customDomain, verifiedAt: branding.domainVerifiedAt }).label}
-          domainActive={domainStatus({ domain: branding.customDomain, verifiedAt: branding.domainVerifiedAt }).active}
-          senderEmail={branding.senderEmail ?? ""}
-          senderLabel={senderStatus({
-            email: branding.senderEmail,
-            mailConfigured: emailDelivery,
-            configuredFrom: process.env.REPORT_FROM_EMAIL ?? null,
-          }).label}
-          senderActive={senderStatus({
-            email: branding.senderEmail,
-            mailConfigured: emailDelivery,
-            configuredFrom: process.env.REPORT_FROM_EMAIL ?? null,
-          }).active}
-        />
-      ) : null}
+        {section === "plan" && canBill ? (
+          <>
+            <Panel title="Plan">
+              <p className="text-[13px] text-ink-2">
+                Usage is counted from locations and reviews. There is no separate checkout in this workspace.
+              </p>
+              <Link href="/portfolio/usage" className={buttonVariants({ variant: "outline", size: "sm" })}>
+                See usage by business
+              </Link>
+            </Panel>
+            <Banner tone="neutral" title="Coming soon.">
+              Invoices, payment methods and AI budget caps aren&apos;t managed here yet.
+            </Banner>
+          </>
+        ) : null}
 
-      {section === "plan" && canBill ? (
-        <section className="space-y-2 rounded-xl border border-silver bg-white p-4 text-sm text-slate">
-          <p>Usage is counted from locations and reviews. There is no separate checkout in this workspace.</p>
-          <Link href="/portfolio/usage" className="font-medium text-ink underline underline-offset-4">Open usage</Link>
-        </section>
-      ) : null}
-
-      {section === "security" ? (
-        <section className="space-y-2 rounded-xl border border-silver bg-white p-4 text-sm text-slate">
-          <p>Sign-in methods turned on for this app:</p>
-          <ul className="space-y-1">
-            {methods.map((method) => (
-              <li key={method.id}>{method.label}</li>
-            ))}
-          </ul>
-        </section>
-      ) : null}
-
+        {section === "security" ? (
+          <>
+            <Panel title="Sign-in methods" description="Sign-in methods turned on for this app.">
+              {methods.length ? (
+                <ul className="divide-y divide-line rounded-md border border-line">
+                  {methods.map((method) => (
+                    <li key={method.id} className="flex items-center justify-between gap-3 px-3 py-2.5">
+                      <div className="min-w-0">
+                        <p className="text-[13px] font-medium text-ink">{method.label}</p>
+                        <p className="text-xs text-ink-3">{method.detail}</p>
+                      </div>
+                      <Badge variant="ok">On</Badge>
+                    </li>
+                  ))}
+                </ul>
+              ) : (
+                <Banner tone="warn">No sign-in method is configured on the server.</Banner>
+              )}
+            </Panel>
+            <Banner tone="neutral" title="Coming soon.">
+              Session controls, allowed email domains and workspace data export aren&apos;t available yet.
+            </Banner>
+          </>
+        ) : null}
+      </div>
     </div>
   );
 }
