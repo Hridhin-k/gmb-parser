@@ -13,6 +13,7 @@ const PUBLIC_PATHS = [
   "/api/google/client-connect",
   "/c/",
   "/api/cron",
+  "/api/health",
   "/r",
   "/api/requests/hooks",
 ];

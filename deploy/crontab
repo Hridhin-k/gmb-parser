@@ -1,0 +1,8 @@
+# Mirrors the former vercel.json schedules (UTC). Each job calls the app over
+# the internal compose network; CRON_SECRET is exported by deploy/cron-entrypoint.sh.
+0 4 * * *  /deploy/run-cron reviews-sync
+30 4 * * * /deploy/run-cron escalations
+15 5 * * * /deploy/run-cron reports
+30 5 * * * /deploy/run-cron requests
+45 5 * * * /deploy/run-cron automation
+0 6 * * *  /deploy/run-cron ai-generations

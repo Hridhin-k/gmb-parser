@@ -20,6 +20,8 @@ const securityHeaders = [
 
 const nextConfig: NextConfig = {
   poweredByHeader: false,
+  // Self-contained server bundle for the Docker image.
+  output: "standalone",
   experimental: {
     // Only load the icons/utilities actually imported — smaller client
     // bundles, faster first paint and route transitions.

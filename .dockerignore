@@ -1,0 +1,12 @@
+node_modules
+.next
+.git
+.github
+.local
+.env*
+*.md
+__tests__
+docs
+design
+fazyo-reviews-*.json
+tsconfig.tsbuildinfo

@@ -1,0 +1,54 @@
+# Production stack: app + Postgres 18 + cron scheduler.
+# Usage: cp config/production.env.example .env, fill it in, then
+#   docker compose up -d db
+#   docker compose run --rm migrate
+#   docker compose up -d app cron
+services:
+  db:
+    image: postgres:18-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_OWNER_USER:-grm_owner}
+      POSTGRES_PASSWORD: ${POSTGRES_OWNER_PASSWORD:?set POSTGRES_OWNER_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB:-grm}
+      GRM_APP_PASSWORD: ${GRM_APP_PASSWORD:?set GRM_APP_PASSWORD}
+    volumes:
+      - pgdata:/var/lib/postgresql
+      - ./deploy/init-app-role.sh:/docker-entrypoint-initdb.d/10-app-role.sh:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  migrate:
+    build: { context: ., target: migrate }
+    profiles: ["tools"]
+    depends_on: { db: { condition: service_healthy } }
+    environment:
+      DATABASE_MIGRATION_URL: ${DATABASE_MIGRATION_URL:?set DATABASE_MIGRATION_URL}
+      DATABASE_URL: ${DATABASE_URL:?set DATABASE_URL} # names the runtime role to grant
+
+  app:
+    build:
+      context: .
+      args:
+        NEXT_PUBLIC_APP_URL: ${NEXT_PUBLIC_APP_URL:?set NEXT_PUBLIC_APP_URL}
+    restart: unless-stopped
+    depends_on: { db: { condition: service_healthy } }
+    env_file: .env
+    ports:
+      - "127.0.0.1:3000:3000" # put Caddy/nginx/Coolify's proxy in front for HTTPS
+
+  cron:
+    image: alpine:3.20
+    restart: unless-stopped
+    depends_on: [app]
+    environment:
+      CRON_SECRET: ${CRON_SECRET:?set CRON_SECRET}
+    volumes:
+      - ./deploy:/deploy:ro
+    entrypoint: ["/bin/sh", "-c", "apk add --no-cache curl >/dev/null && exec /deploy/cron-entrypoint.sh"]
+
+volumes:
+  pgdata:
