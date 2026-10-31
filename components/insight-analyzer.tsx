@@ -45,11 +45,13 @@ export function InsightAnalyzer({ scopeParams, initialRun, pendingCount }: Insig
   const [starting, setStarting] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
   const timer = useRef<ReturnType<typeof setInterval> | null>(null);
+  // Captured once at mount: reading the clock during render is impure.
+  const [mountedAt] = useState(() => Date.now());
 
   const stale =
     run?.status === "running" &&
     run.updatedAt !== undefined &&
-    Date.now() - new Date(run.updatedAt).getTime() > 5 * 60 * 1000;
+    mountedAt - new Date(run.updatedAt).getTime() > 5 * 60 * 1000;
   const running = run?.status === "running" && !stale;
 
   useEffect(() => {
