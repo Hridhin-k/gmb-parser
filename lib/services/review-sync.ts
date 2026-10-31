@@ -1,6 +1,6 @@
 import crypto from "crypto";
 import { createAdminClient } from "@/lib/db/client";
-import { GoogleReviewService, classifyReviewError } from "./google-reviews";
+import { GoogleReviewService, classifyReviewError, isRetryableReviewError } from "./google-reviews";
 import { GoogleOAuthService } from "./google-oauth";
 import { AuditService } from "./audit";
 import { AppError } from "@/lib/errors";
@@ -35,6 +35,18 @@ export type ReviewSyncMode = "incremental" | "full";
 export interface SyncLocationOptions {
   mode?: ReviewSyncMode;
 }
+
+export interface BulkSyncOptions extends SyncLocationOptions {
+  /**
+   * After the first pass, wait this long and try the locations that failed with
+   * a throttling/transient error once more. Unset for interactive requests
+   * (nobody should wait a minute); the cron sets it.
+   */
+  retryFailedAfterMs?: number;
+}
+
+// Already retried by lib/google-api-gate.ts before they reach the sync loop.
+const GATE_RETRIED_CLASSES = new Set(["quota", "rate_limit", "server"]);
 
 // Errors that should never be retried (permanent failures)
 const NON_RETRYABLE_CLASSES = new Set([
@@ -272,7 +284,9 @@ export class ReviewSyncService {
         } catch (err) {
           const cls = classifyReviewError(err);
 
-          if (NON_RETRYABLE_CLASSES.has(cls)) {
+          // Throttling and 5xx were already retried with backoff inside the
+          // Google gate; retrying again here would only hammer the quota.
+          if (NON_RETRYABLE_CLASSES.has(cls) || GATE_RETRIED_CLASSES.has(cls)) {
             errorClass = cls;
             errorMessage = err instanceof Error ? err.message : String(err);
             abortSync = true;
@@ -434,7 +448,7 @@ export class ReviewSyncService {
   static async syncAllWorkspaceLocations(
     workspaceId: string,
     userId: string,
-    options: SyncLocationOptions = {}
+    options: BulkSyncOptions = {}
   ): Promise<BulkSyncResult> {
     const db = createAdminClient();
 
@@ -476,11 +490,6 @@ export class ReviewSyncService {
       return notes !== UNASSIGNED_CLIENT_MARKER;
     });
 
-    const results: LocationSyncResult[] = [];
-    let locationsSucceeded = 0;
-    let locationsFailed = 0;
-    let totalReviewsSynced = 0;
-
     const jobs = eligible.map((loc) => {
       const accountData = Array.isArray(loc.grm_google_accounts)
         ? loc.grm_google_accounts[0]
@@ -490,36 +499,59 @@ export class ReviewSyncService {
       return { loc, connectionId };
     }).filter((j): j is typeof j & { connectionId: string } => Boolean(j.connectionId));
 
-    await mapPool(jobs, LOCATION_CONCURRENCY, async ({ loc, connectionId }) => {
-      try {
-        const result = await this.syncLocation(
-          loc.id,
-          connectionId,
-          workspaceId,
-          userId,
-          options
-        );
-        results.push(result);
-        if (result.errorClass === null || result.reviewsSynced > 0) {
-          locationsSucceeded++;
-        } else {
-          locationsFailed++;
+    const byLocation = new Map<string, LocationSyncResult>();
+
+    const runJobs = (batch: typeof jobs) =>
+      mapPool(batch, LOCATION_CONCURRENCY, async ({ loc, connectionId }) => {
+        try {
+          byLocation.set(
+            loc.id,
+            await this.syncLocation(loc.id, connectionId, workspaceId, userId, options)
+          );
+        } catch (error) {
+          // Thrown (not captured) failures are mostly token problems.
+          const revoked = error instanceof AppError && error.code.startsWith("OAUTH");
+          byLocation.set(loc.id, {
+            locationId: loc.id,
+            reviewsSynced: 0,
+            reviewsUpdated: 0,
+            pagesProcessed: 0,
+            truncated: false,
+            mode: options.mode ?? "incremental",
+            errorClass: revoked ? "authentication" : "unknown",
+            errorMessage: revoked
+              ? "Google authorization was revoked. Reconnect the Google account."
+              : "Unexpected error during sync",
+          });
         }
-        totalReviewsSynced += result.reviewsUpdated;
-      } catch {
-        locationsFailed++;
-        results.push({
-          locationId: loc.id,
-          reviewsSynced: 0,
-          reviewsUpdated: 0,
-          pagesProcessed: 0,
-          truncated: false,
-          mode: options.mode ?? "incremental",
-          errorClass: "unknown",
-          errorMessage: "Unexpected error during sync",
+      });
+
+    const hasFailed = (r: LocationSyncResult) => r.errorClass !== null && r.reviewsSynced === 0;
+
+    await runJobs(jobs);
+
+    // Throttled or briefly-down locations get one more go after a cool-down
+    // instead of staying stale until tomorrow's run.
+    if (options.retryFailedAfterMs !== undefined) {
+      const again = jobs.filter((j) => {
+        const r = byLocation.get(j.loc.id);
+        return r && hasFailed(r) && isRetryableReviewError(r.errorClass);
+      });
+      if (again.length > 0) {
+        logger.warn("review_sync.retrying_failed_locations", {
+          workspaceId,
+          count: again.length,
+          delayMs: options.retryFailedAfterMs,
         });
+        await sleep(options.retryFailedAfterMs);
+        await runJobs(again);
       }
-    });
+    }
+
+    const results = jobs.map((j) => byLocation.get(j.loc.id)!).filter(Boolean);
+    const locationsFailed = results.filter(hasFailed).length;
+    const locationsSucceeded = results.length - locationsFailed;
+    const totalReviewsSynced = results.reduce((sum, r) => sum + r.reviewsUpdated, 0);
 
     return {
       locationsAttempted: eligible.length,

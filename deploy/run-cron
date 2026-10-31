@@ -2,6 +2,6 @@
 # Usage: run-cron <job>. Logs the result to stdout so `docker compose logs cron` shows it.
 . /etc/cron.env
 job="$1"
-code=$(curl -sS -o /tmp/cron-out -w '%{http_code}' --max-time 900 \
+code=$(curl -sS -o /tmp/cron-out -w '%{http_code}' --max-time 3600 \
   -H "Authorization: Bearer ${CRON_SECRET}" "http://app:3000/api/cron/${job}") || code="curl-failed"
 echo "$(date -u +%FT%TZ) cron ${job} -> ${code} $(head -c 300 /tmp/cron-out 2>/dev/null)"

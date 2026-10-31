@@ -1,5 +1,6 @@
 import { GoogleApiError, AppError } from "@/lib/errors";
 import type { GoogleReview, GoogleReviewsResponse, GoogleApiErrorBody } from "@/lib/types/google";
+import { googleFetch, parseRetryAfter } from "@/lib/google-api-gate";
 
 // Google My Business API v4 — the only official review API endpoint.
 // https://developers.google.com/my-business/reference/rest/v4/accounts.locations.reviews
@@ -18,6 +19,7 @@ export type ReviewApiErrorClass =
   | "rate_limit"       // 429 with rateLimitExceeded reason
   | "not_found"        // 404 — location deleted or not accessible
   | "invalid_request"  // 400 — bad parameters
+  | "server"           // 5xx — Google-side failure
   | "network"          // fetch threw (no response)
   | "unknown";         // anything else
 
@@ -32,8 +34,23 @@ export function classifyReviewError(error: unknown): ReviewApiErrorClass {
       const reason = (error.metadata?.body as string | undefined) ?? "";
       return reason.includes("quotaExceeded") ? "quota" : "rate_limit";
     }
-    default:  return "unknown";
+    default:
+      return typeof error.googleErrorCode === "number" && error.googleErrorCode >= 500
+        ? "server"
+        : error.googleErrorCode === undefined
+        ? "network"
+        : "unknown";
   }
+}
+
+/** Failures worth trying again later: Google throttled us or was briefly down. */
+export function isRetryableReviewError(errorClass: string | null | undefined): boolean {
+  return (
+    errorClass === "quota" ||
+    errorClass === "rate_limit" ||
+    errorClass === "server" ||
+    errorClass === "network"
+  );
 }
 
 // ---------------------------------------------------------------------------
@@ -43,10 +60,10 @@ async function reviewApiFetch<T>(url: string, accessToken: string): Promise<T> {
   let response: Response;
 
   try {
-    response = await fetch(url, {
+    // Paced, and 429/5xx are retried with backoff inside the gate.
+    response = await googleFetch(url, {
       headers: { Authorization: `Bearer ${accessToken}` },
       cache: "no-store",
-      signal: AbortSignal.timeout(15_000),
     });
   } catch (cause) {
     // Network-level failure — no HTTP response
@@ -68,7 +85,11 @@ async function reviewApiFetch<T>(url: string, accessToken: string): Promise<T> {
     }
 
     const msg = errorBody.error?.message ?? `HTTP ${response.status}`;
-    throw new GoogleApiError(msg, response.status, { url, body });
+    throw new GoogleApiError(msg, response.status, {
+      url,
+      body,
+      retryAfterMs: parseRetryAfter(response.headers.get("retry-after")),
+    });
   }
 
   return response.json() as Promise<T>;
@@ -118,16 +139,20 @@ export class GoogleReviewService {
   ): Promise<{ comment: string; updateTime: string | null }> {
     let response: Response;
     try {
-      response = await fetch(`${MY_BUSINESS_API}/${reviewName}/reply`, {
-        method: "PUT",
-        headers: {
-          Authorization: `Bearer ${accessToken}`,
-          "Content-Type": "application/json",
+      // A person is waiting on this: jump the queue, retry briefly.
+      response = await googleFetch(
+        `${MY_BUSINESS_API}/${reviewName}/reply`,
+        {
+          method: "PUT",
+          headers: {
+            Authorization: `Bearer ${accessToken}`,
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({ comment }),
+          cache: "no-store",
         },
-        body: JSON.stringify({ comment }),
-        cache: "no-store",
-        signal: AbortSignal.timeout(15_000),
-      });
+        { priority: "interactive", maxAttempts: 3 }
+      );
     } catch (cause) {
       throw new GoogleApiError(
         "Network error publishing reply",
@@ -141,7 +166,7 @@ export class GoogleReviewService {
       throw new GoogleApiError(
         `Failed to publish reply: ${response.status}`,
         response.status,
-        { reviewName, body }
+        { reviewName, body, retryAfterMs: parseRetryAfter(response.headers.get("retry-after")) }
       );
     }
 
@@ -170,12 +195,15 @@ export class GoogleReviewService {
   ): Promise<void> {
     let response: Response;
     try {
-      response = await fetch(`${MY_BUSINESS_API}/${reviewName}/reply`, {
-        method: "DELETE",
-        headers: { Authorization: `Bearer ${accessToken}` },
-        cache: "no-store",
-        signal: AbortSignal.timeout(15_000),
-      });
+      response = await googleFetch(
+        `${MY_BUSINESS_API}/${reviewName}/reply`,
+        {
+          method: "DELETE",
+          headers: { Authorization: `Bearer ${accessToken}` },
+          cache: "no-store",
+        },
+        { priority: "interactive", maxAttempts: 3 }
+      );
     } catch (cause) {
       throw new GoogleApiError(
         "Network error deleting reply",

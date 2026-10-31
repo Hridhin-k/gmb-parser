@@ -42,6 +42,7 @@ export async function GET(request: Request) {
   let succeeded = 0;
   let failed = 0;
   let updated = 0;
+  const failedByClass: Record<string, number> = {};
 
   // Workspaces are independent: sync a few at a time instead of one by one.
   await mapPool(workspaces, 3, async (ws) => {
@@ -49,10 +50,16 @@ export async function GET(request: Request) {
       const result = await ReviewSyncService.syncAllWorkspaceLocations(
         ws.workspaceId,
         ws.userId,
-        { mode: "incremental" }
+        // Locations Google throttled get one more try after a cool-down.
+        { mode: "incremental", retryFailedAfterMs: 60_000 }
       );
       succeeded += result.locationsSucceeded;
       failed += result.locationsFailed;
+      for (const r of result.results) {
+        if (r.errorClass && r.reviewsSynced === 0) {
+          failedByClass[r.errorClass] = (failedByClass[r.errorClass] ?? 0) + 1;
+        }
+      }
       updated += result.totalReviewsSynced;
       await EscalationService.runScheduled(ws.workspaceId);
     } catch (err) {
@@ -64,10 +71,21 @@ export async function GET(request: Request) {
     }
   });
 
+  // Surface it: a silent partial run means stale reviews until tomorrow.
+  if (failed > 0) {
+    logger.error("cron.reviews_sync.locations_failed", {
+      workspaces: workspaces.length,
+      locationsFailed: failed,
+      locationsSucceeded: succeeded,
+      failedByClass,
+    });
+  }
+
   return NextResponse.json({
     workspaces: workspaces.length,
     locationsSucceeded: succeeded,
     locationsFailed: failed,
+    failedByClass,
     reviewsUpdated: updated,
   });
 }

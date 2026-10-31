@@ -92,6 +92,7 @@ function mockApiResponse(status: number, body: unknown) {
   mockFetch.mockResolvedValueOnce({
     ok: status >= 200 && status < 300,
     status,
+    headers: new Headers(),
     text: () => Promise.resolve(JSON.stringify(body)),
     json: () => Promise.resolve(body),
   });
@@ -316,10 +317,8 @@ describe("ReviewSyncService.syncLocation", () => {
   });
 
   it("marks partial sync when retries are exhausted on transient error", async () => {
-    // All retry attempts fail with 429
-    mockApiResponse(429, { error: { message: "Rate limit" } });
-    mockApiResponse(429, { error: { message: "Rate limit" } });
-    mockApiResponse(429, { error: { message: "Rate limit" } });
+    // The Google gate makes 5 attempts before giving up
+    for (let i = 0; i < 5; i++) mockApiResponse(429, { error: { message: "Rate limit" } });
 
     const result = await ReviewSyncService.syncLocation(
       "loc-1",

@@ -8,6 +8,8 @@ import { parseBody, syncBodySchema } from "@/lib/validation";
 import { toUserMessage, toStatusCode } from "@/lib/errors";
 import { checkRateLimit, SYNC_LOCATION_LIMIT, SYNC_ALL_LIMIT } from "@/lib/rate-limit";
 import { assertCanSyncWorkspace, ensurePersonalWorkspace } from "@/lib/services/workspace";
+import { withGooglePriority } from "@/lib/google-api-gate";
+import { describeSyncFailure } from "@/lib/sync-failure";
 
 export const maxDuration = 60;
 
@@ -18,7 +20,30 @@ export const maxDuration = 60;
  *   { all: true }                                    — sync all connected locations
  *   { all: false; locationId: string; connectionId: string } — sync one location
  */
-export async function POST(request: Request) {
+export function POST(request: Request) {
+  // A person is waiting: this sync jumps ahead of cron/background Google calls.
+  return withGooglePriority("interactive", () => handleSync(request));
+}
+
+function failureResponse(errorClass: string | null | undefined, extra: Record<string, unknown> = {}) {
+  const info = describeSyncFailure(errorClass);
+  return NextResponse.json(
+    {
+      error: info.message,
+      code: errorClass ?? "unknown",
+      retryable: info.retryable,
+      retryAfterSeconds: info.retryAfterSeconds,
+      action: info.action,
+      ...extra,
+    },
+    {
+      status: info.status,
+      headers: info.retryAfterSeconds ? { "Retry-After": String(info.retryAfterSeconds) } : undefined,
+    }
+  );
+}
+
+async function handleSync(request: Request) {
   const user = await getCurrentUser();
 
   if (!user) {
@@ -60,10 +85,30 @@ export async function POST(request: Request) {
       const result = await ReviewSyncService.syncAllWorkspaceLocations(workspaceId, user.id, {
         mode: body.full ? "full" : "incremental",
       });
-      return NextResponse.json({ success: true, ...result });
-    } catch {
-      logger.error("sync.all.failed", { userId: user.id, workspaceId });
-      return NextResponse.json({ error: "Failed to sync reviews" }, { status: 500 });
+
+      const failures = result.results.filter((r) => r.errorClass && r.reviewsSynced === 0);
+      const classes = [...new Set(failures.map((r) => r.errorClass as string))];
+      // Everything failed for the same reason: say that reason, with a real status.
+      if (result.locationsAttempted > 0 && result.locationsSucceeded === 0 && classes.length === 1) {
+        return failureResponse(classes[0], { locationsFailed: result.locationsFailed });
+      }
+      // Some failed: report success for what worked and say what to do about the rest.
+      const worst = classes[0];
+      return NextResponse.json({
+        success: true,
+        partial: failures.length > 0,
+        warning: worst ? describeSyncFailure(worst).message : undefined,
+        retryable: failures.length > 0 && classes.every((c) => describeSyncFailure(c).retryable),
+        retryAfterSeconds: worst ? describeSyncFailure(worst).retryAfterSeconds : undefined,
+        ...result,
+      });
+    } catch (error) {
+      logger.error("sync.all.failed", {
+        userId: user.id,
+        workspaceId,
+        message: error instanceof Error ? error.message : "Unknown",
+      });
+      return failureResponse(error instanceof GoogleApiError && error.googleErrorCode === 429 ? "rate_limit" : "unknown");
     }
   }
 
@@ -111,30 +156,32 @@ export async function POST(request: Request) {
       { mode: body.full ? "full" : "incremental" }
     );
 
+    // syncLocation records provider failures on the result instead of throwing.
+    if (result.errorClass && result.reviewsSynced === 0) {
+      return failureResponse(result.errorClass);
+    }
+    if (result.errorClass) {
+      // Some pages were stored before Google failed: keep them, flag the rest.
+      return NextResponse.json({
+        success: true,
+        partial: true,
+        warning: describeSyncFailure(result.errorClass).message,
+        retryable: describeSyncFailure(result.errorClass).retryable,
+        retryAfterSeconds: describeSyncFailure(result.errorClass).retryAfterSeconds,
+        ...result,
+      });
+    }
     return NextResponse.json({ success: true, ...result });
   } catch (error) {
     if (error instanceof AppError) {
       if (error.code === "OAUTH_REVOKED" || error.code === "OAUTH_INVALID_GRANT") {
-        return NextResponse.json(
-          { error: "Your Google authorization has been revoked. Please reconnect your account." },
-          { status: 401 }
-        );
+        return failureResponse("authentication");
       }
     }
 
     if (error instanceof GoogleApiError) {
-      if (error.googleErrorCode === 403) {
-        return NextResponse.json(
-          { error: "Insufficient permission to read reviews for this location." },
-          { status: 403 }
-        );
-      }
-      if (error.googleErrorCode === 429) {
-        return NextResponse.json(
-          { error: "Google API quota exceeded. Please try again later." },
-          { status: 429 }
-        );
-      }
+      if (error.googleErrorCode === 403) return failureResponse("authorization");
+      if (error.googleErrorCode === 429) return failureResponse("rate_limit");
     }
 
     logger.error("sync.location.failed", {
@@ -143,6 +190,6 @@ export async function POST(request: Request) {
       locationId,
       connectionId,
     });
-    return NextResponse.json({ error: "Failed to sync reviews. Please try again." }, { status: 500 });
+    return failureResponse("unknown");
   }
 }
