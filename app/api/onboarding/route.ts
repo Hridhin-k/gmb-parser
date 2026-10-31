@@ -5,6 +5,7 @@ import { AppError, toErrorCode, toStatusCode, toUserMessage } from "@/lib/errors
 import { parseBody } from "@/lib/validation";
 import { ensurePersonalWorkspace } from "@/lib/services/workspace";
 import { bustCatalogCache } from "@/lib/services/catalog-tables";
+import { advanceLocalDemo } from "@/lib/services/local-demo";
 import {
   applyCsvGrouping,
   applyGrouping,
@@ -18,6 +19,8 @@ import {
 } from "@/lib/services/onboarding";
 
 const bodySchema = z.discriminatedUnion("action", [
+  z.object({ action: z.literal("demo-connect") }),
+  z.object({ action: z.literal("demo-import") }),
   z.object({
     action: z.literal("progress"),
     step: z.enum(["connect", "import", "groups", "tone", "invite"]),
@@ -76,6 +79,12 @@ export async function POST(request: Request) {
   try {
     const membership = await ensurePersonalWorkspace(user);
     const workspaceId = membership.workspace_id;
+
+    if (body.action === "demo-connect" || body.action === "demo-import") {
+      await advanceLocalDemo(workspaceId, user.id, body.action);
+      bustCatalogCache();
+      return NextResponse.json({ ok: true });
+    }
 
     if (body.action === "progress") {
       await saveOnboardingStep(workspaceId, user.id, body.step);

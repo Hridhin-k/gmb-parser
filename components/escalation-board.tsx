@@ -12,14 +12,11 @@ import { StarRating } from "@/components/star-rating";
 import { Badge } from "@/components/ui/badge";
 import { Banner } from "@/components/ui/banner";
 import { Button, buttonVariants } from "@/components/ui/button";
-import { Checkbox } from "@/components/ui/checkbox";
-import { Input } from "@/components/ui/input";
 import { KpiGrid, KpiTile } from "@/components/ui/kpi";
 import { SelectField } from "@/components/ui/select-field";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import {
   ESCALATION_LEVELS,
-  ESCALATION_TIMEZONES,
   escalationStatusLabel,
   ticketKey,
   type EscalationPolicy,
@@ -54,6 +51,7 @@ interface BoardProps {
   locations: Array<{ id: string; name: string; clientId: string | null }>;
   members: Member[];
   canManage: boolean;
+  canEditRules?: boolean;
   query: string;
   /** Current text search (`q`), if any. */
   search?: string;
@@ -64,10 +62,10 @@ interface BoardProps {
 }
 
 const TABS: Array<{ id: Bucket; label: string }> = [
-  { id: "needs_human", label: "Needs human" },
+  { id: "needs_human", label: "To do" },
   { id: "in_progress", label: "In progress" },
-  { id: "past_sla", label: "Past SLA" },
-  { id: "resolved", label: "Resolved" },
+  { id: "past_sla", label: "Overdue" },
+  { id: "resolved", label: "Done" },
 ];
 
 export function EscalationBoard(props: BoardProps) {
@@ -98,18 +96,6 @@ export function EscalationBoard(props: BoardProps) {
       setError(payload.error ?? "That change could not be saved.");
       return;
     }
-    if (url === "/api/escalations/policy") {
-      const created = typeof payload.created === "number" ? payload.created : 0;
-      if (created > 0) {
-        toast.success(
-          created === 1
-            ? "Rules saved. Opened 1 matching case from synced reviews."
-            : `Rules saved. Opened ${created} matching cases from synced reviews.`
-        );
-      } else {
-        toast.success("Rules saved. No new matching cases in the recent synced reviews.");
-      }
-    }
     router.refresh();
   }
 
@@ -123,12 +109,12 @@ export function EscalationBoard(props: BoardProps) {
     }).catch(() => null);
     setStarting(null);
     if (!response) {
-      setError("No connection. The case was not started. Try again.");
+      setError("No connection. The follow-up was not started. Try again.");
       return;
     }
     if (!response.ok) {
       const payload = (await response.json().catch(() => ({}))) as { error?: string };
-      setError(payload.error ?? "That case could not be started.");
+      setError(payload.error ?? "That follow-up could not be started.");
       return;
     }
     toast.success(`${ticketKey(item.ticketNo)} is in progress.`);
@@ -161,28 +147,28 @@ export function EscalationBoard(props: BoardProps) {
     <div className="space-y-4">
       <KpiGrid className="lg:grid-cols-4">
         <KpiTile
-          label="Needs human"
+          label="To do"
           value={props.counts.needs_human.toLocaleString("en-US")}
-          detail="Not started, inside the due window"
+          detail="Waiting for someone to start"
           href={hrefFor("needs_human")}
         />
         <KpiTile
           label="In progress"
           value={props.counts.in_progress.toLocaleString("en-US")}
-          detail="Started, inside the due window"
+          detail="Someone is handling these"
           href={hrefFor("in_progress")}
         />
         <KpiTile
           label="Overdue"
           value={props.counts.past_sla.toLocaleString("en-US")}
-          detail={props.counts.past_sla > 0 ? "Open and past the SLA" : "Nothing past the SLA"}
+          detail={props.counts.past_sla > 0 ? "These need attention first" : "Nothing overdue"}
           href={hrefFor("past_sla")}
           tone={props.counts.past_sla > 0 ? "bad" : undefined}
         />
         <KpiTile
-          label="Resolved"
+          label="Done"
           value={props.counts.resolved.toLocaleString("en-US")}
-          detail="Resolution recorded"
+          detail="Handled and marked done"
           href={hrefFor("resolved")}
           tone={props.counts.resolved > 0 ? "ok" : undefined}
         />
@@ -208,7 +194,7 @@ export function EscalationBoard(props: BoardProps) {
           className="inline-flex items-center gap-1 text-xs text-ink-3 hover:text-ink"
         >
           <ArrowUpDown className="size-3.5" aria-hidden />
-          {sortedByOpened ? "Sorted by opened time · sort by due" : "Sorted by SLA deadline · sort by opened"}
+          {sortedByOpened ? "Sorted by opened time · sort by due" : "Soonest deadline first · sort by oldest"}
         </Link>
       </PageTabs>
 
@@ -227,7 +213,7 @@ export function EscalationBoard(props: BoardProps) {
         props.search ? (
           <EmptyState
             icon={SearchX}
-            title="No cases match"
+            title="No follow-ups match"
             description={`Nothing in ${TABS.find((tab) => tab.id === props.bucket)?.label ?? "this queue"} matches “${props.search}”.`}
           >
             <Link href={clearSearchHref} className={buttonVariants({ variant: "outline" })}>
@@ -237,26 +223,27 @@ export function EscalationBoard(props: BoardProps) {
         ) : (
           <EmptyState
             icon={props.bucket === "resolved" ? CheckCircle2 : ShieldAlert}
-            title={props.bucket === "past_sla" ? "Nothing is overdue" : "Nothing in this queue"}
+            title={props.bucket === "past_sla" ? "Nothing is overdue" : props.bucket === "resolved"
+              ? "No completed follow-ups yet" : open === 0 ? "You’re all caught up"
+                : props.bucket === "in_progress" ? "Nothing in progress" : "Nothing waiting to start"}
             description={emptyQueueCopy(props.bucket, props.counts, hrefFor)}
           >
-            {props.bucket !== "resolved" && open === 0 && props.canManage ? (
-              <a href="#rules" className={buttonVariants({ variant: "outline" })}>
-                Review complaint rules
-              </a>
+            {props.bucket !== "resolved" && open === 0 && (props.canEditRules ?? props.canManage) ? (
+              <Link href="/settings?section=sla" className={buttonVariants({ variant: "outline" })}>
+                Change follow-up settings
+              </Link>
             ) : null}
           </EmptyState>
         )
       ) : (
         <div className="overflow-hidden rounded-lg border border-line bg-white">
-          <Table className="min-w-[56rem]">
+          <Table className="min-w-[46rem]">
             <TableHeader>
               <TableRow>
-                <TableHead className="w-24">Level</TableHead>
-                <TableHead>Case</TableHead>
+                <TableHead>Customer review</TableHead>
                 <TableHead>Location</TableHead>
-                <TableHead>Owner</TableHead>
-                <TableHead>SLA</TableHead>
+                <TableHead>Who’s handling it</TableHead>
+                <TableHead>Deadline</TableHead>
                 <TableHead>Status</TableHead>
                 <TableHead className="text-right">Next action</TableHead>
               </TableRow>
@@ -264,16 +251,14 @@ export function EscalationBoard(props: BoardProps) {
             <TableBody>
               {props.items.map((item) => (
                 <TableRow key={item.id} id={`case-${item.id}`} className="scroll-mt-24">
-                  <TableCell>
-                    <LevelBadge level={item.level} />
-                  </TableCell>
                   <TableCell className="max-w-[22rem]">
                     <Link href={`/escalations/${item.id}`} className="text-ink hover:text-brand">
-                      <span className="font-semibold">{ticketKey(item.ticketNo)}</span>
-                      <span className="text-ink-2"> · {item.reviewerName}</span>
+                      <span className="font-semibold">{item.reviewerName}</span>
+                      <span className="ml-2 text-xs text-ink-3">{ticketKey(item.ticketNo)}</span>
                     </Link>
                     <div className="mt-0.5 flex flex-wrap items-center gap-1.5 text-xs text-ink-3">
                       <StarRating rating={item.starRating} />
+                      {item.level !== "store" ? <LevelBadge level={item.level} /> : null}
                       {themeLabel(item.theme) ? <span>{themeLabel(item.theme)}</span> : null}
                       {item.comment ? <span className="truncate">“{item.comment}”</span> : null}
                     </div>
@@ -306,7 +291,7 @@ export function EscalationBoard(props: BoardProps) {
           <div className="flex flex-wrap items-center justify-between gap-2 border-t border-line px-3 text-xs text-ink-3">
             <span className="py-2">
               {typeof props.total === "number"
-                ? `${props.total.toLocaleString("en-US")} ${props.total === 1 ? "case" : "cases"} in ${TABS.find((tab) => tab.id === props.bucket)?.label ?? "this queue"}`
+                ? `${props.total.toLocaleString("en-US")} ${props.total === 1 ? "follow-up" : "follow-ups"} in ${TABS.find((tab) => tab.id === props.bucket)?.label ?? "this queue"}`
                 : null}
             </span>
             {props.totalPages > 1 ? (
@@ -322,24 +307,13 @@ export function EscalationBoard(props: BoardProps) {
       )}
 
       {props.canManage ? (
-        <section id="rules" className="scroll-mt-24 space-y-3 pt-2">
-          <div>
-            <h2 className="text-sm font-semibold text-ink">Rules and pauses</h2>
-            <p className="mt-0.5 text-xs text-ink-3">
-              Which reviews open a case, when they are due, and where automatic replies are paused.
-            </p>
+        <details className="rounded-lg border border-line bg-white p-4">
+          <summary className="cursor-pointer text-sm font-medium text-ink">Team and automatic reply controls</summary>
+          <div className="mt-4">
+            <PauseForm pauses={props.pauses} clients={props.clients} locations={props.locations}
+              disabled={pending} onChange={(body) => send("/api/escalations/pause", body)} />
           </div>
-          <div className="grid gap-4 lg:grid-cols-2">
-            <PolicyForm policy={props.policy} disabled={pending} onSave={(policy) => send("/api/escalations/policy", policy)} />
-            <PauseForm
-              pauses={props.pauses}
-              clients={props.clients}
-              locations={props.locations}
-              disabled={pending}
-              onChange={(body) => send("/api/escalations/pause", body)}
-            />
-          </div>
-        </section>
+        </details>
       ) : null}
     </div>
   );
@@ -359,7 +333,7 @@ function StatusBadge({ status }: { status: string }) {
 }
 
 function SlaBadge({ item }: { item: EscalationBoardItem }) {
-  if (item.status === "resolved") return <Badge variant="ok">Resolved</Badge>;
+  if (item.status === "resolved") return <Badge variant="ok">Done</Badge>;
   if (item.overdue) return <Badge variant="bad">Overdue {item.overdue}</Badge>;
   if (item.remaining) {
     return <Badge variant={item.dueSoon ? "warn" : "default"}>Due in {item.remaining}</Badge>;
@@ -401,7 +375,7 @@ function NextAction({
       href={href}
       className={buttonVariants({ variant: item.overdue ? "default" : "outline", size: "sm" })}
     >
-      {item.assignedTo ? "Open case" : "Open and assign"}
+      Open follow-up
     </Link>
   );
 }
@@ -433,132 +407,31 @@ function sortHref(query: string, bucket: string): string {
   return text ? `/escalations?${text}` : "/escalations";
 }
 
-const FIELD_LABEL = "flex flex-col gap-1 text-xs font-medium text-ink-2";
-
-function PolicyForm({
-  policy,
-  disabled,
-  onSave,
-}: {
-  policy: EscalationPolicy;
-  disabled: boolean;
-  onSave: (policy: EscalationPolicy) => void;
-}) {
-  const [draft, setDraft] = useState(policy);
-  const [keywords, setKeywords] = useState(policy.extraKeywords.join(", "));
-  const [reminders, setReminders] = useState(policy.reminderHours.join(", "));
-  return (
-    <form
-      className="space-y-3 rounded-lg border border-line bg-white p-4"
-      onSubmit={(event) => {
-        event.preventDefault();
-        const extraKeywords = keywords
-          .split(",")
-          .map((word) => word.trim().toLowerCase())
-          .filter(Boolean);
-        const reminderHours = reminders
-          .split(",")
-          .map((hour) => Number(hour.trim()))
-          .filter((hour) => Number.isInteger(hour));
-        onSave({ ...draft, extraKeywords, reminderHours });
-      }}
-    >
-      <h3 className="text-sm font-semibold text-ink">Complaint rules</h3>
-      <div className="grid gap-3 sm:grid-cols-2">
-        <label className={FIELD_LABEL}>
-          Stars at or below
-          <Input
-            type="number"
-            min={1}
-            max={5}
-            className="w-24"
-            value={draft.maxStars}
-            onChange={(event) => setDraft({ ...draft, maxStars: Number(event.target.value) })}
-          />
-        </label>
-        <label className={FIELD_LABEL}>
-          Due after hours
-          <Input
-            type="number"
-            min={1}
-            max={168}
-            className="w-24"
-            value={draft.dueHours}
-            onChange={(event) => setDraft({ ...draft, dueHours: Number(event.target.value) })}
-          />
-        </label>
-      </div>
-      <div className="flex flex-col gap-2">
-        <label className="flex items-center gap-2 text-[13px] text-ink">
-          <Checkbox
-            checked={draft.flagProfanity}
-            onCheckedChange={(checked) => setDraft({ ...draft, flagProfanity: checked === true })}
-          />
-          Flag profanity
-        </label>
-        <label className="flex items-center gap-2 text-[13px] text-ink">
-          <Checkbox
-            checked={draft.flagLegalSafety}
-            onCheckedChange={(checked) => setDraft({ ...draft, flagLegalSafety: checked === true })}
-          />
-          Flag legal or safety wording
-        </label>
-      </div>
-      <label className={FIELD_LABEL}>
-        Extra keywords, comma separated
-        <Input value={keywords} onChange={(event) => setKeywords(event.target.value)} />
-      </label>
-      <label className={FIELD_LABEL}>
-        Reminder hours
-        <Input value={reminders} onChange={(event) => setReminders(event.target.value)} />
-      </label>
-      <div className={FIELD_LABEL}>
-        <span aria-hidden>Timezone for due times</span>
-        <SelectField
-        label="Timezone for due times"
-        value={draft.timezone}
-        onValueChange={(value) => setDraft({ ...draft, timezone: value as EscalationPolicy["timezone"] })}
-        options={ESCALATION_TIMEZONES.map((zone) => ({ value: zone.id, label: zone.label }))}
-      />
-      </div>
-      <div className="flex flex-wrap items-center gap-3">
-        <Button type="submit" loading={disabled}>
-          {disabled ? "Saving…" : "Save rules"}
-        </Button>
-      </div>
-      <p className="text-xs leading-relaxed text-ink-3">
-        Saving scans recent synced reviews and opens cases that match these rules. Complaints already past the due
-        window appear under Past SLA. Reminders are recorded in GRM. No email is sent.
-      </p>
-    </form>
-  );
-}
-
 function emptyQueueCopy(bucket: Bucket, counts: Record<Bucket, number>, hrefFor: (bucket: string) => string): ReactNode {
   const past = counts.past_sla;
   const open = counts.needs_human + counts.in_progress + counts.past_sla;
   if (bucket === "needs_human" && past > 0) {
     return (
       <>
-        No cases are still inside the due window. {past} matching complaint
+        Nothing is waiting to be started within its deadline. {past} matching complaint
         {past === 1 ? " is" : "s are"} already overdue — open{" "}
         <Link href={hrefFor("past_sla")} className="font-medium text-brand underline">
-          Past SLA
+          Overdue
         </Link>
-        . Publishing a reply does not close an escalation.
+        . Replying and marking a follow-up done are separate steps.
       </>
     );
   }
   if (bucket !== "resolved" && open === 0) {
-    return "No open cases yet. Save the complaint rules below to scan synced reviews, or wait for the next matching review. Publishing a reply does not close an escalation.";
+    return "Reviews that need extra care appear here automatically. No need to create a follow-up yourself. Open a review, take care of the customer, then mark it done.";
   }
   if (bucket === "resolved") {
-    return "No resolved cases in this view. Resolve a case from Needs human, In progress, or Past SLA.";
+    return "Completed follow-ups will appear here after you mark them done.";
   }
   if (bucket === "past_sla") {
-    return "Every open case in this view is still inside its due window.";
+    return "No follow-ups in this view have passed their deadline.";
   }
-  return "A review appears here when it matches the star threshold, profanity, legal or safety wording, or an extra keyword. Publishing a reply does not close an escalation.";
+  return "Reviews that match your follow-up settings appear here automatically. Reply to the customer, take any action needed, then mark the follow-up done.";
 }
 
 function PauseForm({

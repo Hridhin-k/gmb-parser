@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   DEFAULT_ESCALATION_POLICY,
+  retimeFollowUpPolicy,
   autoreplyPausedFor,
   closesWhenReplyPublished,
   escalationReasons,
@@ -20,6 +21,17 @@ import {
 } from "@/lib/escalations";
 
 describe("escalation rules", () => {
+  it("keeps check-ins that fit the new deadline and preserves other rules", () => {
+    const result = retimeFollowUpPolicy(DEFAULT_ESCALATION_POLICY, 48);
+    expect(result).toEqual({ ...DEFAULT_ESCALATION_POLICY, dueHours: 48 });
+    expect(DEFAULT_ESCALATION_POLICY.dueHours).toBe(24);
+  });
+
+  it("replaces out-of-range check-ins when the owner picks a shorter deadline", () => {
+    const result = retimeFollowUpPolicy({ ...DEFAULT_ESCALATION_POLICY, reminderHours: [12, 24] }, 8);
+    expect(result.reminderHours).toEqual([4]);
+    expect(result.reminderHours.every((hour) => hour > 0 && hour < result.dueHours)).toBe(true);
+  });
   it("flags three stars and below by default", () => {
     expect(escalationReasons({ starRating: 3, comment: "Slow service" }, DEFAULT_ESCALATION_POLICY)).toContain(
       "rating"

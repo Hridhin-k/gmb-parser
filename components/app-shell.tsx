@@ -48,7 +48,7 @@ const NAV: Record<NavKey, { href: string; label: string; icon: LucideIcon }> = {
   clients: { href: "/portfolio", label: "Portfolio", icon: LayoutGrid },
   overview: { href: "/overview", label: "Overview", icon: Home },
   inbox: { href: "/reviews", label: "Reviews", icon: Inbox },
-  escalations: { href: "/escalations", label: "Escalations", icon: AlertTriangle },
+  escalations: { href: "/escalations", label: "Follow-ups", icon: AlertTriangle },
   analytics: { href: "/analytics", label: "Analytics", icon: ChartColumn },
   insights: { href: "/insights", label: "Insights", icon: Lightbulb },
   reports: { href: "/reports", label: "Reports & alerts", icon: FileText },

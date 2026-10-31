@@ -8,6 +8,7 @@ import {
   ValidationError,
 } from "@/lib/errors";
 import { isManager } from "@/lib/shell";
+import { DEMO_EMAIL, isLocalDemoWorkspace } from "@/lib/services/local-demo";
 import {
   holdReasons,
   matchCsvGroups,
@@ -62,6 +63,7 @@ export interface OnboardingInvite {
 }
 
 export interface OnboardingView {
+  localDemo?: boolean;
   step: OnboardingStep | "done";
   completed: boolean;
   grouping: GroupingMode | null;
@@ -255,6 +257,7 @@ async function ensureRow(workspaceId: string): Promise<void> {
 export async function getOnboardingView(workspaceId: string): Promise<OnboardingView> {
   await ensureRow(workspaceId);
   await refreshLocationHolds(workspaceId);
+  const localDemo = await isLocalDemoWorkspace(workspaceId);
   const admin = createAdminClient();
 
   const [progress, connections, locations, groups, accounts, clients, invites] = await Promise.all([
@@ -263,7 +266,6 @@ export async function getOnboardingView(workspaceId: string): Promise<Onboarding
       .from("grm_google_connections")
       .select("id, google_email, status, created_at, last_refreshed_at")
       .eq("workspace_id", workspaceId)
-      .neq("status", "revoked")
       .order("created_at", { ascending: false }),
     admin
       .from("grm_google_locations")
@@ -328,12 +330,15 @@ export async function getOnboardingView(workspaceId: string): Promise<Onboarding
   }
 
   return {
+    localDemo,
     step: asStep(progress.data?.step),
     completed: Boolean(progress.data?.completed_at),
     grouping: asGrouping(progress.data?.grouping),
     toneVoice: asVoice(progress.data?.tone_voice),
     toneNote: progress.data?.tone_note ?? "",
-    connections: connections.data ?? [],
+    connections: (connections.data ?? []).filter((connection) =>
+      connection.status !== "revoked" || (localDemo && connection.google_email === DEMO_EMAIL)
+    ),
     locations: (locations.data ?? []).map((location) => {
       const account = accountById.get(location.google_account_id);
       return {

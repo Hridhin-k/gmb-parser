@@ -1,156 +1,82 @@
 "use client";
 
-import { useState } from "react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
-import { DateRangeFilter } from "@/components/date-range-filter";
+import { DateRangeFilter, type DateRangeChange } from "@/components/date-range-filter";
 import { useFilterNavigation } from "@/components/filter-navigation";
 import { ScopeSelector } from "@/components/scope-selector";
-import { Button } from "@/components/ui/button";
-import { parseDateRange, type DateRangeKey } from "@/lib/date-range";
+import { parseDateRange } from "@/lib/date-range";
 import { readScopeRequest, resolveScope, writeScopeParams, type ScopeCatalog, type ScopeChoice } from "@/lib/scope";
 import { defaultRangeForPath } from "@/lib/shell";
 
-interface ScopeDraft {
-  clientId: string | null;
-  groupId: string | null;
-  locationId: string | null;
-}
-
-interface RangeDraft {
-  key: DateRangeKey;
-  from: string;
-  to: string;
-}
-
-/** Organisation and date stay in the navbar until Go writes them into the URL. */
+/** Scope and period changes navigate as soon as a selection is made. */
 export function GlobalFilters({ catalog, showDate = true }: { catalog: ScopeCatalog; showDate?: boolean }) {
   const pathname = usePathname();
   const router = useRouter();
   const searchParams = useSearchParams();
   const { applying, begin } = useFilterNavigation();
-  const appliedKey = [
-    searchParams.get("client") ?? "",
-    searchParams.get("group") ?? "",
-    searchParams.get("location") ?? "",
-    searchParams.get("range") ?? "",
-    searchParams.get("from") ?? "",
-    searchParams.get("to") ?? "",
-  ].join("|");
-  const [syncedApplied, setSyncedApplied] = useState(appliedKey);
-  const [scopeDraft, setScopeDraft] = useState<ScopeDraft | null>(null);
-  const [rangeDraft, setRangeDraft] = useState<RangeDraft | null>(null);
-  if (syncedApplied !== appliedKey) {
-    setSyncedApplied(appliedKey);
-    setScopeDraft(null);
-    setRangeDraft(null);
-  }
-
   const rangeDefault = defaultRangeForPath(pathname);
-  const appliedRange = parseDateRange(
-    {
-      range: searchParams.get("range") ?? undefined,
-      from: searchParams.get("from") ?? undefined,
-      to: searchParams.get("to") ?? undefined,
-    },
-    rangeDefault
-  );
-  const shownRange = rangeDraft ?? { key: appliedRange.key, from: appliedRange.from, to: appliedRange.to };
-  const appliedRequest = readScopeRequest({
-    client: searchParams.get("client"),
-    group: searchParams.get("group"),
-    location: searchParams.get("location"),
-  });
-  const shownRequest = scopeDraft
-    ? {
-        clientId: scopeDraft.clientId ?? "",
-        groupId: scopeDraft.groupId ?? "",
-        locationId: scopeDraft.locationId ?? "",
-      }
-    : appliedRequest;
+  // Keep a second selection made during navigation from undoing the first.
+  const params = new URLSearchParams(applying && applying.href.split("?")[0] === pathname
+    ? applying.href.split("?")[1] ?? ""
+    : searchParams.toString());
+  const range = parseDateRange({
+    range: params.get("range") ?? undefined,
+    from: params.get("from") ?? undefined,
+    to: params.get("to") ?? undefined,
+  }, rangeDefault);
+
+  function navigate(next: URLSearchParams) {
+    next.delete("page");
+    next.delete("focusFrom");
+    next.delete("focusTo");
+    const qs = next.toString();
+    const href = qs ? `${pathname}?${qs}` : pathname;
+    if (qs === params.toString()) return;
+    const scope = resolveScope(catalog, readScopeRequest({
+      client: next.get("client"), group: next.get("group"), location: next.get("location"),
+    }));
+    const period = parseDateRange({
+      range: next.get("range") ?? undefined,
+      from: next.get("from") ?? undefined,
+      to: next.get("to") ?? undefined,
+    }, rangeDefault);
+    begin({
+      title: "Updating view",
+      detail: showDate ? `Loading ${scope.title} for ${period.label}.` : `Loading ${scope.title}.`,
+      href,
+    }, () => router.push(href, { scroll: false }));
+  }
 
   function chooseScope(choice: ScopeChoice) {
-    setScopeDraft({
-      clientId: choice.clientId,
-      groupId: choice.groupId,
-      locationId: choice.locationId,
-    });
+    const next = new URLSearchParams(params);
+    writeScopeParams(next, choice);
+    navigate(next);
   }
 
-  function chooseRange(change: { range: string | null; from: string | null; to: string | null }) {
-    if (change.range === "custom") {
-      setRangeDraft({ key: "custom", from: change.from ?? "", to: change.to ?? "" });
-      return;
+  function chooseRange(change: DateRangeChange) {
+    const next = new URLSearchParams(params);
+    for (const key of ["range", "from", "to"] as const) {
+      if (change[key]) next.set(key, change[key]);
+      else next.delete(key);
     }
-    setRangeDraft({ key: (change.range ?? rangeDefault) as DateRangeKey, from: "", to: "" });
+    navigate(next);
   }
-
-  function applyFilters() {
-    const params = new URLSearchParams(searchParams.toString());
-    writeScopeParams(params, {
-      clientId: shownRequest.clientId || null,
-      groupId: shownRequest.groupId || null,
-      locationId: shownRequest.locationId || null,
-    });
-    params.delete("page");
-    params.delete("focusFrom");
-    params.delete("focusTo");
-    if (showDate) {
-      params.delete("range");
-      params.delete("from");
-      params.delete("to");
-      if (shownRange.key === "custom") {
-        params.set("range", "custom");
-        if (shownRange.from) params.set("from", shownRange.from);
-        if (shownRange.to) params.set("to", shownRange.to);
-      } else {
-        params.set("range", shownRange.key);
-      }
-    }
-    const qs = params.toString();
-    const href = qs ? `${pathname}?${qs}` : pathname;
-    const scope = resolveScope(catalog, shownRequest);
-    const period = parseDateRange(
-      { range: shownRange.key, from: shownRange.from, to: shownRange.to },
-      shownRange.key
-    );
-    begin(
-      {
-        title: "Applying filters",
-        detail: showDate
-          ? `Loading ${scope.title} for ${period.label}. The previous numbers stay until this finishes.`
-          : `Loading ${scope.title}. The previous numbers stay until this finishes.`,
-        href,
-      },
-      () => router.push(href)
-    );
-  }
-
-  const dirty = scopeDraft !== null || rangeDraft !== null;
 
   return (
     <div className="flex min-w-0 flex-wrap items-center gap-1.5" aria-label="Scope and period">
       <ScopeSelector
         catalog={catalog}
-        request={
-          scopeDraft
-            ? { client: scopeDraft.clientId, group: scopeDraft.groupId, location: scopeDraft.locationId }
-            : undefined
-        }
+        request={{ client: params.get("client"), group: params.get("group"), location: params.get("location") }}
         onSelect={chooseScope}
       />
       {showDate ? (
         <DateRangeFilter
-          value={shownRange}
+          value={range}
           defaultKey={rangeDefault}
           disabled={applying !== null}
           onChange={chooseRange}
           selectClassName="h-8 w-auto min-w-[8.5rem]"
         />
-      ) : null}
-      {dirty ? (
-        <Button type="button" size="sm" className="h-8" loading={applying !== null} onClick={applyFilters}>
-          Apply
-        </Button>
       ) : null}
     </div>
   );

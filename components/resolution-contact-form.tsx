@@ -42,10 +42,9 @@ export function ResolutionContactForm({
   return (
     <form onSubmit={save} className="space-y-3 rounded-lg border border-line bg-white p-4">
       <div>
-        <h2 className="text-sm font-semibold text-ink">Resolution contact</h2>
+        <h2 className="text-sm font-semibold text-ink">Customer contact details</h2>
         <p className="mt-1 text-[13px] text-ink-3">
-          Phone, email, or both for the whole workspace. On a review draft or an escalation, a person adds one or
-          both to the reply by hand. Nothing is inserted or sent on its own.
+          Where a customer can reach you privately. You can add these details to a reply when needed; saving them does not send a message.
         </p>
       </div>
       <div className="grid max-w-2xl gap-3 sm:grid-cols-2">

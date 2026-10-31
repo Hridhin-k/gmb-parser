@@ -49,10 +49,14 @@ npm run db:seed:demo -- --email your-local-login@example.com
 ```
 
 Without `--email`, this uses the seeded local tester (`local@grm.test`). It creates
-a separate **Local demo workspace** with **Demo · Willow & Oak — High Street**,
-120 synthetic reviews over six months, sample historical replies, and three
-escalations. Your existing workspace is preserved. Refresh the app to open the
-demo; rerunning the seed preserves edits and does not duplicate reviews.
+a separate, empty **Local demo workspace**. Open `/onboarding`, choose **Connect
+demo account**, then **Import demo location** to add Willow & Oak — High Street
+and six sample reviews. Grouping and reply tone are saved as you go. Cases,
+escalations and teammates are not preloaded. Repeating an import does not duplicate data.
+
+To start over, run `npm run db:seed:demo -- --reset`. This clears only that
+tester's marked local demo workspace and returns to the first onboarding step.
+Other workspaces are preserved. Without `--reset`, existing demo progress is kept.
 
 The seed requires a loopback database and local signup enabled, and refuses
 production mode. A visible banner labels the sample data. The demo has no

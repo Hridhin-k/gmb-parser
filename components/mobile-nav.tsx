@@ -78,7 +78,7 @@ export function MobileNav({ summary }: { summary: ShellSummary }) {
         <NavItem href={href("/m/approve")} label="Approve" icon={Check} active={approve} count={summary.drafts} tone="ai" />
         <NavItem
           href={href("/m/escalations")}
-          label="Cases"
+          label="Follow-ups"
           icon={Flag}
           active={escalations}
           count={summary.escalations}

@@ -197,7 +197,7 @@ export class EscalationService {
       due_hours: policy.dueHours,
       timezone: policy.timezone,
       updated_at: new Date().toISOString(),
-    });
+    }, { onConflict: "workspace_id" });
     if (error) throw new AppError("Could not save escalation rules.", "DB_ERROR", 500);
     await AuditService.log({
       workspaceId,

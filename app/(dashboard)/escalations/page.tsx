@@ -1,3 +1,5 @@
+import { workspaceGrant } from "@/lib/access";
+import Link from "next/link";
 import { after } from "next/server";
 import { FreshMetrics } from "@/components/fresh-metrics";
 import { PageHeader } from "@/components/page-header";
@@ -115,20 +117,20 @@ export default async function EscalationsPage({ searchParams }: EscalationsPageP
   return (
     <TransitionScope>
       <PageHeader
-        title="Escalations"
-        description={`${open.toLocaleString("en-US")} open ${open === 1 ? "case" : "cases"} in this view. Each case needs an owner and a recorded resolution — a published reply does not close it.`}
+        title="Customer follow-ups"
+        description={`${open.toLocaleString("en-US")} ${open === 1 ? "customer needs" : "customers need"} extra care. Reply, take any action needed, then mark the follow-up done. Everything else stays in Reviews.`}
       >
-        {canManage ? (
-          <a href="#rules" className={buttonVariants({ variant: "outline" })}>
-            Complaint rules
-          </a>
+        {workspaceGrant(role, "edit_rules") ? (
+          <Link href="/settings?section=sla" className={buttonVariants({ variant: "outline" })}>
+            Follow-up settings
+          </Link>
         ) : null}
       </PageHeader>
       <FreshMetrics
         rendered={overviewQueryKey((key) => (Array.isArray(params[key]) ? params[key][0] : params[key]))}
         surface="escalations"
       >
-        <PendingRegion label="Updating escalations…">
+        <PendingRegion label="Updating follow-ups…">
           <div className="mt-5 space-y-4">
             {assignmentReady ? null : (
               <Banner tone="warn" title="Owners are not stored yet.">
@@ -136,6 +138,10 @@ export default async function EscalationsPage({ searchParams }: EscalationsPageP
                 applied, the queue still follows the complaint rules but owners are not recorded.
               </Banner>
             )}
+            <div className="rounded-lg border border-line bg-white px-4 py-3 text-[13px] text-ink-2">
+              <p><b className="font-medium text-ink">Added automatically:</b> {policy.maxStars === 5 ? "all reviews" : `reviews with ${policy.maxStars} ${policy.maxStars === 1 ? "star" : "stars"} or less`}{policy.flagLegalSafety || policy.flagProfanity || policy.extraKeywords.length ? ", plus reviews matching your other watch rules" : ""}.</p>
+              <p className="mt-1 text-xs text-ink-3">Default deadline: {policy.dueHours} hours from when the review was posted, including nights and weekends. If you work alone, follow-ups come to you.</p>
+            </div>
             <EscalationBoard
               bucket={bucket}
               counts={counts}
@@ -153,6 +159,7 @@ export default async function EscalationsPage({ searchParams }: EscalationsPageP
                   scopeLabel: member.scopeLabel,
                 }))}
               canManage={canManage}
+              canEditRules={workspaceGrant(role, "edit_rules")}
               query={query.toString()}
               search={search}
               page={page}

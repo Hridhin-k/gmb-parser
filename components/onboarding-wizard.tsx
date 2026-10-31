@@ -200,8 +200,10 @@ export function OnboardingWizard({
       {!showDone && step === "connect" ? (
         <StepFrame
           index={0}
-          title="Connect the Google account that manages your profiles"
-          description="Google asks you to pick the account and approve access. You stay signed in here as yourself."
+          title={data.localDemo ? "Connect a demo account" : "Connect the Google account that manages your profiles"}
+          description={data.localDemo
+            ? "Start with a sample account. Your workspace stays empty until you import a location in the next step."
+            : "Google asks you to pick the account and approve access. You stay signed in here as yourself."}
           footer={
             <StepFooter
               primary={
@@ -213,7 +215,12 @@ export function OnboardingWizard({
             />
           }
           aside={
-            <>
+            data.localDemo ? (
+              <AsideCard title="Your fresh demo">
+                <p>One account, one location and six sample reviews. Add them as you move through setup.</p>
+                <p>No cases, escalations or team members are preloaded. No Google account is needed.</p>
+              </AsideCard>
+            ) : <>
               <AsideCard title="What Google is asked for">
                 <p>
                   One permission: <b className="font-medium text-ink">manage your Business Profiles</b>. It is used to
@@ -230,17 +237,29 @@ export function OnboardingWizard({
             </>
           }
         >
-          <GoogleConnectionCard
+          {data.localDemo ? (
+            <div className="space-y-3">
+              {data.connections.length ? (
+                <Banner tone="ok" title="Demo account connected.">Continue to import your first location.</Banner>
+              ) : (
+                <Button type="button" loading={busy} onClick={() => run({ action: "demo-connect" })}>
+                  Connect demo account
+                </Button>
+              )}
+              <p className="text-xs text-ink-3">This is a sample connection. Google sync and publishing stay off.</p>
+            </div>
+          ) : <GoogleConnectionCard
             connections={data.connections}
             connectHref={CONNECT_HREF}
             initialMessage={null}
             initialSuccess={connected}
-          />
+          />}
         </StepFrame>
       ) : null}
 
       {!showDone && step === "import" ? (
-        <ImportStep data={data} busy={busy} previous={previous?.id ?? null} onContinue={() => go("groups")} />
+        <ImportStep data={data} busy={busy} previous={previous?.id ?? null} onContinue={() => go("groups")}
+          onDemoImport={() => run({ action: "demo-import" })} />
       ) : null}
       {!showDone && step === "groups" ? (
         <GroupsStep data={data} busy={busy} onRun={run} onSkip={() => go("tone")} onContinue={() => go("tone")} />
@@ -476,14 +495,16 @@ function ImportStep({
   busy,
   previous,
   onContinue,
+  onDemoImport,
 }: {
   data: OnboardingView;
   busy: boolean;
   previous: OnboardingStep | null;
   onContinue: () => void;
+  onDemoImport: () => void;
 }) {
   const connection = data.connections.find((item) => item.status === "active") ?? data.connections[0];
-  const unhealthy = data.connections.filter((item) => item.status !== "active");
+  const unhealthy = data.localDemo ? [] : data.connections.filter((item) => item.status !== "active");
   const duplicates = data.locations.filter((location) => location.holdReason === "duplicate");
   const unverifiedHeld = data.locations.filter((location) => location.holdReason === "unverified");
   const pending = data.locations.filter((location) => !location.holdReason && location.voiceOfMerchant == null);
@@ -502,7 +523,9 @@ function ImportStep({
     <StepFrame
       index={1}
       title={count ? `${count} ${count === 1 ? "location" : "locations"} imported` : "Import the locations this account manages"}
-      description="Only profiles the connected Google account can access are imported. Existing business links are kept. Check anything held back before you continue."
+      description={data.localDemo
+        ? "Import Willow & Oak — High Street and six sample reviews. Cases and escalations stay empty."
+        : "Only profiles the connected Google account can access are imported. Existing business links are kept. Check anything held back before you continue."}
       footer={
         <StepFooter
           back={previous}
@@ -582,7 +605,11 @@ function ImportStep({
             "Connect a Google account before importing locations."
           )}
         </div>
-        {connection ? (
+        {connection && data.localDemo ? (
+          <Button type="button" loading={busy} disabled={count > 0} onClick={onDemoImport}>
+            {count ? "Demo location imported" : "Import demo location"}
+          </Button>
+        ) : connection ? (
           <SyncLocationsButton connectionId={connection.id} label={count ? "Import again" : "Import locations"} />
         ) : (
           <Link href="/onboarding?step=connect" className={buttonVariants({ variant: "outline", size: "sm" })}>
@@ -591,7 +618,7 @@ function ImportStep({
         )}
       </div>
 
-      {connection && count === 0 ? (
+      {connection && count === 0 && !data.localDemo ? (
         <Banner tone="info" title="Nothing imported yet.">
           If the import finds no locations, the connected account probably isn&apos;t an Owner or Manager on any Business
           Profile. Connect a different account from the previous step.
@@ -1403,7 +1430,7 @@ function CompleteStep({ data }: { data: OnboardingView }) {
       cta: "Open reports",
       primary: false,
     },
-  ];
+  ].filter((item) => !data.localDemo || item.primary);
   return (
     <div className="grid items-start gap-5 lg:grid-cols-[minmax(0,1fr)_340px]">
       <section className="flex min-w-0 flex-col gap-5 rounded-lg border border-line bg-white p-4 sm:p-6" aria-labelledby="onboarding-done-title">
@@ -1412,7 +1439,9 @@ function CompleteStep({ data }: { data: OnboardingView }) {
           <h2 id="onboarding-done-title" className="text-xl font-semibold tracking-[-0.01em] text-ink">
             Your workspace is ready
           </h2>
-          <p className="text-[13px] text-ink-3">Reviews keep syncing in the background. Here&apos;s a sensible first hour.</p>
+          <p className="text-[13px] text-ink-3">{data.localDemo
+            ? "Your sample location and reviews are ready. Start by exploring the inbox."
+            : "Reviews keep syncing in the background. Here's a sensible first hour."}</p>
         </header>
         <ul className="space-y-2">
           {nextSteps.map((item) => (

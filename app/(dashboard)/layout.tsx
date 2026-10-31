@@ -57,7 +57,7 @@ export default async function DashboardLayout({
       {chrome.localDemo ? (
         <div className="flex flex-wrap items-center gap-2.5 border-b border-[#f59e0b] bg-demo px-4 py-2 text-[13px] text-demo-ink" role="status">
           <span className="inline-flex h-[22px] items-center rounded-sm border border-dashed border-[#f59e0b] px-2 text-xs font-semibold">Demo workspace</span>
-          <span>Sample reviews. Google sync and publishing are simulated; AI drafts and analysis use your configured provider.</span>
+          <span>Start empty and add sample data during setup. Google sync and publishing are off; AI actions use your configured provider.</span>
         </div>
       ) : null}
       {supportTenantId ? (

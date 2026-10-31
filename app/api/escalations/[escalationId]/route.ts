@@ -4,7 +4,7 @@ import { getCurrentUser } from "@/lib/auth/server";
 import { EscalationService } from "@/lib/services/escalations";
 import { ensurePersonalWorkspace } from "@/lib/services/workspace";
 import { assertEscalationAction } from "@/lib/services/access";
-import { RESOLUTION_ACTIONS, ESCALATION_LEVELS } from "@/lib/escalations";
+import { RESOLUTION_ACTIONS, FOLLOW_UP_OUTCOMES, ESCALATION_LEVELS, type ResolutionCode } from "@/lib/escalations";
 import { toStatusCode, toUserMessage } from "@/lib/errors";
 import { parseBody, validateId } from "@/lib/validation";
 
@@ -21,11 +21,7 @@ const schema = z.discriminatedUnion("action", [
   }),
   z.object({
     action: z.literal("resolve"),
-    code: z.enum(RESOLUTION_ACTIONS.map((item) => item.id) as [
-      "apology_callback",
-      "replacement_arranged",
-      "store_visit_scheduled",
-    ]),
+    code: z.enum(FOLLOW_UP_OUTCOMES.map((item) => item.id) as [ResolutionCode, ...ResolutionCode[]]),
     note: z.string().trim().max(2000),
   }),
   z.object({

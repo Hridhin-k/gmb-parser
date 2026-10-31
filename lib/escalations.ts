@@ -27,7 +27,12 @@ export const RESOLUTION_ACTIONS = [
   },
 ] as const;
 
-export type ResolutionCode = (typeof RESOLUTION_ACTIONS)[number]["id"];
+export const FOLLOW_UP_OUTCOMES = [
+  { id: "handled", label: "Followed up with the customer", detail: "Marks this follow-up done with your note. It does not send or publish a message." },
+  ...RESOLUTION_ACTIONS,
+] as const;
+
+export type ResolutionCode = (typeof FOLLOW_UP_OUTCOMES)[number]["id"];
 
 export const ESCALATION_LEVELS = [
   { id: "store", label: "Store" },
@@ -56,6 +61,12 @@ export const DEFAULT_ESCALATION_POLICY: EscalationPolicy = {
   dueHours: 24,
   timezone: "Asia/Kolkata",
 };
+
+/** Preserve existing check-ins that still fit when the owner changes the deadline. */
+export function retimeFollowUpPolicy(policy: EscalationPolicy, dueHours: number): EscalationPolicy {
+  const reminderHours = policy.reminderHours.filter((hour) => Number.isInteger(hour) && hour >= 1 && hour <= 72 && hour < dueHours);
+  return { ...policy, dueHours, reminderHours: reminderHours.length ? reminderHours : [Math.max(1, Math.min(72, Math.floor(dueHours / 2)))] };
+}
 
 const PROFANITY = ["fuck", "shit", "bitch", "asshole", "bastard"];
 const LEGAL_SAFETY = [
@@ -153,9 +164,9 @@ export function ticketKey(ticketNo: number | null): string {
 }
 
 export function escalationStatusLabel(status: string): string {
-  if (status === "resolved") return "Resolved";
+  if (status === "resolved") return "Done";
   if (status === "in_progress") return "In progress";
-  return "Needs human";
+  return "To do";
 }
 
 export function escalationEventLabel(
@@ -184,7 +195,9 @@ export function escalationEventLabel(
   if (action === "overdue_noted") return "Still overdue at leadership. The level did not change again.";
   if (action === "level_changed") return `Handed to ${String(metadata.level ?? "the next level")}.`;
   if (action === "status_changed") return `Status set to ${escalationStatusLabel(String(metadata.status ?? ""))}.`;
-  if (action === "resolved") return "Resolution recorded. This does not confirm a callback, replacement, or visit.";
+  if (action === "resolved") return metadata.code === "handled"
+    ? "Marked done after following up with the customer."
+    : "Resolution recorded. This does not confirm a callback, replacement, or visit.";
   if (action === "next_step") {
     return "Next step recorded. This does not mean the call, replacement, or visit happened.";
   }

@@ -17,7 +17,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { roleLabel } from "@/lib/access";
 import {
   ESCALATION_LEVELS,
-  RESOLUTION_ACTIONS,
+  FOLLOW_UP_OUTCOMES,
   escalationEventLabel,
   escalationStatusLabel,
   ticketKey,
@@ -64,7 +64,7 @@ function levelLabel(level: string): string {
 }
 
 function SlaBadge({ item }: { item: TicketItem }) {
-  if (item.status === "resolved") return <Badge variant="ok">Resolved</Badge>;
+  if (item.status === "resolved") return <Badge variant="ok">Done</Badge>;
   if (item.overdue) return <Badge variant="bad">Overdue {item.overdue}</Badge>;
   if (item.remaining) return <Badge variant="default">Due in {item.remaining}</Badge>;
   return null;
@@ -111,7 +111,7 @@ export function EscalationTicket({
   const open = item.status !== "resolved";
   const key = ticketKey(item.ticketNo);
   const events = showSystem ? item.events : item.events.filter((event) => event.action === "comment");
-  const resolution = RESOLUTION_ACTIONS.find((action) => action.id === item.resolutionCode);
+  const resolution = FOLLOW_UP_OUTCOMES.find((action) => action.id === item.resolutionCode);
 
   async function send(body: unknown) {
     setPending(true);
@@ -141,12 +141,12 @@ export function EscalationTicket({
   return (
     <div className="space-y-4">
       <PageHeader
-        breadcrumbs={[{ label: "Escalations", href: "/escalations" }, { label: key }]}
+        breadcrumbs={[{ label: "Follow-ups", href: "/escalations" }, { label: key }]}
         eyebrow={
           <>
-            <Badge variant={item.level === "leadership" ? "bad" : item.level === "regional" ? "warn" : "default"}>
-              {levelLabel(item.level)} level
-            </Badge>
+            {item.level !== "store" ? (
+              <Badge variant={item.level === "leadership" ? "bad" : "warn"}>{levelLabel(item.level)} team</Badge>
+            ) : null}
             <SlaBadge item={item} />
             <Badge variant={item.status === "resolved" ? "ok" : item.status === "in_progress" ? "info" : "default"}>
               {escalationStatusLabel(item.status)}
@@ -170,11 +170,11 @@ export function EscalationTicket({
         </Link>
         {item.status === "needs_human" ? (
           <Button type="button" loading={pending} onClick={() => void send({ action: "start" })}>
-            Start case
+            Start follow-up
           </Button>
         ) : open ? (
           <a href="#resolve" className={buttonVariants()}>
-            Resolve case
+            Mark as done
           </a>
         ) : null}
       </PageHeader>
@@ -217,7 +217,7 @@ export function EscalationTicket({
                     {reason === "recorded" ? "already open" : reason.replace(/_/g, " ")}
                   </Badge>
                 ))}
-                <span>· A public reply does not close this case.</span>
+                <span>· After replying and helping the customer, mark this follow-up done.</span>
               </div>
             </div>
           </section>
@@ -320,7 +320,7 @@ export function EscalationTicket({
 
         <aside className="space-y-4">
           <section className={cn(CARD, "space-y-3 p-4")}>
-            <h2 className="text-sm font-semibold text-ink">Case</h2>
+            <h2 className="text-sm font-semibold text-ink">This follow-up</h2>
             <dl className="space-y-3 text-[13px]">
               <div className="flex items-start justify-between gap-3">
                 <dt className={DT}>Status</dt>
@@ -331,21 +331,13 @@ export function EscalationTicket({
                 </dd>
               </div>
               <div className="flex items-start justify-between gap-3">
-                <dt className={DT}>Owner</dt>
+                <dt className={DT}>Who’s handling it</dt>
                 <dd className={cn("min-w-0 truncate text-right", item.assignedTo ? "text-ink" : "text-warn")}>
                   {item.assignedTo ? name(item.assignedTo) : "Unassigned"}
                 </dd>
               </div>
               <div className="flex items-start justify-between gap-3">
-                <dt className={DT}>Responsible manager</dt>
-                <dd className="min-w-0 truncate text-right text-ink">{name(item.responsibleUserId)}</dd>
-              </div>
-              <div className="flex items-start justify-between gap-3">
-                <dt className={DT}>Level</dt>
-                <dd className="text-ink">{levelLabel(item.level)}</dd>
-              </div>
-              <div className="flex items-start justify-between gap-3">
-                <dt className={DT}>SLA</dt>
+                <dt className={DT}>Deadline</dt>
                 <dd className="text-right">
                   <SlaBadge item={item} />
                   <span className="mt-1 block text-xs text-ink-3">Due {item.dueLabel}</span>
@@ -364,14 +356,14 @@ export function EscalationTicket({
                 loading={pending}
                 onClick={() => void send({ action: "start" })}
               >
-                Start case
+                Start follow-up
               </Button>
             ) : null}
           </section>
 
           {open ? (
-            <section className={cn(CARD, "space-y-3 p-4")}>
-              <h2 className="text-sm font-semibold text-ink">Route</h2>
+            <details className={cn(CARD, "space-y-3 p-4")}>
+              <summary className="cursor-pointer text-sm font-medium text-ink">Team: change who handles this</summary>
               {canManage ? (
                 <div className="flex flex-col gap-1 text-xs font-medium text-ink-2">
                   <span aria-hidden>Level</span>
@@ -400,19 +392,19 @@ export function EscalationTicket({
               ) : (
                 <p className="text-xs text-ink-3">Your role cannot reassign cases. Ask a manager to change the owner.</p>
               )}
-            </section>
+            </details>
           ) : null}
 
           {open ? (
             <section id="resolve" className={cn(CARD, "scroll-mt-24 space-y-3 border-ok-line p-4")}>
-              <h2 className="text-sm font-semibold text-ink">Resolve</h2>
+              <h2 className="text-sm font-semibold text-ink">All taken care of?</h2>
               <ResolveBox disabled={pending} onResolve={(code, note) => void send({ action: "resolve", code, note })} />
             </section>
           ) : (
             <section className={cn(CARD, "space-y-2 border-ok-line bg-[#f8fcf9] p-4")}>
               <div className="flex items-center justify-between gap-2">
                 <h2 className="text-sm font-semibold text-ink">Resolution</h2>
-                <Badge variant="ok">Resolved</Badge>
+                <Badge variant="ok">Done</Badge>
               </div>
               {resolution ? <p className="text-[13px] font-medium text-ink">{resolution.label}</p> : null}
               <p className="text-[13px] text-ink-2">
@@ -509,7 +501,7 @@ function ResolveBox({
   disabled: boolean;
   onResolve: (code: string, note: string) => void;
 }) {
-  const [code, setCode] = useState<(typeof RESOLUTION_ACTIONS)[number]["id"]>(RESOLUTION_ACTIONS[0].id);
+  const [code, setCode] = useState<(typeof FOLLOW_UP_OUTCOMES)[number]["id"]>(FOLLOW_UP_OUTCOMES[0].id);
   const [note, setNote] = useState("");
   return (
     <form
@@ -521,12 +513,12 @@ function ResolveBox({
       }}
     >
       <div className="flex flex-col gap-1 text-xs font-medium text-ink-2">
-        <span aria-hidden>Resolution</span>
+        <span aria-hidden>What did you do?</span>
         <SelectField
-          label="Resolve"
+          label="What did you do?"
           value={code}
           onValueChange={(value) => setCode(value as typeof code)}
-          options={RESOLUTION_ACTIONS.map((action) => ({ value: action.id, label: action.label }))}
+          options={FOLLOW_UP_OUTCOMES.map((action) => ({ value: action.id, label: action.label }))}
         />
       </div>
       <label className="flex flex-col gap-1 text-xs font-medium text-ink-2">
@@ -536,13 +528,13 @@ function ResolveBox({
           onChange={(event) => setNote(event.target.value)}
           maxLength={2000}
           rows={2}
-          placeholder="What was done (optional)"
+          placeholder="For example: Replied and helped with the refund (optional)"
         />
       </label>
       <Button type="submit" className="w-full" loading={disabled}>
-        Resolve case
+        Mark as done
       </Button>
-      <p className="text-xs leading-relaxed text-ink-3">{RESOLUTION_ACTIONS.find((action) => action.id === code)?.detail}</p>
+      <p className="text-xs leading-relaxed text-ink-3">{FOLLOW_UP_OUTCOMES.find((action) => action.id === code)?.detail}</p>
     </form>
   );
 }

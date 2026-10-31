@@ -33,9 +33,9 @@ export function ScopeSelector({
   onSelect,
 }: {
   catalog: ScopeCatalog;
-  /** Draft selection. When omitted, the control shows the URL. */
+  /** Selection override, including a selection whose navigation is still pending. */
   request?: { client?: string | null; group?: string | null; location?: string | null };
-  /** When set, choosing a place updates the draft and does not navigate. */
+  /** When set, the caller handles selection and navigation. */
   onSelect?: (choice: ScopeChoice) => void;
 }) {
   const pathname = usePathname();

@@ -4,6 +4,7 @@ import { redirect } from "next/navigation";
 import { createAdminClient } from "@/lib/db/client";
 import { allows, workspaceGrant } from "@/lib/access";
 import { authMethodsFromEnv } from "@/lib/auth-methods";
+import { FollowUpSettings } from "@/components/follow-up-settings";
 import { SettingsBoard } from "@/components/settings-board";
 import { AiConfigPanel } from "@/components/ai-config-panel";
 import { GoogleConnectionCard } from "@/components/google-connection-card";
@@ -37,7 +38,7 @@ const ERROR_MESSAGES: Record<string, string> = {
 const SECTIONS = [
   ["tone", "AI configuration"],
   ["templates", "Reply templates"],
-  ["sla", "SLAs and escalations"],
+  ["sla", "Customer follow-ups"],
   ["notifications", "Notifications"],
   ["integrations", "Google integrations"],
   ["branding", "Agency branding"],
@@ -173,7 +174,7 @@ export default async function SettingsPage({
   const descriptions: Record<SectionId, ReactNode> = {
     tone: `How AI drafts are written for ${scopeLabel}. Businesses, groups and locations can override individual settings; each row says where its value comes from.`,
     templates: `Hand-written replies your team can insert in one click, for ${scopeLabel}. Templates work with AI off.`,
-    sla: "Response-time targets and the rule that turns complaints into escalations with an owner.",
+    sla: "Choose which reviews need extra care and how soon to handle them. We’ll keep them in one to-do list.",
     notifications: "What reaches you and where. Alert rules for reports live in Reports.",
     integrations: "Google accounts that give access to your Business Profiles, and how to recover when one breaks.",
     branding: "How your agency appears to your team and clients.",
@@ -184,7 +185,7 @@ export default async function SettingsPage({
   const headerAction: Partial<Record<SectionId, ReactNode>> = {
     sla: (
       <Link href="/escalations" className={buttonVariants({ variant: "outline" })}>
-        Open escalations
+        Open follow-ups
       </Link>
     ),
     plan: (
@@ -325,54 +326,18 @@ export default async function SettingsPage({
 
         {section === "sla" ? (
           <>
-            <Panel title="Escalation rule" description={`Applies to the whole workspace. Times are in ${policy.timezone}.`}>
-              <div className="overflow-x-auto rounded-md border border-line">
-                <table className="w-full min-w-[520px] text-left text-[13px]">
-                  <thead className="border-b border-line bg-paper text-xs text-ink-3">
-                    <tr>
-                      <th className="px-3 py-2 font-medium">When</th>
-                      <th className="px-3 py-2 font-medium">Then</th>
-                      <th className="px-3 py-2 font-medium">Source</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-line">
-                    <tr>
-                      <td className="px-3 py-2.5 text-ink">Review at {policy.maxStars} stars or below</td>
-                      <td className="px-3 py-2.5 text-ink-2">Open an escalation, due in <b className="font-medium text-ink">{policy.dueHours} h</b></td>
-                      <td className="px-3 py-2.5"><Badge variant="brand">Workspace</Badge></td>
-                    </tr>
-                    <tr>
-                      <td className="px-3 py-2.5 text-ink">Escalation still open</td>
-                      <td className="px-3 py-2.5 text-ink-2">
-                        Reminder recorded in the app at {policy.reminderHours.join(" and ")} hours. No email or text is sent.
-                      </td>
-                      <td className="px-3 py-2.5"><Badge variant="brand">Workspace</Badge></td>
-                    </tr>
-                  </tbody>
-                </table>
-              </div>
-              <div className="flex flex-wrap gap-2 text-xs">
-                <Badge variant={policy.flagProfanity ? "ok" : "default"}>Flag profanity · {policy.flagProfanity ? "On" : "Off"}</Badge>
-                <Badge variant={policy.flagLegalSafety ? "ok" : "default"}>Flag legal and safety language · {policy.flagLegalSafety ? "On" : "Off"}</Badge>
-                <Badge variant="default">
-                  Extra keywords · {policy.extraKeywords.length ? policy.extraKeywords.join(", ") : "none"}
-                </Badge>
-              </div>
-              <Banner
-                tone="info"
-                title="Overrides."
-                actions={
-                  <Link href="/locations" className={buttonVariants({ variant: "outline", size: "sm" })}>
-                    Open Locations
-                  </Link>
-                }
-              >
-                Business, group and location SLA overrides are set on Locations and groups. A nearer override replaces this
-                workspace rule.
-              </Banner>
+            <FollowUpSettings policy={policy} canEdit={canEditWorkspace} />
+            <Panel title="Your everyday routine">
+              <ol className="grid gap-3 text-[13px] text-ink-2 sm:grid-cols-3">
+                <li><b className="block text-ink">1. Check To do</b>Reviews needing extra care appear automatically.</li>
+                <li><b className="block text-ink">2. Help the customer</b>Reply, then handle any issue behind the review.</li>
+                <li><b className="block text-ink">3. Mark it done</b>Add a short note about what you did. A reply alone does not finish the follow-up.</li>
+              </ol>
             </Panel>
-            <ResolutionContactForm contact={contact} canEdit={canEditWorkspace} />
-            <p className="text-xs text-ink-3">Keyword routing rules and per-group escalation owners are not available yet.</p>
+            <details className="rounded-lg border border-line bg-white p-4">
+              <summary className="cursor-pointer text-[13px] font-medium text-ink">Optional: contact details customers can use</summary>
+              <div className="mt-4"><ResolutionContactForm contact={contact} canEdit={canEditWorkspace} /></div>
+            </details>
           </>
         ) : null}
 
