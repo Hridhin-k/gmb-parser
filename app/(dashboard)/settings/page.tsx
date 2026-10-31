@@ -283,7 +283,10 @@ async function SettingsSection({
         <>
           <section className="space-y-3 rounded-xl border border-silver bg-white p-4 text-sm text-graphite">
             <p>Complaints at {policy.maxStars} stars or below open an escalation. The due time is {policy.dueHours} hours in {policy.timezone}.</p>
-            <p>Reminders are recorded in the app at {policy.reminderHours.join(" and ")} hours. No email or text is sent.</p>
+            <p>
+              Reminders are emailed to the assignee at {policy.reminderHours.join(" and ")} hours when that person has
+              email alerts on. Resolving a case emails the resolution address below.
+            </p>
             <p>Brand, group, and location SLA overrides stay on Locations and groups. A nearer override replaces this organization rule.</p>
             <Link href="/escalations" className="font-medium text-ink underline underline-offset-4">Open escalations</Link>
           </section>
@@ -296,7 +299,11 @@ async function SettingsSection({
           <p className="font-medium text-graphite">This tab explains how alerts work. Toggle email and in-app alerts on Team and roles.</p>
           <p>The bell lists each profile you cover: reviews with no reply, drafts, failed publishes, and open escalations.</p>
           <p>You also get a notice when a new review arrives on one of those profiles, a complaint is assigned to you, a reminder is due, or a reply fails to publish.</p>
-          <p>{emailDelivery ? "Email is sent for an assignment when that person turned email on." : "Email preferences can be saved on Team and roles. Mail is not delivered until a mail provider is configured."}</p>
+          <p>
+            {emailDelivery
+              ? "Email is sent for an assignment and for an SLA reminder when that person turned email on. Resolving a case emails the resolution address in SLA settings."
+              : "Email preferences can be saved on Team and roles. Mail is not delivered until a mail provider is configured."}
+          </p>
           <p>WhatsApp and Slack are not configured.</p>
           {canOpenPath("/team", role) ? (
             <Link href="/team" className="font-medium text-ink underline underline-offset-4">Edit notification preferences</Link>

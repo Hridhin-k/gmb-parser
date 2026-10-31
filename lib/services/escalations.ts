@@ -2,6 +2,14 @@ import { createHash } from "crypto";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { AuditService } from "@/lib/services/audit";
 import { deliverMessage } from "@/lib/delivery";
+import {
+  casePageUrl,
+  reminderMail,
+  resolutionMail,
+  resolutionMailTargets,
+  summarizeMailSends,
+  type EscalationMailOutcome,
+} from "@/lib/escalation-mail";
 import { readDeliveryEnv } from "@/lib/reporting";
 import { AppError, ValidationError } from "@/lib/errors";
 import {
@@ -653,7 +661,7 @@ export class EscalationService {
 
   /**
    * Records a due reminder once. A second run sees sent_at and does nothing.
-   * The assignee gets a bell notice when in-app alerts are on. No email is sent.
+   * The assignee gets a bell notice when in-app alerts are on, and an email when email alerts are on.
    */
   static async processReminders(workspaceId: string): Promise<{ recorded: number }> {
     const admin = createAdminClient();
@@ -680,12 +688,37 @@ export class EscalationService {
       escalationIds.length
         ? admin
             .from("grm_escalations")
-            .select("id, assignee_user_id, location_id")
+            .select("id, assignee_user_id, location_id, ticket_no, review_id")
             .eq("workspace_id", workspaceId)
             .in("id", escalationIds)
         : Promise.resolve({ data: [], error: null }),
     ]);
-    const caseById = new Map((cases.data ?? []).map((row) => [row.id, row]));
+    const caseRows = cases.data ?? [];
+    const caseById = new Map(caseRows.map((row) => [row.id, row]));
+    const assigneeIds = [...new Set(caseRows.flatMap((row) => (row.assignee_user_id ? [row.assignee_user_id] : [])))];
+    const reviewIds = [...new Set(caseRows.map((row) => row.review_id))];
+    const locationIds = [...new Set(caseRows.map((row) => row.location_id))];
+    const [members, reviews, locations] = await Promise.all([
+      assigneeIds.length
+        ? admin
+            .from("grm_workspace_members")
+            .select("user_id, alert_email")
+            .eq("workspace_id", workspaceId)
+            .in("user_id", assigneeIds)
+        : Promise.resolve({ data: [], error: null }),
+      reviewIds.length
+        ? admin.from("grm_reviews").select("id, reviewer_display_name").in("id", reviewIds)
+        : Promise.resolve({ data: [], error: null }),
+      locationIds.length
+        ? admin.from("grm_google_locations").select("id, location_title").in("id", locationIds)
+        : Promise.resolve({ data: [], error: null }),
+    ]);
+    const alertEmail = new Map((members.data ?? []).map((member) => [member.user_id, member.alert_email]));
+    const reviewerName = new Map(
+      (reviews.data ?? []).map((review) => [review.id, review.reviewer_display_name?.trim() || "A reviewer"])
+    );
+    const locationName = new Map((locations.data ?? []).map((location) => [location.id, location.location_title]));
+    const accountEmail = new Map<string, string | null>();
 
     let recorded = 0;
     for (const reminder of due ?? []) {
@@ -701,12 +734,28 @@ export class EscalationService {
         .select("id");
       if (claimed.error || !claimed.data?.length) continue;
 
+      const assigned = caseById.get(reminder.escalation_id);
+      const reminderEmail = await this.emailReminder({
+        assigneeId: assigned?.assignee_user_id ?? null,
+        wantsEmail: assigned?.assignee_user_id ? alertEmail.get(assigned.assignee_user_id) === true : false,
+        accountEmail,
+        ticketNo: assigned?.ticket_no ?? null,
+        reviewerName: assigned ? reviewerName.get(assigned.review_id) ?? "A reviewer" : "A reviewer",
+        locationName: assigned ? locationName.get(assigned.location_id) ?? "a location" : "a location",
+        hours: reminder.kind,
+        escalationId: reminder.escalation_id,
+      });
       const event = await admin.from("grm_escalation_events").insert({
         workspace_id: workspaceId,
         escalation_id: reminder.escalation_id,
         kind: "reminder_recorded",
-        body: "Reminder recorded. The assignee sees it in the bell when in-app alerts are on. No email was sent.",
-        metadata: { kind: reminder.kind, channel: "in_app" },
+        body: reminderEmail.detail,
+        metadata: {
+          kind: reminder.kind,
+          channel: reminderEmail.status === "sent" ? "email" : "in_app",
+          email: reminderEmail.status,
+          recipients: reminderEmail.recipients,
+        },
       });
       if (event.error) {
         await admin
@@ -719,7 +768,6 @@ export class EscalationService {
         continue;
       }
       recorded += 1;
-      const assigned = caseById.get(reminder.escalation_id);
       if (assigned?.location_id) {
         const { notifyProfileEvent } = await import("@/lib/services/notifications");
         await notifyProfileEvent({
@@ -739,7 +787,12 @@ export class EscalationService {
           action: "escalation.reminder",
           entityType: "grm_escalations",
           entityId: reminder.escalation_id,
-          metadata: { source: "scheduler", kind: reminder.kind, channel: "in_app" },
+          metadata: {
+            source: "scheduler",
+            kind: reminder.kind,
+            channel: reminderEmail.status === "sent" ? "email" : "in_app",
+            email: reminderEmail.status,
+          },
         });
       }
     }
@@ -1462,8 +1515,16 @@ export class EscalationService {
     actorId: string;
     code: ResolutionCode;
     note: string;
-  }): Promise<void> {
+  }): Promise<EscalationMailOutcome> {
     const admin = createAdminClient();
+    const current = await admin
+      .from("grm_escalations")
+      .select("id, status, ticket_no, assignee_user_id, review_id, location_id")
+      .eq("id", input.escalationId)
+      .eq("workspace_id", input.workspaceId)
+      .maybeSingle();
+    if (current.error || !current.data) throw new AppError("Could not resolve this escalation.", "DB_ERROR", 400);
+    if (current.data.status === "resolved") throw new ValidationError("This case is already resolved.");
     const now = new Date().toISOString();
     const { data, error } = await admin
       .from("grm_escalations")
@@ -1481,13 +1542,36 @@ export class EscalationService {
       .select("id")
       .maybeSingle();
     if (error || !data) throw new AppError("Could not resolve this escalation.", "DB_ERROR", 400);
+    let email: EscalationMailOutcome;
+    try {
+      email = await this.emailResolution({
+        workspaceId: input.workspaceId,
+        escalationId: input.escalationId,
+        assigneeId: current.data.assignee_user_id,
+        ticketNo: current.data.ticket_no,
+        reviewId: current.data.review_id,
+        locationId: current.data.location_id,
+        code: input.code,
+        note: input.note,
+      });
+    } catch (error) {
+      logger.error("escalations.resolution_email_failed", {
+        escalationId: input.escalationId,
+        message: error instanceof Error ? error.message : "Unknown",
+      });
+      email = {
+        status: "failed",
+        recipients: [],
+        detail: "Resolved. The email could not be prepared.",
+      };
+    }
     await admin.from("grm_escalation_events").insert({
       workspace_id: input.workspaceId,
       escalation_id: input.escalationId,
       actor_id: input.actorId,
       kind: "resolved",
-      body: "Resolution recorded. This does not confirm a callback, replacement, or visit.",
-      metadata: { code: input.code },
+      body: email.detail,
+      metadata: { code: input.code, email: email.status, recipients: email.recipients },
     });
     await AuditService.log({
       workspaceId: input.workspaceId,
@@ -1495,8 +1579,145 @@ export class EscalationService {
       action: "escalation.resolved",
       entityType: "grm_escalations",
       entityId: input.escalationId,
-      metadata: { code: input.code },
+      metadata: { code: input.code, email: email.status, recipients: email.recipients },
     });
+    return email;
+  }
+
+  private static async accountEmail(userId: string, cache: Map<string, string | null>): Promise<string | null> {
+    if (cache.has(userId)) return cache.get(userId) ?? null;
+    const admin = createAdminClient();
+    const user = await admin.auth.admin.getUserById(userId).catch(() => null);
+    const email = user?.data.user?.email?.trim() || null;
+    cache.set(userId, email);
+    return email;
+  }
+
+  private static async emailReminder(input: {
+    assigneeId: string | null;
+    wantsEmail: boolean;
+    accountEmail: Map<string, string | null>;
+    ticketNo: number | null;
+    reviewerName: string;
+    locationName: string;
+    hours: string;
+    escalationId: string;
+  }): Promise<{ status: "sent" | "failed" | "unavailable" | "off" | "no_recipient"; recipients: string[]; detail: string }> {
+    if (!input.assigneeId) {
+      return { status: "no_recipient", recipients: [], detail: "Reminder recorded. This case has no assignee." };
+    }
+    if (!input.wantsEmail) {
+      return {
+        status: "off",
+        recipients: [],
+        detail: "Reminder recorded in the bell. Email alerts are off for the assignee.",
+      };
+    }
+    const email = await this.accountEmail(input.assigneeId, input.accountEmail);
+    if (!email) {
+      return { status: "no_recipient", recipients: [], detail: "Reminder recorded. The assignee has no email address." };
+    }
+    const message = reminderMail({
+      ticketNo: input.ticketNo,
+      hours: input.hours,
+      reviewerName: input.reviewerName,
+      locationName: input.locationName,
+      caseUrl: casePageUrl(input.escalationId),
+    });
+    const result = await deliverMessage({
+      env: readDeliveryEnv(process.env),
+      channel: "email",
+      recipient: email,
+      subject: message.subject,
+      body: message.text,
+    });
+    const status = result.status === "sent" ? "sent" : result.status === "failed" ? "failed" : "unavailable";
+    const summary = summarizeMailSends([{ email, status, detail: result.detail }]);
+    if (status !== "sent") {
+      logger.error("escalations.reminder_email_failed", {
+        escalationId: input.escalationId,
+        status,
+        detail: result.detail,
+      });
+    }
+    return {
+      status,
+      recipients: summary.recipients,
+      detail: status === "sent" ? summary.detail : `Reminder recorded. ${summary.detail}`,
+    };
+  }
+
+  private static async emailResolution(input: {
+    workspaceId: string;
+    escalationId: string;
+    assigneeId: string | null;
+    ticketNo: number | null;
+    reviewId: string;
+    locationId: string;
+    code: ResolutionCode;
+    note: string;
+  }): Promise<EscalationMailOutcome> {
+    const admin = createAdminClient();
+    const [review, location, contact, member] = await Promise.all([
+      admin
+        .from("grm_reviews")
+        .select("reviewer_display_name, star_rating, comment")
+        .eq("id", input.reviewId)
+        .eq("workspace_id", input.workspaceId)
+        .maybeSingle(),
+      admin.from("grm_google_locations").select("location_title").eq("id", input.locationId).maybeSingle(),
+      EscalationContactStore.read(input.workspaceId),
+      input.assigneeId
+        ? admin
+            .from("grm_workspace_members")
+            .select("alert_email")
+            .eq("workspace_id", input.workspaceId)
+            .eq("user_id", input.assigneeId)
+            .maybeSingle()
+        : Promise.resolve({ data: null, error: null }),
+    ]);
+    const assigneeEmail = input.assigneeId ? await this.accountEmail(input.assigneeId, new Map()) : null;
+    const targets = resolutionMailTargets({
+      contactEmail: contact.email,
+      assigneeEmail,
+      assigneeWantsEmail: member.data?.alert_email === true,
+    });
+    if (targets.length === 0) {
+      return summarizeMailSends([]);
+    }
+    const message = resolutionMail({
+      code: input.code,
+      ticketNo: input.ticketNo,
+      reviewerName: review.data?.reviewer_display_name?.trim() || "A reviewer",
+      starRating: review.data?.star_rating ?? 0,
+      locationName: location.data?.location_title?.trim() || "a location",
+      comment: review.data?.comment ?? null,
+      note: input.note,
+      phone: contact.phone,
+      caseUrl: casePageUrl(input.escalationId),
+    });
+    const env = readDeliveryEnv(process.env);
+    const results: Array<{ email: string; status: "sent" | "failed" | "unavailable"; detail: string }> = [];
+    for (const target of targets) {
+      const result = await deliverMessage({
+        env,
+        channel: "email",
+        recipient: target.email,
+        subject: message.subject,
+        body: message.text,
+      });
+      const status = result.status === "sent" ? "sent" : result.status === "failed" ? "failed" : "unavailable";
+      results.push({ email: target.email, status, detail: result.detail });
+    }
+    const summary = summarizeMailSends(results);
+    if (summary.status !== "sent") {
+      logger.error("escalations.resolution_email_failed", {
+        escalationId: input.escalationId,
+        status: summary.status,
+        detail: summary.detail,
+      });
+    }
+    return summary;
   }
 
   /** Opens one escalation for a review a person flagged. An open row is reused. */
@@ -1609,7 +1830,7 @@ export class EscalationService {
       escalation_id: input.escalationId,
       actor_id: input.actorId,
       kind: "next_step",
-      body: "Next step recorded. This does not mean the call, replacement, or visit happened.",
+      body: "Next step recorded. The case stays open until it is resolved, which is when the email is sent.",
       metadata: { code: input.code },
     });
     await AuditService.log({

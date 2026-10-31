@@ -25,6 +25,7 @@ export function MobileComplaintView({ data, aiOnly = false }: { data: MobileComp
   const { refresh } = useServerRefresh();
   const card = data.card;
   const [note, setNote] = useState("");
+  const [resolutionNote, setResolutionNote] = useState("");
   const [content, setContent] = useState(card?.replyContent ?? "");
   const [replyId, setReplyId] = useState(card?.replyId ?? null);
   const [language, setLanguage] = useState<ReplyLanguage>("en");
@@ -90,7 +91,35 @@ export function MobileComplaintView({ data, aiOnly = false }: { data: MobileComp
       setPending(null);
       return;
     }
-    setNotice("Next step recorded. It does not mean the call, replacement, or visit happened.");
+    setNotice("Next step recorded. The case stays open until you resolve it, which sends the email.");
+    setPending(null);
+    router.refresh();
+  }
+
+  async function resolveCase() {
+    if (!card) return;
+    const code = RESOLUTION_ACTIONS.some((action) => action.id === card.resolutionCode)
+      ? (card.resolutionCode as ResolutionCode)
+      : null;
+    if (!code) {
+      setError("Choose a next step, then resolve the case.");
+      return;
+    }
+    setPending("resolve");
+    setError(null);
+    const response = await fetch(`/api/escalations/${card.id}`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ action: "resolve", code, note: resolutionNote.trim() }),
+    });
+    if (!response.ok) {
+      setError(await errorText(response));
+      setPending(null);
+      return;
+    }
+    const payload = (await response.json().catch(() => ({}))) as { detail?: string };
+    setResolutionNote("");
+    setNotice(payload.detail ?? "Case resolved.");
     setPending(null);
     router.refresh();
   }
@@ -322,7 +351,36 @@ export function MobileComplaintView({ data, aiOnly = false }: { data: MobileComp
                   </button>
                 ))}
               </div>
-              <p className="mt-2 text-sm text-slate">{chosen?.detail ?? "Choosing one records the next step. It does not mean it happened, and the escalation stays open."}</p>
+              <p className="mt-2 text-sm text-slate">
+                {chosen?.detail ??
+                  "Choosing one records the next step and leaves the case open. Resolve sends the email and closes it."}
+              </p>
+              <label htmlFor="resolution-note" className="mt-3 block text-sm text-slate">
+                Resolution note
+                <textarea
+                  id="resolution-note"
+                  value={resolutionNote}
+                  onChange={(event) => setResolutionNote(event.target.value)}
+                  rows={3}
+                  maxLength={2000}
+                  disabled={pending !== null}
+                  className="mt-1 w-full resize-y rounded-xl border border-silver px-3 py-3 text-base leading-6 text-ink"
+                />
+              </label>
+              <Button
+                type="button"
+                className="mt-2 w-full"
+                loading={pending === "resolve"}
+                disabled={!card.resolutionCode}
+                onClick={resolveCase}
+              >
+                Resolve and email
+              </Button>
+              <p className="mt-2 text-sm text-slate">
+                {data.resolutionEmail
+                  ? `Resolving emails ${data.resolutionEmail}.`
+                  : "No resolution email is saved, so the assignee is emailed instead."}
+              </p>
             </div>
           ) : null}
 

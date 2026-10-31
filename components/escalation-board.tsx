@@ -309,7 +309,7 @@ function PolicyForm({
       </button>
       <p className="text-xs text-slate">
         Saving scans recent synced reviews and opens cases that match these rules. Complaints already past the due
-        window appear under Past SLA. Reminders are recorded in GRM. No email is sent.
+        window appear under Past SLA. Reminder emails go to the assignee when their email alerts are on.
       </p>
     </form>
   );

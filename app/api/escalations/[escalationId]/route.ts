@@ -114,12 +114,18 @@ export async function POST(
         body: body.body,
       });
     } else {
-      await EscalationService.resolve({
+      const email = await EscalationService.resolve({
         workspaceId: membership.workspace_id,
         escalationId,
         actorId: user.id,
         code: body.code,
         note: body.note,
+      });
+      return NextResponse.json({
+        ok: true,
+        email: email.status,
+        detail: email.detail,
+        recipients: email.recipients,
       });
     }
     return NextResponse.json({ ok: true });

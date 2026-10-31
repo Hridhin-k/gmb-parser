@@ -256,6 +256,20 @@ describe("escalation tickets", () => {
       )
     ).toBe("Assignee changed from ada@example.com to bea@example.com. Reason: Covering the store.");
   });
+
+  it("names the resolution email and keeps older resolutions unchanged", () => {
+    expect(
+      escalationEventLabel("resolved", { email: "sent", recipients: ["care@example.com"] }, () => "nobody")
+    ).toBe(
+      "Resolved. Email sent to care@example.com. This does not place a call, ship a replacement, or book a visit."
+    );
+    expect(escalationEventLabel("resolved", {}, () => "nobody")).toBe(
+      "Resolution recorded. This does not confirm a callback, replacement, or visit."
+    );
+    expect(escalationEventLabel("reminder_recorded", { kind: "2", email: "off" }, () => "nobody")).toBe(
+      "Reminder at 2 hours recorded in the bell. Email alerts are off for the assignee."
+    );
+  });
 });
 
 describe("autoreply pause", () => {

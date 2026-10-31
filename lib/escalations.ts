@@ -13,17 +13,23 @@ export const RESOLUTION_ACTIONS = [
   {
     id: "apology_callback",
     label: "Apology and callback",
-    detail: "Records that someone should apologise and call. It does not mean the call happened.",
+    detail:
+      "Closes the case and emails the organisation resolution address, asking them to call the reviewer. If none is saved, the assignee is emailed. It does not place the call.",
+    closed: "The resolution address was asked to call the reviewer. The email does not place the call.",
   },
   {
     id: "replacement_arranged",
     label: "Replacement arranged",
-    detail: "Records replacement as the next step. It does not mean a replacement was delivered.",
+    detail:
+      "Closes the case and emails the organisation resolution address with the replacement request. If none is saved, the assignee is emailed. It does not ship a replacement.",
+    closed: "The resolution address was asked to arrange the replacement. The email does not ship it.",
   },
   {
     id: "store_visit_scheduled",
     label: "Store visit scheduled",
-    detail: "Records a store visit as the next step. It does not mean the visit happened.",
+    detail:
+      "Closes the case and emails the organisation resolution address to confirm a store visit. If none is saved, the assignee is emailed. It does not book the visit.",
+    closed: "The resolution address was asked to confirm a store visit. The email does not book it.",
   },
 ] as const;
 
@@ -158,6 +164,38 @@ export function escalationStatusLabel(status: string): string {
   return "Needs human";
 }
 
+function mailRecipients(metadata: Record<string, unknown>): string {
+  return Array.isArray(metadata.recipients)
+    ? metadata.recipients.filter((item): item is string => typeof item === "string" && item.length > 0).join(", ")
+    : "";
+}
+
+function resolvedEventLabel(metadata: Record<string, unknown>): string {
+  const email = typeof metadata.email === "string" ? metadata.email : "";
+  const recipients = mailRecipients(metadata);
+  if (email === "sent" && recipients) {
+    return `Resolved. Email sent to ${recipients}. This does not place a call, ship a replacement, or book a visit.`;
+  }
+  if (email === "failed") return "Resolved. The email did not send.";
+  if (email === "unavailable") return "Resolved. Email is not configured, so no message was sent.";
+  if (email === "no_recipient") return "Resolved. No resolution email or assignee email was available.";
+  return "Resolution recorded. This does not confirm a callback, replacement, or visit.";
+}
+
+function reminderEventLabel(metadata: Record<string, unknown>): string {
+  const hours = String(metadata.kind ?? "");
+  const email = typeof metadata.email === "string" ? metadata.email : "";
+  const recipients = mailRecipients(metadata);
+  if (email === "sent" && recipients) return `Reminder at ${hours} hours emailed to ${recipients}.`;
+  if (email === "failed") return `Reminder at ${hours} hours recorded. The email did not send.`;
+  if (email === "unavailable") return `Reminder at ${hours} hours recorded. Email is not configured.`;
+  if (email === "off") {
+    return `Reminder at ${hours} hours recorded in the bell. Email alerts are off for the assignee.`;
+  }
+  if (email === "no_recipient") return `Reminder at ${hours} hours recorded. The assignee has no email address.`;
+  return `Reminder at ${hours} hours recorded. The assignee sees it in the bell when in-app alerts are on. No email was sent.`;
+}
+
 export function escalationEventLabel(
   action: string,
   metadata: Record<string, unknown>,
@@ -184,13 +222,11 @@ export function escalationEventLabel(
   if (action === "overdue_noted") return "Still overdue at leadership. The level did not change again.";
   if (action === "level_changed") return `Handed to ${String(metadata.level ?? "the next level")}.`;
   if (action === "status_changed") return `Status set to ${escalationStatusLabel(String(metadata.status ?? ""))}.`;
-  if (action === "resolved") return "Resolution recorded. This does not confirm a callback, replacement, or visit.";
+  if (action === "resolved") return resolvedEventLabel(metadata);
   if (action === "next_step") {
-    return "Next step recorded. This does not mean the call, replacement, or visit happened.";
+    return "Next step recorded. The case stays open until it is resolved, which is when the email is sent.";
   }
-  if (action === "reminder_recorded") {
-    return `Reminder at ${String(metadata.kind ?? "")} hours recorded. The assignee sees it in the bell when in-app alerts are on. No email was sent.`;
-  }
+  if (action === "reminder_recorded") return reminderEventLabel(metadata);
   if (action === "comment") return "Comment added.";
   return action;
 }

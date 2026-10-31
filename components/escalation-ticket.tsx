@@ -68,12 +68,18 @@ export function EscalationTicket({
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(body),
     });
-    const payload = (await response.json().catch(() => ({}))) as { error?: string };
+    const payload = (await response.json().catch(() => ({}))) as {
+      error?: string;
+      email?: string;
+      detail?: string;
+    };
     setPending(false);
     if (!response.ok) {
       setError(payload.error ?? "That change could not be saved.");
       return false;
     }
+    if (payload.email === "sent") toast.success(payload.detail ?? "Case resolved. Email sent.");
+    else if (payload.email) toast.message(payload.detail ?? "Case resolved.");
     router.refresh();
     return true;
   }
@@ -130,7 +136,7 @@ export function EscalationTicket({
             <section className="rounded-xl bg-white p-4 shadow-card">
               <h2 className="text-sm font-medium text-ink">Resolution</h2>
               <p className="mt-2 text-sm text-slate">
-                {RESOLUTION_ACTIONS.find((action) => action.id === item.resolutionCode)?.detail ??
+                {RESOLUTION_ACTIONS.find((action) => action.id === item.resolutionCode)?.closed ??
                   "Resolved with a recorded next step."}
                 {item.resolutionNote ? ` Note: ${item.resolutionNote}` : ""}
               </p>
@@ -262,7 +268,11 @@ export function EscalationTicket({
             />
           ) : null}
           {open ? (
-            <ResolveBox disabled={pending} onResolve={(code, note) => void send({ action: "resolve", code, note })} />
+            <ResolveBox
+              contact={contact}
+              disabled={pending}
+              onResolve={(code, note) => void send({ action: "resolve", code, note })}
+            />
           ) : null}
           <Link href={`/reviews?q=${encodeURIComponent(item.reviewerName)}`} className="block text-sm text-ink underline">
             Open in inbox
@@ -335,9 +345,11 @@ function AssignBox({
 }
 
 function ResolveBox({
+  contact,
   disabled,
   onResolve,
 }: {
+  contact: ResolutionContact;
   disabled: boolean;
   onResolve: (code: string, note: string) => void;
 }) {
@@ -374,9 +386,22 @@ function ResolveBox({
         className="block w-full rounded-md border border-line px-2 py-1.5 text-sm"
       />
       <button type="submit" disabled={disabled} className="rounded-md bg-ink px-3 py-1.5 text-sm text-white">
-        Resolve
+        {disabled ? "Resolving…" : "Resolve and email"}
       </button>
       <p className="text-xs text-slate">{RESOLUTION_ACTIONS.find((action) => action.id === code)?.detail}</p>
+      <p className="text-xs text-slate">
+        {contact.email ? (
+          <>Resolving emails {contact.email}. The assignee is copied when their email alerts are on.</>
+        ) : (
+          <>
+            No resolution email is saved, so the assignee is emailed instead.{" "}
+            <a href="/settings?section=sla" className="text-ink underline">
+              Set one in Settings
+            </a>
+            .
+          </>
+        )}
+      </p>
     </form>
   );
 }

@@ -42,8 +42,9 @@ export function ResolutionContactForm({
       <div>
         <h2 className="text-sm font-medium text-graphite">Resolution contact</h2>
         <p className="mt-1 text-sm text-slate">
-          Phone, email, or both for the whole organisation. On a review draft or an escalation, a person adds one or
-          both to the reply by hand. Nothing is inserted or sent on its own.
+          Phone and email for the whole organisation. Resolving a case emails this address with the reviewer, the
+          review, and the chosen step. Add phone or email on a public reply by hand. Nothing is posted to Google from
+          here.
         </p>
       </div>
       <label className="block text-xs text-slate">
