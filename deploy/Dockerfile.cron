@@ -1,0 +1,7 @@
+# Cron scheduler as its own service (Railway builds one image per service).
+# Set APP_URL to the app's internal URL, e.g. http://app.railway.internal:3000
+FROM alpine:3.20
+RUN apk add --no-cache curl
+COPY deploy /deploy
+RUN chmod +x /deploy/run-cron /deploy/cron-entrypoint.sh
+ENTRYPOINT ["/deploy/cron-entrypoint.sh"]
