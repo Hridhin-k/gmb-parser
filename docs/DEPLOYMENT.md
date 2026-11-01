@@ -16,3 +16,12 @@ Health: `GET /api/health` (also the container healthcheck).
 
 Backups (not automated here): nightly
 `docker compose exec -T db pg_dump -U grm_owner grm | gzip > grm-$(date +%F).sql.gz`, copied off the box.
+
+## Railway
+
+Project `grm-reviews` (production): services `app` (root `Dockerfile`), `cron`
+(`RAILWAY_DOCKERFILE_PATH=deploy/Dockerfile.cron`, `APP_URL=http://app.railway.internal:3000`) and `Postgres` (18).
+- Deploy: `railway up --service app --ci` (and `--service cron` when `deploy/` changes).
+- Migrations: `railway connect Postgres --tunnel-only -P 55433`, then run
+  `DATABASE_MIGRATION_URL=postgresql://postgres:<PGPASSWORD>@127.0.0.1:55433/railway DATABASE_URL=<app role url> node scripts/db-migrate.mjs`.
+- The runtime role is `grm_app`; `DATABASE_URL` on `app` uses the private host `postgres.railway.internal`.
