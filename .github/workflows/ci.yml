@@ -17,3 +17,4 @@ jobs:
       - run: npm run build
         env:
           NEXT_PUBLIC_APP_URL: http://localhost:3000
+          DATABASE_URL: postgresql://build:build@localhost:5432/build

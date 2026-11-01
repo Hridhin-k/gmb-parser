@@ -12,7 +12,8 @@ COPY . .
 ARG NEXT_PUBLIC_APP_URL
 ENV NEXT_PUBLIC_APP_URL=$NEXT_PUBLIC_APP_URL
 ENV NEXT_TELEMETRY_DISABLED=1
-RUN npm run build
+# Route modules read DATABASE_URL at import time; the build never connects.
+RUN DATABASE_URL=postgresql://build:build@localhost:5432/build npm run build
 
 # One-shot migration runner: `docker compose run --rm migrate`
 FROM node:22-alpine AS migrate
