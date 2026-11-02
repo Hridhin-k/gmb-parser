@@ -10,11 +10,14 @@ import { cn } from "@/lib/utils";
 interface SyncLocationsButtonProps {
   connectionId: string;
   label?: string;
+  /** Find profiles without importing them; the user picks which to import. */
+  stage?: boolean;
 }
 
 export function SyncLocationsButton({
   connectionId,
   label = "Sync profiles",
+  stage = false,
 }: SyncLocationsButtonProps) {
   const router = useRouter();
   const [syncing, setSyncing] = useState(false);
@@ -30,7 +33,7 @@ export function SyncLocationsButton({
       const response = await fetch("/api/google/sync", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ connectionId, force }),
+        body: JSON.stringify({ connectionId, force, stage }),
       });
 
       const data = (await response.json()) as {
@@ -57,7 +60,9 @@ export function SyncLocationsButton({
       } else {
         const parts: string[] = [];
         parts.push(
-          `Synced ${data.locationsUpserted ?? 0} profile${(data.locationsUpserted ?? 0) === 1 ? "" : "s"}`
+          stage
+            ? `Found ${data.locationsUpserted ?? 0} profile${(data.locationsUpserted ?? 0) === 1 ? "" : "s"}. Pick the ones to import below`
+            : `Synced ${data.locationsUpserted ?? 0} profile${(data.locationsUpserted ?? 0) === 1 ? "" : "s"}`
         );
         if ((data.clientsCreated ?? 0) > 0) {
           parts.push(

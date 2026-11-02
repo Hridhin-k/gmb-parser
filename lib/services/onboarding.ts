@@ -40,6 +40,15 @@ export interface OnboardingLocation {
   clientName: string | null;
 }
 
+/** A profile Google returned that the user has not imported (yet). */
+export interface AvailableLocation {
+  id: string;
+  title: string;
+  address: string | null;
+  accountName: string;
+  voiceOfMerchant: boolean | null;
+}
+
 export interface OnboardingGroup {
   id: string;
   name: string;
@@ -71,6 +80,7 @@ export interface OnboardingView {
   toneNote: string;
   connections: OnboardingConnection[];
   locations: OnboardingLocation[];
+  available: AvailableLocation[];
   groups: OnboardingGroup[];
   invites: OnboardingInvite[];
 }
@@ -260,7 +270,7 @@ export async function getOnboardingView(workspaceId: string): Promise<Onboarding
   const localDemo = await isLocalDemoWorkspace(workspaceId);
   const admin = createAdminClient();
 
-  const [progress, connections, locations, groups, accounts, clients, invites] = await Promise.all([
+  const [progress, connections, locations, groups, accounts, clients, invites, staged] = await Promise.all([
     admin.from("grm_onboarding").select("step, grouping, tone_voice, tone_note, completed_at").eq("workspace_id", workspaceId).maybeSingle(),
     admin
       .from("grm_google_connections")
@@ -288,6 +298,12 @@ export async function getOnboardingView(workspaceId: string): Promise<Onboarding
       .eq("workspace_id", workspaceId)
       .eq("status", "pending")
       .order("created_at", { ascending: true }),
+    admin
+      .from("grm_google_locations")
+      .select("id, location_title, address_formatted, voice_of_merchant, google_account_id")
+      .eq("workspace_id", workspaceId)
+      .eq("is_active", false)
+      .order("location_title", { ascending: true }),
   ]);
 
   if (progress.error) {
@@ -356,6 +372,15 @@ export async function getOnboardingView(workspaceId: string): Promise<Onboarding
         clientName: location.client_id ? clientById.get(location.client_id) ?? null : null,
       };
     }),
+    available: staged.error
+      ? []
+      : (staged.data ?? []).map((location) => ({
+          id: location.id,
+          title: location.location_title,
+          address: location.address_formatted,
+          accountName: accountById.get(location.google_account_id)?.account_display_name ?? "Google account",
+          voiceOfMerchant: location.voice_of_merchant,
+        })),
     groups: (groups.data ?? []).map((group) => ({
       id: group.id,
       name: group.name,
@@ -364,6 +389,28 @@ export async function getOnboardingView(workspaceId: string): Promise<Onboarding
     })),
     invites: pendingInvites,
   };
+}
+
+/**
+ * Imports (active) or sets aside (inactive) the chosen locations. Setting aside
+ * keeps the row, so a later Google sync does not bring it back.
+ */
+export async function setLocationsImported(input: {
+  workspaceId: string;
+  locationIds: string[];
+  active: boolean;
+}): Promise<number> {
+  if (input.locationIds.length === 0) return 0;
+  const admin = createAdminClient();
+  const { data, error } = await admin
+    .from("grm_google_locations")
+    .update({ is_active: input.active })
+    .eq("workspace_id", input.workspaceId)
+    .eq("is_active", !input.active)
+    .in("id", input.locationIds)
+    .select("id");
+  if (error) throw new AppError("Could not update which locations are imported.", "DB_ERROR", 500);
+  return (data ?? []).length;
 }
 
 async function touch(

@@ -5,6 +5,7 @@ import { AppError, toErrorCode, toStatusCode, toUserMessage } from "@/lib/errors
 import { parseBody } from "@/lib/validation";
 import { ensurePersonalWorkspace } from "@/lib/services/workspace";
 import { bustCatalogCache } from "@/lib/services/catalog-tables";
+import { autoProvisionClientsFromLocations } from "@/lib/services/auto-provision-clients";
 import { advanceLocalDemo } from "@/lib/services/local-demo";
 import {
   applyCsvGrouping,
@@ -15,7 +16,9 @@ import {
   moveLocationToGroup,
   renameLocationGroup,
   saveOnboardingStep,
+  refreshLocationHolds,
   saveReplyTone,
+  setLocationsImported,
 } from "@/lib/services/onboarding";
 
 const bodySchema = z.discriminatedUnion("action", [
@@ -59,6 +62,10 @@ const bodySchema = z.discriminatedUnion("action", [
     action: z.literal("tone"),
     voice: z.enum(["warm", "professional", "brief"]),
     note: z.string().trim().max(500),
+  }),
+  z.object({
+    action: z.enum(["import-locations", "remove-locations"]),
+    locationIds: z.array(z.string().uuid()).min(1).max(1000),
   }),
   z.object({ action: z.literal("complete") }),
 ]);
@@ -144,6 +151,20 @@ export async function POST(request: Request) {
       });
       bustCatalogCache();
       return NextResponse.json({ ok: true });
+    }
+    if (body.action === "import-locations" || body.action === "remove-locations") {
+      const importing = body.action === "import-locations";
+      const changed = await setLocationsImported({
+        workspaceId,
+        locationIds: body.locationIds,
+        active: importing,
+      });
+      if (importing && changed > 0) {
+        await refreshLocationHolds(workspaceId);
+        await autoProvisionClientsFromLocations(workspaceId, user.id);
+      }
+      bustCatalogCache();
+      return NextResponse.json({ ok: true, changed });
     }
     if (body.action === "tone") {
       await saveReplyTone({

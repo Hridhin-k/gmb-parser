@@ -16,6 +16,8 @@ export const maxDuration = 60;
 const syncSchema = z.object({
   connectionId: z.string().uuid("Invalid connectionId"),
   force: z.boolean().optional(),
+  /** New locations wait to be picked instead of being imported. */
+  stage: z.boolean().optional(),
 });
 
 /**
@@ -43,7 +45,7 @@ export async function POST(request: Request) {
     );
   }
 
-  let body: { connectionId: string; force?: boolean };
+  let body: { connectionId: string; force?: boolean; stage?: boolean };
   try {
     body = await parseBody(request, syncSchema);
   } catch {
@@ -53,7 +55,7 @@ export async function POST(request: Request) {
     );
   }
 
-  const { connectionId, force } = body;
+  const { connectionId, force, stage } = body;
 
   const admin = createAdminClient();
   const { data: connection } = await admin
@@ -90,7 +92,7 @@ export async function POST(request: Request) {
     const result = await GoogleBusinessProfileService.syncConnectionAccounts(
       connectionId,
       connection.workspace_id,
-      { force: force === true, userId: user.id }
+      { force: force === true, userId: user.id, stage: stage === true }
     );
 
     await AuditService.log({

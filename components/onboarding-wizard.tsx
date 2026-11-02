@@ -259,7 +259,7 @@ export function OnboardingWizard({
 
       {!showDone && step === "import" ? (
         <ImportStep data={data} busy={busy} previous={previous?.id ?? null} onContinue={() => go("groups")}
-          onDemoImport={() => run({ action: "demo-import" })} />
+          onDemoImport={() => run({ action: "demo-import" })} onRun={run} />
       ) : null}
       {!showDone && step === "groups" ? (
         <GroupsStep data={data} busy={busy} onRun={run} onSkip={() => go("tone")} onContinue={() => go("tone")} />
@@ -496,12 +496,14 @@ function ImportStep({
   previous,
   onContinue,
   onDemoImport,
+  onRun,
 }: {
   data: OnboardingView;
   busy: boolean;
   previous: OnboardingStep | null;
   onContinue: () => void;
   onDemoImport: () => void;
+  onRun: (body: Record<string, unknown>) => Promise<void>;
 }) {
   const connection = data.connections.find((item) => item.status === "active") ?? data.connections[0];
   const unhealthy = data.localDemo ? [] : data.connections.filter((item) => item.status !== "active");
@@ -525,7 +527,7 @@ function ImportStep({
       title={count ? `${count} ${count === 1 ? "location" : "locations"} imported` : "Import the locations this account manages"}
       description={data.localDemo
         ? "Import Willow & Oak — High Street and six sample reviews. Cases and escalations stay empty."
-        : "Only profiles the connected Google account can access are imported. Existing business links are kept. Check anything held back before you continue."}
+        : "Read the profiles this Google account manages, then pick the ones you want in this workspace. Profiles you leave out are not imported and use no Google quota for reviews."}
       footer={
         <StepFooter
           back={previous}
@@ -610,7 +612,7 @@ function ImportStep({
             {count ? "Demo location imported" : "Import demo location"}
           </Button>
         ) : connection ? (
-          <SyncLocationsButton connectionId={connection.id} label={count ? "Import again" : "Import locations"} />
+          <SyncLocationsButton connectionId={connection.id} stage label={count || data.available.length ? "Find new profiles" : "Find profiles"} />
         ) : (
           <Link href="/onboarding?step=connect" className={buttonVariants({ variant: "outline", size: "sm" })}>
             Connect Google
@@ -618,7 +620,11 @@ function ImportStep({
         )}
       </div>
 
-      {connection && count === 0 && !data.localDemo ? (
+      {!data.localDemo && data.available.length > 0 ? (
+        <LocationPicker available={data.available} busy={busy} onRun={onRun} />
+      ) : null}
+
+      {connection && count === 0 && data.available.length === 0 && !data.localDemo ? (
         <Banner tone="info" title="Nothing imported yet.">
           If the import finds no locations, the connected account probably isn&apos;t an Owner or Manager on any Business
           Profile. Connect a different account from the previous step.
@@ -640,12 +646,118 @@ function ImportStep({
         </Banner>
       ) : null}
 
-      <LocationTable locations={data.locations} />
+      <LocationTable locations={data.locations} busy={busy} onRun={data.localDemo ? undefined : onRun} />
     </StepFrame>
   );
 }
 
-function LocationTable({ locations }: { locations: OnboardingView["locations"] }) {
+function LocationPicker({
+  available,
+  busy,
+  onRun,
+}: {
+  available: OnboardingView["available"];
+  busy: boolean;
+  onRun: (body: Record<string, unknown>) => Promise<void>;
+}) {
+  const [picked, setPicked] = useState<Set<string>>(() => new Set());
+  const [query, setQuery] = useState("");
+  const needle = query.trim().toLowerCase();
+  const rows = available.filter(
+    (location) => !needle || `${location.title} ${location.address ?? ""} ${location.accountName}`.toLowerCase().includes(needle)
+  );
+  const shown = new Set(rows.map((row) => row.id));
+  const chosen = [...picked].filter((id) => available.some((row) => row.id === id));
+  const allShownPicked = rows.length > 0 && rows.every((row) => picked.has(row.id));
+
+  function toggle(id: string) {
+    setPicked((current) => {
+      const next = new Set(current);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  }
+
+  function toggleShown() {
+    setPicked((current) => {
+      const next = new Set(current);
+      for (const id of shown) {
+        if (allShownPicked) next.delete(id);
+        else next.add(id);
+      }
+      return next;
+    });
+  }
+
+  return (
+    <div className="space-y-2 rounded-lg border border-brand-line bg-white p-3">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <div>
+          <h3 className="text-[13px] font-semibold text-ink">Choose locations to import</h3>
+          <p className="text-xs text-ink-3">
+            {available.length} {available.length === 1 ? "profile" : "profiles"} found. Only the ones you tick are imported.
+          </p>
+        </div>
+        <Button
+          type="button"
+          size="sm"
+          disabled={chosen.length === 0 || busy}
+          loading={busy}
+          onClick={() => {
+            void onRun({ action: "import-locations", locationIds: chosen }).then(() => setPicked(new Set()));
+          }}
+        >
+          Import {chosen.length > 0 ? chosen.length : ""} selected
+        </Button>
+      </div>
+      <div className="flex flex-wrap items-center gap-2">
+        <Input
+          value={query}
+          onChange={(event) => setQuery(event.target.value)}
+          placeholder="Search by name or address"
+          aria-label="Search profiles to import"
+          className="min-w-0 flex-1 sm:max-w-xs"
+        />
+        <Button type="button" size="sm" variant="outline" onClick={toggleShown}>
+          {allShownPicked ? "Clear selection" : needle ? "Select matches" : "Select all"}
+        </Button>
+        <span className="text-xs text-ink-3">{chosen.length} selected</span>
+      </div>
+      <ul className="max-h-80 divide-y divide-line overflow-y-auto rounded-lg border border-line">
+        {rows.map((location) => (
+          <li key={location.id}>
+            <label className="flex cursor-pointer items-start gap-3 px-3 py-2.5 hover:bg-paper">
+              <input
+                type="checkbox"
+                className="mt-0.5 size-4 shrink-0 accent-[var(--color-brand)]"
+                checked={picked.has(location.id)}
+                onChange={() => toggle(location.id)}
+              />
+              <span className="min-w-0 flex-1 text-[13px]">
+                <span className="block font-medium text-ink">{location.title}</span>
+                <span className="block text-xs text-ink-3">{location.address ?? "No address returned"}</span>
+              </span>
+              {location.voiceOfMerchant === false ? <Badge variant="warn">Unverified</Badge> : null}
+            </label>
+          </li>
+        ))}
+        {rows.length === 0 ? <li className="px-3 py-6 text-center text-xs text-ink-3">No profiles match.</li> : null}
+      </ul>
+    </div>
+  );
+}
+
+function LocationTable({
+  locations,
+  busy,
+  onRun,
+}: {
+  locations: OnboardingView["locations"];
+  busy: boolean;
+  onRun?: (body: Record<string, unknown>) => Promise<void>;
+}) {
+  const [selected, setSelected] = useState<Set<string>>(() => new Set());
   const [query, setQuery] = useState("");
   const [onlyHeld, setOnlyHeld] = useState(false);
   if (!locations.length) {
@@ -684,11 +796,25 @@ function LocationTable({ locations }: { locations: OnboardingView["locations"] }
         <span className="text-xs text-ink-3">
           {rows.length === locations.length ? `${locations.length} locations` : `${rows.length} of ${locations.length}`}
         </span>
+        {onRun && selected.size > 0 ? (
+          <Button
+            type="button"
+            size="sm"
+            variant="outline"
+            disabled={busy}
+            onClick={() => {
+              void onRun({ action: "remove-locations", locationIds: [...selected] }).then(() => setSelected(new Set()));
+            }}
+          >
+            Remove {selected.size} from workspace
+          </Button>
+        ) : null}
       </div>
       <div className="overflow-x-auto rounded-lg border border-line">
         <table className="w-full min-w-[640px] text-left text-[13px]">
           <thead className="border-b border-line bg-paper text-xs text-ink-3">
             <tr>
+              {onRun ? <th className="w-8 px-3 py-2"><span className="sr-only">Select</span></th> : null}
               <th className="px-3 py-2 font-medium">Location</th>
               <th className="px-3 py-2 font-medium">Address</th>
               <th className="px-3 py-2 font-medium">Status</th>
@@ -697,7 +823,7 @@ function LocationTable({ locations }: { locations: OnboardingView["locations"] }
           <tbody className="divide-y divide-line">
             {rows.length === 0 ? (
               <tr>
-                <td colSpan={3} className="px-3 py-6 text-center text-xs text-ink-3">
+                <td colSpan={onRun ? 4 : 3} className="px-3 py-6 text-center text-xs text-ink-3">
                   No locations match.{" "}
                   <button
                     type="button"
@@ -717,6 +843,24 @@ function LocationTable({ locations }: { locations: OnboardingView["locations"] }
               const verification = verificationBadge(location);
               return (
                 <tr key={location.id} className={location.holdReason ? "bg-warn-tint/40" : undefined}>
+                  {onRun ? (
+                    <td className="px-3 py-2.5 align-top">
+                      <input
+                        type="checkbox"
+                        aria-label={`Select ${location.title}`}
+                        className="size-4 accent-[var(--color-brand)]"
+                        checked={selected.has(location.id)}
+                        onChange={() =>
+                          setSelected((current) => {
+                            const next = new Set(current);
+                            if (next.has(location.id)) next.delete(location.id);
+                            else next.add(location.id);
+                            return next;
+                          })
+                        }
+                      />
+                    </td>
+                  ) : null}
                   <td className="px-3 py-2.5 align-top">
                     <p className="font-medium text-ink">{location.title}</p>
                     <p className="mt-0.5 text-xs text-ink-3">

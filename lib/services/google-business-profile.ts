@@ -214,7 +214,7 @@ export class GoogleBusinessProfileService {
   static async syncConnectionAccounts(
     connectionId: string,
     workspaceId: string,
-    options: { force?: boolean; userId?: string } = {}
+    options: { force?: boolean; userId?: string; stage?: boolean } = {}
   ): Promise<{
     accountsUpserted: number;
     locationsUpserted: number;
@@ -378,14 +378,14 @@ export class GoogleBusinessProfileService {
 
     // Batch write: one read of the existing rows for this workspace, then
     // one upsert per chunk — instead of a select + insert/update per location.
-    const existingByName = new Map<string, { id: string; client_id: string | null }>();
+    const existingByName = new Map<string, { id: string; client_id: string | null; is_active: boolean }>();
     {
       const { data: existingRows } = await db
         .from("grm_google_locations")
-        .select("id, client_id, google_location_name")
+        .select("id, client_id, google_location_name, is_active")
         .eq("workspace_id", workspaceId);
       for (const row of existingRows ?? []) {
-        existingByName.set(row.google_location_name, { id: row.id, client_id: row.client_id });
+        existingByName.set(row.google_location_name, { id: row.id, client_id: row.client_id, is_active: row.is_active });
       }
     }
 
@@ -413,7 +413,10 @@ export class GoogleBusinessProfileService {
         place_id: loc.placeId,
         voice_of_merchant: loc.voiceOfMerchant,
         google_duplicate_of: loc.googleDuplicateOf,
-        is_active: true,
+        // A location the user already imported stays imported, and one they left
+        // out stays out. Only locations Google returns for the first time depend
+        // on the mode: staged ones wait for the user to pick them.
+        is_active: existingByName.get(googleLocationName)?.is_active ?? !options.stage,
         last_synced_at: syncedAt,
         // Keep existing client mapping. New rows start unassigned, then
         // auto-provision creates/links clients without extra Google calls.
