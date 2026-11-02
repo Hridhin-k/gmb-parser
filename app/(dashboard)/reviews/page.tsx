@@ -205,7 +205,18 @@ export default async function ReviewsPage({ searchParams }: ReviewsPageProps) {
     query.delete("focusTo");
   });
   const members = roster.members.map((member) => ({ id: member.userId, email: member.email }));
-  const canSync = data.hasConnections && canSyncWorkspace(role);
+  const canSyncRole = data.hasConnections && canSyncWorkspace(role);
+  // Syncing follows the scope selector: one outlet, one group or one business
+  // syncs only its locations. The organisation view syncs everything.
+  const scoped = resolved.level !== "organisation";
+  const syncIds = scoped && resolved.locationIds.length > 0 ? resolved.locationIds : undefined;
+  // A scope that matches no locations must not fall back to syncing everything.
+  const canSync = canSyncRole && (!scoped || resolved.locationIds.length > 0);
+  const syncLabel = !scoped
+    ? "Sync all"
+    : resolved.locationIds.length === 1
+      ? "Sync this location"
+      : `Sync ${resolved.locationIds.length} locations`;
   const firstShown = (currentPage - 1) * data.pageSize + 1;
   const lastShown = Math.min(data.totalReviewCount, firstShown + data.reviews.length - 1);
   const filterSummary = [
@@ -246,7 +257,7 @@ export default async function ReviewsPage({ searchParams }: ReviewsPageProps) {
             Export CSV
           </a>
         )}
-        {canSync ? <SyncButton syncAll label="Sync all" size="default" /> : null}
+        {canSync ? <SyncButton syncAll locationIds={syncIds} label={syncLabel} size="default" /> : null}
       </PageHeader>
 
       <TransitionScope>
@@ -315,7 +326,7 @@ export default async function ReviewsPage({ searchParams }: ReviewsPageProps) {
                   title="No reviews synced yet"
                   description="Reviews appear here once Google sends them. Sync now to pull the latest reviews for your connected locations."
                 >
-                  {canSync ? <SyncButton syncAll label="Sync reviews now" size="sm" /> : null}
+                  {canSync ? <SyncButton syncAll locationIds={syncIds} label="Sync reviews now" size="sm" /> : null}
                 </EmptyState>
               ) : (
                 <EmptyState

@@ -13,6 +13,8 @@ interface SyncButtonProps {
   locationId?: string;
   connectionId?: string;
   syncAll?: boolean;
+  /** With syncAll: only these locations (the current scope). */
+  locationIds?: string[];
   label?: string;
   size?: "default" | "sm" | "xs";
 }
@@ -21,6 +23,7 @@ export function SyncButton({
   locationId,
   connectionId,
   syncAll,
+  locationIds,
   label = "Sync reviews",
   size = "default",
 }: SyncButtonProps) {
@@ -45,7 +48,7 @@ export function SyncButton({
 
     try {
       const body = syncAll
-        ? { all: true }
+        ? { all: true, ...(locationIds ? { locationIds } : {}) }
         : { locationId, connectionId };
 
       const response = await fetch("/api/reviews/sync", {

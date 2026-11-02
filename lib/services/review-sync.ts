@@ -43,6 +43,8 @@ export interface BulkSyncOptions extends SyncLocationOptions {
    * (nobody should wait a minute); the cron sets it.
    */
   retryFailedAfterMs?: number;
+  /** Sync only these locations. Ids outside the workspace match nothing. */
+  locationIds?: string[];
 }
 
 // Already retried by lib/google-api-gate.ts before they reach the sync loop.
@@ -481,7 +483,9 @@ export class ReviewSyncService {
       throw new AppError("Failed to fetch locations", "DB_ERROR", 500);
     }
 
+    const only = options.locationIds ? new Set(options.locationIds) : null;
     const eligible = (locations ?? []).filter((loc) => {
+      if (only && !only.has(loc.id)) return false;
       if (loc.client_id && unassignedIds.has(loc.client_id)) return false;
       const client = Array.isArray(loc.grm_clients)
         ? loc.grm_clients[0]

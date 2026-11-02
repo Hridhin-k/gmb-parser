@@ -17,7 +17,7 @@ export const maxDuration = 60;
  * POST /api/reviews/sync
  *
  * Body (one of):
- *   { all: true }                                    — sync all connected locations
+ *   { all: true; locationIds? }                      — sync all connected locations, or just those ids
  *   { all: false; locationId: string; connectionId: string } — sync one location
  */
 export function POST(request: Request) {
@@ -50,7 +50,7 @@ async function handleSync(request: Request) {
     return NextResponse.json({ error: "Not authenticated" }, { status: 401 });
   }
 
-  let body: { all?: boolean; locationId?: string; connectionId?: string; full?: boolean };
+  let body: { all?: boolean; locationId?: string; connectionId?: string; full?: boolean; locationIds?: string[] };
   try {
     body = await parseBody(request, syncBodySchema);
   } catch (e) {
@@ -84,6 +84,7 @@ async function handleSync(request: Request) {
     try {
       const result = await ReviewSyncService.syncAllWorkspaceLocations(workspaceId, user.id, {
         mode: body.full ? "full" : "incremental",
+        locationIds: body.locationIds,
       });
 
       const failures = result.results.filter((r) => r.errorClass && r.reviewsSynced === 0);
