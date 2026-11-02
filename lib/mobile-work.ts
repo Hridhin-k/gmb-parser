@@ -1,3 +1,4 @@
+import { formatSpan } from "@/lib/duration";
 import { parseDateRange, type DateRange } from "@/lib/date-range";
 import { buildInsights, reviewWindow, type DashboardFacts, type StarCounts } from "@/lib/metrics";
 import { sumStarCounts } from "@/lib/star-breakdown";
@@ -56,8 +57,8 @@ export function slaRemaining(dueAt: string, now: Date = new Date()): { label: st
   const hours = Math.floor(abs / 3_600_000);
   const minutes = Math.floor((abs % 3_600_000) / 60_000);
   if (hours >= 48) {
-    const days = Math.floor(hours / 24);
-    return { overdue, label: overdue ? `${days} days past the due time` : `${days} days left` };
+    const span = formatSpan(ms);
+    return { overdue, label: overdue ? `${span} past the due time` : `${span} left` };
   }
   if (hours >= 1) {
     return {

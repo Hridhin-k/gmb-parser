@@ -1,3 +1,4 @@
+import { formatSpan } from "@/lib/duration";
 import { canAct, type ScopeIds } from "@/lib/access";
 
 export const ESCALATION_TIMEZONES = [
@@ -135,10 +136,7 @@ export function queueBucket(
 
 export function slaClock(dueAt: string, now: number): { remaining: string | null; overdue: string | null } {
   const delta = Date.parse(dueAt) - now;
-  const abs = Math.abs(delta);
-  const hours = Math.floor(abs / 3_600_000);
-  const minutes = Math.floor((abs % 3_600_000) / 60_000);
-  const label = hours > 0 ? `${hours}h ${minutes}m` : `${minutes}m`;
+  const label = formatSpan(delta);
   if (delta >= 0) return { remaining: label, overdue: null };
   return { remaining: null, overdue: label };
 }

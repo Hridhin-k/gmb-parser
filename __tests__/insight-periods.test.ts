@@ -53,3 +53,16 @@ describe("theme changes", () => {
     expect(describeChanges(mergeThemes(current, null))).toEqual([]);
   });
 });
+
+import { formatSpan } from "@/lib/duration";
+
+describe("formatSpan", () => {
+  const h = 3_600_000;
+  it("reads like a person would say it", () => {
+    expect(formatSpan(20 * 60_000)).toBe("20m");
+    expect(formatSpan(5 * h + 10 * 60_000)).toBe("5h 10m");
+    expect(formatSpan(-18774 * h - 3 * 60_000)).toBe("2.1 years");
+    expect(formatSpan(10 * 24 * h)).toBe("10 days");
+    expect(formatSpan(120 * 24 * h)).toBe("4 months");
+  });
+});
