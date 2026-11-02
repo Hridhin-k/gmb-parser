@@ -3,8 +3,14 @@ interface Entry<T> {
   expires: number;
 }
 
-const store = new Map<string, Entry<unknown>>();
-const inflight = new Map<string, Promise<unknown>>();
+// Next can load route handlers and pages as separate module instances. Keep the
+// maps on globalThis so a route that calls forget() clears what pages read.
+const shared = globalThis as typeof globalThis & {
+  __grmTtlStore?: Map<string, Entry<unknown>>;
+  __grmTtlInflight?: Map<string, Promise<unknown>>;
+};
+const store = (shared.__grmTtlStore ??= new Map<string, Entry<unknown>>());
+const inflight = (shared.__grmTtlInflight ??= new Map<string, Promise<unknown>>());
 
 function sweep(now: number): void {
   if (store.size < 200) return;
