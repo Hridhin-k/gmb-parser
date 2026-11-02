@@ -161,6 +161,9 @@ export function TenantActionsCard({ tenantId, name, status }: { tenantId: string
   const router = useRouter();
   const [busy, setBusy] = useState<TenantAction | null>(null);
   const [confirm, setConfirm] = useState<"suspend" | "delete" | null>(null);
+  const [resetOpen, setResetOpen] = useState(false);
+  const [resetBusy, setResetBusy] = useState(false);
+  const [typed, setTyped] = useState("");
   const [error, setError] = useState<string | null>(null);
 
   async function run(action: TenantAction) {
@@ -207,6 +210,46 @@ export function TenantActionsCard({ tenantId, name, status }: { tenantId: string
         )}
       </div>
       {error ? <Banner tone="bad" className="mt-3">{error}</Banner> : null}
+      <div className="mt-3 flex flex-col gap-2 border-t border-line-2 pt-3 text-[13px]">
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <span className="text-ink-2">
+            Developer reset: permanently removes imported locations, their reviews, location groups and setup progress. Members,
+            businesses and the Google connection are kept.
+          </span>
+          <Button type="button" variant="destructive" size="sm" onClick={() => { setTyped(""); setResetOpen(true); }}>Reset setup…</Button>
+        </div>
+        {resetOpen ? (
+          <form
+            className="flex flex-wrap items-center gap-2"
+            onSubmit={async (event) => {
+              event.preventDefault();
+              if (typed.trim() !== name) return;
+              setResetBusy(true);
+              setError(null);
+              try {
+                const result = (await send(`/api/platform/tenants/${tenantId}`, "POST", { action: "reset-setup" })) as { locations?: number };
+                toast.success(`${name} reset (${result.locations ?? 0} locations removed)`);
+                setResetOpen(false);
+                router.refresh();
+              } catch (e) {
+                setError(e instanceof Error ? e.message : "Something went wrong.");
+              } finally {
+                setResetBusy(false);
+              }
+            }}
+          >
+            <Input
+              value={typed}
+              onChange={(event) => setTyped(event.target.value)}
+              placeholder={`Type "${name}" to confirm`}
+              aria-label="Type the tenant name to confirm the reset"
+              className="max-w-xs"
+            />
+            <Button type="submit" variant="destructive" size="sm" loading={resetBusy} disabled={typed.trim() !== name}>Reset permanently</Button>
+            <Button type="button" variant="ghost" size="sm" onClick={() => setResetOpen(false)}>Cancel</Button>
+          </form>
+        ) : null}
+      </div>
       <ConfirmDialog
         open={confirm !== null}
         onOpenChange={(open) => { if (!open) setConfirm(null); }}

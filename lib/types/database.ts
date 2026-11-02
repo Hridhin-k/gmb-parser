@@ -82,6 +82,7 @@ export type AuditAction =
   | "platform.tenant_reactivate"
   | "platform.tenant_delete"
   | "platform.tenant_restore"
+  | "platform.tenant_reset"
   | "platform.support_view_started"
   | "onboarding.updated"
   | "location_group.updated"

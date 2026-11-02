@@ -243,6 +243,51 @@ export async function actOnTenant(input: {
 }
 
 /**
+ * Developer reset: puts a tenant back to a fresh start. Removes every imported
+ * location (and with them the reviews, replies, escalations and insights tied to
+ * them), the location groups, and the setup progress. Members, businesses and
+ * their brand profiles, and the Google connection are kept, so setup can be
+ * run again straight away.
+ */
+export async function resetTenantSetup(input: {
+  actor: { id: string; email?: string | null };
+  workspaceId: string;
+}): Promise<{ locations: number }> {
+  await requireSuperAdmin(input.actor);
+  const admin = createAdminClient();
+  const { data: workspace } = await admin.from("grm_workspaces").select("id").eq("id", input.workspaceId).maybeSingle();
+  if (!workspace) throw new ValidationError("That tenant does not exist.");
+  const removed = await admin
+    .from("grm_google_locations")
+    .delete()
+    .eq("workspace_id", input.workspaceId)
+    .select("id");
+  if (removed.error) throw new AppError("Could not reset that tenant.", "DB_ERROR", 500, { dbError: removed.error.message });
+  // Child groups first: a group cannot be deleted while another group points at it.
+  for (let pass = 0; pass < 6; pass += 1) {
+    const { data: groups } = await admin.from("grm_location_groups").select("id, parent_id").eq("workspace_id", input.workspaceId);
+    if (!groups?.length) break;
+    const parents = new Set(groups.map((group) => group.parent_id).filter(Boolean));
+    const leaves = groups.filter((group) => !parents.has(group.id)).map((group) => group.id);
+    if (leaves.length === 0) break;
+    const { error } = await admin.from("grm_location_groups").delete().in("id", leaves);
+    if (error) throw new AppError("Could not reset that tenant.", "DB_ERROR", 500, { dbError: error.message });
+  }
+  const { error } = await admin.from("grm_onboarding").delete().eq("workspace_id", input.workspaceId);
+  if (error) throw new AppError("Could not reset that tenant.", "DB_ERROR", 500, { dbError: error.message });
+  const count = removed.data?.length ?? 0;
+  await AuditService.log({
+    workspaceId: input.workspaceId,
+    userId: input.actor.id,
+    action: "platform.tenant_reset",
+    entityType: "grm_workspaces",
+    entityId: input.workspaceId,
+    metadata: { locationsRemoved: count },
+  }).catch(() => undefined);
+  return { locations: count };
+}
+
+/**
  * Tenants and invites are paginated in the database (count + range), and the
  * search runs server-side too — the admin board used to receive up to 500
  * tenants and filter/render them in the browser. Per-tenant counts are exact

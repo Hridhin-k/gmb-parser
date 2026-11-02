@@ -3,10 +3,10 @@ import { z } from "zod";
 import { getCurrentUser } from "@/lib/auth/server";
 import { AppError, toStatusCode, toUserMessage } from "@/lib/errors";
 import { parseBody, validateId } from "@/lib/validation";
-import { actOnTenant, updateTenantSettings } from "@/lib/services/platform";
+import { actOnTenant, resetTenantSetup, updateTenantSettings } from "@/lib/services/platform";
 
 interface RouteParams { params: Promise<{ workspaceId: string }> }
-const schema = z.object({ action: z.enum(["suspend", "reactivate", "delete", "restore"]) });
+const schema = z.object({ action: z.enum(["suspend", "reactivate", "delete", "restore", "reset-setup"]) });
 
 /** POST /api/platform/tenants/[workspaceId] — suspend / reactivate / soft-delete / restore a tenant. */
 export async function POST(request: Request, { params }: RouteParams) {
@@ -20,6 +20,10 @@ export async function POST(request: Request, { params }: RouteParams) {
     return NextResponse.json({ error: toUserMessage(error) }, { status: toStatusCode(error) });
   }
   try {
+    if (body.action === "reset-setup") {
+      const result = await resetTenantSetup({ actor: user, workspaceId });
+      return NextResponse.json({ success: true, ...result });
+    }
     await actOnTenant({ actor: user, workspaceId, action: body.action });
     return NextResponse.json({ success: true });
   } catch (error) {

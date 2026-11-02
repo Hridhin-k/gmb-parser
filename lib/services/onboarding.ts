@@ -413,6 +413,21 @@ export async function setLocationsImported(input: {
   return (data ?? []).length;
 }
 
+/** Sends setup back to the first step. Locations, groups and reviews are left as they are. */
+export async function restartOnboarding(workspaceId: string, userId: string): Promise<void> {
+  await assertManager(userId, workspaceId);
+  await ensureRow(workspaceId);
+  await touch(workspaceId, { step: "connect", completed_at: null });
+  await AuditService.log({
+    workspaceId,
+    userId,
+    action: "onboarding.updated",
+    entityType: "grm_onboarding",
+    entityId: workspaceId,
+    metadata: { step: "connect", restarted: true },
+  });
+}
+
 async function touch(
   workspaceId: string,
   patch: {

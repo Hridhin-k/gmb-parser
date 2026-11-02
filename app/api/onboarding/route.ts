@@ -11,6 +11,7 @@ import {
   applyCsvGrouping,
   applyGrouping,
   completeOnboarding,
+  restartOnboarding,
   createLocationGroup,
   mergeLocationGroups,
   moveLocationToGroup,
@@ -68,6 +69,7 @@ const bodySchema = z.discriminatedUnion("action", [
     locationIds: z.array(z.string().uuid()).min(1).max(1000),
   }),
   z.object({ action: z.literal("complete") }),
+  z.object({ action: z.literal("restart") }),
 ]);
 
 export async function POST(request: Request) {
@@ -173,6 +175,11 @@ export async function POST(request: Request) {
         voice: body.voice,
         note: body.note,
       });
+      bustCatalogCache();
+      return NextResponse.json({ ok: true });
+    }
+    if (body.action === "restart") {
+      await restartOnboarding(workspaceId, user.id);
       bustCatalogCache();
       return NextResponse.json({ ok: true });
     }

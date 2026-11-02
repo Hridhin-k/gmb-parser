@@ -167,6 +167,24 @@ export function OnboardingWizard({
     <div className="space-y-5">
       <OnboardingTopBar data={data} current={showDone ? "done" : step} unlockView={unlockView} />
 
+      {data.completed ? (
+        <div className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-line bg-paper p-3 text-xs text-ink-3">
+          <span>Setup is finished. Restart it to go through the steps again. Your locations, groups and reviews are kept.</span>
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            loading={busy}
+            onClick={async () => {
+              await run({ action: "restart" });
+              router.push("/onboarding?step=connect");
+            }}
+          >
+            Restart setup
+          </Button>
+        </div>
+      ) : null}
+
       {error ? (
         <Banner
           tone="bad"
