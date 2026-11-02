@@ -241,13 +241,16 @@ function WorkspaceSwitcher({
     if (workspaceId === activeWorkspaceId) return;
     setSaving(true);
     try {
-      await fetch("/api/workspace/active", {
+      const response = await fetch("/api/workspace/active", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ workspaceId }),
       });
+      if (!response.ok) return;
+      // "/" is the public landing page. /overview bounces roles that cannot
+      // open it (members) to their own home, so it is right for every role.
       startRefresh(() => {
-        router.push("/");
+        router.push("/overview");
         router.refresh();
       });
     } finally {
