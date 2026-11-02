@@ -2,14 +2,16 @@ import { redirect } from "next/navigation";
 import { PlatformAdminSidebar } from "@/components/platform-admin-sidebar";
 import { getCurrentUser } from "@/lib/services/session";
 import { isSuperAdmin } from "@/lib/services/platform";
+import { inspectTenantAccess } from "@/lib/services/workspace";
 
 export default async function AdminLayout({ children }: { children: React.ReactNode }) {
   const user = await getCurrentUser();
   if (!user) redirect("/login");
   if (!isSuperAdmin(user)) redirect("/overview");
+  const access = await inspectTenantAccess(user).catch(() => null);
   return (
     <div className="flex min-h-dvh flex-col bg-paper lg:flex-row">
-      <PlatformAdminSidebar email={user.email ?? "Platform admin"} />
+      <PlatformAdminSidebar email={user.email ?? "Platform admin"} hasWorkspace={access?.kind === "allowed"} />
       <div className="flex min-w-0 flex-1 flex-col">
         <header className="hidden min-h-[52px] items-center gap-3 border-b border-line bg-white px-5 lg:flex">
           <span className="text-[13px] font-medium text-ink">RevuPilot platform</span>

@@ -60,7 +60,19 @@ function NavLinks({ pathname, compact = false }: { pathname: string; compact?: b
 }
 
 /** Dark platform-admin shell: sidebar on desktop, a dark bar with the same links on small screens. */
-export function PlatformAdminSidebar({ email }: { email: string }) {
+/** Staff accounts often have no tenant of their own; /overview would bounce them back here. */
+function WorkspaceExit({ hasWorkspace, compact = false }: { hasWorkspace: boolean; compact?: boolean }) {
+  if (!hasWorkspace) {
+    return <span className="text-[#7d8595]">{compact ? "Staff account" : "Staff account · no workspace"}</span>;
+  }
+  return (
+    <Link href="/overview" className="inline-flex items-center gap-1 font-medium text-[#afc2f7] hover:text-white">
+      {compact ? null : <ArrowLeft className="size-3.5" aria-hidden />} Exit to workspace
+    </Link>
+  );
+}
+
+export function PlatformAdminSidebar({ email, hasWorkspace }: { email: string; hasWorkspace: boolean }) {
   const pathname = usePathname() ?? "/admin";
   return (
     <>
@@ -79,9 +91,7 @@ export function PlatformAdminSidebar({ email }: { email: string }) {
             </div>
           </div>
           <div className="flex items-center justify-between gap-2 px-1 text-xs">
-            <Link href="/overview" className="inline-flex items-center gap-1 font-medium text-[#afc2f7] hover:text-white">
-              <ArrowLeft className="size-3.5" aria-hidden /> Exit to workspace
-            </Link>
+            <WorkspaceExit hasWorkspace={hasWorkspace} />
             <SignOutButton className="text-[#c7cdd8] hover:text-white disabled:opacity-60" />
           </div>
         </div>
@@ -91,7 +101,7 @@ export function PlatformAdminSidebar({ email }: { email: string }) {
         <div className="flex flex-wrap items-center justify-between gap-2">
           <Mark />
           <div className="flex items-center gap-3 text-xs">
-            <Link href="/overview" className="font-medium text-[#afc2f7] hover:text-white">Exit to workspace</Link>
+            <WorkspaceExit hasWorkspace={hasWorkspace} compact />
             <SignOutButton className="text-[#c7cdd8] hover:text-white disabled:opacity-60" />
           </div>
         </div>
