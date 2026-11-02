@@ -12,17 +12,13 @@ import { getActiveWorkspace } from "@/lib/services/session";
 import { readPageScope } from "@/lib/services/scope-catalog";
 import { parseDateRange } from "@/lib/date-range";
 import { getLatestAnalysisRun } from "@/lib/services/insight-pipeline";
+import { loadThemeEvidence } from "@/lib/services/insight-drilldown";
+import { defaultPeriod, insightPeriods, matchPeriod, previousWindow } from "@/lib/insight-periods";
+import { describeChanges, mergeThemes } from "@/lib/insight-changes";
+import { insightTopicLabel } from "@/lib/insight-dashboard";
 import { loadInsightDashboard } from "@/lib/services/insight-dashboard";
 import { loadScopeCatalog } from "@/lib/services/scope-catalog";
-import {
-  KeyInsights,
-  LocationPerformance,
-  SectionCard,
-  SentimentDonut,
-  SentimentTrend,
-  StaffPraised,
-  TopThemes,
-} from "@/components/insights-dashboard";
+import { LocationPerformance, SectionCard, SentimentTrend } from "@/components/insights-dashboard";
 import { SEVERITY_LABELS, severityLabel } from "@/lib/review-intelligence";
 import { InsightAnalyzer, type AnalysisRunStatus } from "@/components/insight-analyzer";
 import { InsightReportPanel } from "@/components/insight-report-panel";
@@ -218,51 +214,50 @@ function InsightSection({
   );
 }
 
-function ThemeList({ entries, empty }: { entries: Array<{ topic: string; count: number; reviews: number }>; empty: string }) {
-  if (entries.length === 0) return <p className="py-6 text-center text-[13px] text-ink-3">{empty}</p>;
-  return (
-    <ul className="divide-y divide-line-2">
-      {entries.slice(0, 12).map((entry) => (
-        <li key={entry.topic} className="flex items-baseline justify-between gap-3 py-2 text-[13px]">
-          <span className="capitalize text-ink-2">{entry.topic.replace(/_/g, " ")}</span>
-          <span className="text-xs tabular-nums text-ink-3">
-            {entry.count.toLocaleString()} mentions · {entry.reviews.toLocaleString()} reviews
-          </span>
-        </li>
-      ))}
-    </ul>
-  );
-}
-
-function NameList({ entries, tone }: { entries: Array<{ name: string; count: number }>; tone: "ok" | "bad" }) {
-  if (entries.length === 0) return <p className="py-6 text-center text-[13px] text-ink-3">No names mentioned.</p>;
-  return (
-    <ul className="divide-y divide-line-2">
-      {entries.slice(0, 10).map((entry) => (
-        <li key={entry.name} className="flex justify-between gap-3 py-2 text-[13px]">
-          <span className="text-ink-2">{entry.name}</span>
-          <span className={`text-xs tabular-nums ${tone === "ok" ? "text-ok" : "text-bad"}`}>{entry.count} mentions</span>
-        </li>
-      ))}
-    </ul>
-  );
-}
-
 function dayLabel(d: Date): string {
   return d.toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" });
 }
 
 export const maxDuration = 60;
 
+const TABS = [
+  { id: "themes", label: "Themes" },
+  { id: "locations", label: "Locations" },
+  { id: "incidents", label: "Incidents" },
+  { id: "report", label: "AI report" },
+  { id: "analysis", label: "Analysis" },
+] as const;
+type TabId = (typeof TABS)[number]["id"];
+
+function delta(current: number, previous: number | null, goodWhenUp: boolean) {
+  if (previous === null || current === previous) return null;
+  const change = current - previous;
+  const good = goodWhenUp ? change > 0 : change < 0;
+  return (
+    <span className={`ml-1.5 text-xs tabular-nums ${good ? "text-ok" : "text-bad"}`}>
+      {change > 0 ? "+" : "−"}
+      {Math.abs(change)}
+    </span>
+  );
+}
+
 export default async function InsightsPage({ searchParams }: InsightsPageProps) {
-  const [params, { user, workspaceId }] = await Promise.all([
-    searchParams,
-    getActiveWorkspace(),
-  ]);
+  const [rawParams, { user, workspaceId }] = await Promise.all([searchParams, getActiveWorkspace()]);
+  const now = new Date();
+  // No dates in the URL: open on the last three full calendar months.
+  const hasRangeParam = Boolean(first(rawParams.range) || first(rawParams.from) || first(rawParams.to));
+  const fallbackPeriod = defaultPeriod(now);
+  const params = hasRangeParam
+    ? rawParams
+    : { ...rawParams, range: "custom", from: fallbackPeriod.from, to: fallbackPeriod.to };
+  const tab: TabId = TABS.some((t) => t.id === first(params.tab)) ? (first(params.tab) as TabId) : "themes";
+
   const scope = await readPageScope(user.id, workspaceId, params);
   const range = parseDateRange(params, "12m");
   const start = range.start ? range.start.toISOString() : null;
   const end = range.end ? range.end.toISOString() : null;
+  const previous = range.start ? previousWindow(range.start, range.end, now) : null;
+  const activePeriod = matchPeriod(range, now);
 
   const cacheKey = reportCacheKey(workspaceId, {
     locationIds: scope.locationIds,
@@ -272,16 +267,19 @@ export default async function InsightsPage({ searchParams }: InsightsPageProps) 
     start,
     end,
   });
-  const [dashboard, latestRun, exactReport, catalog] = await Promise.all([
+  const [dashboard, previousDashboard, latestRun, exactReport, catalog] = await Promise.all([
     loadInsightDashboard(workspaceId, { locationIds: scope.locationIds, start, end }),
+    previous
+      ? loadInsightDashboard(workspaceId, {
+          locationIds: scope.locationIds,
+          start: previous.start.toISOString(),
+          end: previous.end.toISOString(),
+        })
+      : Promise.resolve(null),
     getLatestAnalysisRun(workspaceId),
     getReportByCacheKey(workspaceId, cacheKey),
     loadScopeCatalog(user.id, workspaceId),
   ]);
-  // Rolling preset windows drift daily, so from tomorrow the exact cache
-  // key misses. Fall back to the most recent saved report for this scope
-  // and preset (shown with its own generated date) rather than an empty
-  // page demanding regeneration.
   const report =
     exactReport ??
     (await getLatestReportForScope(workspaceId, {
@@ -296,37 +294,72 @@ export default async function InsightsPage({ searchParams }: InsightsPageProps) 
   const outletNames = new Map((catalog?.locations ?? []).map((l) => [l.id, l.name]));
   const positiveMentions = aggregates.positive.reduce((sum, e) => sum + e.count, 0);
   const negativeMentions = aggregates.negative.reduce((sum, e) => sum + e.count, 0);
+  const previousPositive = previousDashboard?.aggregates.positive.reduce((sum, e) => sum + e.count, 0) ?? null;
+  const previousNegative = previousDashboard?.aggregates.negative.reduce((sum, e) => sum + e.count, 0) ?? null;
+  const sentimentTotal = positiveMentions + negativeMentions;
+  const positiveShare = sentimentTotal > 0 ? Math.round((positiveMentions / sentimentTotal) * 100) : null;
+  const previousTotal = (previousPositive ?? 0) + (previousNegative ?? 0);
+  const previousShare =
+    previousPositive !== null && previousTotal > 0 ? Math.round((previousPositive / previousTotal) * 100) : null;
   const coveragePct = counts.eligible > 0 ? Math.round((counts.alreadyAnalysed / counts.eligible) * 100) : 0;
   const reportInsights = (Array.isArray(report?.insights) ? report.insights : []) as InsightRecord[];
-  // One incident, one story on the page: an excerpt is displayed once,
-  // under its most prominent card (serious incidents first); later cards
-  // whose quotes are all already shown say so instead of repeating the
-  // same customer words as if they were a different event.
-  const excerptKey = (e: string) => e.trim().toLowerCase().replace(/\s+/g, " ").slice(0, 80);
-  const seenExcerptKeys = new Set<string>();
-  const displayByIndex = new Map<number, InsightRecord & { evidenceShownElsewhere?: boolean }>();
-  const prioritized = reportInsights
-    .map((insight, index) => ({ insight, index }))
-    .sort((a, b) =>
-      (a.insight.category === "serious_incident" ? 0 : 1) -
-      (b.insight.category === "serious_incident" ? 0 : 1)
-    );
-  for (const { insight, index } of prioritized) {
-    const fresh = insight.evidenceExcerpts.filter((e) => !seenExcerptKeys.has(excerptKey(e)));
-    for (const excerpt of insight.evidenceExcerpts) seenExcerptKeys.add(excerptKey(excerpt));
-    displayByIndex.set(index, {
-      ...insight,
-      evidenceExcerpts: fresh,
-      evidenceShownElsewhere: insight.evidenceExcerpts.length > 0 && fresh.length === 0,
-    });
-  }
-  const displayInsights = reportInsights.map((insight, index) => displayByIndex.get(index) ?? insight);
   const reportLimitations = (Array.isArray(report?.limitations) ? report.limitations : []) as string[];
+  const reportStatus = (report?.status as string | undefined) ?? null;
+  const hasReport = reportInsights.length > 0;
   const reportDataMoved = Boolean(report) && counts.pending > 0;
+  const themes = mergeThemes(aggregates, previousDashboard ? previousDashboard.aggregates : null);
+  const changes = describeChanges(themes);
 
-  // Only resume/show a run that belongs to the range currently on screen.
-  // Bounds are compared by UTC day: preset windows resolve to a fresh
-  // instant on every request.
+  const scopeParams = {
+    client: first(params.client),
+    group: first(params.group),
+    location: first(params.location),
+    range: first(params.range),
+    from: first(params.from),
+    to: first(params.to),
+  };
+  const baseQuery = new URLSearchParams();
+  for (const [key, value] of Object.entries(scopeParams)) if (value) baseQuery.set(key, value);
+  const link = (patch: Record<string, string | null>, hash = "") => {
+    const query = new URLSearchParams(baseQuery);
+    for (const [key, value] of Object.entries(patch)) {
+      if (value === null) query.delete(key);
+      else query.set(key, value);
+    }
+    const text = query.toString();
+    return `/insights${text ? `?${text}` : ""}${hash}`;
+  };
+  const periodLink = (period: { from: string; to: string }) => {
+    const query = new URLSearchParams(baseQuery);
+    query.set("range", "custom");
+    query.set("from", period.from);
+    query.set("to", period.to);
+    if (tab !== "themes") query.set("tab", tab);
+    return `/insights?${query.toString()}`;
+  };
+  const reviewsHrefFor = (insight: InsightRecord): string | null => {
+    const excerpt = insight.evidenceExcerpts[0];
+    if (!excerpt) return null;
+    const query = new URLSearchParams(baseQuery);
+    query.set("q", excerpt.split(/\s+/).slice(0, 6).join(" "));
+    return `/reviews?${query.toString()}`;
+  };
+  const scopeReviewsHref = `/reviews${baseQuery.toString() ? `?${baseQuery.toString()}` : ""}`;
+
+  // The quotes behind one theme, when a row was opened.
+  const openTopic = first(params.theme);
+  const openSentiment = first(params.sentiment) === "positive" ? "positive" : "negative";
+  const evidence =
+    tab === "themes" && openTopic && /^[a-z0-9_]{1,60}$/.test(openTopic)
+      ? await loadThemeEvidence(workspaceId, {
+          locationIds: scope.locationIds,
+          start,
+          end,
+          topic: openTopic,
+          sentiment: openSentiment,
+        })
+      : null;
+
   const sameDay = (a: string | null, b: string | null) =>
     (a ? a.slice(0, 10) : null) === (b ? b.slice(0, 10) : null);
   const runForThisRange =
@@ -335,7 +368,6 @@ export default async function InsightsPage({ searchParams }: InsightsPageProps) 
     sameDay((latestRun.range_end as string | null) ?? null, end)
       ? latestRun
       : null;
-
   const initialRun: AnalysisRunStatus | null = runForThisRange
     ? {
         runId: runForThisRange.id as string,
@@ -352,72 +384,23 @@ export default async function InsightsPage({ searchParams }: InsightsPageProps) 
         inputTokens: runForThisRange.input_tokens as number,
         outputTokens: runForThisRange.output_tokens as number,
         error: (runForThisRange.error as string | null) ?? null,
+        updatedAt: (runForThisRange.updated_at as string | undefined) ?? undefined,
       }
     : null;
-
-  const scopeParams = {
-    client: first(params.client),
-    group: first(params.group),
-    location: first(params.location),
-    range: first(params.range),
-    from: first(params.from),
-    to: first(params.to),
-  };
-
-  function reviewsHrefFor(insight: InsightRecord): string | null {
-    const excerpt = insight.evidenceExcerpts[0];
-    if (!excerpt) return null;
-    const query = new URLSearchParams();
-    for (const [key, value] of Object.entries(scopeParams)) {
-      if (value) query.set(key, value);
-    }
-    query.set("q", excerpt.split(/\s+/).slice(0, 6).join(" "));
-    return `/reviews?${query.toString()}`;
-  }
 
   const periodDetail = range.start
     ? `${range.label} · ${dayLabel(range.start)} – ${range.end ? dayLabel(new Date(range.end.getTime() - 86_400_000)) : "today"}`
     : range.label;
-  const reportStatus = (report?.status as string | undefined) ?? null;
-  const reportReused = (report?.phase as string | null) === "reused";
-  const hasReport = reportInsights.length > 0;
-
-  const navItems: Array<{ id: string; label: string; show: boolean }> = [
-    { id: "serious", label: "Serious incidents", show: reportInsights.some((i) => i.category === "serious_incident") },
-    { id: "positive", label: "Key positive", show: reportInsights.some((i) => i.sentiment === "positive" && i.category !== "staff_recognition" && i.category !== "product_quality") },
-    { id: "negative", label: "Key negative", show: reportInsights.some((i) => i.sentiment === "negative" && i.category !== "serious_incident" && i.category !== "staff_complaint" && i.category !== "product_quality") },
-    { id: "staff", label: "Staff", show: reportInsights.some((i) => i.category === "staff_recognition" || i.category === "staff_complaint") },
-    { id: "product", label: "Product & service", show: reportInsights.some((i) => i.category === "product_quality" || i.category === "service_quality") },
-    { id: "trends", label: "Trends & locations", show: reportInsights.some((i) => i.category === "trend" || i.category === "outlet_comparison") },
-    { id: "connections", label: "How issues connect", show: reportInsights.some((i) => i.category === "relationship") },
-    { id: "actions", label: "Recommendations", show: reportInsights.some((i) => i.suggestedAction) },
-    { id: "themes", label: "Recurring themes", show: aggregates.storedObservations > 0 },
-  ];
-
-  const scopeQuery = new URLSearchParams();
-  for (const [key, value] of Object.entries(scopeParams)) {
-    if (value) scopeQuery.set(key, value);
-  }
-  const scopeQueryText = scopeQuery.toString();
-  const reviewsInScopeHref = scopeQueryText ? `/reviews?${scopeQueryText}` : "/reviews";
-  const analyticsThemesHref = `/analytics?${scopeQueryText ? `${scopeQueryText}&` : ""}section=themes`;
   const generatedAt = report?.finished_at ? new Date(report.finished_at as string) : null;
   const generatedLabel = generatedAt
     ? generatedAt.toLocaleString("en-GB", { day: "numeric", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit" })
     : null;
   const locationCount = scope.locationIds.length;
-  const sentimentTotal = positiveMentions + negativeMentions;
-  const statusTag = !hasReport ? (
-    aggregates.storedObservations > 0 ? <Badge variant="info">Analysis only · no report yet</Badge> : <Badge>No analysis yet</Badge>
-  ) : reportStatus === "partial" ? (
-    <Badge variant="warn">Partial report</Badge>
-  ) : reportStatus === "failed" ? (
-    <Badge variant="bad">Last generation failed</Badge>
-  ) : reportDataMoved ? (
-    <Badge variant="warn">Report may be stale</Badge>
-  ) : (
-    <Badge variant="ok">Report complete</Badge>
-  );
+  const topInsights = [...reportInsights]
+    .filter((i) => i.category !== "serious_incident")
+    .sort((a, b) => (b.importance ?? 0) - (a.importance ?? 0))
+    .slice(0, 3);
+  const sections = (filter: (i: InsightRecord) => boolean) => reportInsights.filter(filter);
 
   return (
     <div className="flex flex-col gap-4">
@@ -425,58 +408,83 @@ export default async function InsightsPage({ searchParams }: InsightsPageProps) 
         title="Insights"
         description={`What customers said about ${modernizeCopy(scope.title)} · ${locationCount.toLocaleString()} ${
           locationCount === 1 ? "location" : "locations"
-        } · ${periodDetail}`}
-        eyebrow={
-          <>
-            {statusTag}
-            <span className="text-xs text-ink-3">
-              {generatedLabel ? `Generated ${generatedLabel} · ` : ""}
-              {counts.discovered.toLocaleString()} reviews · coverage {coveragePct}%
-            </span>
-          </>
-        }
+        }`}
       >
-        <Link href={analyticsThemesHref} className={buttonVariants({ variant: "outline" })}>
+        <Link href={`/analytics?${baseQuery.toString() ? `${baseQuery.toString()}&` : ""}section=themes`} className={buttonVariants({ variant: "outline" })}>
           <BarChart3 aria-hidden />
           Theme analytics
         </Link>
-        <a href="#analysis" className={buttonVariants({ variant: "ai" })}>
-          <Sparkles aria-hidden />
-          {hasReport ? "Re-analyse" : "Analyse"}
-        </a>
       </PageHeader>
 
+      <nav aria-label="Period" className="flex flex-wrap items-center gap-1.5">
+        {insightPeriods(now).map((period) => {
+          const active = activePeriod?.key === period.key;
+          return (
+            <Link
+              key={period.key}
+              href={periodLink(period)}
+              aria-current={active ? "true" : undefined}
+              className={`inline-flex h-8 items-center rounded-md border px-3 text-[13px] font-medium ${
+                active ? "border-brand bg-brand text-white" : "border-line bg-white text-ink-2 hover:border-brand-line hover:text-brand"
+              }`}
+            >
+              {period.label}
+            </Link>
+          );
+        })}
+        <span className="ml-1 text-xs text-ink-3">
+          {periodDetail}
+          {previous ? ` · compared with the ${Math.round((previous.end.getTime() - previous.start.getTime()) / 86_400_000)} days before` : ""}
+        </span>
+      </nav>
+
       <KpiGrid>
-        <KpiTile label="Reviews in scope" value={counts.discovered.toLocaleString()} detail={periodDetail} href={reviewsInScopeHref} />
         <KpiTile
-          label="With written comments"
-          value={counts.eligible.toLocaleString()}
-          detail={`${counts.ratingOnly.toLocaleString()} rating-only, never used as evidence`}
+          label="Reviews analysed"
+          value={aggregates.reviewsAnalysed.toLocaleString()}
+          detail={`${counts.discovered.toLocaleString()} reviews · ${coveragePct}% of written ones analysed`}
+          href={scopeReviewsHref}
         />
         <KpiTile
-          label="Analysis coverage"
-          value={`${coveragePct}%`}
-          detail={`${counts.alreadyAnalysed.toLocaleString()} of ${counts.eligible.toLocaleString()} written reviews`}
-          tone={coveragePct === 100 ? "ok" : undefined}
+          label="Positive share"
+          value={positiveShare === null ? "—" : `${positiveShare}%`}
+          detail={
+            positiveShare !== null && previousShare !== null
+              ? `${positiveShare >= previousShare ? "▲" : "▼"} ${Math.abs(positiveShare - previousShare)} pts vs before (${previousShare}%)`
+              : "of praise and complaint mentions"
+          }
+          tone={positiveShare !== null && previousShare !== null && positiveShare < previousShare ? "bad" : undefined}
         />
         <KpiTile
-          label="Still pending"
-          value={counts.pending.toLocaleString()}
-          detail={counts.failed > 0 ? `${counts.failed} failed — retried next run` : "Will be analysed on the next run"}
-          tone={counts.failed > 0 ? "bad" : undefined}
+          label="Complaints"
+          value={negativeMentions.toLocaleString()}
+          detail={previousNegative !== null ? `${previousNegative.toLocaleString()} in the previous period` : "mentions in this period"}
         />
         <KpiTile
           label="Serious incidents"
           value={dashboard.severeCount.toLocaleString()}
           detail="Customer allegations to verify"
-          href={dashboard.severeCount > 0 ? (hasReport ? "#serious" : "#themes") : undefined}
+          href={dashboard.severeCount > 0 ? link({ tab: "incidents" }) : undefined}
           tone={dashboard.severeCount > 0 ? "bad" : undefined}
         />
       </KpiGrid>
 
+      {counts.pending > 0 ? (
+        <Banner
+          tone="info"
+          title={`${counts.pending.toLocaleString()} written ${counts.pending === 1 ? "review is" : "reviews are"} not analysed yet.`}
+          actions={
+            <Link href={link({ tab: "analysis" })} className={buttonVariants({ variant: "outline", size: "sm" })}>
+              Analyse now
+            </Link>
+          }
+        >
+          New reviews are analysed automatically each night. Numbers here cover the reviews analysed so far.
+        </Banner>
+      ) : null}
       {reportStatus === "partial" && hasReport ? (
         <Banner tone="warn" title="Completed with failures.">
-          This saved report does not yet cover every eligible review and must not be read as complete.
+          This saved report does not yet cover every eligible review.
           {reportLimitations.map((limitation, i) => (
             <span key={i} className="mt-1 block">
               {limitation}
@@ -484,350 +492,323 @@ export default async function InsightsPage({ searchParams }: InsightsPageProps) 
           ))}
         </Banner>
       ) : null}
-
       {reportDataMoved && hasReport ? (
-        <Banner tone="warn" title="This report may be stale.">
-          Reviews in this scope have been added or changed since it was generated. Regenerate to refresh it — existing review analysis is
-          reused and only new or changed reviews are processed.
+        <Banner tone="warn" title="The AI summary may be out of date.">
+          Reviews have been added or changed since it was written. Generate it again to refresh it. Reviews already analysed are reused.
         </Banner>
       ) : null}
 
-      {aggregates.storedObservations > 0 ? (
-        <section aria-label="Observed summary" className="grid items-start gap-4 lg:grid-cols-3">
-          <SectionCard title="Praise vs complaints" hint="observed mentions">
-            <div className="flex flex-wrap items-center gap-5">
-              <SentimentDonut positive={positiveMentions} negative={negativeMentions} />
-              <ul className="min-w-0 flex-1 space-y-2 text-[13px]">
-                <li className="flex items-center justify-between gap-2">
-                  <span className="flex items-center gap-2 text-ink-2">
-                    <span className="size-2.5 rounded-sm bg-ok" aria-hidden />
-                    Positive
-                  </span>
-                  <span className="font-semibold tabular-nums text-ink">{positiveMentions.toLocaleString()}</span>
-                </li>
-                <li className="flex items-center justify-between gap-2">
-                  <span className="flex items-center gap-2 text-ink-2">
-                    <span className="size-2.5 rounded-sm bg-bad" aria-hidden />
-                    Negative
-                  </span>
-                  <span className="font-semibold tabular-nums text-ink">{negativeMentions.toLocaleString()}</span>
-                </li>
-                <li className="flex items-center justify-between gap-2">
-                  <span className="flex items-center gap-2 text-ink-2">
-                    <span className="size-2.5 rounded-sm bg-[#7f1d1d]" aria-hidden />
-                    Serious incidents
-                  </span>
-                  <span className="font-semibold tabular-nums text-ink">{dashboard.severeCount.toLocaleString()}</span>
-                </li>
-              </ul>
+      {aggregates.storedObservations === 0 ? (
+        <EmptyState
+          icon={Sparkles}
+          title="No analysed reviews in this period"
+          description="Reviews are analysed automatically each night. To see this period now, analyse its written reviews. Every number here comes from your saved reviews."
+        >
+          <Link href={link({ tab: "analysis" })} className={buttonVariants({ variant: "ai", size: "sm" })}>
+            <Sparkles aria-hidden />
+            Analyse this period
+          </Link>
+        </EmptyState>
+      ) : (
+        <section className="grid items-start gap-4 lg:grid-cols-3" aria-label="Summary">
+          <SectionCard
+            title={`Summary for ${activePeriod?.label.toLowerCase() ?? "this period"}`}
+            hint={generatedLabel ? `AI summary generated ${generatedLabel}` : "What moved, then the AI summary"}
+            className="lg:col-span-2"
+          >
+            <div className="flex flex-col gap-3 text-[13px]">
+              {changes.length > 0 ? (
+                <ul className="flex flex-col gap-1.5">
+                  {changes.map((change) => (
+                    <li key={change.text} className="flex gap-2 text-ink-2">
+                      <span className={change.tone === "good" ? "text-ok" : "text-bad"} aria-hidden>
+                        {change.tone === "good" ? "▲" : "▼"}
+                      </span>
+                      {change.text}
+                    </li>
+                  ))}
+                </ul>
+              ) : (
+                <p className="text-ink-3">
+                  {previous ? "No theme moved by more than a couple of mentions since the previous period." : "Pick a period to see what changed."}
+                </p>
+              )}
+              {topInsights.length > 0 ? (
+                <ul className="flex flex-col gap-2 border-t border-line-2 pt-3">
+                  {topInsights.map((insight) => (
+                    <li key={insight.id} className="rounded-md border border-ai-line bg-[#fbf9ff] p-3">
+                      <div className="flex flex-wrap items-center gap-1.5 text-xs text-ink-3">
+                        <Badge variant="ai">AI</Badge>
+                        <Badge variant={insight.sentiment === "positive" ? "ok" : "bad"}>
+                          {insight.sentiment === "positive" ? "Positive" : "Negative"}
+                        </Badge>
+                      </div>
+                      <p className="mt-1.5 font-medium text-ink">{insight.title}</p>
+                      {insight.suggestedAction ? (
+                        <p className="mt-1 text-ink-2">
+                          <span className="font-medium text-ink">Suggested action:</span> {insight.suggestedAction}
+                        </p>
+                      ) : null}
+                    </li>
+                  ))}
+                </ul>
+              ) : null}
+              <div className="border-t border-line-2 pt-3">
+                <InsightReportPanel
+                  scopeParams={scopeParams}
+                  initialReport={
+                    report
+                      ? { reportId: report.id as string, status: reportStatus as string, phase: (report.phase as string | null) ?? null }
+                      : null
+                  }
+                  hasSavedReport={hasReport}
+                />
+              </div>
             </div>
-            <p className="mt-3 text-xs leading-relaxed text-ink-3">
-              {sentimentTotal > 0
-                ? `${Math.round((positiveMentions / sentimentTotal) * 100)}% of praise and complaint mentions are positive`
-                : "Insights are building up"}{" "}
-              across {aggregates.reviewsAnalysed.toLocaleString()} analysed written reviews
-              {aggregates.positive[0] ? `. Most praised: ${aggregates.positive[0].topic.replace(/_/g, " ")}` : ""}
-              {aggregates.negative[0] ? `. Most complaints: ${aggregates.negative[0].topic.replace(/_/g, " ")}` : ""}.{" "}
-              {aggregates.storedObservations.toLocaleString()} observations.
-            </p>
           </SectionCard>
-          <SectionCard title="Sentiment trend" hint="observations per month" className="lg:col-span-2">
+          <SectionCard title="Sentiment trend" hint="observations per month">
             <SentimentTrend byMonth={aggregates.byMonth} />
           </SectionCard>
         </section>
-      ) : null}
-
-      <section
-        id="analysis"
-        aria-label="Analysis and report status"
-        className="grid scroll-mt-24 gap-4 rounded-lg border border-line bg-white p-4 lg:grid-cols-2 lg:divide-x lg:divide-line [&>*]:min-w-0 lg:[&>*+*]:pl-4"
-      >
-        <InsightAnalyzer scopeParams={scopeParams} initialRun={initialRun} pendingCount={counts.pending} />
-        <InsightReportPanel
-          scopeParams={scopeParams}
-          initialReport={
-            report
-              ? {
-                  reportId: report.id as string,
-                  status: reportStatus as string,
-                  phase: (report.phase as string | null) ?? null,
-                }
-              : null
-          }
-          hasSavedReport={hasReport}
-        />
-      </section>
-
-      {aggregates.storedObservations > 0 ? (
-        <section className="grid items-start gap-4 lg:grid-cols-3" aria-label="Insights dashboard">
-          <SectionCard title="Location performance" hint="share of positive observations" className="lg:col-span-2">
-            <LocationPerformance aggregates={aggregates} outletNames={outletNames} />
-          </SectionCard>
-          <SectionCard title="Top review themes" hint="praise and complaints ranked separately">
-            <TopThemes aggregates={aggregates} />
-          </SectionCard>
-          <SectionCard title="Key insights" hint="from the saved report" className="lg:col-span-2">
-            <KeyInsights insights={displayInsights} />
-          </SectionCard>
-          <SectionCard title="Staff praised by name" hint="recognition">
-            <StaffPraised aggregates={aggregates} />
-          </SectionCard>
-        </section>
-      ) : null}
-
-      {hasReport ? (
-        <>
-          <div className="flex flex-col gap-3 rounded-lg border border-line bg-white p-3 sm:flex-row sm:items-center sm:justify-between">
-            <div className="flex flex-wrap items-center gap-1.5 text-xs text-ink-3">
-              <Badge variant={reportStatus === "partial" ? "warn" : "ok"}>
-                {reportStatus === "partial" ? "Saved report — partial coverage" : "Saved report"}
-              </Badge>
-              {reportReused ? <Badge>Reused — data unchanged, no new AI call</Badge> : null}
-              <span>
-                {modernizeCopy(scope.title)} · {periodDetail} · generated {generatedLabel ?? "—"} · built from{" "}
-                {(report?.analysed_count as number | undefined)?.toLocaleString() ?? "—"} analysed reviews · {reportInsights.length} insights ·
-                analysis {(report?.analysis_version as string) ?? "—"} / prompt {(report?.prompt_version as string) ?? "—"} · counts computed
-                from saved observations, never from model memory.
-              </span>
-            </div>
-          </div>
-
-          <nav className="flex flex-wrap gap-1.5" aria-label="Report sections">
-            {navItems
-              .filter((item) => item.show)
-              .map((item) => (
-                <a
-                  key={item.id}
-                  href={`#${item.id}`}
-                  className="inline-flex h-7 items-center rounded-md border border-line bg-white px-2.5 text-xs font-medium text-ink-2 hover:border-brand-line hover:text-brand"
-                >
-                  {item.label}
-                </a>
-              ))}
-          </nav>
-
-          <InsightSection
-            id="serious"
-            title="Serious incidents requiring attention"
-            intro="Ranked by severity, not frequency — a single credible report stays visible here. Each entry is a customer allegation that needs verification; it is not presented as a proven fact."
-            tone="danger"
-            insights={displayInsights.filter((i) => i.category === "serious_incident")}
-            periodLabel={periodDetail}
-            reviewsHrefFor={reviewsHrefFor}
-          />
-          <InsightSection
-            columns
-            id="positive"
-            title="Key positive insights"
-            intro="Strengths customers praise. Always reported separately from complaints."
-            insights={displayInsights.filter(
-              (i) =>
-                i.sentiment === "positive" &&
-                !["trend", "outlet_comparison", "relationship", "staff_recognition", "product_quality"].includes(i.category)
-            )}
-            periodLabel={periodDetail}
-            reviewsHrefFor={reviewsHrefFor}
-          />
-          <InsightSection
-            columns
-            id="negative"
-            title="Key negative insights"
-            intro="Problems customers report. Always reported separately from praise — one review can appear in both lists for different points."
-            insights={displayInsights.filter(
-              (i) =>
-                i.sentiment === "negative" &&
-                i.category !== "serious_incident" &&
-                !["trend", "outlet_comparison", "relationship", "staff_complaint", "product_quality"].includes(i.category)
-            )}
-            periodLabel={periodDetail}
-            reviewsHrefFor={reviewsHrefFor}
-          />
-          <InsightSection
-            columns
-            id="staff"
-            title="Staff insights"
-            intro="Recognition and complaints about named team members, kept as two separate lists."
-            insights={displayInsights.filter(
-              (i) => i.category === "staff_recognition" || i.category === "staff_complaint"
-            )}
-            periodLabel={periodDetail}
-            reviewsHrefFor={reviewsHrefFor}
-          />
-          <InsightSection
-            columns
-            id="product"
-            title="Product & service quality and assortment"
-            intro="Quality, durability, selection, sizes, stock, price and service findings — praise and complaints on separate cards."
-            insights={displayInsights.filter(
-              (i) => i.category === "product_quality" || i.category === "service_quality"
-            )}
-            periodLabel={periodDetail}
-            reviewsHrefFor={reviewsHrefFor}
-          />
-          <InsightSection
-            id="trends"
-            title="Trends and location comparisons"
-            intro="Trends compare equivalent periods using rates as well as counts. Location rates use each location's own analysed-review denominator; small samples are flagged on the card."
-            insights={displayInsights.filter(
-              (i) => i.category === "trend" || i.category === "outlet_comparison"
-            )}
-            periodLabel={periodDetail}
-            reviewsHrefFor={reviewsHrefFor}
-          />
-          <InsightSection
-            columns
-            id="connections"
-            title="How issues connect"
-            intro="Topics customers raise together in the same reviews. Co-occurrence is correlation, not proof that one causes the other."
-            insights={displayInsights.filter((i) => i.category === "relationship")}
-            periodLabel={periodDetail}
-            reviewsHrefFor={reviewsHrefFor}
-          />
-          <InsightSection
-            id="actions"
-            title="Recommendations"
-            intro="Suggested next steps, each grounded in the evidence card it came from."
-            insights={displayInsights
-              .filter((i) => i.suggestedAction)
-              // Actions index the evidence cards above; they must not
-              // re-tell the incident or repeat its quotes a second time.
-              .map((i) => ({
-                ...i,
-                detail: i.suggestedAction as string,
-                suggestedAction: null,
-                evidenceExcerpts: [],
-                evidenceShownElsewhere: false,
-              }))}
-            periodLabel={periodDetail}
-            reviewsHrefFor={reviewsHrefFor}
-          />
-        </>
-      ) : null}
-
-      {/* Evidence overview from saved observations — visible before/without a report too */}
-      {aggregates.storedObservations > 0 ? (
-        <section id="themes" className="flex scroll-mt-24 flex-col gap-4">
-          <div className="grid items-start gap-4 lg:grid-cols-2">
-            <Panel
-              title="Recurring themes — praise"
-              hint={`Ranked by frequency across ${aggregates.reviewsAnalysed.toLocaleString()} reviews with observations · ${periodDetail}`}
-            >
-              <ThemeList entries={aggregates.positive} empty="No positive observations yet." />
-            </Panel>
-            <Panel
-              title="Recurring themes — complaints"
-              hint="Frequency ranks recurring issues; one-off serious incidents are never buried here — they are listed separately by severity."
-            >
-              <ThemeList entries={aggregates.negative} empty="No negative observations yet." />
-            </Panel>
-          </div>
-
-          {!hasReport && dashboard.severeIncidents.length > 0 ? (
-            <Panel
-              tone="bad"
-              title="Serious incidents needing investigation"
-              hint="Severity reflects potential harm and credibility, not frequency. A single credible report appears here regardless of star rating. These are customer allegations to verify — not proven facts."
-            >
-              <ul className="flex flex-col gap-3">
-                {dashboard.severeIncidents.map((incident, index) => (
-                  <li key={`${incident.reviewId}-${index}`} className="rounded-md border border-line-2 p-3">
-                    <div className="flex flex-wrap items-center gap-1.5 text-xs text-ink-3">
-                      <Badge variant="bad">
-                        {severityLabel(incident.severity)} severity
-                        {incident.severity ? ` (${incident.severity}/5)` : ""}
-                      </Badge>
-                      <span>
-                        {incident.starRating}★ · {new Date(incident.reviewCreateTime).toLocaleDateString("en-GB")}
-                      </span>
-                    </div>
-                    <blockquote className="mt-2 border-l-2 border-line py-1 pl-3 text-[13px] text-ink-2">
-                      “{incident.evidenceExcerpt}”
-                    </blockquote>
-                    {incident.severityRationale ? (
-                      <div className="mt-2 rounded-md border border-ai-line bg-[#fbf9ff] px-3 py-2 text-xs text-ink-2">
-                        <Badge variant="ai" className="mr-1.5">
-                          Suggested interpretation
-                        </Badge>
-                        {incident.severityRationale}
-                      </div>
-                    ) : null}
-                  </li>
-                ))}
-              </ul>
-            </Panel>
-          ) : null}
-
-          {!hasReport &&
-          (aggregates.staffPraise.length > 0 || aggregates.staffComplaints.length > 0) ? (
-            <div className="grid items-start gap-4 lg:grid-cols-2">
-              <Panel title="Staff praised by name">
-                <NameList entries={aggregates.staffPraise} tone="ok" />
-              </Panel>
-              <Panel title="Staff complaints by name">
-                <NameList entries={aggregates.staffComplaints} tone="bad" />
-              </Panel>
-            </div>
-          ) : null}
-        </section>
-      ) : (
-        <EmptyState
-          icon={Sparkles}
-          title="No analysed reviews yet"
-          description="Analyse the written reviews in this scope to extract evidence-backed observations, then generate the report. Nothing is estimated or filled in — every number on this page comes from your saved reviews."
-        >
-          <a href="#analysis" className={buttonVariants({ variant: "ai", size: "sm" })}>
-            <Sparkles aria-hidden />
-            Go to analysis
-          </a>
-        </EmptyState>
       )}
 
-      <section className="grid gap-4 rounded-lg border border-line bg-white p-4 sm:grid-cols-2 lg:grid-cols-4">
-        <div>
-          <span className="text-[11px] font-semibold uppercase tracking-[0.06em] text-ink-3">Analysis coverage</span>
-          <div className="mt-1.5 flex items-center gap-2">
-            <span className="block h-1.5 flex-1 overflow-hidden rounded-[3px] bg-line-2" aria-hidden>
-              <span className="block h-full rounded-[3px] bg-ok" style={{ width: `${coveragePct}%` }} />
-            </span>
-            <b className="text-[13px] tabular-nums text-ink">{coveragePct}%</b>
-          </div>
-          <p className="mt-1 text-xs text-ink-3">
-            {counts.alreadyAnalysed.toLocaleString()} of {counts.eligible.toLocaleString()} written reviews analysed.{" "}
-            {counts.ratingOnly.toLocaleString()} rating-only reviews are skipped.
-          </p>
-        </div>
-        <div>
-          <span className="text-[11px] font-semibold uppercase tracking-[0.06em] text-ink-3">Last updated</span>
-          <p className="mt-1.5 text-[13px] font-semibold text-ink">{generatedLabel ?? "No report yet"}</p>
-          <p className="mt-1 text-xs text-ink-3">
-            {counts.pending > 0
-              ? `${counts.pending.toLocaleString()} written reviews are not reflected yet; they are included in the next analysis.`
-              : "Every written review in this scope is reflected."}
-          </p>
-        </div>
-        <div>
-          <span className="text-[11px] font-semibold uppercase tracking-[0.06em] text-ink-3">How to read this</span>
-          <p className="mt-1.5 text-xs leading-relaxed text-ink-3">
-            Counts, percentages, periods and quotes are <b className="text-ink-2">observed</b> from review text. Violet boxes are the
-            model&apos;s <b className="text-ink-2">suggested interpretation</b> and may be wrong; check the reviews before acting.
-          </p>
-        </div>
-        <div>
-          <span className="flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-[0.06em] text-ink-3">
-            History <Badge variant="ai">Proposed</Badge>
-          </span>
-          <p className="mt-1.5 text-xs leading-relaxed text-ink-3">
-            Weekly and monthly snapshots of this page are not stored yet. Only the latest report for each scope and period is kept.
-          </p>
-        </div>
-      </section>
+      {aggregates.storedObservations > 0 || tab === "analysis" ? (
+        <>
+          <nav aria-label="Insight sections" className="flex flex-wrap gap-1 border-b border-line">
+            {TABS.map((item) => (
+              <Link
+                key={item.id}
+                href={link({ tab: item.id === "themes" ? null : item.id, theme: null, sentiment: null })}
+                aria-current={tab === item.id ? "page" : undefined}
+                className={`-mb-px inline-flex h-9 items-center border-b-2 px-3 text-[13px] font-medium ${
+                  tab === item.id ? "border-brand text-brand" : "border-transparent text-ink-3 hover:text-ink"
+                }`}
+              >
+                {item.label}
+                {item.id === "incidents" && dashboard.severeCount > 0 ? (
+                  <Badge variant="bad" className="ml-1.5">
+                    {dashboard.severeCount}
+                  </Badge>
+                ) : null}
+              </Link>
+            ))}
+          </nav>
 
-      <p className="text-xs text-ink-3">
-        Severity scale: {SEVERITY_LABELS[1]} (1–2), {SEVERITY_LABELS[3]} (3), {SEVERITY_LABELS[4]}{" "}
-        (4), {SEVERITY_LABELS[5]} (5). Severity describes the incident as reported and is kept
-        separate from verification status. Rating-only reviews count toward ratings but are never used as evidence. Change scope and
-        dates in the header filters.
-      </p>
+          {tab === "themes" ? (
+            <section className="flex flex-col gap-4" aria-label="Themes">
+              <div className="overflow-x-auto rounded-lg border border-line bg-white">
+                <table className="w-full min-w-[560px] text-left text-[13px]">
+                  <thead className="border-b border-line bg-paper text-xs text-ink-3">
+                    <tr>
+                      <th className="px-3 py-2 font-medium">Theme</th>
+                      <th className="px-3 py-2 font-medium">Praise</th>
+                      <th className="px-3 py-2 font-medium">Complaints</th>
+                      <th className="px-3 py-2 font-medium">Reviews</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-line">
+                    {themes.slice(0, 25).map((row) => (
+                      <tr key={row.topic} className={openTopic === row.topic ? "bg-brand-tint/40" : undefined}>
+                        <td className="px-3 py-2.5 font-medium text-ink">{row.label}</td>
+                        <td className="px-3 py-2.5 tabular-nums">
+                          {row.praise > 0 ? (
+                            <Link href={link({ tab: null, theme: row.topic, sentiment: "positive" }, "#evidence")} className="text-ok hover:underline">
+                              {row.praise}
+                            </Link>
+                          ) : (
+                            <span className="text-ink-3">—</span>
+                          )}
+                          {delta(row.praise, row.praisePrev, true)}
+                        </td>
+                        <td className="px-3 py-2.5 tabular-nums">
+                          {row.complaints > 0 ? (
+                            <Link href={link({ tab: null, theme: row.topic, sentiment: "negative" }, "#evidence")} className="text-bad hover:underline">
+                              {row.complaints}
+                            </Link>
+                          ) : (
+                            <span className="text-ink-3">—</span>
+                          )}
+                          {delta(row.complaints, row.complaintsPrev, false)}
+                        </td>
+                        <td className="px-3 py-2.5 tabular-nums text-ink-3">{row.praiseReviews + row.complaintReviews}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+              <p className="text-xs text-ink-3">
+                Select a number to read the customer quotes behind it. A mention is one point in a review, not a star rating. Themes are
+                named by the AI for each business.
+              </p>
+
+              {evidence ? (
+                <section id="evidence" className="scroll-mt-24 rounded-lg border border-line bg-white p-4">
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <h2 className="text-sm font-semibold text-ink">
+                      {openSentiment === "positive" ? "Praise" : "Complaints"} about {insightTopicLabel(openTopic ?? "")}
+                    </h2>
+                    <Link href={link({ theme: null, sentiment: null })} className={buttonVariants({ variant: "ghost", size: "sm" })}>
+                      Close
+                    </Link>
+                  </div>
+                  {evidence.length === 0 ? (
+                    <p className="mt-2 text-[13px] text-ink-3">No quotes found for this theme in this period.</p>
+                  ) : (
+                    <ul className="mt-3 flex flex-col gap-3">
+                      {evidence.map((item, index) => {
+                        const query = new URLSearchParams(baseQuery);
+                        query.set("q", item.excerpt.split(/\s+/).slice(0, 6).join(" "));
+                        return (
+                          <li key={`${item.reviewId}-${index}`} className="rounded-md border border-line-2 p-3">
+                            <div className="flex flex-wrap items-center gap-1.5 text-xs text-ink-3">
+                              <span>{item.starRating}★</span>
+                              <span>{new Date(item.createdAt).toLocaleDateString("en-GB")}</span>
+                              <span>{outletNames.get(item.locationId) ?? "Location"}</span>
+                              {item.severity && item.severity >= 3 ? (
+                                <Badge variant="bad">Severity {item.severity}/5</Badge>
+                              ) : null}
+                            </div>
+                            <blockquote className="mt-1.5 border-l-2 border-line pl-3 text-[13px] text-ink-2">“{item.excerpt}”</blockquote>
+                            <Link href={`/reviews?${query.toString()}`} className="mt-1.5 inline-block text-xs font-medium text-brand hover:underline">
+                              Open this review
+                            </Link>
+                          </li>
+                        );
+                      })}
+                    </ul>
+                  )}
+                </section>
+              ) : null}
+            </section>
+          ) : null}
+
+          {tab === "locations" ? (
+            <SectionCard title="Location performance" hint="share of positive observations">
+              <LocationPerformance aggregates={aggregates} outletNames={outletNames} />
+            </SectionCard>
+          ) : null}
+
+          {tab === "incidents" ? (
+            dashboard.severeIncidents.length === 0 ? (
+              <p className="py-8 text-center text-[13px] text-ink-3">No serious incidents in this period.</p>
+            ) : (
+              <Panel
+                tone="bad"
+                title="Serious incidents needing investigation"
+                hint="Ranked by severity, not frequency. These are customer allegations to verify, not proven facts."
+              >
+                <ul className="flex flex-col gap-3">
+                  {dashboard.severeIncidents.map((incident, index) => (
+                    <li key={`${incident.reviewId}-${index}`} className="rounded-md border border-line-2 p-3">
+                      <div className="flex flex-wrap items-center gap-1.5 text-xs text-ink-3">
+                        <Badge variant="bad">
+                          {severityLabel(incident.severity)} severity
+                          {incident.severity ? ` (${incident.severity}/5)` : ""}
+                        </Badge>
+                        <span>
+                          {incident.starRating}★ · {new Date(incident.reviewCreateTime).toLocaleDateString("en-GB")}
+                        </span>
+                      </div>
+                      <blockquote className="mt-2 border-l-2 border-line py-1 pl-3 text-[13px] text-ink-2">“{incident.evidenceExcerpt}”</blockquote>
+                      {incident.severityRationale ? (
+                        <div className="mt-2 rounded-md border border-ai-line bg-[#fbf9ff] px-3 py-2 text-xs text-ink-2">
+                          <Badge variant="ai" className="mr-1.5">
+                            Suggested interpretation
+                          </Badge>
+                          {incident.severityRationale}
+                        </div>
+                      ) : null}
+                    </li>
+                  ))}
+                </ul>
+              </Panel>
+            )
+          ) : null}
+
+          {tab === "report" ? (
+            hasReport ? (
+              <div className="flex flex-col gap-6">
+                <InsightSection
+                  columns
+                  id="positive"
+                  title="Key positive insights"
+                  intro="Strengths customers praise, reported separately from complaints."
+                  insights={sections((i) => i.sentiment === "positive" && !["trend", "outlet_comparison", "relationship"].includes(i.category))}
+                  periodLabel={periodDetail}
+                  reviewsHrefFor={reviewsHrefFor}
+                />
+                <InsightSection
+                  columns
+                  id="negative"
+                  title="Key negative insights"
+                  intro="Problems customers report, reported separately from praise."
+                  insights={sections((i) => i.sentiment === "negative" && i.category !== "serious_incident" && !["trend", "outlet_comparison", "relationship"].includes(i.category))}
+                  periodLabel={periodDetail}
+                  reviewsHrefFor={reviewsHrefFor}
+                />
+                <InsightSection
+                  id="trends"
+                  title="Trends and location comparisons"
+                  intro="Equivalent periods compared by rate as well as count. Small samples are flagged on the card."
+                  insights={sections((i) => i.category === "trend" || i.category === "outlet_comparison")}
+                  periodLabel={periodDetail}
+                  reviewsHrefFor={reviewsHrefFor}
+                />
+                <InsightSection
+                  columns
+                  id="connections"
+                  title="How issues connect"
+                  intro="Topics customers raise together. Co-occurrence is correlation, not proof of cause."
+                  insights={sections((i) => i.category === "relationship")}
+                  periodLabel={periodDetail}
+                  reviewsHrefFor={reviewsHrefFor}
+                />
+                <InsightSection
+                  id="actions"
+                  title="Recommendations"
+                  intro="Suggested next steps, each grounded in the evidence it came from."
+                  insights={sections((i) => Boolean(i.suggestedAction)).map((i) => ({
+                    ...i,
+                    detail: i.suggestedAction as string,
+                    suggestedAction: null,
+                    evidenceExcerpts: [],
+                  }))}
+                  periodLabel={periodDetail}
+                  reviewsHrefFor={reviewsHrefFor}
+                />
+              </div>
+            ) : (
+              <p className="py-8 text-center text-[13px] text-ink-3">
+                No AI report for this period yet. Use “Generate” in the summary above.
+              </p>
+            )
+          ) : null}
+
+          {tab === "analysis" ? (
+            <section
+              aria-label="Analysis status"
+              className="flex flex-col gap-4 rounded-lg border border-line bg-white p-4"
+            >
+              <InsightAnalyzer scopeParams={scopeParams} initialRun={initialRun} pendingCount={counts.pending} />
+              <div className="grid gap-3 border-t border-line-2 pt-3 text-xs text-ink-3 sm:grid-cols-3">
+                <p>
+                  <b className="text-ink-2">Coverage:</b> {counts.alreadyAnalysed.toLocaleString()} of {counts.eligible.toLocaleString()} written
+                  reviews analysed ({coveragePct}%). {counts.ratingOnly.toLocaleString()} rating-only reviews are skipped.
+                </p>
+                <p>
+                  <b className="text-ink-2">Automatic:</b> new reviews are analysed each night, so this is normally up to date. Each review is
+                  analysed once and reused for every period.
+                </p>
+                <p>
+                  <b className="text-ink-2">Reading this page:</b> counts, percentages and quotes come from your reviews. Violet boxes are
+                  the AI&apos;s interpretation and may be wrong. Severity: {SEVERITY_LABELS[1]} (1–2), {SEVERITY_LABELS[3]} (3),{" "}
+                  {SEVERITY_LABELS[4]} (4), {SEVERITY_LABELS[5]} (5).
+                </p>
+              </div>
+            </section>
+          ) : null}
+        </>
+      ) : null}
     </div>
   );
 }

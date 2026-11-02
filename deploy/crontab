@@ -6,3 +6,4 @@
 30 5 * * * /deploy/run-cron requests
 45 5 * * * /deploy/run-cron automation
 0 6 * * *  /deploy/run-cron ai-generations
+30 6 * * * /deploy/run-cron insights
