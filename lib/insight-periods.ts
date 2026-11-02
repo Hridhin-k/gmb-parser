@@ -9,7 +9,11 @@ export interface InsightPeriod {
   label: string;
   /** YYYY-MM-DD, inclusive. */
   from: string;
-  /** YYYY-MM-DD, inclusive. */
+  /**
+   * YYYY-MM-DD, inclusive. Empty for a period still in progress ("this month",
+   * year to date): it stays open-ended so the saved report keeps its identity
+   * as days pass, and a fingerprint of the reviews tells when it is out of date.
+   */
   to: string;
 }
 
@@ -25,11 +29,11 @@ export function insightPeriods(now: Date = new Date()): InsightPeriod[] {
   const year = now.getUTCFullYear();
   const month = now.getUTCMonth();
   return [
-    { key: "this_month", label: "This month", from: iso(firstOfMonth(year, month)), to: iso(now) },
+    { key: "this_month", label: "This month", from: iso(firstOfMonth(year, month)), to: "" },
     { key: "last_month", label: "Last month", from: iso(firstOfMonth(year, month - 1)), to: iso(lastOfMonth(year, month - 1)) },
     { key: "last_3", label: "Last 3 months", from: iso(firstOfMonth(year, month - 3)), to: iso(lastOfMonth(year, month - 1)) },
     { key: "last_6", label: "Last 6 months", from: iso(firstOfMonth(year, month - 6)), to: iso(lastOfMonth(year, month - 1)) },
-    { key: "ytd", label: "Year to date", from: iso(firstOfMonth(year, 0)), to: iso(now) },
+    { key: "ytd", label: "Year to date", from: iso(firstOfMonth(year, 0)), to: "" },
   ];
 }
 

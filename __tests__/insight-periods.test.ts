@@ -7,7 +7,7 @@ const now = new Date("2026-11-02T10:00:00Z");
 describe("insightPeriods", () => {
   it("aligns to calendar months", () => {
     const byKey = Object.fromEntries(insightPeriods(now).map((p) => [p.key, p]));
-    expect(byKey.this_month).toMatchObject({ from: "2026-11-01", to: "2026-11-02" });
+    expect(byKey.this_month).toMatchObject({ from: "2026-11-01", to: "" });
     expect(byKey.last_month).toMatchObject({ from: "2026-10-01", to: "2026-10-31" });
     expect(byKey.last_3).toMatchObject({ from: "2026-08-01", to: "2026-10-31" });
     expect(byKey.ytd).toMatchObject({ from: "2026-01-01" });

@@ -333,7 +333,8 @@ export default async function InsightsPage({ searchParams }: InsightsPageProps) 
     const query = new URLSearchParams(baseQuery);
     query.set("range", "custom");
     query.set("from", period.from);
-    query.set("to", period.to);
+    if (period.to) query.set("to", period.to);
+    else query.delete("to");
     if (tab !== "themes") query.set("tab", tab);
     return `/insights?${query.toString()}`;
   };
@@ -432,6 +433,22 @@ export default async function InsightsPage({ searchParams }: InsightsPageProps) 
             </Link>
           );
         })}
+        <Link
+          href={(() => {
+            const query = new URLSearchParams(baseQuery);
+            query.set("range", "12m");
+            query.delete("from");
+            query.delete("to");
+            if (tab !== "themes") query.set("tab", tab);
+            return `/insights?${query.toString()}`;
+          })()}
+          aria-current={range.key === "12m" ? "true" : undefined}
+          className={`inline-flex h-8 items-center rounded-md border px-3 text-[13px] font-medium ${
+            range.key === "12m" ? "border-brand bg-brand text-white" : "border-line bg-white text-ink-2 hover:border-brand-line hover:text-brand"
+          }`}
+        >
+          Last 12 months
+        </Link>
         <span className="ml-1 text-xs text-ink-3">
           {periodDetail}
           {previous ? ` · compared with the ${Math.round((previous.end.getTime() - previous.start.getTime()) / 86_400_000)} days before` : ""}
