@@ -161,6 +161,9 @@ export type Database = {
           website: string | null
           account_manager_user_id: string | null
           brand_name: string | null
+          brand_profile: Json | null
+          brand_profile_source: string | null
+          brand_profile_updated_at: string | null
           logo_url: string | null
           updated_at: string
           workspace_id: string
@@ -176,6 +179,9 @@ export type Database = {
           website?: string | null
           account_manager_user_id?: string | null
           brand_name?: string | null
+          brand_profile?: Json | null
+          brand_profile_source?: string | null
+          brand_profile_updated_at?: string | null
           logo_url?: string | null
           updated_at?: string
           workspace_id: string
@@ -191,6 +197,9 @@ export type Database = {
           website?: string | null
           account_manager_user_id?: string | null
           brand_name?: string | null
+          brand_profile?: Json | null
+          brand_profile_source?: string | null
+          brand_profile_updated_at?: string | null
           logo_url?: string | null
           updated_at?: string
           workspace_id?: string

@@ -18,6 +18,8 @@ import {
   persistAnalysisResult,
   type ReviewForAnalysis,
 } from "@/lib/services/review-observations";
+import { brandContextBlock } from "@/lib/brand-profile";
+import { loadBrandContexts, type ClientBrandContext } from "@/lib/services/brand-profile";
 import { logger } from "@/lib/logger";
 
 type Admin = ReturnType<typeof createAdminClient>;
@@ -38,6 +40,43 @@ type BatchReview = ReviewForAnalysis & { comment: string; starRating: number };
 
 function toBatchReviews(reviews: ReviewForAnalysis[]): BatchReview[] {
   return reviews.map((r) => ({ ...r, comment: r.comment ?? "", starRating: r.star_rating }));
+}
+
+/**
+ * Splits pending reviews by business and pairs each group with its brand
+ * context text. A business with no profile and no themes yet gets an empty
+ * context, so the model reads its reviews on their own.
+ */
+async function businessContexts(
+  admin: Admin,
+  workspaceId: string,
+  reviews: ReviewForAnalysis[]
+): Promise<Map<string, ReviewForAnalysis[]>> {
+  const locationIds = [...new Set(reviews.map((r) => r.location_id))];
+  const clientByLocation = new Map<string, string | null>();
+  for (const ids of chunk(locationIds, LOCATION_CHUNK)) {
+    const { data } = await admin
+      .from("grm_google_locations")
+      .select("id, client_id")
+      .eq("workspace_id", workspaceId)
+      .in("id", ids);
+    for (const row of data ?? []) clientByLocation.set(row.id, row.client_id);
+  }
+  const byClient = new Map<string, ReviewForAnalysis[]>();
+  for (const review of reviews) {
+    const key = clientByLocation.get(review.location_id) ?? "";
+    byClient.set(key, [...(byClient.get(key) ?? []), review]);
+  }
+  const contexts = await loadBrandContexts(workspaceId, [...byClient.keys()].filter(Boolean)).catch(
+    () => new Map<string, ClientBrandContext>()
+  );
+  const out = new Map<string, ReviewForAnalysis[]>();
+  for (const [clientId, group] of byClient) {
+    const context = contexts.get(clientId);
+    const text = brandContextBlock(context?.profile ?? null, context?.knownThemes ?? []);
+    out.set(text, [...(out.get(text) ?? []), ...group]);
+  }
+  return out;
 }
 
 function chunk<T>(items: T[], size: number): T[][] {
@@ -204,10 +243,10 @@ export async function discoverScopeReviews(
   return all;
 }
 
-async function callBatchExtractor(reviews: BatchReview[], workspaceId: string) {
+async function callBatchExtractor(reviews: BatchReview[], workspaceId: string, brandContext: string) {
   return generateAi({
     workspaceId, task: "extract", operation: "extract_review",
-    prompt: batchExtractionPrompt(reviews), schema: batchExtractionSchema,
+    prompt: batchExtractionPrompt(reviews, brandContext), schema: batchExtractionSchema,
     temperature: 0.1, maxOutputTokens: 8192, timeoutMs: REQUEST_TIMEOUT_MS,
   });
 }
@@ -401,9 +440,9 @@ function makeRunProcessor(
       .eq("id", runId);
   }
 
-  async function processBatch(batch: BatchReview[]) {
+  async function processBatch(batch: BatchReview[], brandContext: string) {
     try {
-      const { text, model, usage } = await withRetry(() => callBatchExtractor(batch, workspaceId), {
+      const { text, model, usage } = await withRetry(() => callBatchExtractor(batch, workspaceId, brandContext), {
         attempts: 3,
         baseDelayMs: 1000,
         onRetry: () => {
@@ -470,7 +509,13 @@ function makeRunProcessor(
   return {
     state,
     async process(pendingReviews: ReviewForAnalysis[]): Promise<void> {
-      const batches = buildBatches(toBatchReviews(pendingReviews));
+      // Reviews are batched per business so each batch carries that business's
+      // brand profile and the theme names already in use for it.
+      const contexts = await businessContexts(admin, workspaceId, pendingReviews);
+      const batches: Array<{ reviews: BatchReview[]; brandContext: string }> = [];
+      for (const [brandContext, group] of contexts) {
+        for (const reviews of buildBatches(toBatchReviews(group))) batches.push({ reviews, brandContext });
+      }
       state.batchesTotal += batches.length;
       for (let i = 0; i < batches.length; i += BATCH_CONCURRENCY) {
         // Slice deadline: stop starting new batches so this invocation can
@@ -480,7 +525,7 @@ function makeRunProcessor(
           state.exhausted = true;
           return;
         }
-        await Promise.all(batches.slice(i, i + BATCH_CONCURRENCY).map((b) => processBatch(b)));
+        await Promise.all(batches.slice(i, i + BATCH_CONCURRENCY).map((b) => processBatch(b.reviews, b.brandContext)));
       }
     },
     async finish(): Promise<void> {

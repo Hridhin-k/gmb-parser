@@ -31,6 +31,7 @@ export type AuditAction =
   | "google_sync.completed"
   | "client.created"
   | "client.updated"
+  | "client.brand_profile_saved"
   | "client.onboarding_issued"
   | "client.approval_updated"
   | "branding.updated"

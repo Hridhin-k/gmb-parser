@@ -10,7 +10,7 @@ const PRICE_PER_MILLION: Record<string, { input: number; output: number }> = {
   "google:gemini-3.8-flash": { input: 0.75, output: 3.75 },
 };
 
-export type AiOperation = "reply_draft" | "extract_review" | "insight_prose" | "preview";
+export type AiOperation = "reply_draft" | "extract_review" | "insight_prose" | "insight_brief" | "preview";
 
 export interface AiPrice { input: number; output: number }
 

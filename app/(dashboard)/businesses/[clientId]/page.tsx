@@ -8,6 +8,8 @@ import { isOrgScope, workspaceGrant } from "@/lib/access";
 import { getWorkspaceRoster } from "@/lib/services/workspace";
 import { AgencyClientForm } from "@/components/agency-client-form";
 import { ClientQueue } from "@/components/client-queue";
+import { BrandProfileCard } from "@/components/brand-profile-card";
+import { normalizeBrandProfile } from "@/lib/brand-profile";
 import { canSyncWorkspace } from "@/lib/services/workspace";
 import { PageHeader } from "@/components/page-header";
 import { LocationTable } from "@/components/location-table";
@@ -49,7 +51,7 @@ export default async function ClientDetailPage({
   ] = await Promise.all([
     admin
       .from("grm_clients")
-      .select("id, name, notes, is_active, created_at, contact_email, website, brand_name, logo_url, account_manager_user_id")
+      .select("id, name, notes, is_active, created_at, contact_email, website, brand_name, logo_url, account_manager_user_id, brand_profile, brand_profile_source")
       .eq("id", clientId)
       .eq("workspace_id", workspaceId)
       .single(),
@@ -321,6 +323,14 @@ export default async function ClientDetailPage({
               )}
             </div>
           </section>
+
+          <BrandProfileCard
+            clientId={clientId}
+            website={clientRow.website}
+            initial={normalizeBrandProfile(clientRow.brand_profile)}
+            source={clientRow.brand_profile_source}
+            canEdit={canEdit}
+          />
         </div>
       </div>
     </div>

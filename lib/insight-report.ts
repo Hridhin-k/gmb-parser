@@ -1,7 +1,6 @@
 import { createHash } from "node:crypto";
 import {
   ANALYSIS_VERSION,
-  STANDARD_TOPICS,
   type ObservationAggregates,
 } from "@/lib/review-intelligence";
 
@@ -222,11 +221,9 @@ function illustrativeSamples(
   return [...ordinary, ...severe].slice(0, limit);
 }
 
-const PRODUCT_TOPICS = new Set(["product_quality", "assortment", "pricing", "availability"]);
-const STANDARD_TOPIC_SET = new Set<string>(STANDARD_TOPICS);
-
-function topicCategory(topic: string, sentiment: InsightSentiment): InsightCategory {
-  if (PRODUCT_TOPICS.has(topic)) return "product_quality";
+// Themes are named by the model for each business, so no theme name is special:
+// the category follows the sentiment alone.
+function topicCategory(sentiment: InsightSentiment): InsightCategory {
   if (sentiment === "positive") return "recurring_strength";
   return "recurring_issue";
 }
@@ -258,7 +255,7 @@ export function buildEvidenceItems(input: {
       );
       items.push({
         key: `topic:${sentiment}:${entry.topic}`,
-        category: topicCategory(entry.topic, sentiment),
+        category: topicCategory(sentiment),
         sentiment,
         title: entry.topic.replace(/_/g, " "),
         statLine: `${entry.reviews} of ${denominator} analysed written reviews (${pct(entry.reviews, denominator)}) mention ${entry.topic.replace(/_/g, " ")} ${sentiment === "positive" ? "positively" : "negatively"} across ${entry.count} observations.`,
@@ -271,23 +268,6 @@ export function buildEvidenceItems(input: {
         evidenceExcerpts: picked.map((s) => s.evidenceExcerpt),
         limitations: [],
       });
-      if (!STANDARD_TOPIC_SET.has(entry.topic) && entry.reviews >= 2) {
-        items.push({
-          key: `emerging:${sentiment}:${entry.topic}`,
-          category: "emerging_theme",
-          sentiment,
-          title: `Emerging theme: ${entry.topic.replace(/_/g, " ")}`,
-          statLine: `${entry.topic.replace(/_/g, " ")} is not in the standard taxonomy but appears in ${entry.reviews} reviews. Treat it as an emerging theme worth watching.`,
-          supportingReviews: entry.reviews,
-          denominator,
-          calculation: "reviews mentioning non-taxonomy topic ÷ analysed written reviews",
-          context: `emerging topic ${entry.topic}`,
-          severity: null,
-          evidenceReviewIds: [...new Set(picked.map((s) => s.reviewId))],
-          evidenceExcerpts: picked.map((s) => s.evidenceExcerpt),
-          limitations: ["Theme name was assigned by the extraction model, not the fixed taxonomy."],
-        });
-      }
     }
   }
 

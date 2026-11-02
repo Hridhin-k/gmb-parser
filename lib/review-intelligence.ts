@@ -27,20 +27,6 @@ export const ENTITY_TYPES = [
 ] as const;
 export type ObservationEntityType = (typeof ENTITY_TYPES)[number];
 
-/** Standard reporting categories. A subtopic always keeps the customer's specific meaning. */
-export const STANDARD_TOPICS = [
-  "staff",
-  "product_quality",
-  "assortment",
-  "price",
-  "billing",
-  "refunds_returns",
-  "service_speed",
-  "cleanliness",
-  "store_experience",
-  "other",
-] as const;
-
 export interface ExtractedObservation {
   topic: string;
   subtopic: string | null;
@@ -173,9 +159,7 @@ export function validateObservations(raw: unknown, comment: string): ExtractedOb
     if (at < 0) continue;
     const evidenceExcerpt = source.slice(at, at + excerptRaw.length);
     const topicInput = typeof row.topic === "string" && row.topic.trim() ? row.topic.trim() : "other";
-    const topic = (STANDARD_TOPICS as readonly string[]).includes(slug(topicInput))
-      ? slug(topicInput)
-      : slug(topicInput) || "other";
+    const topic = slug(topicInput) || "other";
     const entityType = ENTITY_TYPES.includes(row.entityType as ObservationEntityType)
       ? (row.entityType as ObservationEntityType)
       : null;
@@ -223,14 +207,15 @@ export function dedupeObservations(rows: ExtractedObservation[]): ExtractedObser
   });
 }
 
-export function extractionPrompt(input: { comment: string; starRating: number }): string {
+export function extractionPrompt(input: { comment: string; starRating: number; brandContext?: string }): string {
   return `You extract structured observations from one Google review. Return JSON only: {"observations":[...]}.
 
+${input.brandContext ?? ""}
 Rules:
 - One observation per distinct point. A review can praise one thing and complain about another: return both, as separate observations. Never merge praise and a complaint into one item.
 - Sentiment per observation: "positive", "negative", "neutral", or "mixed" only when the point itself is genuinely both.
 - Keep every meaningful point, including a problem that occurs only once in this review. Do not drop a point because it seems minor or unusual.
-- topic: one of ${STANDARD_TOPICS.join(", ")}. If none fits, use a short snake_case topic of your own instead of forcing a fit.
+- topic: the theme this point belongs to, as a short snake_case name that fits THIS business (for example "advice_quality" for a consultancy, "fitting_rooms" for a clothes shop). Do not force a point into a generic category. Use the same name every time the same idea comes up, and reuse a name from THEMES ALREADY USED when one means the same.
 - subtopic: the specific thing in the customer's words (for example "missing sizes", "jeans quality", "billing counter behaviour").
 - detail: one sentence stating the specific issue, strength, event, or request.
 - entityType: one of ${ENTITY_TYPES.join(", ")} when a specific entity is identifiable, else null. entityName: a staff name, product, clothing category, or other name exactly as written, else null. Never invent a name.
@@ -437,7 +422,7 @@ export function buildBatches<T extends BatchableReview>(
   return batches;
 }
 
-export function batchExtractionPrompt(reviews: readonly BatchableReview[]): string {
+export function batchExtractionPrompt(reviews: readonly BatchableReview[], brandContext = ""): string {
   const blocks = reviews
     .map(
       (review) =>
@@ -449,11 +434,12 @@ export function batchExtractionPrompt(reviews: readonly BatchableReview[]): stri
 
 Include one result for every REVIEW below, even when its observations list is empty. Copy each reviewId exactly; never invent an id.
 
+${brandContext}
 For each review, follow these rules:
 - One observation per distinct point. A review can praise one thing and complain about another: return both, as separate observations. Never merge praise and a complaint into one item, and never collapse distinct complaints into one generic statement.
 - Sentiment per observation: "positive", "negative", "neutral", or "mixed" only when the point itself is genuinely both. Judge the point itself, not the star rating: a five-star review can contain a serious complaint.
 - Keep every meaningful point, including a problem that occurs only once in this review. Do not drop a point because it seems minor or unusual.
-- topic: one of ${STANDARD_TOPICS.join(", ")}. If none fits, use a short snake_case topic of your own instead of forcing a fit.
+- topic: the theme this point belongs to, as a short snake_case name that fits THIS business (for example "advice_quality" for a consultancy, "fitting_rooms" for a clothes shop). Do not force a point into a generic category. Use the same name every time the same idea comes up, and reuse a name from THEMES ALREADY USED when one means the same.
 - subtopic: the specific thing in the customer's words (for example "missing sizes", "jeans quality", "billing counter behaviour").
 - detail: one sentence stating the specific issue, strength, event, or request, preserving product, outlet, and qualifier details.
 - entityType: one of ${ENTITY_TYPES.join(", ")} when a specific entity is identifiable, else null. entityName: a staff name, product, clothing category, or other name exactly as written, else null. Never invent a name.

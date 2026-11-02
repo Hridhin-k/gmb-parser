@@ -698,7 +698,10 @@
         "website": "text",
         "account_manager_user_id": "uuid",
         "brand_name": "text",
-        "logo_url": "text"
+        "logo_url": "text",
+        "brand_profile": "jsonb",
+        "brand_profile_source": "text",
+        "brand_profile_updated_at": "timestamptz"
       },
       "relations": [
         {
