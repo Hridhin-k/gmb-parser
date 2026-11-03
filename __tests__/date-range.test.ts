@@ -98,3 +98,29 @@ describe("filter apply copy", () => {
     });
   });
 });
+
+describe("day range presets", () => {
+  const now = new Date("2026-11-03T10:00:00Z");
+
+  it("parses 7d, 30d and 90d as rolling windows", () => {
+    const range = parseDateRange({ range: "30d" }, "all", now);
+    expect(range.key).toBe("30d");
+    expect(range.label).toBe("Last 30 days");
+    expect(range.start?.toISOString()).toBe("2026-10-04T10:00:00.000Z");
+    expect(range.end).toBeNull();
+    expect(parseDateRange({ range: "7d" }, "all", now).start?.toISOString()).toBe("2026-10-27T10:00:00.000Z");
+  });
+
+  it("compares with the same number of days before", () => {
+    const range = parseDateRange({ range: "7d" }, "all", now);
+    expect(previousDateRange(range, now)).toEqual({
+      start: new Date("2026-10-20T10:00:00Z"),
+      end: new Date("2026-10-27T10:00:00Z"),
+    });
+  });
+
+  it("writes the key back to the URL", () => {
+    expect(dateRangeParams(parseDateRange({ range: "90d" }, "all", now), "30d")).toEqual({ range: "90d" });
+    expect(dateRangeParams(parseDateRange({ range: "30d" }, "all", now), "30d")).toEqual({});
+  });
+});
