@@ -43,7 +43,7 @@ export async function advanceLocalDemo(workspaceId: string, userId: string, acti
         (workspace_id,authorized_by_user_id,google_email,access_token_enc,refresh_token_enc,token_expires_at,status)
         VALUES ($1,$2,$3,'NO_GOOGLE_TOKEN','NO_GOOGLE_TOKEN',now(),'revoked')
         ON CONFLICT(workspace_id,google_email) DO NOTHING`, [workspaceId, userId, DEMO_EMAIL]);
-      await db.query("UPDATE grm_onboarding SET step='import' WHERE workspace_id=$1", [workspaceId]);
+      await db.query("UPDATE grm_onboarding SET step='connect' WHERE workspace_id=$1", [workspaceId]);
     } else {
       const { rows: [connection] } = await db.query(
         "SELECT id FROM grm_google_connections WHERE workspace_id=$1 AND google_email=$2 AND access_token_enc='NO_GOOGLE_TOKEN'",

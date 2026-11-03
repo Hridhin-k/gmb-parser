@@ -314,3 +314,54 @@
     cursor: help;
   }
 }
+
+/* Setup flow: finish-screen check and the "looking for profiles" pulse. */
+@keyframes onb-draw {
+  to {
+    stroke-dashoffset: 0;
+  }
+}
+@keyframes onb-pop {
+  0% {
+    transform: scale(0.55);
+    opacity: 0;
+  }
+  60% {
+    transform: scale(1.08);
+    opacity: 1;
+  }
+  100% {
+    transform: scale(1);
+  }
+}
+@keyframes onb-ring {
+  0% {
+    transform: scale(0.85);
+    opacity: 0.55;
+  }
+  100% {
+    transform: scale(2.1);
+    opacity: 0;
+  }
+}
+.onb-check path {
+  stroke-dasharray: 30;
+  stroke-dashoffset: 30;
+  animation: onb-draw 0.5s 0.3s ease-out forwards;
+}
+.onb-pop {
+  animation: onb-pop 0.55s cubic-bezier(0.2, 0.9, 0.3, 1.2) both;
+}
+.onb-ring {
+  animation: onb-ring 1.9s ease-out infinite;
+}
+@media (prefers-reduced-motion: reduce) {
+  .onb-check path {
+    animation: none;
+    stroke-dashoffset: 0;
+  }
+  .onb-pop,
+  .onb-ring {
+    animation: none;
+  }
+}

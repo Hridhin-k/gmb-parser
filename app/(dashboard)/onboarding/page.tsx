@@ -62,7 +62,6 @@ export default async function OnboardingPage({ searchParams }: OnboardingPagePro
       requestedStep={requested}
       notice={googleConnectError(googleError)}
       connected={googleConnected}
-      canInviteAdmin={role === "owner"}
     />
   );
 }

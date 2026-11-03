@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  ONBOARDING_STEPS,
   authMethods,
   holdReasons,
   inviteExpiresAt,
@@ -8,7 +9,6 @@ import {
   parseGroupCsv,
   placeFromStoredAddress,
   shouldEnterWizard,
-  stepUnlocked,
   suggestGroups,
   toneInstruction,
 } from "@/lib/onboarding";
@@ -185,32 +185,8 @@ describe("setup progress and invites", () => {
     expect(shouldEnterWizard({ completed: true, connections: 0, locations: 0 })).toBe(false);
   });
 
-  it("unlocks a step that already has its data", () => {
-    expect(
-      stepUnlocked("import", {
-        step: "connect",
-        connections: 1,
-        locations: 0,
-        grouping: null,
-        toneVoice: null,
-      })
-    ).toBe(true);
-    expect(
-      stepUnlocked("tone", {
-        step: "groups",
-        connections: 1,
-        locations: 2,
-        grouping: null,
-        toneVoice: null,
-      })
-    ).toBe(false);
-  });
-
-  it("lets setup start at the brand step and skip it to connect Google", () => {
-    const fresh = { step: "brand" as const, connections: 0, locations: 0, grouping: null, toneVoice: null };
-    expect(stepUnlocked("brand", fresh)).toBe(true);
-    expect(stepUnlocked("connect", fresh)).toBe(true);
-    expect(stepUnlocked("import", fresh)).toBe(false);
+  it("keeps setup to the brand screen and the Google locations screen", () => {
+    expect([...ONBOARDING_STEPS]).toEqual(["brand", "connect"]);
   });
 
   it("expires an invite after 14 days", () => {

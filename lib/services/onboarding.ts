@@ -24,7 +24,9 @@ import {
   type ToneVoice,
 } from "@/lib/onboarding";
 
-const STEPS: readonly string[] = ["brand", "connect", "import", "groups", "tone", "invite", "done"];
+const STEPS: readonly string[] = ["brand", "connect", "done"];
+/** Steps saved by the longer setup this replaced; they all resume at the Google screen. */
+const LEGACY_STEPS: readonly string[] = ["import", "groups", "tone", "invite"];
 const VOICES: readonly ToneVoice[] = ["warm", "professional", "brief"];
 const GROUPINGS: readonly GroupingMode[] = ["state_city", "city", "account", "none", "csv"];
 
@@ -122,6 +124,7 @@ function schemaError(): AppError {
 
 function asStep(value: string | null | undefined): OnboardingStep | "done" {
   if (value && STEPS.includes(value)) return value as OnboardingStep | "done";
+  if (value && LEGACY_STEPS.includes(value)) return "connect";
   return "brand";
 }
 

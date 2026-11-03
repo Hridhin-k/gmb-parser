@@ -81,7 +81,7 @@ export async function GET(request: NextRequest) {
     }
     if (setup) {
       try {
-        await saveOnboardingStep(workspaceId, userId, "import");
+        await saveOnboardingStep(workspaceId, userId, "connect");
       } catch (stepError) {
         logger.error("google.oauth.onboarding_step_failed", {
           message: stepError instanceof Error ? stepError.message : "Unknown",

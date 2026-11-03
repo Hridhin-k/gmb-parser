@@ -1,4 +1,5 @@
-export const ONBOARDING_STEPS = ["brand", "connect", "import", "groups", "tone", "invite"] as const;
+/** Setup is two screens (brand, then Google locations) and a finish screen. */
+export const ONBOARDING_STEPS = ["brand", "connect"] as const;
 export type OnboardingStep = (typeof ONBOARDING_STEPS)[number];
 
 export const GROUPING_MODES = ["state_city", "city", "account", "none", "csv"] as const;
@@ -378,27 +379,6 @@ export function shouldEnterWizard(input: {
   locations: number;
 }): boolean {
   return !input.completed && input.connections === 0 && input.locations === 0;
-}
-
-export function stepUnlocked(
-  step: OnboardingStep,
-  view: {
-    step: OnboardingStep | "done";
-    connections: number;
-    locations: number;
-    grouping: GroupingMode | null;
-    toneVoice: ToneVoice | null;
-  }
-): boolean {
-  const saved = view.step === "done" ? ONBOARDING_STEPS.length : ONBOARDING_STEPS.indexOf(view.step);
-  const target = ONBOARDING_STEPS.indexOf(step);
-  if (target <= saved) return true;
-  if (step === "connect") return true;
-  if (step === "import") return view.connections > 0;
-  if (step === "groups") return view.locations > 0;
-  if (step === "tone") return view.grouping != null;
-  if (step === "invite") return view.toneVoice != null;
-  return false;
 }
 
 export function googleConnectError(code: string | null | undefined): string | null {

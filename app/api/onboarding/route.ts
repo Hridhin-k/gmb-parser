@@ -33,7 +33,7 @@ const bodySchema = z.discriminatedUnion("action", [
   z.object({ action: z.literal("demo-import") }),
   z.object({
     action: z.literal("progress"),
-    step: z.enum(["brand", "connect", "import", "groups", "tone", "invite"]),
+    step: z.enum(["brand", "connect"]),
   }),
   z.object({
     action: z.literal("grouping"),

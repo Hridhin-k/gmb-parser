@@ -9,7 +9,6 @@ export interface OnboardingWizardLoaderProps {
   requestedStep: string | null;
   notice: string | null;
   connected: boolean;
-  canInviteAdmin: boolean;
 }
 
 // Code splitting only works from a Client Component (dynamic imports from a
