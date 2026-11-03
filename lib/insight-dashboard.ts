@@ -153,3 +153,22 @@ export function emptyInsightDashboard(): InsightDashboardData {
     severeIncidents: [],
   });
 }
+
+const GENERIC_STAFF = new Set([
+  "team", "the team", "staff", "the staff", "staff member", "staff members", "employee", "employees", "manager",
+  "the manager", "owner", "the owner", "cashier", "everyone", "people", "crew", "worker", "workers", "assistant",
+]);
+
+/** Staff customers named, without words like "team" or "staff" that name nobody. Most mentioned first. */
+export function namedStaff(people: Array<{ name: string; count: number }>, limit = 8): Array<{ name: string; count: number }> {
+  return people
+    .filter((person) => !GENERIC_STAFF.has(person.name.trim().toLowerCase()))
+    .sort((a, b) => b.count - a.count || a.name.localeCompare(b.name))
+    .slice(0, limit);
+}
+
+/** Short name for a teammate: the part of their email before the @. */
+export function memberName(email: string): string {
+  const local = email.split("@")[0] ?? email;
+  return local.charAt(0).toUpperCase() + local.slice(1);
+}

@@ -10,7 +10,7 @@ import type { AlertEventRow, AlertRuleRow, ReportRunRow, SavedReport } from "@/l
 import { ConfirmDialog } from "@/components/confirm-dialog";
 import { EmptyState } from "@/components/empty-state";
 import { NoData, Panel } from "@/components/analytics-panel";
-import { PageHeader, PageTabs } from "@/components/page-header";
+import { PageTabs } from "@/components/page-header";
 import { Badge } from "@/components/ui/badge";
 import { Banner } from "@/components/ui/banner";
 import { Button, buttonVariants } from "@/components/ui/button";
@@ -195,13 +195,14 @@ export function ReportsBoard(props: ReportsBoardProps) {
   const failureCount = failedRuns.length + failedEvents.length;
   const newestFailure = failedRuns[0] ?? null;
 
+  // The board lives on Insights → Reports and alerts; its own sections use `view`.
   const tabHref = (id: ReportsTab) => {
     const params = new URLSearchParams(props.query ?? "");
     params.delete("edit");
-    if (id === "reports") params.delete("tab");
-    else params.set("tab", id);
-    const text = params.toString();
-    return text ? `/reports?${text}` : "/reports";
+    params.set("tab", "reports");
+    if (id === "reports") params.delete("view");
+    else params.set("view", id);
+    return `/insights?${params.toString()}`;
   };
 
   const editingReport = drawer?.kind === "report" && drawer.id ? props.reports.find((item) => item.id === drawer.id) ?? null : null;
@@ -210,37 +211,37 @@ export function ReportsBoard(props: ReportsBoardProps) {
 
   return (
     <div className="flex flex-col gap-4">
-      <PageHeader
-        title="Reports & alerts"
-        description={
-          props.description ??
-          "Scheduled summaries and rule-based alerts. Email, Slack and WhatsApp send only when that provider is configured."
-        }
-      >
-        <Button
-          variant="outline"
-          disabled={!props.canManage}
-          title={manageHint}
-          onClick={() => {
-            setAlertError(null);
-            setDrawer({ kind: "alert", id: null });
-          }}
-        >
-          <Bell aria-hidden />
-          New alert rule
-        </Button>
-        <Button
-          disabled={!props.canManage}
-          title={manageHint}
-          onClick={() => {
-            setReportError(null);
-            setDrawer({ kind: "report", id: null });
-          }}
-        >
-          <Plus aria-hidden />
-          New report
-        </Button>
-      </PageHeader>
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <p className="max-w-2xl text-[13px] text-ink-3">
+          {props.description ??
+            "Scheduled summaries and rule-based alerts. Email, Slack and WhatsApp send only when that provider is configured."}
+        </p>
+        <div className="flex flex-wrap items-center gap-2">
+          <Button
+            variant="outline"
+            disabled={!props.canManage}
+            title={manageHint}
+            onClick={() => {
+              setAlertError(null);
+              setDrawer({ kind: "alert", id: null });
+            }}
+          >
+            <Bell aria-hidden />
+            New alert rule
+          </Button>
+          <Button
+            disabled={!props.canManage}
+            title={manageHint}
+            onClick={() => {
+              setReportError(null);
+              setDrawer({ kind: "report", id: null });
+            }}
+          >
+            <Plus aria-hidden />
+            New report
+          </Button>
+        </div>
+      </div>
 
       <PageTabs
         tabs={[

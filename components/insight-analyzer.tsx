@@ -39,7 +39,8 @@ interface InsightAnalyzerProps {
   pendingCount: number;
 }
 
-export function InsightAnalyzer({ scopeParams, initialRun, pendingCount }: InsightAnalyzerProps) {
+/** Starts an analysis run for the scope and polls it until it finishes. */
+function useAnalysisRun({ scopeParams, initialRun, pendingCount }: InsightAnalyzerProps) {
   const router = useRouter();
   const [run, setRun] = useState<AnalysisRunStatus | null>(initialRun);
   const [starting, setStarting] = useState(false);
@@ -117,6 +118,12 @@ export function InsightAnalyzer({ scopeParams, initialRun, pendingCount }: Insig
     }
   }
 
+  return { run, starting, message, stale, running, start };
+}
+
+export function InsightAnalyzer(props: InsightAnalyzerProps) {
+  const { pendingCount } = props;
+  const { run, starting, message, stale, running, start } = useAnalysisRun(props);
   const tokens = run ? run.inputTokens + run.outputTokens : 0;
   const progress =
     run && run.batchesTotal > 0 ? Math.min(100, Math.round((run.batchesCompleted / run.batchesTotal) * 100)) : null;
@@ -242,5 +249,38 @@ function RunStat({ label, value, tone }: { label: string; value: number; tone?: 
       <dt>{label}</dt>
       <dd className={`text-[13px] font-semibold tabular-nums ${tone === "bad" ? "text-bad" : "text-ink"}`}>{value.toLocaleString()}</dd>
     </div>
+  );
+}
+
+/**
+ * The header's "Read them now": the same run as the panel, as one link-sized
+ * button with its progress beside it. Hidden when nothing is waiting.
+ */
+export function InsightReadNow(props: InsightAnalyzerProps) {
+  const { run, starting, message, stale, running, start } = useAnalysisRun(props);
+  const progress =
+    run && running && run.batchesTotal > 0 ? `${run.batchesCompleted} of ${run.batchesTotal} batches` : null;
+  if (props.pendingCount === 0 && !running && !stale && !message) return null;
+  return (
+    <span className="inline-flex flex-wrap items-center gap-1.5" aria-live="polite">
+      {running || starting ? (
+        <span className="inline-flex items-center gap-1.5 text-ink-2">
+          <Spinner size="xs" />
+          {starting ? "Starting…" : `Reading reviews${progress ? ` · ${progress}` : "…"}`}
+        </span>
+      ) : (
+        <button
+          type="button"
+          onClick={start}
+          className="inline-flex min-h-8 items-center rounded-md px-1 font-semibold text-brand hover:text-brand-hover focus-visible:outline-2 focus-visible:outline-brand"
+          title={`Uses AI on the ${props.pendingCount.toLocaleString()} unread review${props.pendingCount === 1 ? "" : "s"} only; reviews already read are reused.`}
+        >
+          {stale ? "Restart reading" : "Read them now"}
+        </button>
+      )}
+      {message ? <span className="text-bad">{message}</span> : null}
+      {run && !running && run.status === "partial" ? <span className="text-warn">Some reviews could not be read. Try again.</span> : null}
+      {run && !running && run.status === "failed" ? <span className="text-bad">Reading failed. Try again.</span> : null}
+    </span>
   );
 }
