@@ -886,9 +886,30 @@ export class EscalationService {
     };
   }
 
+  /** Open follow-ups for a page of reviews, keyed by review id. Used to mark "Call back" rows in the inbox. */
+  static async openForReviews(
+    workspaceId: string,
+    reviewIds: string[]
+  ): Promise<Record<string, { id: string; dueAt: string }>> {
+    if (reviewIds.length === 0) return {};
+    const admin = createAdminClient();
+    const { data, error } = await admin
+      .from("grm_escalations")
+      .select("id, review_id, due_at")
+      .eq("workspace_id", workspaceId)
+      .in("review_id", reviewIds)
+      .neq("status", "resolved");
+    if (error) {
+      logger.warn("escalations.open_for_reviews_failed", { workspaceId, message: error.message });
+      return {};
+    }
+    return Object.fromEntries((data ?? []).map((row) => [row.review_id, { id: row.id, dueAt: row.due_at }]));
+  }
+
   static async queue(input: {
     workspaceId: string;
-    bucket: "needs_human" | "in_progress" | "past_sla" | "resolved";
+    /** `open` is every case not yet resolved, overdue or not. */
+    bucket: "needs_human" | "in_progress" | "past_sla" | "resolved" | "open";
     clientId: string | null;
     locationId: string | null;
     groupId: string | null;
@@ -969,6 +990,7 @@ export class EscalationService {
       .eq("workspace_id", input.workspaceId);
 
     if (input.bucket === "resolved") query = query.eq("status", "resolved");
+    else if (input.bucket === "open") query = query.neq("status", "resolved");
     else if (input.bucket === "past_sla") query = query.neq("status", "resolved").lt("due_at", now);
     else if (input.bucket === "in_progress") {
       query = query.eq("status", "in_progress").gte("due_at", now);

@@ -18,11 +18,12 @@ export interface BulkJobOutcome {
 /**
  * Polls a queued bulk generate/publish job until it finishes.
  * Resolves with the final outcome (including per-item results), or the last
- * seen state if the wait budget runs out.
+ * seen state if the wait budget runs out. `onProgress` sees every poll while
+ * the job runs, with the items finished so far.
  */
 export async function pollBulkJob(
   jobId: string,
-  options: { attempts?: number; intervalMs?: number } = {}
+  options: { attempts?: number; intervalMs?: number; onProgress?: (outcome: BulkJobOutcome) => void } = {}
 ): Promise<BulkJobOutcome> {
   const attempts = options.attempts ?? 160;
   const intervalMs = options.intervalMs ?? 1500;
@@ -34,6 +35,7 @@ export async function pollBulkJob(
       if (!response.ok) continue;
       last = (await response.json()) as BulkJobOutcome;
       if (last.status === "done" || last.status === "failed") return last;
+      options.onProgress?.(last);
     } catch {
       // Keep polling; a transient network error should not lose the job state.
     }

@@ -4,12 +4,10 @@ import { useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
-import { ExternalLink, Sparkles } from "lucide-react";
-import { PageHeader } from "@/components/page-header";
-import { StarRating } from "@/components/star-rating";
+import { Sparkles } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Banner } from "@/components/ui/banner";
-import { Button, buttonVariants } from "@/components/ui/button";
+import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import { SelectField } from "@/components/ui/select-field";
@@ -19,8 +17,6 @@ import {
   ESCALATION_LEVELS,
   FOLLOW_UP_OUTCOMES,
   escalationEventLabel,
-  escalationStatusLabel,
-  ticketKey,
 } from "@/lib/escalations";
 import {
   insertResolutionContact,
@@ -43,7 +39,6 @@ type TicketItem = EscalationQueueItem & { remaining: string | null; overdue: str
 
 const CARD = "rounded-lg border border-line bg-white";
 const CARD_HEAD = "flex flex-wrap items-center justify-between gap-2 border-b border-line px-4 py-3";
-const DT = "text-xs text-ink-3";
 
 const REPLY_STATUS: Record<string, { label: string; variant: "default" | "brand" | "info" | "ok" | "bad" }> = {
   none: { label: "No reply yet", variant: "default" },
@@ -57,17 +52,6 @@ const REPLY_STATUS: Record<string, { label: string; variant: "default" | "brand"
 function replyBadge(status: string) {
   const meta = REPLY_STATUS[status] ?? { label: status, variant: "default" as const };
   return <Badge variant={meta.variant}>{meta.label}</Badge>;
-}
-
-function levelLabel(level: string): string {
-  return ESCALATION_LEVELS.find((item) => item.id === level)?.label ?? level;
-}
-
-function SlaBadge({ item }: { item: TicketItem }) {
-  if (item.status === "resolved") return <Badge variant="ok">Done</Badge>;
-  if (item.overdue) return <Badge variant="bad">Overdue {item.overdue}</Badge>;
-  if (item.remaining) return <Badge variant="default">Due in {item.remaining}</Badge>;
-  return null;
 }
 
 const EVENT_DOT: Record<string, string> = {
@@ -109,7 +93,6 @@ export function EscalationTicket({
     return members.find((member) => member.userId === userId)?.email ?? "a former member";
   };
   const open = item.status !== "resolved";
-  const key = ticketKey(item.ticketNo);
   const events = showSystem ? item.events : item.events.filter((event) => event.action === "comment");
   const resolution = FOLLOW_UP_OUTCOMES.find((action) => action.id === item.resolutionCode);
 
@@ -136,301 +119,193 @@ export function EscalationTicket({
     return true;
   }
 
-  const location = [item.locationName, item.groupName, item.clientName].filter(Boolean).join(" · ");
-
   return (
     <div className="space-y-4">
-      <PageHeader
-        breadcrumbs={[{ label: "Follow-ups", href: "/escalations" }, { label: key }]}
-        eyebrow={
-          <>
-            {item.level !== "store" ? (
-              <Badge variant={item.level === "leadership" ? "bad" : "warn"}>{levelLabel(item.level)} team</Badge>
-            ) : null}
-            <SlaBadge item={item} />
-            <Badge variant={item.status === "resolved" ? "ok" : item.status === "in_progress" ? "info" : "default"}>
-              {escalationStatusLabel(item.status)}
-            </Badge>
-          </>
-        }
-        title={`${key} · ${item.reviewerName} · ${item.starRating}★`}
-        description={
-          <>
-            {location}
-            {themeLabel(item.theme) ? ` · ${themeLabel(item.theme)}` : ""} · opened{" "}
-            {new Date(item.openedAt).toLocaleString("en-US", { dateStyle: "medium", timeStyle: "short" })}
-          </>
-        }
-      >
-        <Link
-          href={`/reviews?q=${encodeURIComponent(item.reviewerName)}`}
-          className={buttonVariants({ variant: "outline" })}
-        >
-          Open in reviews
-        </Link>
-        {item.status === "needs_human" ? (
-          <Button type="button" loading={pending} onClick={() => void send({ action: "start" })}>
-            Start follow-up
-          </Button>
-        ) : open ? (
-          <a href="#resolve" className={buttonVariants()}>
-            Mark as done
-          </a>
-        ) : null}
-      </PageHeader>
-
       {error ? (
         <Banner tone="bad" title="Not saved.">
           {error}
         </Banner>
       ) : null}
-
-      <div className="grid items-start gap-4 lg:grid-cols-[minmax(0,1fr)_340px]">
-        <div className="min-w-0 space-y-4">
-          <section className={CARD}>
-            <div className={CARD_HEAD}>
-              <h2 className="text-sm font-semibold text-ink">The review</h2>
-              <Link
-                href={`/reviews?q=${encodeURIComponent(item.reviewerName)}`}
-                className="inline-flex items-center gap-1 text-xs text-brand hover:underline"
-              >
-                Open in reviews <ExternalLink className="size-3" aria-hidden />
-              </Link>
-            </div>
-            <div className="space-y-3 p-4">
-              <div className="rounded-r-md border-l-[3px] border-star bg-paper px-3 py-2.5">
-                <div className="mb-1.5 flex flex-wrap items-center gap-2 text-xs text-ink-3">
-                  <StarRating rating={item.starRating} />
-                  <span className="font-semibold text-ink">{item.reviewerName}</span>
-                  <span>· {item.locationName}</span>
-                </div>
-                {item.comment ? (
-                  <p className="whitespace-pre-wrap break-words text-sm leading-relaxed text-ink">{item.comment}</p>
-                ) : (
-                  <p className="text-sm text-ink-3">Rating only. No written comment.</p>
-                )}
-              </div>
-              <div className="flex flex-wrap items-center gap-1.5 text-xs text-ink-3">
-                <span>Triggered by</span>
-                {item.triggerReasons.map((reason) => (
-                  <Badge key={reason} variant="outline">
-                    {reason === "recorded" ? "already open" : reason.replace(/_/g, " ")}
-                  </Badge>
-                ))}
-                <span>· After replying and helping the customer, mark this follow-up done.</span>
-              </div>
-            </div>
-          </section>
-
-          <section className={CARD}>
-            <ResolutionReply
-              reviewId={item.reviewId}
-              replyId={item.replyId}
-              replyStatus={item.replyStatus}
-              initialContent={item.replyContent}
-              contact={contact}
-              aiOnly={aiOnly}
-            />
-          </section>
-
-          <section className={CARD}>
-            <div className={CARD_HEAD}>
-              <h2 className="text-sm font-semibold text-ink">Timeline and discussion</h2>
-              <label className="flex items-center gap-2 text-xs text-ink-3">
-                <Checkbox checked={showSystem} onCheckedChange={(checked) => setShowSystem(checked === true)} />
-                Show system events
-              </label>
-            </div>
-            <div className="px-4 py-4">
-              {events.length === 0 ? (
-                <p className="text-[13px] text-ink-3">
-                  {item.events.length === 0 ? "No comments or status changes yet." : "No comments yet."}
-                </p>
-              ) : (
-                <ol className="relative space-y-3 before:absolute before:bottom-1 before:left-[5px] before:top-1 before:w-px before:bg-line">
-                  {events.map((event, index) => {
-                    const when = new Date(event.createdAt).toLocaleString("en-US", {
-                      dateStyle: "medium",
-                      timeStyle: "short",
-                    });
-                    const isComment = event.action === "comment" && event.body;
-                    return (
-                      <li key={`${event.createdAt}-${index}`} className="relative flex gap-3 pl-0">
-                        <span
-                          aria-hidden
-                          className={cn(
-                            "relative z-[1] mt-1.5 size-[11px] shrink-0 rounded-full border-2 border-white",
-                            isComment ? "bg-ink-3" : (EVENT_DOT[event.action] ?? "bg-line-2")
-                          )}
-                        />
-                        {isComment ? (
-                          <div className="min-w-0 flex-1 rounded-md border border-line bg-white px-3 py-2">
-                            <div className="mb-1 flex flex-wrap items-center justify-between gap-2 text-xs">
-                              <span className="font-semibold text-ink">{name(event.actorId ?? null)}</span>
-                              <span className="text-ink-3">{when}</span>
-                            </div>
-                            <p className="whitespace-pre-wrap break-words text-[13px] text-ink-2">{event.body}</p>
-                          </div>
-                        ) : (
-                          <p className="min-w-0 flex-1 text-[13px] text-ink-2">
-                            {escalationEventLabel(event.action, event.metadata as Record<string, unknown>, name)}{" "}
-                            <span className="text-xs text-ink-3">
-                              · {name(event.actorId ?? null) === "nobody" ? "System" : name(event.actorId ?? null)} · {when}
-                            </span>
-                          </p>
-                        )}
-                      </li>
-                    );
-                  })}
-                </ol>
-              )}
-            </div>
-            <form
-              className="space-y-2 border-t border-line px-4 py-3"
-              onSubmit={(event) => {
-                event.preventDefault();
-                if (!comment.trim()) return;
-                void send({ action: "comment", body: comment.trim() }).then((ok) => {
-                  if (ok) setComment("");
-                });
-              }}
-            >
-              <label htmlFor="case-comment" className="sr-only">
-                Internal comment
-              </label>
-              <Textarea
-                id="case-comment"
-                value={comment}
-                onChange={(event) => setComment(event.target.value)}
-                maxLength={2000}
-                rows={3}
-                disabled={pending}
-                placeholder="Add an internal comment…"
-                className="resize-y"
-              />
-              <div className="flex flex-wrap items-center justify-between gap-2">
-                <span className="text-xs text-ink-3">Internal only. Comments stay in GRM and are not posted to Google.</span>
-                <Button type="submit" size="sm" loading={pending} disabled={!comment.trim()}>
-                  Comment
-                </Button>
-              </div>
-            </form>
-          </section>
+      {item.status === "needs_human" ? (
+        <div className="flex flex-wrap items-center gap-2 text-xs text-ink-3">
+          <span>Nobody has started this follow-up yet.</span>
+          <Button type="button" size="sm" variant="outline" loading={pending} onClick={() => void send({ action: "start" })}>
+            Start follow-up
+          </Button>
         </div>
+      ) : null}
+      {item.triggerReasons.length > 0 ? (
+        <div className="flex flex-wrap items-center gap-1.5 text-xs text-ink-3">
+          <span>Triggered by</span>
+          {item.triggerReasons.map((reason) => (
+            <Badge key={reason} variant="outline">
+              {reason === "recorded" ? "already open" : reason.replace(/_/g, " ")}
+            </Badge>
+          ))}
+          {themeLabel(item.theme) ? <span>· {themeLabel(item.theme)}</span> : null}
+        </div>
+      ) : null}
+      <section className={CARD}>
+        <ResolutionReply
+          reviewId={item.reviewId}
+          replyId={item.replyId}
+          replyStatus={item.replyStatus}
+          initialContent={item.replyContent}
+          contact={contact}
+          aiOnly={aiOnly}
+        />
+      </section>
 
-        <aside className="space-y-4">
-          <section className={cn(CARD, "space-y-3 p-4")}>
-            <h2 className="text-sm font-semibold text-ink">This follow-up</h2>
-            <dl className="space-y-3 text-[13px]">
-              <div className="flex items-start justify-between gap-3">
-                <dt className={DT}>Status</dt>
-                <dd>
-                  <Badge variant={item.status === "resolved" ? "ok" : item.status === "in_progress" ? "info" : "default"}>
-                    {escalationStatusLabel(item.status)}
-                  </Badge>
-                </dd>
-              </div>
-              <div className="flex items-start justify-between gap-3">
-                <dt className={DT}>Who’s handling it</dt>
-                <dd className={cn("min-w-0 truncate text-right", item.assignedTo ? "text-ink" : "text-warn")}>
-                  {item.assignedTo ? name(item.assignedTo) : "Unassigned"}
-                </dd>
-              </div>
-              <div className="flex items-start justify-between gap-3">
-                <dt className={DT}>Deadline</dt>
-                <dd className="text-right">
-                  <SlaBadge item={item} />
-                  <span className="mt-1 block text-xs text-ink-3">Due {item.dueLabel}</span>
-                </dd>
-              </div>
-              <div className="flex items-start justify-between gap-3">
-                <dt className={DT}>Public reply</dt>
-                <dd>{replyBadge(item.replyStatus)}</dd>
-              </div>
-            </dl>
-            {item.status === "needs_human" ? (
-              <Button
-                type="button"
-                variant="outline"
-                className="w-full"
-                loading={pending}
-                onClick={() => void send({ action: "start" })}
-              >
-                Start follow-up
-              </Button>
-            ) : null}
-          </section>
-
-          {open ? (
-            <details className={cn(CARD, "space-y-3 p-4")}>
-              <summary className="cursor-pointer text-sm font-medium text-ink">Team: change who handles this</summary>
-              {canManage ? (
-                <div className="flex flex-col gap-1 text-xs font-medium text-ink-2">
-                  <span aria-hidden>Level</span>
-                  <SelectField
-                    label="Level"
-                    value={item.level}
-                    disabled={pending}
-                    onValueChange={(level) => {
-                      if (level !== item.level) void send({ action: "level", level });
-                    }}
-                    options={ESCALATION_LEVELS.map((level) => ({ value: level.id, label: level.label }))}
-                  />
-                </div>
-              ) : (
-                <p className="text-xs text-ink-3">Changing the level needs approval permission for 1–3 star reviews.</p>
-              )}
-              {canReassign ? (
-                <AssignBox
-                  members={members.filter((member) => assignees.includes(member.userId))}
-                  assignedTo={item.assignedTo}
-                  disabled={pending}
-                  onAssign={(userId, reason) =>
-                    void send({ action: "assign", userId, reason, expectedUpdatedAt: item.updatedAt })
-                  }
-                />
-              ) : (
-                <p className="text-xs text-ink-3">Your role cannot reassign cases. Ask a manager to change the owner.</p>
-              )}
-            </details>
-          ) : null}
-
-          {open ? (
-            <section id="resolve" className={cn(CARD, "scroll-mt-24 space-y-3 border-ok-line p-4")}>
-              <h2 className="text-sm font-semibold text-ink">All taken care of?</h2>
-              <ResolveBox disabled={pending} onResolve={(code, note) => void send({ action: "resolve", code, note })} />
-            </section>
+      <section className={CARD}>
+        <div className={CARD_HEAD}>
+          <h2 className="text-sm font-semibold text-ink">Timeline and discussion</h2>
+          <label className="flex items-center gap-2 text-xs text-ink-3">
+            <Checkbox checked={showSystem} onCheckedChange={(checked) => setShowSystem(checked === true)} />
+            Show system events
+          </label>
+        </div>
+        <div className="px-4 py-4">
+          {events.length === 0 ? (
+            <p className="text-[13px] text-ink-3">
+              {item.events.length === 0 ? "No comments or status changes yet." : "No comments yet."}
+            </p>
           ) : (
-            <section className={cn(CARD, "space-y-2 border-ok-line bg-[#f8fcf9] p-4")}>
-              <div className="flex items-center justify-between gap-2">
-                <h2 className="text-sm font-semibold text-ink">Resolution</h2>
-                <Badge variant="ok">Done</Badge>
-              </div>
-              {resolution ? <p className="text-[13px] font-medium text-ink">{resolution.label}</p> : null}
-              <p className="text-[13px] text-ink-2">
-                {resolution?.detail ?? "Resolved with a recorded next step."}
-              </p>
-              {item.resolutionNote ? (
-                <p className="whitespace-pre-wrap break-words rounded-md bg-white px-3 py-2 text-[13px] text-ink-2">
-                  {item.resolutionNote}
-                </p>
-              ) : null}
-              {item.resolvedAt ? (
-                <p className="text-xs text-ink-3">
-                  Resolved {new Date(item.resolvedAt).toLocaleString("en-US", { dateStyle: "medium", timeStyle: "short" })}
-                </p>
-              ) : null}
-              <p className="text-xs text-ink-3">
-                There is no manual reopen yet. The case reopens on its own if the reviewer changes the review.
-              </p>
-            </section>
+            <ol className="relative space-y-3 before:absolute before:bottom-1 before:left-[5px] before:top-1 before:w-px before:bg-line">
+              {events.map((event, index) => {
+                const when = new Date(event.createdAt).toLocaleString("en-US", {
+                  dateStyle: "medium",
+                  timeStyle: "short",
+                });
+                const isComment = event.action === "comment" && event.body;
+                return (
+                  <li key={`${event.createdAt}-${index}`} className="relative flex gap-3 pl-0">
+                    <span
+                      aria-hidden
+                      className={cn(
+                        "relative z-[1] mt-1.5 size-[11px] shrink-0 rounded-full border-2 border-white",
+                        isComment ? "bg-ink-3" : (EVENT_DOT[event.action] ?? "bg-line-2")
+                      )}
+                    />
+                    {isComment ? (
+                      <div className="min-w-0 flex-1 rounded-md border border-line bg-white px-3 py-2">
+                        <div className="mb-1 flex flex-wrap items-center justify-between gap-2 text-xs">
+                          <span className="font-semibold text-ink">{name(event.actorId ?? null)}</span>
+                          <span className="text-ink-3">{when}</span>
+                        </div>
+                        <p className="whitespace-pre-wrap break-words text-[13px] text-ink-2">{event.body}</p>
+                      </div>
+                    ) : (
+                      <p className="min-w-0 flex-1 text-[13px] text-ink-2">
+                        {escalationEventLabel(event.action, event.metadata as Record<string, unknown>, name)}{" "}
+                        <span className="text-xs text-ink-3">
+                          · {name(event.actorId ?? null) === "nobody" ? "System" : name(event.actorId ?? null)} · {when}
+                        </span>
+                      </p>
+                    )}
+                  </li>
+                );
+              })}
+            </ol>
           )}
-        </aside>
-      </div>
+        </div>
+        <form
+          className="space-y-2 border-t border-line px-4 py-3"
+          onSubmit={(event) => {
+            event.preventDefault();
+            if (!comment.trim()) return;
+            void send({ action: "comment", body: comment.trim() }).then((ok) => {
+              if (ok) setComment("");
+            });
+          }}
+        >
+          <label htmlFor="case-comment" className="sr-only">
+            Internal comment
+          </label>
+          <Textarea
+            id="case-comment"
+            value={comment}
+            onChange={(event) => setComment(event.target.value)}
+            maxLength={2000}
+            rows={3}
+            disabled={pending}
+            placeholder="Add an internal comment…"
+            className="resize-y"
+          />
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <span className="text-xs text-ink-3">Internal only. Comments stay in GRM and are not posted to Google.</span>
+            <Button type="submit" size="sm" loading={pending} disabled={!comment.trim()}>
+              Comment
+            </Button>
+          </div>
+        </form>
+      </section>
+      {open ? (
+        <details className={cn(CARD, "space-y-3 p-4")}>
+          <summary className="cursor-pointer text-sm font-medium text-ink">Team: change who handles this</summary>
+          {canManage ? (
+            <div className="flex flex-col gap-1 text-xs font-medium text-ink-2">
+              <span aria-hidden>Level</span>
+              <SelectField
+                label="Level"
+                value={item.level}
+                disabled={pending}
+                onValueChange={(level) => {
+                  if (level !== item.level) void send({ action: "level", level });
+                }}
+                options={ESCALATION_LEVELS.map((level) => ({ value: level.id, label: level.label }))}
+              />
+            </div>
+          ) : (
+            <p className="text-xs text-ink-3">Changing the level needs approval permission for 1–3 star reviews.</p>
+          )}
+          {canReassign ? (
+            <AssignBox
+              members={members.filter((member) => assignees.includes(member.userId))}
+              assignedTo={item.assignedTo}
+              disabled={pending}
+              onAssign={(userId, reason) =>
+                void send({ action: "assign", userId, reason, expectedUpdatedAt: item.updatedAt })
+              }
+            />
+          ) : (
+            <p className="text-xs text-ink-3">Your role cannot reassign cases. Ask a manager to change the owner.</p>
+          )}
+        </details>
+      ) : null}
+
+      {open ? (
+        <section id="resolve" className={cn(CARD, "scroll-mt-24 space-y-3 border-ok-line p-4")}>
+          <h2 className="text-sm font-semibold text-ink">All taken care of?</h2>
+          <ResolveBox disabled={pending} onResolve={(code, note) => void send({ action: "resolve", code, note })} />
+        </section>
+      ) : (
+        <section className={cn(CARD, "space-y-2 border-ok-line bg-[#f8fcf9] p-4")}>
+          <div className="flex items-center justify-between gap-2">
+            <h2 className="text-sm font-semibold text-ink">Resolution</h2>
+            <Badge variant="ok">Done</Badge>
+          </div>
+          {resolution ? <p className="text-[13px] font-medium text-ink">{resolution.label}</p> : null}
+          <p className="text-[13px] text-ink-2">
+            {resolution?.detail ?? "Resolved with a recorded next step."}
+          </p>
+          {item.resolutionNote ? (
+            <p className="whitespace-pre-wrap break-words rounded-md bg-white px-3 py-2 text-[13px] text-ink-2">
+              {item.resolutionNote}
+            </p>
+          ) : null}
+          {item.resolvedAt ? (
+            <p className="text-xs text-ink-3">
+              Resolved {new Date(item.resolvedAt).toLocaleString("en-US", { dateStyle: "medium", timeStyle: "short" })}
+            </p>
+          ) : null}
+          <p className="text-xs text-ink-3">
+            There is no manual reopen yet. The case reopens on its own if the reviewer changes the review.
+          </p>
+        </section>
+      )}
     </div>
   );
 }
-
 function AssignBox({
   members,
   assignedTo,
