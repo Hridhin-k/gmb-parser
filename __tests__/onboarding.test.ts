@@ -206,6 +206,13 @@ describe("setup progress and invites", () => {
     ).toBe(false);
   });
 
+  it("lets setup start at the brand step and skip it to connect Google", () => {
+    const fresh = { step: "brand" as const, connections: 0, locations: 0, grouping: null, toneVoice: null };
+    expect(stepUnlocked("brand", fresh)).toBe(true);
+    expect(stepUnlocked("connect", fresh)).toBe(true);
+    expect(stepUnlocked("import", fresh)).toBe(false);
+  });
+
   it("expires an invite after 14 days", () => {
     const start = Date.parse("2026-10-01T00:00:00.000Z");
     const expires = inviteExpiresAt(start);

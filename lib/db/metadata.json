@@ -2081,7 +2081,10 @@
         "tone_note": "text",
         "completed_at": "timestamptz",
         "created_at": "timestamptz",
-        "updated_at": "timestamptz"
+        "updated_at": "timestamptz",
+        "website": "text",
+        "brand_profile": "jsonb",
+        "brand_profile_source": "text"
       },
       "relations": [
         {

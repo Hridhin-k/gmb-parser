@@ -3,6 +3,8 @@ import { z } from "zod";
 import { getCurrentUser } from "@/lib/auth/server";
 import { AppError, toErrorCode, toStatusCode, toUserMessage } from "@/lib/errors";
 import { parseBody } from "@/lib/validation";
+import { checkRateLimit, SYNC_ALL_LIMIT } from "@/lib/rate-limit";
+import { applySetupBrandToClient } from "@/lib/services/brand-profile";
 import { ensurePersonalWorkspace } from "@/lib/services/workspace";
 import { bustCatalogCache } from "@/lib/services/catalog-tables";
 import { autoProvisionClientsFromLocations } from "@/lib/services/auto-provision-clients";
@@ -11,7 +13,9 @@ import {
   applyCsvGrouping,
   applyGrouping,
   completeOnboarding,
+  draftSetupBrand,
   restartOnboarding,
+  saveSetupBrand,
   createLocationGroup,
   mergeLocationGroups,
   moveLocationToGroup,
@@ -22,12 +26,14 @@ import {
   setLocationsImported,
 } from "@/lib/services/onboarding";
 
+export const maxDuration = 90;
+
 const bodySchema = z.discriminatedUnion("action", [
   z.object({ action: z.literal("demo-connect") }),
   z.object({ action: z.literal("demo-import") }),
   z.object({
     action: z.literal("progress"),
-    step: z.enum(["connect", "import", "groups", "tone", "invite"]),
+    step: z.enum(["brand", "connect", "import", "groups", "tone", "invite"]),
   }),
   z.object({
     action: z.literal("grouping"),
@@ -70,6 +76,21 @@ const bodySchema = z.discriminatedUnion("action", [
   }),
   z.object({ action: z.literal("complete") }),
   z.object({ action: z.literal("restart") }),
+  z.object({ action: z.literal("brand-draft"), website: z.string().min(1).max(2000) }),
+  z.object({
+    action: z.literal("brand-save"),
+    website: z.string().max(2000),
+    profile: z
+      .object({
+        summary: z.string().max(2000),
+        offerings: z.array(z.string().max(300)).max(40),
+        customerVocabulary: z.array(z.string().max(300)).max(40),
+        staffRoles: z.array(z.string().max(300)).max(40),
+        themeHints: z.array(z.string().max(300)).max(40),
+      })
+      .nullable(),
+    source: z.enum(["website", "manual"]),
+  }),
 ]);
 
 export async function POST(request: Request) {
@@ -164,6 +185,7 @@ export async function POST(request: Request) {
       if (importing && changed > 0) {
         await refreshLocationHolds(workspaceId);
         await autoProvisionClientsFromLocations(workspaceId, user.id);
+        await applySetupBrandToClient(workspaceId).catch(() => undefined);
       }
       bustCatalogCache();
       return NextResponse.json({ ok: true, changed });
@@ -177,6 +199,24 @@ export async function POST(request: Request) {
       });
       bustCatalogCache();
       return NextResponse.json({ ok: true });
+    }
+    if (body.action === "brand-draft") {
+      const rl = checkRateLimit(user.id, "brand.draft", SYNC_ALL_LIMIT);
+      if (!rl.allowed) {
+        return NextResponse.json({ error: "Too many requests. Wait a few minutes before reading another website." }, { status: 429 });
+      }
+      const result = await draftSetupBrand({ workspaceId, userId: user.id, website: body.website });
+      return NextResponse.json({ ok: true, ...result });
+    }
+    if (body.action === "brand-save") {
+      const profile = await saveSetupBrand({
+        workspaceId,
+        userId: user.id,
+        website: body.website,
+        profile: body.profile,
+        source: body.source,
+      });
+      return NextResponse.json({ ok: true, profile });
     }
     if (body.action === "restart") {
       await restartOnboarding(workspaceId, user.id);

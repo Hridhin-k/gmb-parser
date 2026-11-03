@@ -47,6 +47,7 @@ export function BrandProfileCard({ clientId, website, initial, source, canEdit }
   const router = useRouter();
   const [profile, setProfile] = useState<BrandProfile>(initial ?? EMPTY);
   const [drafted, setDrafted] = useState<string[] | null>(null);
+  const [version, setVersion] = useState(0);
   const [busy, setBusy] = useState<"draft" | "save" | null>(null);
   const [error, setError] = useState<string | null>(null);
 
@@ -57,6 +58,7 @@ export function BrandProfileCard({ clientId, website, initial, source, canEdit }
       const data = await call(clientId, { action: "draft" });
       setProfile(data.profile ?? EMPTY);
       setDrafted(data.pages ?? []);
+      setVersion((value) => value + 1);
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : "Could not build the profile.");
     } finally {
@@ -76,6 +78,7 @@ export function BrandProfileCard({ clientId, website, initial, source, canEdit }
       if (clear) {
         setProfile(EMPTY);
         setDrafted(null);
+        setVersion((value) => value + 1);
       }
       toast.success(clear ? "Brand profile cleared" : "Brand profile saved");
       setDrafted(null);
@@ -149,7 +152,7 @@ export function BrandProfileCard({ clientId, website, initial, source, canEdit }
             <span className="ml-2 text-xs text-ink-3">{list.hint}</span>
             <Textarea
               defaultValue={profile[list.key].join("\n")}
-              key={`${list.key}:${drafted ? "draft" : "saved"}:${profile[list.key].join("|")}`}
+              key={`${list.key}:${version}`}
               disabled={!canEdit}
               rows={3}
               onChange={(event) => setProfile({ ...profile, [list.key]: lines(event.target.value) })}

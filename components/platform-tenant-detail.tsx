@@ -213,8 +213,8 @@ export function TenantActionsCard({ tenantId, name, status }: { tenantId: string
       <div className="mt-3 flex flex-col gap-2 border-t border-line-2 pt-3 text-[13px]">
         <div className="flex flex-wrap items-center justify-between gap-2">
           <span className="text-ink-2">
-            Developer reset: permanently removes imported locations, their reviews, location groups and setup progress. Members,
-            businesses and the Google connection are kept.
+            Developer reset: permanently removes everything the tenant has set up: locations and their reviews, groups,
+            businesses and brand profiles, Google connections and setup progress. Only the tenant and its members are kept.
           </span>
           <Button type="button" variant="destructive" size="sm" onClick={() => { setTyped(""); setResetOpen(true); }}>Reset setup…</Button>
         </div>

@@ -1180,6 +1180,9 @@ export type Database = {
           completed_at: string | null
           created_at: string
           updated_at: string
+          website: string | null
+          brand_profile: Json | null
+          brand_profile_source: string | null
         }
         Insert: {
           workspace_id: string
@@ -1190,6 +1193,9 @@ export type Database = {
           completed_at?: string | null
           created_at?: string
           updated_at?: string
+          website?: string | null
+          brand_profile?: Json | null
+          brand_profile_source?: string | null
         }
         Update: {
           workspace_id?: string
@@ -1200,6 +1206,9 @@ export type Database = {
           completed_at?: string | null
           created_at?: string
           updated_at?: string
+          website?: string | null
+          brand_profile?: Json | null
+          brand_profile_source?: string | null
         }
         Relationships: [
           {

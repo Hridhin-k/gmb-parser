@@ -11,6 +11,7 @@ import {
 } from "@/lib/platform-admin";
 import { readDeliveryEnv } from "@/lib/reporting";
 import { AuditService } from "@/lib/services/audit";
+import { UNASSIGNED_CLIENT_MARKER } from "@/lib/services/unassigned-client";
 
 export function isSuperAdmin(user: { email?: string | null } | null | undefined): boolean {
   return isSuperAdminEmail(user?.email);
@@ -243,11 +244,12 @@ export async function actOnTenant(input: {
 }
 
 /**
- * Developer reset: puts a tenant back to a fresh start. Removes every imported
+ * Developer reset: puts a tenant back to a blank start. Removes every imported
  * location (and with them the reviews, replies, escalations and insights tied to
- * them), the location groups, and the setup progress. Members, businesses and
- * their brand profiles, and the Google connection are kept, so setup can be
- * run again straight away.
+ * them), the location groups, the businesses with their brand profiles, the
+ * Google connections and the setup progress. Only the tenant itself and its
+ * members are kept. The Google grant is not revoked at Google; the account can
+ * simply be connected again.
  */
 export async function resetTenantSetup(input: {
   actor: { id: string; email?: string | null };
@@ -272,6 +274,20 @@ export async function resetTenantSetup(input: {
     if (leaves.length === 0) break;
     const { error } = await admin.from("grm_location_groups").delete().in("id", leaves);
     if (error) throw new AppError("Could not reset that tenant.", "DB_ERROR", 500, { dbError: error.message });
+  }
+  const connections = await admin.from("grm_google_connections").delete().eq("workspace_id", input.workspaceId);
+  if (connections.error) {
+    throw new AppError("Could not reset that tenant.", "DB_ERROR", 500, { dbError: connections.error.message });
+  }
+  // The "unassigned" holding business is system-owned and stays. Filtered here
+  // because SQL `<>` would also skip businesses whose notes are empty.
+  const owned = await admin.from("grm_clients").select("id, notes").eq("workspace_id", input.workspaceId);
+  const businessIds = (owned.data ?? []).filter((client) => client.notes !== UNASSIGNED_CLIENT_MARKER).map((client) => client.id);
+  if (businessIds.length > 0) {
+    const businesses = await admin.from("grm_clients").delete().in("id", businessIds);
+    if (businesses.error) {
+      throw new AppError("Could not reset that tenant.", "DB_ERROR", 500, { dbError: businesses.error.message });
+    }
   }
   const { error } = await admin.from("grm_onboarding").delete().eq("workspace_id", input.workspaceId);
   if (error) throw new AppError("Could not reset that tenant.", "DB_ERROR", 500, { dbError: error.message });

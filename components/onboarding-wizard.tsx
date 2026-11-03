@@ -3,7 +3,7 @@
 import { useMemo, useState, type FormEvent, type ReactNode } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { Check, ChevronLeft, ExternalLink } from "lucide-react";
+import { Check, ChevronLeft, ExternalLink, Sparkles } from "lucide-react";
 import { ConfirmDialog } from "@/components/confirm-dialog";
 import { GoogleConnectionCard } from "@/components/google-connection-card";
 import { SyncLocationsButton } from "@/components/sync-locations-button";
@@ -22,8 +22,10 @@ import {
 import type { OnboardingView } from "@/lib/services/onboarding";
 import { roleName, roleSummary } from "@/lib/ui/vocabulary";
 import { cn } from "@/lib/utils";
+import type { BrandProfile } from "@/lib/brand-profile";
 
 const STEPS: { id: OnboardingStep; label: string; optional: boolean }[] = [
+  { id: "brand", label: "Your brand", optional: true },
   { id: "connect", label: "Connect Google", optional: false },
   { id: "import", label: "Import and check", optional: false },
   { id: "groups", label: "Organise", optional: true },
@@ -48,6 +50,7 @@ function isStep(value: string | null): value is OnboardingStep {
 }
 
 function stepComplete(id: OnboardingStep, data: OnboardingView): boolean {
+  if (id === "brand") return data.brandProfile != null;
   if (id === "connect") return data.connections.length > 0;
   if (id === "import") return data.locations.length > 0;
   if (id === "groups") return data.grouping != null;
@@ -101,7 +104,8 @@ export function OnboardingWizard({
       ? requestedStep
       : data.step === "done"
         ? "invite"
-        : data.step === "connect" ||
+        : data.step === "brand" ||
+            data.step === "connect" ||
             data.step === "import" ||
             data.step === "groups" ||
             data.step === "tone" ||
@@ -177,7 +181,7 @@ export function OnboardingWizard({
             loading={busy}
             onClick={async () => {
               await run({ action: "restart" });
-              router.push("/onboarding?step=connect");
+              router.push("/onboarding?step=brand");
             }}
           >
             Restart setup
@@ -215,15 +219,18 @@ export function OnboardingWizard({
 
       {showDone ? <CompleteStep data={data} /> : null}
 
+      {!showDone && step === "brand" ? <BrandStep data={data} busy={busy} onContinue={() => go("connect")} /> : null}
+
       {!showDone && step === "connect" ? (
         <StepFrame
-          index={0}
+          index={1}
           title={data.localDemo ? "Connect a demo account" : "Connect the Google account that manages your profiles"}
           description={data.localDemo
             ? "Start with a sample account. Your workspace stays empty until you import a location in the next step."
             : "Google asks you to pick the account and approve access. You stay signed in here as yourself."}
           footer={
             <StepFooter
+              back="brand"
               primary={
                 <Button type="button" disabled={data.connections.length === 0 || busy} onClick={() => go("import")}>
                   Continue to locations
@@ -541,7 +548,7 @@ function ImportStep({
   const count = data.locations.length;
   return (
     <StepFrame
-      index={1}
+      index={2}
       title={count ? `${count} ${count === 1 ? "location" : "locations"} imported` : "Import the locations this account manages"}
       description={data.localDemo
         ? "Import Willow & Oak — High Street and six sample reviews. Cases and escalations stay empty."
@@ -951,7 +958,7 @@ function GroupsStep({
 
   return (
     <StepFrame
-      index={2}
+      index={3}
       title={`Organise ${data.locations.length} ${data.locations.length === 1 ? "location" : "locations"} into groups`}
       description="Groups (regions, brands, franchisees) let managers see only their stores and let you scope any page in one click. Recommended for more than 20 locations."
       footer={
@@ -1311,7 +1318,7 @@ function ToneStep({
   const dirty = voice !== data.toneVoice || note !== data.toneNote;
   return (
     <StepFrame
-      index={3}
+      index={4}
       title="How should AI drafts sound?"
       description="Draft replies use this voice across the workspace. A location playbook still applies on top of it, and drafts are always reviewed by a person before publishing. Held profiles do not get drafts."
       footer={
@@ -1465,7 +1472,7 @@ function InviteStep({
 
   return (
     <StepFrame
-      index={4}
+      index={5}
       title="Invite the people who'll do the work"
       description="Invites cover the whole workspace. No email is sent; the person joins the next time they sign in with that Google address. Invites expire after 14 days."
       footer={
@@ -1661,5 +1668,170 @@ function CompleteStep({ data }: { data: OnboardingView }) {
         </AsideCard>
       </aside>
     </div>
+  );
+}
+
+/* ---------- Step 1: the business's website and brand ---------- */
+
+const EMPTY_BRAND: BrandProfile = { summary: "", offerings: [], customerVocabulary: [], staffRoles: [], themeHints: [] };
+
+const BRAND_LISTS: Array<{ key: Exclude<keyof BrandProfile, "summary">; label: string; hint: string }> = [
+  { key: "offerings", label: "What it offers", hint: "One per line" },
+  { key: "customerVocabulary", label: "Words customers use", hint: "Phrases likely to appear in reviews" },
+  { key: "staffRoles", label: "Staff roles", hint: "Job titles customers deal with" },
+  { key: "themeHints", label: "What customers care about", hint: "Hints, not a fixed list" },
+];
+
+const toLines = (value: string) =>
+  value
+    .split("\n")
+    .map((line) => line.trim())
+    .filter(Boolean);
+
+async function brandCall(body: object) {
+  const response = await fetch("/api/onboarding", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
+  const payload = (await response.json().catch(() => ({}))) as { error?: string; profile?: BrandProfile | null; pages?: string[] };
+  if (!response.ok) throw new Error(payload.error ?? "Something went wrong. Please try again.");
+  return payload;
+}
+
+function BrandStep({ data, busy, onContinue }: { data: OnboardingView; busy: boolean; onContinue: () => void }) {
+  const router = useRouter();
+  const [website, setWebsite] = useState(data.website);
+  const [profile, setProfile] = useState<BrandProfile>(data.brandProfile ?? EMPTY_BRAND);
+  const [drafted, setDrafted] = useState<string[] | null>(null);
+  const [version, setVersion] = useState(0);
+  const [work, setWork] = useState<"draft" | "save" | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const hasProfile = Boolean(profile.summary || BRAND_LISTS.some((list) => profile[list.key].length));
+
+  async function read() {
+    setWork("draft");
+    setError(null);
+    try {
+      const result = await brandCall({ action: "brand-draft", website });
+      setProfile(result.profile ?? EMPTY_BRAND);
+      setDrafted(result.pages ?? []);
+      setVersion((value) => value + 1);
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : "Could not read that website.");
+    } finally {
+      setWork(null);
+    }
+  }
+
+  async function saveAndContinue() {
+    setWork("save");
+    setError(null);
+    try {
+      await brandCall({
+        action: "brand-save",
+        website,
+        profile: hasProfile ? profile : null,
+        source: drafted ? "website" : data.brandSource ?? "manual",
+      });
+      router.refresh();
+      onContinue();
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : "Could not save the brand details.");
+    } finally {
+      setWork(null);
+    }
+  }
+
+  return (
+    <StepFrame
+      index={0}
+      title="Start with the business's website"
+      description="We read the website so reviews are understood in the business's own terms: what it sells, what customers call things, and what they care about. You can edit everything we find."
+      footer={
+        <StepFooter
+          skip={
+            <Button type="button" variant="ghost" disabled={busy || work !== null} onClick={onContinue}>
+              Skip for now
+            </Button>
+          }
+          primary={
+            <Button type="button" loading={work === "save"} disabled={busy || work !== null} onClick={() => void saveAndContinue()}>
+              Save and continue
+            </Button>
+          }
+          hint={!website.trim() && !hasProfile ? "Nothing to save yet. You can skip this." : undefined}
+        />
+      }
+      aside={
+        <>
+          <AsideCard title="What happens to the website">
+            <p>Only public pages are read (the home page and a few about or service pages). Nothing is posted anywhere.</p>
+            <p>The summary below goes into the review analysis, so the themes it finds fit this business.</p>
+          </AsideCard>
+          <AsideCard title="No website?">
+            <p>Skip this step, or write the summary by hand. Themes are still found from the reviews themselves.</p>
+          </AsideCard>
+        </>
+      }
+    >
+      <div className="space-y-4">
+        {error ? (
+          <Banner tone="bad" role="alert">
+            {error}
+          </Banner>
+        ) : null}
+        <div className="flex flex-col gap-2 sm:flex-row sm:items-end">
+          <label className="block flex-1 space-y-1 text-[13px]">
+            <span className="font-medium text-ink">Website</span>
+            <Input
+              value={website}
+              onChange={(event) => setWebsite(event.target.value)}
+              placeholder="https://example.com"
+              inputMode="url"
+              autoComplete="url"
+            />
+          </label>
+          <Button
+            type="button"
+            variant="ai"
+            loading={work === "draft"}
+            disabled={!website.trim() || busy || work !== null}
+            onClick={() => void read()}
+          >
+            <Sparkles aria-hidden />
+            {work === "draft" ? "Reading the website…" : hasProfile ? "Read again" : "Read the website"}
+          </Button>
+        </div>
+
+        {drafted ? (
+          <Banner tone="info" title="Draft ready. Check it, then save.">
+            Written from {drafted.length} page{drafted.length === 1 ? "" : "s"}. Edit anything that is wrong.
+          </Banner>
+        ) : null}
+
+        <label className="block space-y-1 text-[13px]">
+          <span className="font-medium text-ink">What the business is</span>
+          <Textarea
+            value={profile.summary}
+            rows={3}
+            maxLength={800}
+            onChange={(event) => setProfile({ ...profile, summary: event.target.value })}
+          />
+        </label>
+        {BRAND_LISTS.map((list) => (
+          <label key={list.key} className="block space-y-1 text-[13px]">
+            <span className="font-medium text-ink">{list.label}</span>
+            <span className="ml-2 text-xs text-ink-3">{list.hint}</span>
+            <Textarea
+              key={`${list.key}:${version}`}
+              defaultValue={profile[list.key].join("\n")}
+              rows={3}
+              onChange={(event) => setProfile({ ...profile, [list.key]: toLines(event.target.value) })}
+            />
+          </label>
+        ))}
+      </div>
+    </StepFrame>
   );
 }

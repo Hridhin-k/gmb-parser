@@ -8,6 +8,9 @@ import {
   ValidationError,
 } from "@/lib/errors";
 import { isManager } from "@/lib/shell";
+import { normalizeBrandProfile, normalizeWebsiteUrl, type BrandProfile } from "@/lib/brand-profile";
+import { applySetupBrandToClient, draftFromWebsite } from "@/lib/services/brand-profile";
+import type { Json } from "@/lib/types/database-schema";
 import { DEMO_EMAIL, isLocalDemoWorkspace } from "@/lib/services/local-demo";
 import {
   holdReasons,
@@ -21,7 +24,7 @@ import {
   type ToneVoice,
 } from "@/lib/onboarding";
 
-const STEPS: readonly string[] = ["connect", "import", "groups", "tone", "invite", "done"];
+const STEPS: readonly string[] = ["brand", "connect", "import", "groups", "tone", "invite", "done"];
 const VOICES: readonly ToneVoice[] = ["warm", "professional", "brief"];
 const GROUPINGS: readonly GroupingMode[] = ["state_city", "city", "account", "none", "csv"];
 
@@ -78,6 +81,9 @@ export interface OnboardingView {
   grouping: GroupingMode | null;
   toneVoice: ToneVoice | null;
   toneNote: string;
+  website: string;
+  brandProfile: BrandProfile | null;
+  brandSource: "website" | "manual" | null;
   connections: OnboardingConnection[];
   locations: OnboardingLocation[];
   available: AvailableLocation[];
@@ -116,7 +122,7 @@ function schemaError(): AppError {
 
 function asStep(value: string | null | undefined): OnboardingStep | "done" {
   if (value && STEPS.includes(value)) return value as OnboardingStep | "done";
-  return "connect";
+  return "brand";
 }
 
 function asGrouping(value: string | null | undefined): GroupingMode | null {
@@ -271,7 +277,7 @@ export async function getOnboardingView(workspaceId: string): Promise<Onboarding
   const admin = createAdminClient();
 
   const [progress, connections, locations, groups, accounts, clients, invites, staged] = await Promise.all([
-    admin.from("grm_onboarding").select("step, grouping, tone_voice, tone_note, completed_at").eq("workspace_id", workspaceId).maybeSingle(),
+    admin.from("grm_onboarding").select("step, grouping, tone_voice, tone_note, completed_at, website, brand_profile, brand_profile_source").eq("workspace_id", workspaceId).maybeSingle(),
     admin
       .from("grm_google_connections")
       .select("id, google_email, status, created_at, last_refreshed_at")
@@ -352,6 +358,12 @@ export async function getOnboardingView(workspaceId: string): Promise<Onboarding
     grouping: asGrouping(progress.data?.grouping),
     toneVoice: asVoice(progress.data?.tone_voice),
     toneNote: progress.data?.tone_note ?? "",
+    website: progress.data?.website ?? "",
+    brandProfile: normalizeBrandProfile(progress.data?.brand_profile),
+    brandSource:
+      progress.data?.brand_profile_source === "website" || progress.data?.brand_profile_source === "manual"
+        ? progress.data.brand_profile_source
+        : null,
     connections: (connections.data ?? []).filter((connection) =>
       connection.status !== "revoked" || (localDemo && connection.google_email === DEMO_EMAIL)
     ),
@@ -413,18 +425,62 @@ export async function setLocationsImported(input: {
   return (data ?? []).length;
 }
 
+/** Reads the website entered at the start of setup and returns a draft brand profile. Nothing is saved. */
+export async function draftSetupBrand(input: {
+  workspaceId: string;
+  userId: string;
+  website: string;
+}): Promise<{ profile: BrandProfile; pages: string[] }> {
+  await assertManager(input.userId, input.workspaceId);
+  const website = normalizeWebsiteUrl(input.website);
+  if (!website) throw new ValidationError("Enter the business's website, for example https://example.com.");
+  const { data } = await createAdminClient().from("grm_workspaces").select("name").eq("id", input.workspaceId).maybeSingle();
+  return draftFromWebsite({ workspaceId: input.workspaceId, businessName: data?.name ?? "This business", website });
+}
+
+/** Saves the website and the (edited) brand profile with the setup progress; a profile of null clears it. */
+export async function saveSetupBrand(input: {
+  workspaceId: string;
+  userId: string;
+  website: string;
+  profile: unknown;
+  source: "website" | "manual";
+}): Promise<BrandProfile | null> {
+  await assertManager(input.userId, input.workspaceId);
+  const raw = input.website.trim();
+  const website = raw ? normalizeWebsiteUrl(raw) : null;
+  if (raw && !website) throw new ValidationError("Enter a valid website address, for example https://example.com.");
+  const profile = normalizeBrandProfile(input.profile);
+  await ensureRow(input.workspaceId);
+  await touch(input.workspaceId, {
+    website: website ? website.toString() : null,
+    brand_profile: profile as unknown as Json | null,
+    brand_profile_source: profile ? input.source : null,
+  });
+  await applySetupBrandToClient(input.workspaceId);
+  await AuditService.log({
+    workspaceId: input.workspaceId,
+    userId: input.userId,
+    action: "onboarding.updated",
+    entityType: "grm_onboarding",
+    entityId: input.workspaceId,
+    metadata: { step: "brand", source: input.source, cleared: !profile },
+  });
+  return profile;
+}
+
 /** Sends setup back to the first step. Locations, groups and reviews are left as they are. */
 export async function restartOnboarding(workspaceId: string, userId: string): Promise<void> {
   await assertManager(userId, workspaceId);
   await ensureRow(workspaceId);
-  await touch(workspaceId, { step: "connect", completed_at: null });
+  await touch(workspaceId, { step: "brand", completed_at: null });
   await AuditService.log({
     workspaceId,
     userId,
     action: "onboarding.updated",
     entityType: "grm_onboarding",
     entityId: workspaceId,
-    metadata: { step: "connect", restarted: true },
+    metadata: { step: "brand", restarted: true },
   });
 }
 
@@ -436,6 +492,9 @@ async function touch(
     tone_voice?: ToneVoice | null;
     tone_note?: string | null;
     completed_at?: string | null;
+    website?: string | null;
+    brand_profile?: Json | null;
+    brand_profile_source?: string | null;
   }
 ): Promise<void> {
   const admin = createAdminClient();

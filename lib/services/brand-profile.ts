@@ -13,7 +13,7 @@ import {
   type SitePage,
 } from "@/lib/brand-profile";
 import { createAdminClient } from "@/lib/db/client";
-import type { Json } from "@/lib/types/database-schema";
+import type { Database, Json } from "@/lib/types/database-schema";
 import { getPool } from "@/lib/db/pool";
 import { AppError, AuthorizationError, ValidationError } from "@/lib/errors";
 import { logger } from "@/lib/logger";
@@ -128,12 +128,21 @@ export async function draftBrandProfile(input: {
   const website = client.website ? normalizeWebsiteUrl(client.website) : null;
   if (!website) throw new ValidationError("Save the business's website first, then build its profile.");
 
-  const pages = await fetchSitePages(website);
+  return draftFromWebsite({ workspaceId: input.workspaceId, businessName: client.brand_name || client.name, website });
+}
+
+/** Reads a public website and has the model write a brand profile. Nothing is saved. */
+export async function draftFromWebsite(input: {
+  workspaceId: string;
+  businessName: string;
+  website: URL;
+}): Promise<{ profile: BrandProfile; pages: string[] }> {
+  const pages = await fetchSitePages(input.website);
   const result = await generateAi({
     workspaceId: input.workspaceId,
     task: "insight",
     operation: "insight_brief",
-    prompt: brandProfilePrompt(client.brand_name || client.name, pages),
+    prompt: brandProfilePrompt(input.businessName, pages),
     schema: brandProfileSchema,
     temperature: 0.2,
     maxOutputTokens: 1500,
@@ -147,7 +156,7 @@ export async function draftBrandProfile(input: {
   }
   const profile = normalizeBrandProfile(parsed);
   if (!profile) throw new AppError("The AI could not write a profile from that website. Try again, or write it yourself.", "AI_INVALID_RESPONSE", 502);
-  logger.info("brand_profile.drafted", { workspaceId: input.workspaceId, clientId: input.clientId, pages: pages.length });
+  logger.info("brand_profile.drafted", { workspaceId: input.workspaceId, pages: pages.length });
   return { profile, pages: pages.map((page) => page.url) };
 }
 
@@ -230,4 +239,30 @@ export async function loadBrandContexts(
     contexts.set(row.client_id, context);
   }
   return contexts;
+}
+
+/**
+ * Copies the profile written during setup onto the business, when the workspace
+ * has exactly one and it has no profile of its own. A workspace with several
+ * businesses keeps each one's profile separate.
+ */
+export async function applySetupBrandToClient(workspaceId: string): Promise<void> {
+  const admin = createAdminClient();
+  const [setup, clients] = await Promise.all([
+    admin.from("grm_onboarding").select("website, brand_profile, brand_profile_source").eq("workspace_id", workspaceId).maybeSingle(),
+    admin.from("grm_clients").select("id, website, brand_profile, notes").eq("workspace_id", workspaceId),
+  ]);
+  const real = (clients.data ?? []).filter((client) => client.notes !== UNASSIGNED_CLIENT_MARKER);
+  if (!setup.data || real.length !== 1) return;
+  const client = real[0];
+  const profile = normalizeBrandProfile(setup.data.brand_profile);
+  const patch: Database["public"]["Tables"]["grm_clients"]["Update"] = {};
+  if (profile && !client.brand_profile) {
+    patch.brand_profile = profile as unknown as Json;
+    patch.brand_profile_source = setup.data.brand_profile_source === "website" ? "website" : "manual";
+    patch.brand_profile_updated_at = new Date().toISOString();
+  }
+  if (setup.data.website && !client.website) patch.website = setup.data.website;
+  if (Object.keys(patch).length === 0) return;
+  await admin.from("grm_clients").update(patch).eq("id", client.id).eq("workspace_id", workspaceId);
 }

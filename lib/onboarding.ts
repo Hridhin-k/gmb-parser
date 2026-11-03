@@ -1,4 +1,4 @@
-export const ONBOARDING_STEPS = ["connect", "import", "groups", "tone", "invite"] as const;
+export const ONBOARDING_STEPS = ["brand", "connect", "import", "groups", "tone", "invite"] as const;
 export type OnboardingStep = (typeof ONBOARDING_STEPS)[number];
 
 export const GROUPING_MODES = ["state_city", "city", "account", "none", "csv"] as const;
@@ -393,6 +393,7 @@ export function stepUnlocked(
   const saved = view.step === "done" ? ONBOARDING_STEPS.length : ONBOARDING_STEPS.indexOf(view.step);
   const target = ONBOARDING_STEPS.indexOf(step);
   if (target <= saved) return true;
+  if (step === "connect") return true;
   if (step === "import") return view.connections > 0;
   if (step === "groups") return view.locations > 0;
   if (step === "tone") return view.grouping != null;
