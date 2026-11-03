@@ -1,27 +1,20 @@
 "use client";
 
 import Link from "next/link";
-import { usePathname, useRouter, useSearchParams } from "next/navigation";
-import { Suspense, useState, useEffect, useCallback, useTransition } from "react";
+import { usePathname, useSearchParams } from "next/navigation";
+import { Suspense, useState, useEffect, useCallback } from "react";
 import { signOut } from "next-auth/react";
 import type { User } from "@/lib/auth/types";
 import { cn } from "@/lib/utils";
 import {
-  AlertTriangle,
   ChartColumn,
-  Check,
   ChevronsUpDown,
-  FileText,
   Inbox,
-  LayoutGrid,
-  Lightbulb,
   LogOut,
   MapPin,
   Home,
-  ListChecks,
   Send,
-  Settings,
-  UsersRound,
+  SlidersHorizontal,
   X,
   type LucideIcon,
 } from "lucide-react";
@@ -35,38 +28,31 @@ import {
 import { FilterApplyFrame, FilterNavigation } from "@/components/filter-navigation";
 import { ShellHeader } from "@/components/shell-header";
 import { MobileNav } from "@/components/mobile-nav";
-import { ActivityStatus } from "@/components/activity-status";
 import { GlobalFilters } from "@/components/global-filters";
+import { PlacePicker } from "@/components/place-picker";
+import { SidebarSearch } from "@/components/sidebar-search";
 import type { ScopeCatalog } from "@/lib/scope";
 import type { ShellSummary } from "@/lib/services/shell-summary";
-import { canOpenPath, homePath, scopedHref, visibleNav, type ShellNavId } from "@/lib/shell";
+import { homePath, scopedHref, visibleNav, type ShellNavId } from "@/lib/shell";
 import { roleName } from "@/lib/ui/vocabulary";
 
-type NavKey = ShellNavId | "audit";
-
-const NAV: Record<NavKey, { href: string; label: string; icon: LucideIcon }> = {
-  clients: { href: "/portfolio", label: "Portfolio", icon: LayoutGrid },
-  overview: { href: "/overview", label: "Overview", icon: Home },
+const NAV: Record<ShellNavId, { href: string; label: string; icon: LucideIcon }> = {
+  overview: { href: "/overview", label: "Today", icon: Home },
   inbox: { href: "/reviews", label: "Reviews", icon: Inbox },
-  escalations: { href: "/escalations", label: "Follow-ups", icon: AlertTriangle },
-  analytics: { href: "/analytics", label: "Analytics", icon: ChartColumn },
-  insights: { href: "/insights", label: "Insights", icon: Lightbulb },
-  reports: { href: "/reports", label: "Reports & alerts", icon: FileText },
-  requests: { href: "/requests", label: "Review requests", icon: Send },
+  insights: { href: "/insights", label: "Insights", icon: ChartColumn },
+  requests: { href: "/requests", label: "Get reviews", icon: Send },
   locations: { href: "/locations", label: "Locations", icon: MapPin },
-  team: { href: "/team", label: "Team", icon: UsersRound },
-  settings: { href: "/settings", label: "Settings", icon: Settings },
-  usage: { href: "/portfolio/usage", label: "Usage", icon: LayoutGrid },
-  audit: { href: "/audit", label: "Audit log", icon: ListChecks },
+  settings: { href: "/settings", label: "Settings", icon: SlidersHorizontal },
 };
 
-/** Daily work first; occasional administration below a quieter "Manage" divider. */
-const SECTIONS: Array<{ label: string; ids: NavKey[] }> = [
-  { label: "Work", ids: ["clients", "overview", "inbox", "escalations"] },
-  { label: "Understand", ids: ["analytics", "insights", "reports"] },
-  { label: "Grow", ids: ["requests"] },
-  { label: "Manage", ids: ["locations", "team", "settings", "audit"] },
-];
+/** Pages folded into a nav item still light that item up. */
+const ALSO_UNDER: Partial<Record<ShellNavId, string[]>> = {
+  overview: ["/portfolio"],
+  inbox: ["/escalations"],
+  insights: ["/analytics", "/reports"],
+  locations: ["/businesses"],
+  settings: ["/team", "/audit", "/portfolio/usage"],
+};
 
 interface AppShellProps {
   user: User;
@@ -82,13 +68,23 @@ interface AppShellProps {
   children: React.ReactNode;
 }
 
-function navActive(pathname: string, href: string) {
+function under(pathname: string, href: string) {
   return pathname === href || pathname.startsWith(`${href}/`);
 }
 
-function badgeFor(id: NavKey, summary: ShellSummary): { value: number; tone: "default" | "bad" } | null {
-  if (id === "inbox" && summary.unreplied > 0) return { value: summary.unreplied, tone: "default" };
-  if (id === "escalations" && summary.escalations > 0) return { value: summary.escalations, tone: "bad" };
+function navActive(pathname: string, id: ShellNavId) {
+  // /portfolio/usage belongs to Settings, not to Today's /portfolio.
+  if (id === "overview" && under(pathname, "/portfolio/usage")) return false;
+  return [NAV[id].href, ...(ALSO_UNDER[id] ?? [])].some((href) => under(pathname, href));
+}
+
+/** Today counts what is urgent; Reviews counts what has no reply. */
+function badgeFor(id: ShellNavId, summary: ShellSummary): { value: number; tone: "default" | "bad"; label: string } | null {
+  if (id === "overview") {
+    const urgent = summary.escalations + summary.failed;
+    return urgent > 0 ? { value: urgent, tone: "bad", label: "need you now" } : null;
+  }
+  if (id === "inbox" && summary.unreplied > 0) return { value: summary.unreplied, tone: "default", label: "reviews without a reply" };
   return null;
 }
 
@@ -109,6 +105,50 @@ function initialsOf(text: string) {
   return ((parts[0]?.[0] ?? "U") + (parts[1]?.[0] ?? "")).toUpperCase();
 }
 
+function NavItem({
+  id,
+  summary,
+  pathname,
+  searchParams,
+  onNavigate,
+}: {
+  id: ShellNavId;
+  summary: ShellSummary;
+  pathname: string;
+  searchParams: URLSearchParams;
+  onNavigate: () => void;
+}) {
+  const item = NAV[id];
+  const Icon = item.icon;
+  const active = navActive(pathname, id);
+  const badge = badgeFor(id, summary);
+  return (
+    <Link
+      href={scopedHref(item.href, searchParams, pathname)}
+      onClick={onNavigate}
+      aria-current={active ? "page" : undefined}
+      className={cn(
+        "flex h-10 items-center gap-2.5 rounded-md px-2.5 text-sm font-medium transition-colors",
+        active ? "bg-brand-tint font-semibold text-brand" : "text-ink-2 hover:bg-paper hover:text-ink"
+      )}
+    >
+      <Icon className="size-[18px] shrink-0" strokeWidth={1.75} aria-hidden />
+      <span className="min-w-0 flex-1 truncate">{item.label}</span>
+      {badge ? (
+        <span
+          className={cn(
+            "ml-auto min-w-[22px] rounded-full px-1.5 py-px text-center text-xs font-semibold tabular-nums",
+            badge.tone === "bad" ? "bg-bad-tint text-bad" : active ? "bg-white text-ink-2" : "bg-paper text-ink-2"
+          )}
+          aria-label={`${badge.value.toLocaleString("en-US")} ${badge.label}`}
+        >
+          {formatBadge(badge.value)}
+        </span>
+      ) : null}
+    </Link>
+  );
+}
+
 function SidebarNav({
   role,
   summary,
@@ -122,171 +162,24 @@ function SidebarNav({
   searchParams: URLSearchParams;
   onNavigate: () => void;
 }) {
-  const allowed = new Set<NavKey>(visibleNav(role));
-  if (canOpenPath("/audit", role) && allowed.has("team")) allowed.add("audit");
-
+  const items = visibleNav(role).filter((id) => id !== "settings");
   return (
-    <>
-      {SECTIONS.map((section) => {
-        const items = section.ids.filter((id) => allowed.has(id));
-        if (items.length === 0) return null;
-        return (
-          <div key={section.label}>
-            <p className="px-2.5 pb-1 pt-3 text-[11px] font-semibold uppercase tracking-[0.06em] text-ink-3">
-              {section.label}
-            </p>
-            <div className="flex flex-col gap-0.5">
-              {items.map((id) => {
-                const item = NAV[id];
-                const Icon = item.icon;
-                const href = scopedHref(item.href, searchParams, pathname);
-                const active = navActive(pathname, item.href);
-                const badge = badgeFor(id, summary);
-                return (
-                  <Link
-                    key={id}
-                    href={href}
-                    onClick={onNavigate}
-                    aria-current={active ? "page" : undefined}
-                    className={cn(
-                      "flex h-[34px] items-center gap-2.5 rounded-md px-2.5 text-[13px] font-medium transition-colors",
-                      active ? "bg-brand-tint text-brand" : "text-ink-2 hover:bg-paper hover:text-ink"
-                    )}
-                  >
-                    <Icon className="size-4 shrink-0" strokeWidth={1.75} aria-hidden />
-                    <span className="min-w-0 flex-1 truncate">{item.label}</span>
-                    {badge ? (
-                      <span
-                        className={cn(
-                          "ml-auto rounded-full px-1.5 py-px text-[11px] tabular-nums",
-                          badge.tone === "bad"
-                            ? "bg-bad-tint text-bad"
-                            : active
-                              ? "bg-white text-ink-2"
-                              : "bg-paper text-ink-2"
-                        )}
-                        aria-label={`${badge.value.toLocaleString("en-US")} ${id === "inbox" ? "reviews without a reply" : "open escalations"}`}
-                      >
-                        {formatBadge(badge.value)}
-                      </span>
-                    ) : null}
-                  </Link>
-                );
-              })}
-            </div>
-          </div>
-        );
-      })}
-    </>
+    <div className="flex flex-col gap-0.5">
+      {items.map((id) => (
+        <NavItem key={id} id={id} summary={summary} pathname={pathname} searchParams={searchParams} onNavigate={onNavigate} />
+      ))}
+    </div>
   );
+}
+
+function SettingsLink(props: Omit<Parameters<typeof NavItem>[0], "id" | "searchParams">) {
+  const searchParams = useSearchParams();
+  return <NavItem {...props} id="settings" searchParams={searchParams} />;
 }
 
 function SidebarNavLive(props: Omit<Parameters<typeof SidebarNav>[0], "searchParams">) {
   const searchParams = useSearchParams();
   return <SidebarNav {...props} searchParams={searchParams} />;
-}
-
-function WorkspaceSwitcher({
-  workspaces,
-  activeWorkspaceId,
-  workspaceName,
-  productTitle,
-  logoUrl,
-  clientCount,
-  home,
-}: {
-  workspaces: Array<{ id: string; name: string }>;
-  activeWorkspaceId: string;
-  workspaceName: string;
-  productTitle: string;
-  logoUrl?: string | null;
-  clientCount: number;
-  home: string;
-}) {
-  const router = useRouter();
-  const [saving, setSaving] = useState(false);
-  const [refreshing, startRefresh] = useTransition();
-  const switching = saving || refreshing;
-  const subtitle =
-    clientCount > 1 ? `${clientCount.toLocaleString("en-US")} businesses` : productTitle !== workspaceName ? productTitle : "Workspace";
-
-  const mark = logoUrl ? (
-    // The agency supplied this URL. It is shown only after they save it.
-    <img src={logoUrl} alt="" className="size-7 shrink-0 rounded-md object-cover" />
-  ) : (
-    <span className="flex size-7 shrink-0 items-center justify-center rounded-md bg-brand text-xs font-bold text-white">
-      {workspaceName.trim().charAt(0).toUpperCase() || "R"}
-    </span>
-  );
-
-  const body = (
-    <>
-      {mark}
-      <span className="min-w-0 flex-1 text-left">
-        <span className="block truncate text-[13px] font-semibold leading-tight text-ink">{workspaceName}</span>
-        <span className="block truncate text-[11px] text-ink-3">{subtitle}</span>
-      </span>
-    </>
-  );
-
-  if (workspaces.length <= 1) {
-    return (
-      <Link href={home} className="flex w-full items-center gap-2.5 rounded-md border border-line bg-white px-2 py-1.5 hover:bg-paper">
-        {body}
-      </Link>
-    );
-  }
-
-  async function choose(workspaceId: string) {
-    if (workspaceId === activeWorkspaceId) return;
-    setSaving(true);
-    try {
-      const response = await fetch("/api/workspace/active", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ workspaceId }),
-      });
-      if (!response.ok) return;
-      // "/" is the public landing page. /overview bounces roles that cannot
-      // open it (members) to their own home, so it is right for every role.
-      startRefresh(() => {
-        router.push("/overview");
-        router.refresh();
-      });
-    } finally {
-      setSaving(false);
-    }
-  }
-
-  return (
-    <div className="flex flex-col gap-2">
-      <DropdownMenu>
-        <DropdownMenuTrigger
-          className="flex w-full items-center gap-2.5 rounded-md border border-line bg-white px-2 py-1.5 outline-none hover:bg-paper focus-visible:ring-2 focus-visible:ring-brand-line"
-          aria-label={`Workspace: ${workspaceName}. Switch workspace`}
-          disabled={switching}
-        >
-          {body}
-          <ChevronsUpDown className="size-3.5 shrink-0 text-ink-3" aria-hidden />
-        </DropdownMenuTrigger>
-        <DropdownMenuContent align="start" className="w-64">
-          <p className="px-2 py-1.5 text-[11px] font-semibold uppercase tracking-[0.06em] text-ink-3">Switch workspace</p>
-          {workspaces.map((workspace) => (
-            <DropdownMenuItem key={workspace.id} className="cursor-pointer text-[13px]" onClick={() => void choose(workspace.id)}>
-              <span className="min-w-0 flex-1 truncate">{workspace.name}</span>
-              {workspace.id === activeWorkspaceId ? <Check className="size-3.5 text-brand" aria-hidden /> : null}
-            </DropdownMenuItem>
-          ))}
-          <p className="border-t border-line px-2 pb-1 pt-2 text-[11px] leading-snug text-ink-3">
-            Switching changes your team, permissions and settings. To narrow what you see, use the scope bar instead.
-          </p>
-        </DropdownMenuContent>
-      </DropdownMenu>
-      {switching ? (
-        <ActivityStatus title="Opening that workspace" detail="Loading its businesses, reviews and Google connections." />
-      ) : null}
-    </div>
-  );
 }
 
 function AccountFooter({ user, role }: { user: User; role: string | null }) {
@@ -337,11 +230,9 @@ export function AppShell({
   workspaceName,
   workspaces,
   activeWorkspaceId,
-  clients,
   catalog,
   summary,
   logoUrl,
-  productTitle = "RevuPilot",
   children,
 }: AppShellProps) {
   const pathname = usePathname();
@@ -415,15 +306,19 @@ export function AppShell({
         >
           <div className="flex items-start gap-2">
             <div className="min-w-0 flex-1">
-              <WorkspaceSwitcher
-                workspaces={workspaces}
-                activeWorkspaceId={activeWorkspaceId}
-                workspaceName={workspaceName}
-                productTitle={productTitle}
-                logoUrl={logoUrl}
-                clientCount={clients.length}
-                home={scopedHref(home, searchParams, pathname)}
-              />
+              <Suspense fallback={<div className="h-[52px] rounded-[10px] border border-line" />}>
+                <PlacePicker
+                  catalog={catalog}
+                  workspaceName={workspaceName}
+                  workspaces={workspaces}
+                  activeWorkspaceId={activeWorkspaceId}
+                  logoUrl={logoUrl}
+                  profiles={summary.profiles}
+                  home={home}
+                  canManageLocations={visibleNav(role).includes("locations")}
+                  onNavigate={closeSidebar}
+                />
+              </Suspense>
             </div>
             <Button
               type="button"
@@ -437,20 +332,31 @@ export function AppShell({
             </Button>
           </div>
 
-          <nav className="-mx-1 flex-1 overflow-y-auto px-1 pb-2">
+          <div className="pt-2">
+            <Suspense fallback={<div className="h-9 rounded-md bg-paper" />}>
+              <SidebarSearch onNavigate={closeSidebar} />
+            </Suspense>
+          </div>
+
+          <nav className="-mx-1 flex-1 overflow-y-auto px-1 pb-2 pt-2">
             <Suspense fallback={null}>
               <SidebarNavLive role={role} summary={summary} pathname={pathname} onNavigate={closeSidebar} />
             </Suspense>
           </nav>
 
-          <div className="border-t border-line pt-2">
+          <div className="flex flex-col gap-0.5 border-t border-line pt-2">
+            {visibleNav(role).includes("settings") ? (
+              <Suspense fallback={null}>
+                <SettingsLink summary={summary} pathname={pathname} onNavigate={closeSidebar} />
+              </Suspense>
+            ) : null}
             <AccountFooter user={user} role={role} />
           </div>
         </aside>
 
         <div className="flex min-w-0 flex-1 flex-col overflow-hidden">
-          <Suspense fallback={<div className="h-[52px] shrink-0 border-b border-line bg-white" />}>
-            <ShellHeader role={role} catalog={catalog} summary={summary} onOpenMenu={() => setSidebarOpen(true)} />
+          <Suspense fallback={<div className="h-[52px] shrink-0 border-b border-line bg-white lg:hidden" />}>
+            <ShellHeader workspaceName={workspaceName} catalog={catalog} onOpenMenu={() => setSidebarOpen(true)} />
           </Suspense>
           <main className="flex-1 overflow-y-auto" id="main-content">
             <div className="mx-auto flex max-w-[1440px] flex-col gap-4 px-4 pb-8 pt-5 sm:px-6">

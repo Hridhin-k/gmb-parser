@@ -154,32 +154,16 @@ export function shellAlerts(summary: ShellAlertInput, role: ShellRole): ShellAle
   return items;
 }
 
-export type ShellNavId =
-  | "overview"
-  | "inbox"
-  | "escalations"
-  | "analytics"
-  | "insights"
-  | "reports"
-  | "requests"
-  | "locations"
-  | "team"
-  | "settings"
-  | "clients"
-  | "usage";
+/**
+ * Five places plus Settings. Follow-ups live inside Reviews; analytics and
+ * reports inside Insights; portfolio inside Today; team, usage and the audit
+ * log inside Settings.
+ */
+export type ShellNavId = "overview" | "inbox" | "insights" | "requests" | "locations" | "settings";
 
-const EVERYONE: ShellNavId[] = [
-  "overview",
-  "inbox",
-  "escalations",
-  "analytics",
-  "insights",
-  "reports",
-  "requests",
-  "locations",
-];
+const EVERYONE: ShellNavId[] = ["overview", "inbox", "insights", "requests", "locations"];
 
-const MEMBER_NAV: ShellNavId[] = ["inbox", "escalations"];
+const MEMBER_NAV: ShellNavId[] = ["inbox"];
 
 export function homePath(role: ShellRole): string {
   return draftsWithAiOnly(role) ? "/reviews" : "/overview";
@@ -188,10 +172,8 @@ export function homePath(role: ShellRole): string {
 export function visibleNav(role: ShellRole): ShellNavId[] {
   if (draftsWithAiOnly(role)) return [...MEMBER_NAV];
   const items = [...EVERYONE];
-  if (isManager(role)) items.push("clients");
-  if (canOpenTeam(role)) items.push("team");
-  if (canOpenSettings(role)) items.push("settings");
-  if (allows(role, "manage_people")) items.push("usage");
+  // Team and the audit log are sections of Settings, so people who can only manage the team still get it.
+  if (canOpenSettings(role) || canOpenTeam(role)) items.push("settings");
   return items;
 }
 

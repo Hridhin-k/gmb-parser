@@ -1,6 +1,6 @@
 # Global scope
 
-The header scope selector is the only organisation, group, and outlet control on review screens. Later phases should read this contract instead of adding another client, group, or location dropdown.
+The place picker at the top of the sidebar (`components/place-picker.tsx`) is the only organisation, group, and outlet control on review screens. Later phases should read this contract instead of adding another client, group, or location dropdown.
 
 ## Names
 
@@ -46,7 +46,9 @@ Sidebar badges stay at the permission boundary. The dashboard layout cannot read
 
 Overview, Inbox, Escalations, Analytics, Reports, Review requests, and the agency home all call `readPageScope`. Phone routes under `/m` use the same resolver.
 
-The header owns the selector. Do not render a second client, group, or location control on these screens.
+The sidebar place picker owns the selector. Do not render a second client, group, or location control on these screens. Picking a place on a page that does not follow the place (`scopeMode` is `none`, such as Settings) opens the home page for that place instead.
+
+The date range is not part of the shell. Each page that has a period renders its own date control and writes `range`, `from`, and `to`.
 
 ## Later phases
 

@@ -2,19 +2,13 @@ import { describe, expect, it } from "vitest";
 import { canOpenPath, homePath, scopedHref, scopeMode, shellAlerts, visibleNav } from "@/lib/shell";
 
 describe("visibleNav", () => {
-  it("keeps members on the inbox and escalations", () => {
-    expect(visibleNav("member")).toEqual(["inbox", "escalations"]);
+  it("keeps members on Reviews, where follow-ups now live", () => {
+    expect(visibleNav("member")).toEqual(["inbox"]);
   });
 
-  it("lets an admin see the portfolio and usage", () => {
-    const items = visibleNav("admin");
-    expect(items).toContain("clients");
-    expect(items).toContain("team");
-    expect(items).toContain("usage");
-  });
-
-  it("lets the owner see billing", () => {
-    expect(visibleNav("owner")).toContain("usage");
+  it("gives everyone else the five places plus Settings", () => {
+    expect(visibleNav("owner")).toEqual(["overview", "inbox", "insights", "requests", "locations", "settings"]);
+    expect(visibleNav("admin")).toEqual(["overview", "inbox", "insights", "requests", "locations", "settings"]);
   });
 });
 
