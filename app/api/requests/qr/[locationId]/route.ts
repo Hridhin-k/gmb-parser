@@ -14,7 +14,10 @@ export async function GET(request: Request, { params }: { params: Promise<{ loca
   } catch {
     return NextResponse.json({ error: "Invalid location" }, { status: 400 });
   }
-  const format = new URL(request.url).searchParams.get("format") === "pdf" ? "pdf" : "svg";
+  const search = new URL(request.url).searchParams;
+  const format = search.get("format") === "pdf" ? "pdf" : "svg";
+  // `inline=1` opens the counter card in the browser so it can be printed straight away.
+  const disposition = search.get("inline") === "1" ? "inline" : "attachment";
   try {
     const actor = await actingUser(user);
     const file = await qrDownload(actor.workspaceId, format, locationId);
@@ -22,7 +25,7 @@ export async function GET(request: Request, { params }: { params: Promise<{ loca
       headers: {
         "Content-Type": file.contentType,
         "Cache-Control": "private, max-age=300",
-        ...(format === "pdf" ? { "Content-Disposition": `attachment; filename="${file.filename}"` } : {}),
+        ...(format === "pdf" ? { "Content-Disposition": `${disposition}; filename="${file.filename}"` } : {}),
       },
     });
   } catch (error) {

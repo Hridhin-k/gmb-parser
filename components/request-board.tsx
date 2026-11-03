@@ -271,7 +271,7 @@ export function RequestBoard(props: RequestBoardProps) {
             tone="info"
             title={`${reviewedElsewhere.name} is no longer a draft.`}
             actions={
-              <Button size="sm" variant="outline" nativeButton={false} render={<Link href={href({})} />}>
+              <Button size="sm" variant="outline" nativeButton={false} render={<Link href={href({ tab: "campaigns" })} />}>
                 See campaigns
               </Button>
             }
@@ -587,7 +587,7 @@ export function RequestBoard(props: RequestBoardProps) {
                   </p>
                 ) : null}
                 <div className="flex flex-wrap items-center justify-between gap-2">
-                  <Button variant="ghost" nativeButton={false} render={<Link href={href({})} />}>
+                  <Button variant="ghost" nativeButton={false} render={<Link href={href({ tab: "campaigns" })} />}>
                     Back
                   </Button>
                   <Button

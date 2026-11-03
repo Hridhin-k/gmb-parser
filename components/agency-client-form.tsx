@@ -7,7 +7,8 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 
 interface AgencyClientFormProps {
-  clientId: string;
+  /** Null adds a new business, then opens its page. */
+  clientId: string | null;
   canAssignManager: boolean;
   managers: Array<{ id: string; email: string }>;
   initial?: {
@@ -18,6 +19,8 @@ interface AgencyClientFormProps {
     logoUrl: string;
     accountManagerUserId: string | null;
   };
+  /** Shows a Cancel button, for the form in a dialog. */
+  onCancel?: () => void;
 }
 
 async function post(url: string, body: object) {
@@ -28,10 +31,10 @@ async function post(url: string, body: object) {
   });
   const data = (await response.json().catch(() => ({}))) as { error?: string; url?: string; expiresAt?: string };
   if (!response.ok) throw new Error(data.error ?? "Could not save the client.");
-  return data;
+  return data as typeof data & { id?: string };
 }
 
-export function AgencyClientForm({ clientId, canAssignManager, managers, initial }: AgencyClientFormProps) {
+export function AgencyClientForm({ clientId, canAssignManager, managers, initial, onCancel }: AgencyClientFormProps) {
   const router = useRouter();
   const [error, setError] = useState<string | null>(null);
   const [link, setLink] = useState<string | null>(null);
@@ -55,8 +58,13 @@ export function AgencyClientForm({ clientId, canAssignManager, managers, initial
           logoUrl: String(form.get("logoUrl") ?? ""),
           accountManagerUserId: manager || null,
         };
-        void post(`/api/clients/${clientId}`, body)
-          .then(() => {
+        void post(clientId ? `/api/clients/${clientId}` : "/api/clients", body)
+          .then((data) => {
+            if (!clientId && data.id) {
+              toast.success("Business added");
+              router.push(`/businesses/${data.id}`);
+              return;
+            }
             toast.success("Business details saved");
             router.refresh();
           })
@@ -93,23 +101,30 @@ export function AgencyClientForm({ clientId, canAssignManager, managers, initial
       </div>
       {error ? <p className="text-[13px] text-bad" role="alert">{error}</p> : null}
       <div className="flex flex-wrap justify-end gap-2">
-        <Button
-          type="button"
-          variant="outline"
-          onClick={() => {
-            setError(null);
-            void post(`/api/clients/${clientId}`, { action: "onboarding" })
-              .then((data) => {
-                setLink(data.url ?? null);
-                toast.success("Link ready to copy. Mail is not sent.");
-              })
-              .catch((caught: unknown) => setError(caught instanceof Error ? caught.message : "Could not create the link."));
-          }}
-        >
-          Create connection link
-        </Button>
+        {onCancel ? (
+          <Button type="button" variant="ghost" onClick={onCancel} disabled={pending}>
+            Cancel
+          </Button>
+        ) : null}
+        {clientId ? (
+          <Button
+            type="button"
+            variant="outline"
+            onClick={() => {
+              setError(null);
+              void post(`/api/clients/${clientId}`, { action: "onboarding" })
+                .then((data) => {
+                  setLink(data.url ?? null);
+                  toast.success("Link ready to copy. Mail is not sent.");
+                })
+                .catch((caught: unknown) => setError(caught instanceof Error ? caught.message : "Could not create the link."));
+            }}
+          >
+            Create connection link
+          </Button>
+        ) : null}
         <Button type="submit" disabled={pending} loading={pending}>
-          {pending ? "Saving…" : "Save details"}
+          {pending ? "Saving…" : clientId ? "Save details" : "Add business"}
         </Button>
       </div>
       {link ? (

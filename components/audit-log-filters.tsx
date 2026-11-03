@@ -89,7 +89,15 @@ export function AuditLogFilters({
 
       <DateRangeFilter value={currentRange} defaultKey="all" onChange={updateParams} />
 
-      {hasFilters && <ClearFiltersButton onClear={() => startTransition(() => router.push(pathname))} />}
+      {hasFilters && (
+        <ClearFiltersButton
+          onClear={() => {
+            // Inside Settings the log lives under ?section=security; clearing keeps it there.
+            const section = searchParams.get("section");
+            startTransition(() => router.push(section ? `${pathname}?section=${encodeURIComponent(section)}` : pathname));
+          }}
+        />
+      )}
     </div>
   );
 }

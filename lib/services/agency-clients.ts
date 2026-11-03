@@ -51,6 +51,42 @@ function cleanClient(input: ClientInput, allowManager: boolean): {
   };
 }
 
+/** A business added by hand on Locations. Only people who manage locations across the whole workspace can add one. */
+export async function createAgencyClient(input: {
+  workspaceId: string;
+  userId: string;
+  client: ClientInput;
+}): Promise<{ id: string }> {
+  await assertScoped({
+    userId: input.userId,
+    workspaceId: input.workspaceId,
+    permission: "manage_locations",
+    target: { kind: "workspace" },
+  });
+  const role = await getMemberRole(input.userId, input.workspaceId);
+  const access = await getMemberAccess(input.userId, input.workspaceId);
+  if (!access || !isOrgScope(access.scope) || !workspaceGrant(role, "manage_locations")) {
+    throw new AuthorizationError("Only people who manage every location can add a business.");
+  }
+  const payload = cleanClient(input.client, false);
+  const admin = createAdminClient();
+  const { data, error } = await admin
+    .from("grm_clients")
+    .insert({ workspace_id: input.workspaceId, is_active: true, created_by: input.userId, ...payload })
+    .select("id")
+    .single();
+  if (error || !data) throw new AppError("Could not add the business.", "DB_ERROR", 500);
+  await AuditService.log({
+    workspaceId: input.workspaceId,
+    userId: input.userId,
+    action: "client.created",
+    entityType: "grm_clients",
+    entityId: data.id,
+    metadata: { name: payload.name },
+  });
+  return { id: data.id };
+}
+
 export async function updateAgencyClient(input: {
   workspaceId: string;
   userId: string;
