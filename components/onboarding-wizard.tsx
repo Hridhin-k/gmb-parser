@@ -578,10 +578,12 @@ function LocationsStep({
   return (
     <Card
       icon={<MapPin className="size-5" aria-hidden />}
-      title={connection ? "Choose your locations" : "Connect your Google account"}
+      title={connection ? (initial ? "Choose your locations" : "Your locations") : "Connect your Google account"}
       description={
         connection
-          ? "These are the Business Profiles your Google account manages. Everything Google has verified is already ticked."
+          ? initial
+            ? "These are the Business Profiles your Google account manages. Everything Google has verified is already ticked."
+            : "These are connected. You can finish now, or add more profiles below."
           : "Sign in with the Google account that manages your Business Profiles. We only ask to read reviews and post the replies you approve."
       }
       footer={
@@ -702,7 +704,7 @@ function LocationsStep({
             </div>
           ) : null}
 
-          {imported.length > 0 && !finding ? (
+          {imported.length > 0 && !finding && !demo ? (
             <button
               type="button"
               onClick={() => find(true)}
