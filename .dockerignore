@@ -3,6 +3,7 @@ node_modules
 .git
 .github
 .local
+.claude
 .env*
 *.md
 __tests__

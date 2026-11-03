@@ -21,7 +21,11 @@ Backups (not automated here): nightly
 
 Project `grm-reviews` (production): services `app` (root `Dockerfile`), `cron`
 (`RAILWAY_DOCKERFILE_PATH=deploy/Dockerfile.cron`, `APP_URL=http://app.railway.internal:3000`) and `Postgres` (18).
-- Deploy: `railway up --service app --ci` (and `--service cron` when `deploy/` changes).
-- Migrations: `railway connect Postgres --tunnel-only -P 55433`, then run
+- Deploy: pushing to the `Launch` branch deploys `app`. `cron` also follows `Launch`, but only redeploys when `deploy/` changes.
+  `railway up --service app --ci` still works for a manual deploy.
+- Migrations run automatically before each `app` deploy: the pre-deploy command is `node scripts/db-migrate.mjs`, using `DATABASE_MIGRATION_URL`
+  (a reference to `${{Postgres.DATABASE_URL}}`). If a migration fails, the new version does not go live and the old one keeps running.
+  A release must keep working with the previous code's schema during the switch, so never drop a column in the same release that stops using it.
+- To run migrations by hand: `railway connect Postgres --tunnel-only -P 55433`, then
   `DATABASE_MIGRATION_URL=postgresql://postgres:<PGPASSWORD>@127.0.0.1:55433/railway DATABASE_URL=<app role url> node scripts/db-migrate.mjs`.
 - The runtime role is `grm_app`; `DATABASE_URL` on `app` uses the private host `postgres.railway.internal`.

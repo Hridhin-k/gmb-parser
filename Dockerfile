@@ -30,6 +30,10 @@ ENV NODE_ENV=production NEXT_TELEMETRY_DISABLED=1 PORT=3000 HOSTNAME=0.0.0.0
 RUN addgroup -S app && adduser -S app -G app
 COPY --from=build --chown=app:app /app/.next/standalone ./
 COPY --from=build --chown=app:app /app/.next/static ./.next/static
+# Railway's pre-deploy step runs migrations from this image. pg and @next/env
+# are already in the standalone node_modules.
+COPY --from=build --chown=app:app /app/scripts/db-migrate.mjs ./scripts/db-migrate.mjs
+COPY --from=build --chown=app:app /app/db ./db
 USER app
 EXPOSE 3000
 HEALTHCHECK --interval=30s --timeout=5s --start-period=20s CMD wget -qO- http://127.0.0.1:3000/api/health || exit 1
