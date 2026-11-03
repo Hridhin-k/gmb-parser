@@ -34,7 +34,8 @@ export async function GET(_request: Request, { params }: RouteParams) {
       total: reviewIds.length,
       succeeded: job.succeeded,
       failed: job.failed,
-      results: job.status === "done" || job.status === "failed" ? (job.results ?? []) : undefined,
+      // Partial results while running, so the inbox can flip rows as they finish.
+      results: job.results ?? [],
       error: job.last_error,
     },
     { headers: NO_STORE }

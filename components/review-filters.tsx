@@ -35,8 +35,8 @@ const TEXT_OPTIONS = [
   { value: "none", label: "Rating only" },
 ] as const;
 
-/** Scope and period belong to the top bar; status belongs to the tabs. Clear keeps both. */
-const KEPT_ON_CLEAR = ["client", "group", "location", "range", "from", "to", "filter"] as const;
+/** Scope and period belong to the sidebar; the inbox tab is not a filter. Clear keeps them. */
+const KEPT_ON_CLEAR = ["client", "group", "location", "range", "from", "to", "tab"] as const;
 
 interface ReviewFiltersProps {
   /** Applied status keys (multiselect). Empty = all. Tabs normally own this. */
@@ -205,10 +205,7 @@ export function ReviewFilters({
     const params = new URLSearchParams();
     for (const key of KEPT_ON_CLEAR) {
       const value = searchParams.get(key);
-      if (!value) continue;
-      // A custom status combination is a filter, not a tab. Clear drops it.
-      if (key === "filter" && customStatus) continue;
-      params.set(key, value);
+      if (value) params.set(key, value);
     }
     setSearch("");
     const qs = params.toString();

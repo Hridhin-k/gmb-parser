@@ -98,7 +98,7 @@ export interface ReviewContext {
   locationName: string;
   /** The unpublished draft being replaced when the user clicks Regenerate. */
   previousDraft?: string | null;
-  /** The draft to revise for shorter, warmer, formal, or language changes. */
+  /** The draft to revise for shorter, warmer, formal, apology, or language changes. */
   currentDraft?: string | null;
   adjustment?: DraftAdjustment | null;
   tone?: { voice: ToneVoice | null; note: string | null } | null;
@@ -296,7 +296,7 @@ export class AIReviewService {
     );
     if (manuallyEdited && !params.replaceEdited) {
       throw new ValidationError(
-        "This draft has manual edits. Use Shorter, Warmer, More formal, Regenerate, a language, or a template when you want to replace it."
+        "This draft has manual edits. Use Shorter, Warmer, More formal, Add apology, Regenerate, a language, or a template when you want to replace it."
       );
     }
     const previousDraft = activeReply?.content;

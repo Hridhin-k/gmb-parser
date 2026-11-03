@@ -34,6 +34,7 @@ export type DraftAdjustment =
   | { kind: "shorter" }
   | { kind: "warmer" }
   | { kind: "formal" }
+  | { kind: "apology" }
   | { kind: "language"; language: ReplyLanguage };
 
 const LANGUAGE_LINES: Record<ReplyLanguage, string> = {
@@ -62,6 +63,9 @@ export function adjustmentInstruction(
   }
   if (adjustment.kind === "formal") {
     return `${currentBlock}\nADJUSTMENT\nMake the reply more formal and restrained. No emoji. No slang.\n`;
+  }
+  if (adjustment.kind === "apology") {
+    return `${currentBlock}\nADJUSTMENT\nOpen with a short, sincere apology for what went wrong. Do not admit fault beyond what the reviewer described, and do not add compensation.\n`;
   }
   return `${currentBlock}\nLANGUAGE\n${LANGUAGE_LINES[adjustment.language]} This is a new reply to the reviewer, not a translation of their review. Do not add a translation of the review.\n`;
 }
