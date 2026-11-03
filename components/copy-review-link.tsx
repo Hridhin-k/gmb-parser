@@ -5,12 +5,15 @@ import { Check, Copy, ExternalLink } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 
-export function CopyReviewLink({ url }: { url: string }) {
-  const [state, setState] = useState<"idle" | "copied" | "failed">("idle");
+export type CopyState = "idle" | "copied" | "failed";
 
-  async function copy() {
+/** Clipboard write with a short "Copied" state. "failed" means show the text so it can be copied by hand. */
+export function useCopyText() {
+  const [state, setState] = useState<CopyState>("idle");
+
+  async function copy(text: string) {
     try {
-      await navigator.clipboard.writeText(url);
+      await navigator.clipboard.writeText(text);
       setState("copied");
       window.setTimeout(() => setState("idle"), 2000);
     } catch {
@@ -18,10 +21,16 @@ export function CopyReviewLink({ url }: { url: string }) {
     }
   }
 
+  return { state, copy, reset: () => setState("idle") };
+}
+
+export function CopyReviewLink({ url }: { url: string }) {
+  const { state, copy } = useCopyText();
+
   return (
     <div className="flex min-w-0 flex-col gap-2 sm:items-end">
       <div className="flex flex-wrap gap-2">
-        <Button type="button" size="sm" onClick={() => void copy()}>
+        <Button type="button" size="sm" onClick={() => void copy(url)}>
           {state === "copied" ? <Check className="size-3.5" /> : <Copy className="size-3.5" />}
           {state === "copied" ? "Copied" : "Copy link"}
         </Button>

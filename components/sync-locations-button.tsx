@@ -12,12 +12,15 @@ interface SyncLocationsButtonProps {
   label?: string;
   /** Find profiles without importing them; the user picks which to import. */
   stage?: boolean;
+  /** Page-header pill without the Force refresh button. */
+  pill?: boolean;
 }
 
 export function SyncLocationsButton({
   connectionId,
   label = "Sync profiles",
   stage = false,
+  pill = false,
 }: SyncLocationsButtonProps) {
   const router = useRouter();
   const [syncing, setSyncing] = useState(false);
@@ -80,6 +83,32 @@ export function SyncLocationsButton({
     } finally {
       setSyncing(false);
     }
+  }
+
+  if (pill) {
+    return (
+      <div className="flex flex-col gap-2 sm:items-end">
+        <button
+          type="button"
+          onClick={() => handleSync(false)}
+          disabled={syncing}
+          className="inline-flex h-10 items-center gap-2 rounded-full border border-line bg-white px-4 text-sm font-medium text-ink outline-none hover:bg-paper focus-visible:ring-2 focus-visible:ring-brand-line disabled:cursor-not-allowed disabled:opacity-60"
+        >
+          <RefreshCw className={cn("size-[15px]", syncing && "animate-spin")} aria-hidden />
+          {syncing ? "Reading Google…" : label}
+        </button>
+        {summary ? (
+          <p className="max-w-xs text-xs text-ink sm:text-right" role="status">
+            {summary}
+          </p>
+        ) : null}
+        {error ? (
+          <p className="max-w-xs text-xs text-bad sm:text-right" role="alert">
+            {error}
+          </p>
+        ) : null}
+      </div>
+    );
   }
 
   return (

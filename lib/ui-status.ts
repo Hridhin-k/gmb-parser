@@ -58,7 +58,7 @@ export const PAGE_LOADING = {
     tone: "work" as const,
   },
   requests: {
-    title: "Loading review requests…",
+    title: "Loading Get reviews…",
     detail: "Opening request links and delivery settings.",
     short: "Loading requests…",
     tone: "work" as const,

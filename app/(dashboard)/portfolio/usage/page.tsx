@@ -1,20 +1,15 @@
-import { AgencyUsageView } from "@/components/agency-home";
-import { loadPortfolio, type PortfolioSearchParams } from "../load-portfolio";
+import { redirect } from "next/navigation";
+import { getActiveRole } from "@/lib/services/session";
+import { canOpenPath } from "@/lib/shell";
+import { settingsRedirect } from "@/lib/settings-redirect";
 
-interface PortfolioUsagePageProps {
-  searchParams: Promise<PortfolioSearchParams>;
-}
-
-export default async function PortfolioUsagePage({ searchParams }: PortfolioUsagePageProps) {
-  const portfolio = await loadPortfolio(searchParams, "/portfolio/usage");
-  return (
-    <AgencyUsageView
-      data={portfolio.data}
-      clientId={portfolio.clientId}
-      rangeParams={portfolio.rangeParams}
-      rangeLabel={portfolio.rangeLabel}
-      query={portfolio.query}
-      showUsage={portfolio.showUsage}
-    />
-  );
+/** Usage now lives in Settings › Plan and usage. Old links keep their scope and period. */
+export default async function PortfolioUsagePage({
+  searchParams,
+}: {
+  searchParams: Promise<Record<string, string | string[] | undefined>>;
+}) {
+  const role = await getActiveRole();
+  if (!canOpenPath("/portfolio/usage", role)) redirect("/overview");
+  redirect(settingsRedirect("plan", await searchParams));
 }

@@ -233,11 +233,11 @@ export function HierarchyBoard({
                 </div>
                 {brand.regions.map((region) => (
                   <div key={region.id} className="flex flex-col gap-0.5">
-                    <TreeLink href={`/locations?group=${region.id}`} active={selectedPanel?.id === region.id} depth={1} count={region.count}>
+                    <TreeLink href={`/locations?view=groups&group=${region.id}`} active={selectedPanel?.id === region.id} depth={1} count={region.count}>
                       {region.name}
                     </TreeLink>
                     {region.cities.map((city) => (
-                      <TreeLink key={city.id} href={`/locations?group=${city.id}`} active={selectedPanel?.id === city.id} depth={2} count={city.count}>
+                      <TreeLink key={city.id} href={`/locations?view=groups&group=${city.id}`} active={selectedPanel?.id === city.id} depth={2} count={city.count}>
                         {city.name}
                       </TreeLink>
                     ))}
@@ -254,7 +254,7 @@ export function HierarchyBoard({
             <>
               <TreeHeading>Other groups</TreeHeading>
               {tree.loose.map((group) => (
-                <TreeLink key={group.id} href={`/locations?group=${group.id}`} active={selectedPanel?.id === group.id} count={group.count}>
+                <TreeLink key={group.id} href={`/locations?view=groups&group=${group.id}`} active={selectedPanel?.id === group.id} count={group.count}>
                   {group.name}
                 </TreeLink>
               ))}
@@ -336,7 +336,7 @@ export function HierarchyBoard({
                 setGroupManagerId("");
                 setLocationQuery("");
                 setNotice("Group saved.");
-                if (result.id) router.push(`/locations?group=${result.id}`);
+                if (result.id) router.push(`/locations?view=groups&group=${result.id}`);
                 router.refresh();
               })();
             }}
@@ -681,7 +681,7 @@ function SelectedPanel({
                         </td>
                       ) : null}
                       <td className="px-3 py-2.5">
-                        <Link className="font-semibold text-ink hover:text-brand" href={`/locations?location=${row.id}`}>
+                        <Link className="font-semibold text-ink hover:text-brand" href={`/locations?view=groups&location=${row.id}`}>
                           {row.name}
                         </Link>
                         {row.storeCode ? <span className="block text-xs text-ink-3">{row.storeCode}</span> : null}
