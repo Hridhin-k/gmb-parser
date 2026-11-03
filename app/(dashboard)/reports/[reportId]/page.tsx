@@ -278,7 +278,7 @@ export default async function ReportPreviewPage({ params }: ReportPreviewProps) 
     <div className="flex flex-col gap-4">
       <PageHeader
         title={document.name}
-        breadcrumbs={[{ label: "Reports & alerts", href: "/reports" }, { label: document.name }]}
+        breadcrumbs={[{ label: "Reports and alerts", href: "/insights?tab=reports" }, { label: document.name }]}
         description={`${modernizeCopy(document.scopeLabel)} · ${document.periodLabel} (${document.timezone}) · figures come from stored reviews`}
         eyebrow={
           <>
@@ -288,7 +288,7 @@ export default async function ReportPreviewPage({ params }: ReportPreviewProps) 
         }
       >
         {canManage ? (
-          <Link href={`/reports?edit=${reportId}`} className={buttonVariants({ variant: "outline" })}>
+          <Link href={`/insights?tab=reports&edit=${reportId}`} className={buttonVariants({ variant: "outline" })}>
             <Pencil aria-hidden />
             Edit schedule
           </Link>

@@ -1,19 +1,15 @@
-import type { ObservationAggregates } from "@/lib/review-intelligence";
-import type { InsightRecord } from "@/lib/insight-report";
-import { monthlySeriesMetrics } from "@/lib/chart-metrics";
-import { MetricStrip } from "@/components/charts";
+import Link from "next/link";
+import { Check, CircleAlert, Sparkles } from "lucide-react";
+import { InsightAssign, type AssignableMember } from "@/components/insight-assign";
+import type { DivergingRow, HeatStep, TopicTrend } from "@/lib/insight-mood";
+import type { InsightSevereIncident } from "@/lib/insight-dashboard";
+import type { NextAction, ShortVersion, TakeawayKind } from "@/lib/insight-report";
+import { severityLabel } from "@/lib/review-intelligence";
 
 /**
- * Dashboard visualisation for the insights page. Pure server-rendered
- * SVG/divs — every number comes from the aggregates and saved report
- * the page already loaded. No client fetching, no invented metrics:
- * sentiment share is praise-vs-complaint mentions, outlet sentiment is
- * positive observations ÷ (positive + negative) for that outlet.
+ * Server-rendered pieces of the Insights page. Every number comes from the
+ * counts the page already loaded; AI wording is marked as AI.
  */
-
-function topicLabel(topic: string): string {
-  return topic.replace(/_/g, " ");
-}
 
 export function SentimentDonut({
   positive,
@@ -53,359 +49,481 @@ export function SentimentDonut({
   );
 }
 
-export function SentimentTrend({ byMonth }: { byMonth: ObservationAggregates["byMonth"] }) {
-  const months = [...byMonth].sort((a, b) => a.month.localeCompare(b.month)).slice(-12);
-  if (months.length < 2) {
-    return <p className="py-6 text-center text-[13px] text-ink-3">Not enough monthly history in this range yet.</p>;
-  }
-  const max = Math.max(1, ...months.map((m) => Math.max(m.positive, m.negative)));
-  const w = 640;
-  const h = 190;
-  const pad = 14;
-  const x = (i: number) => pad + (i * (w - pad * 2)) / (months.length - 1);
-  const y = (v: number) => h - 22 - (v / max) * (h - 44);
-  const line = (key: "positive" | "negative") =>
-    months.map((m, i) => `${x(i)},${y(m[key])}`).join(" ");
-  const monthName = (m: string) =>
-    new Date(`${m}-02T00:00:00Z`).toLocaleDateString("en-GB", { month: "short", timeZone: "UTC" });
-  const monthLabel = (m: string) =>
-    new Date(`${m}-02T00:00:00Z`).toLocaleDateString("en-GB", { month: "short", year: "2-digit", timeZone: "UTC" });
-  // Metrics are computed from the same 12 months the lines draw.
-  const metrics = monthlySeriesMetrics(
-    months.map((m) => ({ label: monthLabel(m.month), positive: m.positive, negative: m.negative }))
-  );
-  return (
-    <div>
-      <svg viewBox={`0 0 ${w} ${h}`} className="w-full" role="img" aria-label="Monthly positive and negative observations">
-        {[0.25, 0.5, 0.75, 1].map((f) => (
-          <g key={f}>
-            <line x1={pad} x2={w - pad} y1={y(max * f)} y2={y(max * f)} stroke="#EEF0F3" strokeWidth="1" />
-            <text x={w - pad} y={y(max * f) - 3} textAnchor="end" fontSize="10" fill="#687283">
-              {Math.round(max * f).toLocaleString()}
-            </text>
-          </g>
-        ))}
-        <line x1={pad} x2={w - pad} y1={y(0)} y2={y(0)} stroke="#E4E7EC" strokeWidth="1" />
-        <polyline points={line("positive")} fill="none" stroke="#15803D" strokeWidth="2" strokeLinejoin="round" />
-        <polyline points={line("negative")} fill="none" stroke="#B91C1C" strokeWidth="2" strokeLinejoin="round" />
-        {months.map((m, i) => (
-          <g key={m.month}>
-            <circle cx={x(i)} cy={y(m.positive)} r="2.5" fill="#15803D" />
-            <circle cx={x(i)} cy={y(m.negative)} r="2.5" fill="#B91C1C" />
-          </g>
-        ))}
-      </svg>
-      <div className="flex justify-between text-[11px] text-ink-3" aria-hidden>
-        <span>{monthName(months[0].month)}</span>
-        <span>{monthName(months[months.length - 1].month)}</span>
-      </div>
-      <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-xs text-ink-3">
-        <span className="inline-flex items-center gap-1.5"><span className="h-0.5 w-4 bg-ok" aria-hidden /> Positive mentions</span>
-        <span className="inline-flex items-center gap-1.5"><span className="h-0.5 w-4 bg-bad" aria-hidden /> Negative mentions</span>
-        <span className="ml-auto">Right axis: mentions per month</span>
-      </div>
-      <MetricStrip
-        items={[
-          {
-            label: "Mentions in chart",
-            value: metrics.total.toLocaleString(),
-            sub: `${metrics.positive.toLocaleString()} positive · ${metrics.negative.toLocaleString()} negative`,
-          },
-          ...(metrics.positiveShare !== null
-            ? [
-                {
-                  label: "Positive share",
-                  value: `${Math.round(metrics.positiveShare * 100)}%`,
-                  sub:
-                    metrics.positiveShareChangePoints === null
-                      ? "of praise + complaint mentions"
-                      : `${metrics.positiveShareChangePoints >= 0 ? "+" : "−"}${Math.abs(metrics.positiveShareChangePoints).toFixed(1)} pts vs first month`,
-                },
-              ]
-            : []),
-          ...(metrics.latest
-            ? [
-                {
-                  label: `Latest · ${metrics.latest.label}`,
-                  value: metrics.latest.total.toLocaleString(),
-                  sub: `${metrics.latest.positive.toLocaleString()} pos · ${metrics.latest.negative.toLocaleString()} neg`,
-                },
-              ]
-            : []),
-          ...(metrics.peakNegative
-            ? [
-                {
-                  label: "Most complaints",
-                  value: metrics.peakNegative.label,
-                  sub: `${metrics.peakNegative.negative.toLocaleString()} negative mentions`,
-                },
-              ]
-            : []),
-          ...(metrics.peak
-            ? [
-                {
-                  label: "Busiest month",
-                  value: metrics.peak.label,
-                  sub: `${metrics.peak.total.toLocaleString()} mentions`,
-                },
-              ]
-            : []),
-        ]}
-      />
-    </div>
-  );
-}
+const CARD = "rounded-2xl border border-line bg-white p-4 sm:p-6";
+const WORSE_TEXT = "text-[#c2410c]";
 
-interface RankedTheme {
-  topic: string;
-  count: number;
-  reviews: number;
-}
+const TAKEAWAY: Record<TakeawayKind, { label: string; tone: string; Icon: typeof Check }> = {
+  good: { label: "Going well", tone: "text-ok", Icon: Check },
+  fix_first: { label: "Fix first", tone: WORSE_TEXT, Icon: CircleAlert },
+  fix_next: { label: "Fix next", tone: WORSE_TEXT, Icon: CircleAlert },
+};
 
-function rankedThemes(entries: RankedTheme[], limit: number): RankedTheme[] {
-  const byTopic = new Map<string, RankedTheme>();
-  for (const entry of entries) {
-    if (entry.count <= 0 || entry.topic.length === 0) continue;
-    const row = byTopic.get(entry.topic) ?? { topic: entry.topic, count: 0, reviews: 0 };
-    row.count += entry.count;
-    row.reviews += entry.reviews;
-    byTopic.set(entry.topic, row);
-  }
-  return [...byTopic.values()]
-    .sort((a, b) => b.count - a.count || a.topic.localeCompare(b.topic))
-    .slice(0, limit);
-}
-
-function ThemeRankList({
-  title,
-  rows,
-  tone,
+/** "The short version": one sentence and up to three takeaway cards. */
+export function ShortVersionCard({
+  short,
+  takeawayHref,
+  footer,
 }: {
-  title: string;
-  rows: RankedTheme[];
-  tone: "praise" | "complaint";
+  short: ShortVersion;
+  takeawayHref: (index: number) => string | null;
+  footer?: React.ReactNode;
 }) {
-  if (rows.length === 0) return null;
-  const max = Math.max(1, ...rows.map((row) => row.count));
-  const bar = tone === "praise" ? "bg-ok" : "bg-bad";
-  const kind = tone === "praise" ? "praise" : "complaint";
   return (
-    <div>
-      <p className="text-xs font-medium text-ink-3">{title}</p>
-      <ul className="mt-2 space-y-2.5">
-        {rows.map((row) => (
-          <li key={row.topic}>
-            <div className="flex items-baseline justify-between gap-2 text-[13px]">
-              <span className="capitalize text-ink-2">{topicLabel(row.topic)}</span>
-              <span className="text-right text-xs tabular-nums text-ink-3">
-                {row.count.toLocaleString()} {kind} {row.count === 1 ? "mention" : "mentions"}
+    <section aria-label="The short version" className={`flex flex-col gap-5 ${CARD}`}>
+      <div className="flex flex-col gap-2.5">
+        <span
+          className={`inline-flex items-center gap-1.5 self-start rounded-full px-2.5 py-[3px] text-xs font-semibold ${
+            short.source === "ai" ? "bg-ai-tint text-ai" : "bg-line-2 text-ink-2"
+          }`}
+        >
+          <Sparkles aria-hidden className="size-3" />
+          The short version
+          {short.source === "ai" ? <span className="sr-only"> (written by AI)</span> : null}
+        </span>
+        <p className="max-w-[860px] text-lg font-medium leading-normal tracking-[-0.01em] text-ink sm:text-xl">
+          {short.sentence.map((part, index) =>
+            part.problem ? (
+              <span key={index} className={`font-semibold ${WORSE_TEXT}`}>
+                {part.text}
               </span>
-            </div>
-            <div className="mt-1 h-2 overflow-hidden rounded-[3px] bg-line-2" aria-hidden="true">
-              <div className={`h-full rounded-[3px] ${bar}`} style={{ width: `${(row.count / max) * 100}%` }} />
-            </div>
-          </li>
-        ))}
-      </ul>
-    </div>
-  );
-}
-
-export function TopThemes({ aggregates, limit = 5 }: { aggregates: ObservationAggregates; limit?: number }) {
-  const praise = rankedThemes(aggregates.positive, limit);
-  const complaints = rankedThemes(aggregates.negative, limit);
-  if (praise.length === 0 && complaints.length === 0) return <p className="py-6 text-center text-[13px] text-ink-3">No themes yet.</p>;
-  return (
-    <div className="space-y-4">
-      <ThemeRankList title="Most praised" rows={praise} tone="praise" />
-      <ThemeRankList title="Complaint themes" rows={complaints} tone="complaint" />
-      <p className="text-xs text-ink-3">
-        Ranked separately. Complaint counts match Analytics. A mention is one topic in analysed text, not a star rating.
-      </p>
-    </div>
-  );
-}
-
-export function LocationPerformance({
-  aggregates,
-  outletNames,
-  limit = 8,
-}: {
-  aggregates: ObservationAggregates;
-  outletNames: Map<string, string>;
-  limit?: number;
-}) {
-  const rows = aggregates.byOutlet
-    .map((o) => ({
-      ...o,
-      reviews: aggregates.outletReviews[o.locationId] ?? 0,
-      sentimentTotal: o.positive + o.negative,
-    }))
-    .sort((a, b) => b.reviews - a.reviews)
-    .slice(0, limit);
-  if (rows.length === 0) return <p className="py-6 text-center text-[13px] text-ink-3">No location data in this scope yet.</p>;
-  return (
-    <div className="overflow-x-auto">
-      <table className="w-full min-w-[430px] text-[13px]">
-        <thead>
-          <tr className="border-b border-line text-left text-xs text-ink-3">
-            <th className="pb-2 font-medium">Location</th>
-            <th className="pb-2 font-medium">Analysed</th>
-            <th className="pb-2 font-medium">Positive</th>
-            <th className="pb-2 font-medium">Negative</th>
-            <th className="pb-2 font-medium">Severe</th>
-          </tr>
-        </thead>
-        <tbody>
-          {rows.map((row) => {
-            const pct = row.sentimentTotal > 0 ? Math.round((row.positive / row.sentimentTotal) * 100) : 0;
+            ) : (
+              <span key={index}>{part.text}</span>
+            )
+          )}
+        </p>
+      </div>
+      {short.takeaways.length > 0 ? (
+        <div className="grid grid-cols-[repeat(auto-fit,minmax(240px,1fr))] gap-3">
+          {short.takeaways.map((takeaway, index) => {
+            const kind = TAKEAWAY[takeaway.kind];
+            const href = takeawayHref(index);
             return (
-              <tr key={row.locationId} className="border-b border-line-2 last:border-0">
-                <td className="max-w-[170px] truncate py-2 pr-2 font-medium text-ink">
-                  {outletNames.get(row.locationId) ?? "Location"}
-                </td>
-                <td className="py-2 pr-2 tabular-nums text-ink-2">{row.reviews.toLocaleString()}</td>
-                <td className="py-2 pr-2">
-                  <span className="flex items-center gap-2">
-                    <span className="w-9 tabular-nums text-ok">{pct}%</span>
-                    <span className="h-2 w-16 overflow-hidden rounded-[3px] bg-line-2">
-                      <span className="block h-full rounded-[3px] bg-ok" style={{ width: `${pct}%` }} />
-                    </span>
-                    <span className="text-xs tabular-nums text-ink-3">{row.positive.toLocaleString()} mentions</span>
-                  </span>
-                </td>
-                <td className="py-2 pr-2 tabular-nums text-bad">{row.negative.toLocaleString()}</td>
-                <td className="py-2">
-                  {row.severe > 0 ? (
-                    <span className="inline-flex h-[20px] items-center rounded-sm bg-bad-tint px-1.5 text-xs font-medium tabular-nums text-bad">
-                      {row.severe}
-                    </span>
-                  ) : (
-                    <span className="text-ink-3">0</span>
-                  )}
-                </td>
-              </tr>
+              <div key={`${takeaway.kind}-${index}`} className="flex flex-col gap-2 rounded-xl border border-line-2 bg-[#f8f9fb] p-4">
+                <span className={`inline-flex items-center gap-1.5 text-xs font-semibold ${kind.tone}`}>
+                  <kind.Icon aria-hidden className="size-[13px]" strokeWidth={2.25} />
+                  {kind.label}
+                </span>
+                <span className="text-[15px] font-semibold leading-snug text-ink">{takeaway.title}</span>
+                <span className="text-[13px] leading-normal text-ink-2">{takeaway.body}</span>
+                {href && takeaway.reviews > 0 ? (
+                  <Link href={href} className="mt-auto text-[13px] font-medium text-brand hover:text-brand-hover">
+                    {takeaway.topic
+                      ? `See ${takeaway.reviews.toLocaleString()} ${takeaway.reviews === 1 ? "review" : "reviews"}`
+                      : "See an example review"}
+                  </Link>
+                ) : null}
+              </div>
             );
           })}
-        </tbody>
-      </table>
-    </div>
+        </div>
+      ) : null}
+      {footer ? <div className="border-t border-line-2 pt-4">{footer}</div> : null}
+    </section>
   );
 }
 
-const KEY_INSIGHT_STYLES: Array<{
-  key: string;
-  label: string;
-  href: string;
-  classes: string;
-  pick: (insights: InsightRecord[]) => InsightRecord | undefined;
-}> = [
-  {
-    key: "concern",
-    label: "Rising concern",
-    href: "#negative",
-    classes: "bg-bad-tint text-bad",
-    pick: (list) =>
-      list.find((i) => i.sentiment === "negative" && i.category !== "serious_incident") ??
-      list.find((i) => i.category === "serious_incident"),
-  },
-  {
-    key: "driver",
-    label: "Positive driver",
-    href: "#positive",
-    classes: "bg-ok-tint text-ok",
-    pick: (list) => list.find((i) => i.sentiment === "positive"),
-  },
-  {
-    key: "emerging",
-    label: "Emerging signal",
-    href: "#trends",
-    classes: "bg-info-tint text-info",
-    pick: (list) => list.find((i) => i.category === "trend") ?? list.find((i) => i.category === "relationship"),
-  },
-  {
-    key: "action",
-    label: "Recommendation",
-    href: "#actions",
-    classes: "bg-brand-tint text-brand",
-    pick: (list) =>
-      list.find((i) => i.suggestedAction && i.sentiment === "negative") ??
-      list.find((i) => i.suggestedAction),
-  },
-];
-
-export function KeyInsights({ insights }: { insights: InsightRecord[] }) {
-  const cards = KEY_INSIGHT_STYLES.map((style) => ({ style, insight: style.pick(insights) })).filter(
-    (c) => c.insight
-  );
-  if (cards.length === 0) return <p className="py-6 text-center text-[13px] text-ink-3">Generate a report to surface key insights.</p>;
-  return (
-    <ul className="space-y-2">
-      {cards.map(({ style, insight }) => (
-        <li key={style.key}>
-          <a href={style.href} className="flex gap-3 rounded-md border border-line-2 p-2.5 transition-colors hover:border-brand-line">
-            <span className={`flex size-7 shrink-0 items-center justify-center rounded-md text-xs font-semibold ${style.classes}`}>
-              {style.label.slice(0, 1)}
-            </span>
-            <span className="min-w-0">
-              <span className="block text-xs font-medium text-ink-3">{style.label}</span>
-              <span className="mt-0.5 line-clamp-2 block text-[13px] font-medium text-ink">{insight!.title}</span>
-              <span className="mt-0.5 block text-xs tabular-nums text-ink-3">
-                {insight!.supportingReviews.toLocaleString()} supporting review
-                {insight!.supportingReviews === 1 ? "" : "s"}
-                {insight!.severity ? ` · severity ${insight!.severity}/5` : ""}
-              </span>
-            </span>
-          </a>
-        </li>
-      ))}
-    </ul>
-  );
-}
-
-export function StaffPraised({ aggregates, limit = 5 }: { aggregates: ObservationAggregates; limit?: number }) {
-  const rows = aggregates.staffPraise.slice(0, limit);
-  if (rows.length === 0) return <p className="py-6 text-center text-[13px] text-ink-3">No staff named in praise yet.</p>;
-  const max = Math.max(1, ...rows.map((r) => r.count));
-  // Share is of every staff-praise mention, including names below the cut.
-  const totalPraise = aggregates.staffPraise.reduce((s, r) => s + r.count, 0);
-  return (
-    <ul className="space-y-2.5">
-      {rows.map((row) => (
-        <li key={row.name}>
-          <div className="flex items-baseline justify-between text-[13px]">
-            <span className="text-ink-2">{row.name}</span>
-            <span className="text-xs tabular-nums text-ink-3">
-              {row.count} mentions{totalPraise > 0 ? ` · ${Math.round((row.count / totalPraise) * 100)}% of staff praise` : ""}
-            </span>
-          </div>
-          <div className="mt-1 h-2 overflow-hidden rounded-[3px] bg-line-2" aria-hidden="true">
-            <div className="h-full rounded-[3px] bg-ok" style={{ width: `${(row.count / max) * 100}%` }} />
-          </div>
-        </li>
-      ))}
-    </ul>
-  );
-}
-
-export function SectionCard({
-  title,
-  hint,
-  children,
-  className = "",
+/** "What to do next": suggested actions from the AI report, each assignable. */
+export function NextActionsCard({
+  actions,
+  assignments,
+  members,
+  canAssign,
+  empty,
 }: {
-  title: string;
-  hint?: string;
-  children: React.ReactNode;
-  className?: string;
+  actions: NextAction[];
+  assignments: Record<string, string>;
+  members: AssignableMember[];
+  canAssign: boolean;
+  empty: React.ReactNode;
 }) {
   return (
-    <div className={`min-w-0 rounded-lg border border-line bg-white p-4 ${className}`}>
-      <div className="mb-3 flex flex-wrap items-baseline justify-between gap-2">
-        <h2 className="text-sm font-semibold text-ink">{title}</h2>
-        {hint ? <span className="text-xs text-ink-3">{hint}</span> : null}
+    <section className="flex min-w-0 flex-[999_1_460px] flex-col gap-3.5 rounded-[14px] border border-line bg-white p-5">
+      <h2 className="text-[15px] font-semibold text-ink">What to do next</h2>
+      {actions.length === 0 ? (
+        <div className="text-[13px] text-ink-3">{empty}</div>
+      ) : (
+        <ol className="flex flex-col">
+          {actions.map((action, index) => (
+            <li key={action.id} className="flex flex-wrap items-start gap-x-4 gap-y-3 border-t border-line-2 py-3.5">
+              <span className="flex size-7 shrink-0 items-center justify-center rounded-full bg-brand-tint text-[13px] font-bold text-brand">
+                {index + 1}
+              </span>
+              <span className="flex min-w-0 flex-[1_1_260px] flex-col gap-1">
+                <span className="text-sm font-semibold text-ink">{action.title}</span>
+                <span className="text-[13px] leading-normal text-ink-2">{action.why}</span>
+              </span>
+              <InsightAssign
+                actionId={action.id}
+                title={action.title}
+                members={members}
+                assigneeId={assignments[action.id] ?? null}
+                canAssign={canAssign}
+              />
+            </li>
+          ))}
+        </ol>
+      )}
+    </section>
+  );
+}
+
+/** "Worth checking": serious claims to verify, and staff customers name. */
+export function WorthChecking({
+  incidents,
+  staff,
+  hrefFor,
+  locationLabel,
+}: {
+  incidents: InsightSevereIncident[];
+  staff: Array<{ name: string; count: number }>;
+  hrefFor: (excerpt: string) => string;
+  locationLabel: string;
+}) {
+  return (
+    <section className="flex min-w-0 flex-[1_1_320px] flex-col gap-3 rounded-[14px] border border-line bg-white p-5">
+      <div className="flex flex-col gap-0.5">
+        <h2 className="text-[15px] font-semibold text-ink">Worth checking</h2>
+        <span className="text-xs leading-[1.45] text-ink-3">
+          Serious claims from customers. Verify before acting — they are not proven facts.
+        </span>
       </div>
-      {children}
+      {incidents.length === 0 ? (
+        <p className="text-[13px] text-ink-3">No serious claims in this period.</p>
+      ) : (
+        incidents.slice(0, 3).map((incident, index) => (
+          <Link
+            key={`${incident.reviewId}-${index}`}
+            href={hrefFor(incident.evidenceExcerpt)}
+            className="flex flex-col gap-1 rounded-[10px] border border-warn-line bg-[#fffaf3] p-3 text-ink hover:border-warn"
+          >
+            <span className="flex items-center gap-2 text-xs font-semibold text-warn">
+              <CircleAlert aria-hidden className="size-3" strokeWidth={2.5} />
+              {(() => {
+                const label = severityLabel(incident.severity);
+                return label.charAt(0).toUpperCase() + label.slice(1);
+              })()}
+              {incident.severity ? ` · ${incident.severity}/5` : ""}
+            </span>
+            <span className="line-clamp-3 text-sm font-medium">“{incident.evidenceExcerpt}”</span>
+            <span className="text-xs text-ink-3">
+              {locationLabel} · {incident.starRating}★
+              {incident.reviewCreateTime
+                ? ` · ${new Date(incident.reviewCreateTime).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" })}`
+                : ""}
+            </span>
+          </Link>
+        ))
+      )}
+      <div className="mt-1 flex flex-col gap-2 border-t border-line-2 pt-3">
+        <span className="text-[13px] font-semibold text-ink">Staff customers name</span>
+        {staff.length === 0 ? (
+          <span className="text-[13px] text-ink-3">No staff named in this period.</span>
+        ) : (
+          <div className="flex flex-wrap gap-1.5">
+            {staff.map((person) => (
+              <span key={person.name} className="rounded-full bg-brand-tint px-2.5 py-1 text-xs font-medium text-brand">
+                {person.name} · {person.count}
+              </span>
+            ))}
+          </div>
+        )}
+      </div>
+    </section>
+  );
+}
+
+/* ---------------- Topics tab ---------------- */
+
+export interface TopicQuote {
+  excerpt: string;
+  href: string;
+  sentiment: "positive" | "negative";
+  stars: number;
+  createdAt: string;
+  place: string;
+}
+
+export interface TopicDetail {
+  topic: string;
+  label: string;
+  praise: number;
+  complaints: number;
+  reviews: number;
+  trend: TopicTrend | null;
+  where: Array<{ name: string; count: number }>;
+  quotes: TopicQuote[];
+  /** Every mention, when "Open N reviews" was used. */
+  allQuotes: TopicQuote[] | null;
+  toggleAllHref: string;
+}
+
+/** Diverging bars, complaints left and praise right, plus the picked topic. */
+export function TopicsTab({
+  rows,
+  selected,
+  hrefFor,
+  detail,
+}: {
+  rows: DivergingRow[];
+  selected: string | null;
+  hrefFor: (topic: string) => string;
+  detail: TopicDetail | null;
+}) {
+  if (rows.length === 0) {
+    return <p className="rounded-[14px] border border-line bg-white p-8 text-center text-[13px] text-ink-3">No topics in this period yet.</p>;
+  }
+  const good = detail ? detail.praise >= detail.complaints : true;
+  const trendText = detail?.trend
+    ? detail.trend.status === "worse"
+      ? "getting worse"
+      : detail.trend.status === "better"
+        ? "getting better"
+        : "steady"
+    : null;
+  return (
+    <div className="flex flex-wrap items-start gap-4">
+      <section className="flex min-w-0 flex-[999_1_520px] flex-col gap-3.5 rounded-[14px] border border-line bg-white p-5">
+        <div className="flex flex-wrap items-baseline justify-between gap-3">
+          <div className="flex flex-col gap-0.5">
+            <h2 className="text-[15px] font-semibold text-ink">Topics customers mention</h2>
+            <span className="text-[13px] text-ink-3">Complaints to the left, praise to the right. Pick a topic.</span>
+          </div>
+          <div className="flex gap-3.5 text-xs text-ink-2">
+            <span className="inline-flex items-center gap-1.5">
+              <span className="size-2.5 rounded-[3px] bg-[#c2410c]" />
+              Complaints
+            </span>
+            <span className="inline-flex items-center gap-1.5">
+              <span className="size-2.5 rounded-[3px] bg-brand" />
+              Praise
+            </span>
+          </div>
+        </div>
+        <div className="flex flex-col gap-1">
+          {rows.map((row) => {
+            const on = row.topic === selected;
+            return (
+              <Link
+                key={row.topic}
+                href={hrefFor(row.topic)}
+                aria-current={on ? "true" : undefined}
+                aria-label={`${row.label}: ${row.complaints} complaints, ${row.praise} praise`}
+                className={`grid min-h-11 grid-cols-[76px_minmax(0,1fr)_2px_minmax(0,1fr)] items-center gap-1.5 rounded-[10px] px-2 py-1.5 sm:grid-cols-[minmax(110px,150px)_minmax(0,1fr)_2px_minmax(0,1fr)] sm:gap-2.5 sm:px-2.5 ${
+                  on ? "bg-[#f1f4fd]" : "hover:bg-paper"
+                }`}
+              >
+                <span className={`line-clamp-2 text-[13px] leading-tight text-ink sm:line-clamp-1 sm:text-sm ${on ? "font-semibold" : "font-medium"}`}>{row.label}</span>
+                <span className="flex items-center justify-end gap-1.5 text-xs tabular-nums text-ink-2" aria-hidden>
+                  {row.complaints}
+                  <span className="h-3.5 rounded-l bg-[#c2410c]" style={{ width: `${row.complaintWidth}%` }} />
+                </span>
+                <span className="h-6 bg-[#c3c9d3]" aria-hidden />
+                <span className="flex items-center gap-1.5 text-xs tabular-nums text-ink-2" aria-hidden>
+                  <span className="h-3.5 rounded-r bg-brand" style={{ width: `${row.praiseWidth}%` }} />
+                  {row.praise}
+                </span>
+              </Link>
+            );
+          })}
+        </div>
+      </section>
+
+      {detail ? (
+        <aside
+          id="topic-detail"
+          aria-label={`${detail.label} in detail`}
+          className="flex min-w-0 flex-[1_1_340px] scroll-mt-24 flex-col gap-4 rounded-[14px] border border-line bg-white p-5"
+        >
+          <div className="flex flex-col gap-1">
+            <span className="text-xs font-semibold uppercase tracking-[0.06em] text-ink-3">Topic</span>
+            <h2 className="text-xl font-bold text-ink">{detail.label}</h2>
+            <span className="text-[13px] text-ink-2">
+              {(detail.praise + detail.complaints).toLocaleString()} mentions
+              {trendText ? (
+                <>
+                  {" · "}
+                  <span
+                    className={`font-medium ${
+                      detail.trend?.status === "worse" ? WORSE_TEXT : detail.trend?.status === "better" ? "text-ok" : "text-ink-3"
+                    }`}
+                  >
+                    {trendText}
+                  </span>
+                </>
+              ) : null}
+            </span>
+          </div>
+          <p className="text-sm leading-[1.55] text-ink">
+            {detail.complaints.toLocaleString()} {detail.complaints === 1 ? "complaint" : "complaints"} and {detail.praise.toLocaleString()}{" "}
+            praise in {detail.reviews.toLocaleString()} {detail.reviews === 1 ? "review" : "reviews"}
+            {detail.trend?.now !== null && detail.trend?.now !== undefined ? `, ${detail.trend.now}% happy in the latest month` : ""}.
+            {detail.where[0] ? ` It comes up most at ${detail.where[0].name}.` : ""}
+          </p>
+          {detail.where.length > 0 ? (
+            <div className="flex flex-col gap-2">
+              <span className="text-[13px] font-semibold text-ink">Where it comes up most</span>
+              {detail.where.map((place) => (
+                <div key={place.name} className="flex items-center gap-2.5 text-[13px]">
+                  <span className="min-w-0 flex-auto truncate text-ink">{place.name}</span>
+                  <span className="h-2 w-[90px] shrink-0 overflow-hidden rounded-full bg-line-2">
+                    <span
+                      className={`block h-2 rounded-full ${good ? "bg-brand" : "bg-[#c2410c]"}`}
+                      style={{ width: `${Math.round((place.count / Math.max(1, detail.where[0].count)) * 100)}%` }}
+                    />
+                  </span>
+                  <span className="w-6 shrink-0 text-right tabular-nums text-ink">{place.count}</span>
+                </div>
+              ))}
+            </div>
+          ) : null}
+          {detail.quotes.length > 0 ? (
+            <div className="flex flex-col gap-2">
+              <span className="text-[13px] font-semibold text-ink">In their words</span>
+              {detail.quotes.map((quote, index) => (
+                <Link
+                  key={index}
+                  href={quote.href}
+                  className="rounded-lg bg-paper px-3 py-2.5 text-[13px] leading-normal text-ink-2 hover:bg-line-2"
+                >
+                  <span className="sr-only">{quote.sentiment === "positive" ? "Praise: " : "Complaint: "}</span>“{quote.excerpt}”
+                </Link>
+              ))}
+            </div>
+          ) : null}
+          <Link
+            href={detail.toggleAllHref}
+            className="inline-flex h-10 items-center self-start rounded-full bg-ink px-[18px] text-sm font-semibold text-white hover:bg-graphite"
+          >
+            {detail.allQuotes
+              ? "Hide the reviews"
+              : `Open ${detail.reviews.toLocaleString()} ${detail.reviews === 1 ? "review" : "reviews"}`}
+          </Link>
+          {detail.allQuotes ? (
+            <ul className="flex flex-col gap-2 border-t border-line-2 pt-3">
+              {detail.allQuotes.map((quote, index) => (
+                <li key={index}>
+                  <Link href={quote.href} className="flex flex-col gap-1 rounded-lg border border-line-2 p-3 hover:border-brand-line">
+                    <span className="flex flex-wrap items-center gap-x-1.5 text-xs text-ink-3">
+                      <span className={`font-semibold ${quote.sentiment === "positive" ? "text-brand" : WORSE_TEXT}`}>
+                        {quote.sentiment === "positive" ? "Praise" : "Complaint"}
+                      </span>
+                      · {quote.stars}★ · {new Date(quote.createdAt).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric", timeZone: "UTC" })} ·{" "}
+                      {quote.place}
+                    </span>
+                    <span className="text-[13px] leading-normal text-ink-2">“{quote.excerpt}”</span>
+                  </Link>
+                </li>
+              ))}
+            </ul>
+          ) : null}
+        </aside>
+      ) : null}
     </div>
+  );
+}
+
+/* ---------------- Locations tab ---------------- */
+
+const HEAT: Record<HeatStep, { bg: string; ink: string; label: string }> = {
+  [-2]: { bg: "#c2410c", ink: "#ffffff", label: "Very negative" },
+  [-1]: { bg: "#f6b48d", ink: "#14181f", label: "Negative" },
+  [0]: { bg: "#eef0f3", ink: "#14181f", label: "Mixed" },
+  [1]: { bg: "#a9bdf3", ink: "#14181f", label: "Positive" },
+  [2]: { bg: "#1f4ed8", ink: "#ffffff", label: "Very positive" },
+};
+
+export interface HeatmapRowView {
+  locationId: string;
+  name: string;
+  rating: number | null;
+  cells: Array<{ topic: string; score: number | null; step: HeatStep | null; mentions: number }>;
+}
+
+/** Locations × topics on a five-step diverging scale. */
+export function LocationHeatmap({
+  topics,
+  rows,
+  note,
+}: {
+  topics: Array<{ topic: string; label: string }>;
+  rows: HeatmapRowView[];
+  note: string | null;
+}) {
+  return (
+    <section className="flex flex-col gap-4 rounded-[14px] border border-line bg-white p-5">
+      <div className="flex flex-wrap items-baseline justify-between gap-3">
+        <div className="flex flex-col gap-0.5">
+          <h2 className="text-[15px] font-semibold text-ink">Each location, topic by topic</h2>
+          <span className="text-[13px] text-ink-3">
+            How positive reviews are about each topic, from −100 to +100. Blank means too few mentions.
+          </span>
+        </div>
+        <div className="flex items-center gap-1.5 text-xs text-ink-2" role="img" aria-label="Scale from negative to positive in five steps">
+          <span>Negative</span>
+          {([-2, -1, 0, 1, 2] as HeatStep[]).map((step) => (
+            <span key={step} className="h-3 w-[18px] rounded-[3px]" style={{ background: HEAT[step].bg }} title={HEAT[step].label} />
+          ))}
+          <span>Positive</span>
+        </div>
+      </div>
+      {rows.length === 0 || topics.length === 0 ? (
+        <p className="py-6 text-center text-[13px] text-ink-3">Not enough topic mentions per location in this period yet.</p>
+      ) : (
+        <div className="overflow-x-auto">
+          <table className="w-full border-separate border-spacing-1 text-[13px]" style={{ minWidth: `${132 + topics.length * 88 + 60}px` }}>
+            <thead>
+              <tr>
+                <th scope="col" className="sticky left-0 z-10 bg-white px-2 py-1.5 text-left text-xs font-medium text-ink-3">
+                  Location
+                </th>
+                {topics.map((topic) => (
+                  <th key={topic.topic} scope="col" className="px-1 py-1.5 text-center text-xs font-medium text-ink-3">
+                    {topic.label}
+                  </th>
+                ))}
+                <th scope="col" className="px-2 py-1.5 text-right text-xs font-medium text-ink-3">
+                  Rating
+                </th>
+              </tr>
+            </thead>
+            <tbody>
+              {rows.map((row) => (
+                <tr key={row.locationId}>
+                  <th
+                    scope="row"
+                    className="sticky left-0 z-10 w-[132px] min-w-[132px] bg-white p-2 text-left font-medium leading-snug text-ink sm:w-auto sm:min-w-[180px]"
+                  >
+                    {row.name}
+                  </th>
+                  {row.cells.map((cell) => {
+                    const look = cell.step === null ? null : HEAT[cell.step];
+                    return (
+                      <td
+                        key={cell.topic}
+                        title={
+                          cell.score === null
+                            ? `Too few mentions (${cell.mentions})`
+                            : `${look?.label}: ${cell.score > 0 ? "+" : ""}${cell.score} from ${cell.mentions} mentions`
+                        }
+                        className="h-11 min-w-[84px] rounded-md text-center font-semibold tabular-nums"
+                        style={look ? { background: look.bg, color: look.ink } : { background: "#ffffff", color: "#687283" }}
+                      >
+                        {cell.score === null ? (
+                          <span className="sr-only">Too few mentions</span>
+                        ) : (
+                          `${cell.score > 0 ? "+" : cell.score < 0 ? "−" : ""}${Math.abs(cell.score)}`
+                        )}
+                      </td>
+                    );
+                  })}
+                  <td className="p-2 text-right font-semibold tabular-nums text-ink">{row.rating === null ? "—" : row.rating.toFixed(1)}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+      {note ? <p className="rounded-[10px] bg-[#f8f9fb] px-3.5 py-3 text-[13px] leading-[1.55] text-ink-2">{note}</p> : null}
+    </section>
   );
 }

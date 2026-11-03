@@ -531,3 +531,191 @@ export function assembleInsights(
     };
   });
 }
+
+/* ---------------- The short version (Insights → Summary) ---------------- */
+
+export type TakeawayKind = "good" | "fix_first" | "fix_next";
+
+export interface Takeaway {
+  kind: TakeawayKind;
+  title: string;
+  body: string;
+  /** Reviews behind it, for "See N reviews". */
+  reviews: number;
+  /** The theme it is about, when known, so the card can open it on the Topics tab. */
+  topic: string | null;
+  /** The saved insight it came from, when it came from the AI report. */
+  insightId: string | null;
+}
+
+/** A run of the headline sentence; `problem` runs are highlighted. */
+export interface ShortVersionPart {
+  text: string;
+  problem?: boolean;
+}
+
+export interface ShortVersion {
+  /** "ai" when written from the saved AI report, "counts" when only the theme counts were available. */
+  source: "ai" | "counts";
+  sentence: ShortVersionPart[];
+  takeaways: Takeaway[];
+}
+
+export interface ShortVersionTheme {
+  topic: string;
+  label: string;
+  praise: number;
+  complaints: number;
+  praiseReviews: number;
+  complaintReviews: number;
+}
+
+const NOT_TAKEAWAYS = new Set<InsightCategory>(["serious_incident", "relationship", "outlet_comparison"]);
+
+function firstSentence(text: string): string {
+  const clean = text.replace(/\s+/g, " ").trim();
+  const match = /^(.+?[.!?])(\s|$)/.exec(clean);
+  return match ? match[1] : clean;
+}
+
+/** "Long waits at Downtown" → "long waits at Downtown", but "Harbor Dental" stays as written. */
+function inSentence(title: string): string {
+  const text = title.trim().replace(/[.!?]+$/, "");
+  if (text.length > 1 && /^[A-Z][a-z]/.test(text) && !/^[A-Z][a-z]+\s+[A-Z]/.test(text)) {
+    return text[0].toLowerCase() + text.slice(1);
+  }
+  return text;
+}
+
+function rank(a: InsightRecord, b: InsightRecord): number {
+  return (b.importance ?? 0) - (a.importance ?? 0) || b.supportingReviews - a.supportingReviews || a.id.localeCompare(b.id);
+}
+
+function moodClause(now: number | null, yearAgo: number | null, monthAgo: number | null): string {
+  const against = yearAgo ?? monthAgo;
+  const when = yearAgo !== null ? "a year ago" : "last month";
+  if (now === null || against === null) return "Here is what customers are saying";
+  const change = now - against;
+  if (change >= 3) return `Customers are happier than ${when}`;
+  if (change <= -3) return `Customers are less happy than ${when}`;
+  return `Customers are about as happy as ${when}`;
+}
+
+function joinProblems(parts: ShortVersionPart[], problems: string[]): void {
+  problems.forEach((problem, index) => {
+    if (index > 0) parts.push({ text: index === problems.length - 1 ? " and " : ", " });
+    parts.push({ text: problem, problem: true });
+  });
+}
+
+/**
+ * The headline and three takeaway cards at the top of Insights. Built from the
+ * saved AI insights when there are any; otherwise from the theme counts, so
+ * the page still says something true before the AI report is written.
+ * Numbers come only from the insights' database fields or the counts.
+ */
+export function shortVersion(input: {
+  insights: InsightRecord[];
+  themes: ShortVersionTheme[];
+  mood: { now: number | null; yearAgo: number | null; monthAgo: number | null };
+}): ShortVersion | null {
+  const lead = moodClause(input.mood.now, input.mood.yearAgo, input.mood.monthAgo);
+  const usable = input.insights.filter((insight) => !NOT_TAKEAWAYS.has(insight.category) && insight.supportingReviews > 0);
+  const strengths = usable.filter((insight) => insight.sentiment === "positive").sort(rank);
+  const problems = usable.filter((insight) => insight.sentiment === "negative").sort(rank);
+
+  if (strengths.length + problems.length > 0) {
+    const sentence: ShortVersionPart[] = [{ text: lead }];
+    if (strengths[0]) sentence.push({ text: ` — ${inSentence(strengths[0].title)}` });
+    sentence.push({ text: "." });
+    const top = problems.slice(0, 2).map((insight) => inSentence(insight.title));
+    if (top.length > 0) {
+      sentence.push({ text: top.length === 1 ? " One problem is costing you stars: " : ` ${top.length === 2 ? "Two" : top.length} problems are costing you stars: ` });
+      joinProblems(sentence, top);
+      sentence.push({ text: "." });
+    }
+    const card = (insight: InsightRecord, kind: TakeawayKind): Takeaway => ({
+      kind,
+      title: insight.title,
+      body: firstSentence(insight.detail),
+      reviews: insight.supportingReviews,
+      topic: /^topic (\S+)$/.exec(insight.context)?.[1] ?? null,
+      insightId: insight.id,
+    });
+    const takeaways: Takeaway[] = [];
+    if (strengths[0]) takeaways.push(card(strengths[0], "good"));
+    if (problems[0]) takeaways.push(card(problems[0], "fix_first"));
+    if (problems[1]) takeaways.push(card(problems[1], "fix_next"));
+    else if (strengths[1]) takeaways.push(card(strengths[1], "good"));
+    return { source: "ai", sentence, takeaways };
+  }
+
+  const mentioned = input.themes.filter((theme) => theme.praise + theme.complaints > 0);
+  if (mentioned.length === 0) return null;
+  const praised = [...mentioned]
+    .filter((theme) => theme.praise > theme.complaints)
+    .sort((a, b) => b.praise - a.praise || a.topic.localeCompare(b.topic));
+  const complained = [...mentioned]
+    .filter((theme) => theme.complaints >= 2 && theme.complaints >= theme.praise)
+    .sort((a, b) => b.complaints - a.complaints || a.topic.localeCompare(b.topic));
+  const sentence: ShortVersionPart[] = [{ text: lead }];
+  if (praised[0]) sentence.push({ text: `, and ${praised[0].label.toLowerCase()} gets the most praise` });
+  sentence.push({ text: "." });
+  const worst = complained.slice(0, 2);
+  if (worst.length > 0) {
+    sentence.push({ text: worst.length === 1 ? " The most common complaint is " : " The most common complaints are " });
+    joinProblems(sentence, worst.map((theme) => theme.label.toLowerCase()));
+    sentence.push({ text: "." });
+  }
+  const share = (part: number, theme: ShortVersionTheme) => Math.round((part / (theme.praise + theme.complaints)) * 100);
+  const takeaways: Takeaway[] = [];
+  if (praised[0]) {
+    const theme = praised[0];
+    takeaways.push({
+      kind: "good",
+      title: `${theme.label} is what customers like most`,
+      body: `${theme.praise} praise ${theme.praise === 1 ? "mention" : "mentions"}, ${share(theme.praise, theme)}% of what was said about it.`,
+      reviews: theme.praiseReviews,
+      topic: theme.topic,
+      insightId: null,
+    });
+  }
+  worst.forEach((theme, index) => {
+    takeaways.push({
+      kind: index === 0 ? "fix_first" : "fix_next",
+      title: `Complaints about ${theme.label.toLowerCase()}`,
+      body: `${theme.complaints} ${theme.complaints === 1 ? "complaint" : "complaints"}, ${share(theme.complaints, theme)}% of what was said about it.`,
+      reviews: theme.complaintReviews,
+      topic: theme.topic,
+      insightId: null,
+    });
+  });
+  return { source: "counts", sentence, takeaways };
+}
+
+export interface NextAction {
+  /** Stable id for assigning it: the insight it came from. */
+  id: string;
+  title: string;
+  why: string;
+}
+
+/**
+ * "What to do next": the suggested actions from the AI report, problems first.
+ * Serious incidents are left out; they are listed under "Worth checking".
+ */
+export function nextActions(insights: InsightRecord[], limit = 3): NextAction[] {
+  const withAction = insights.filter(
+    (insight) => insight.suggestedAction && insight.category !== "relationship" && insight.category !== "serious_incident"
+  );
+  return withAction
+    .sort((a, b) => (a.sentiment === b.sentiment ? 0 : a.sentiment === "negative" ? -1 : 1) || rank(a, b))
+    .slice(0, limit)
+    .map((insight) => ({
+      id: insight.id,
+      title: (insight.suggestedAction as string).replace(/\s+/g, " ").trim(),
+      why: `${firstSentence(insight.title)}${/[.!?]$/.test(insight.title.trim()) ? "" : "."} ${insight.supportingReviews} ${
+        insight.supportingReviews === 1 ? "review" : "reviews"
+      }${insight.denominator ? ` of ${insight.denominator}` : ""}.`,
+    }));
+}

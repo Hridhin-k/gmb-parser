@@ -88,6 +88,8 @@ export type AuditAction =
   | "location_group.updated"
   | "review.assigned"
   | "review.note_added"
+  | "insight.action_assigned"
+  | "insight.action_unassigned"
   | "escalation.policy_updated"
   | "escalation.contact_updated"
   | "escalation.opened"

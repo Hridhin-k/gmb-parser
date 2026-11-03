@@ -54,6 +54,8 @@ interface InsightReportPanelProps {
   };
   initialReport: ReportStatusView | null;
   hasSavedReport: boolean;
+  /** One line with a small button, for the Insights summary card. */
+  compact?: boolean;
 }
 
 const TERMINAL = ["completed", "partial", "failed"];
@@ -62,6 +64,7 @@ export function InsightReportPanel({
   scopeParams,
   initialReport,
   hasSavedReport,
+  compact = false,
 }: InsightReportPanelProps) {
   const router = useRouter();
   const [report, setReport] = useState<ReportStatusView | null>(initialReport);
@@ -147,6 +150,26 @@ export function InsightReportPanel({
   ) : report.status === "failed" ? (
     <Badge variant="bad">Failed</Badge>
   ) : null;
+
+  if (compact) {
+    return (
+      <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5 text-[13px] text-ink-3" aria-live="polite">
+        <span>
+          {running || starting
+            ? `Writing the AI summary${report?.phase ? ` — ${phaseLabel(report.phase).toLowerCase()}` : "…"}`
+            : hasSavedReport
+              ? "Written by AI from your saved reviews."
+              : "Counted from your reviews. Ask AI to write it up with suggested actions."}
+        </span>
+        <Button type="button" variant="ai" size="sm" onClick={start} loading={starting || running}>
+          {running || starting ? null : <Sparkles aria-hidden />}
+          {running || starting ? "Writing…" : hasSavedReport ? "Refresh AI summary" : "Write AI summary"}
+        </Button>
+        {message ? <span className="basis-full text-bad">{message}</span> : null}
+        {!running && report?.status === "failed" ? <span className="basis-full text-bad">The summary failed. Try again.</span> : null}
+      </div>
+    );
+  }
 
   return (
     <div className="flex flex-col gap-3">
