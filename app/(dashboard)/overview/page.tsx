@@ -1,44 +1,67 @@
 import Link from "next/link";
-import { ClientOverviewView, type OverviewRecentChange } from "@/components/client-overview";
 import { EmptyState } from "@/components/empty-state";
+import { FreshMetrics } from "@/components/fresh-metrics";
+import { PendingRegion, TransitionScope } from "@/components/transition-scope";
+import {
+  KpiTiles,
+  LocationsCard,
+  NeedsYouStrip,
+  StarCard,
+  ThemesCard,
+  TodayHeader,
+  VolumeCard,
+} from "@/components/today/today-sections";
 import { Banner } from "@/components/ui/banner";
 import { Button } from "@/components/ui/button";
+import { DAY_RANGE_PRESETS, dateRangeParams } from "@/lib/date-range";
 import { formatFriendlyDateTime } from "@/lib/format-date";
-import { scopeKindLabel } from "@/lib/ui/vocabulary";
-import { FreshMetrics } from "@/components/fresh-metrics";
-import { PageHeader } from "@/components/page-header";
-import { PendingRegion, TransitionScope } from "@/components/transition-scope";
-import { dateRangeParams, parseDateRange } from "@/lib/date-range";
-import { buildAttention, reviewDrillHref } from "@/lib/metrics";
+import { insightTopicLabel } from "@/lib/insight-dashboard";
+import { reviewDrillHref } from "@/lib/metrics";
 import { buildOverviewBoard, overviewQueryKey, type BoardPlace } from "@/lib/overview-board";
-import { loadInsightDashboard } from "@/lib/services/insight-dashboard";
-import { getLatestReportForScope, getReportByCacheKey, reportCacheKey } from "@/lib/services/insight-report";
-import { loadOverviewSignals } from "@/lib/services/overview";
 import { getDashboardContext } from "@/lib/services/dashboard-metrics";
+import { loadInsightDashboard } from "@/lib/services/insight-dashboard";
 import { getOnboardingGate } from "@/lib/services/onboarding";
+import { loadOverviewSignals } from "@/lib/services/overview";
 import { readPageScope } from "@/lib/services/scope-catalog";
 import { getActiveRole, getActiveWorkspace } from "@/lib/services/session";
-import { canOpenPath, isManager } from "@/lib/shell";
-import { scopeSummary } from "@/lib/scope";
+import { getShellSummary } from "@/lib/services/shell-summary";
+import { loadNeedsYouExtras, loadTodayReviews } from "@/lib/services/today";
+import { canOpenPath, isManager, shellAlerts } from "@/lib/shell";
+import {
+  buildDays,
+  buildKpis,
+  buildLocationTable,
+  buildNeedsYou,
+  buildThemes,
+  greeting,
+  longDate,
+  niceMax,
+  rangeDays,
+  shortDay,
+  sparkSeries,
+  todayRange,
+} from "@/lib/today";
 
 interface OverviewPageProps {
   searchParams: Promise<Record<string, string | string[] | undefined>>;
 }
 
-const DEFAULT_RANGE = "12m";
 /** Newest Google sync older than this reads as stale. */
 const STALE_AFTER_MS = 24 * 60 * 60 * 1000;
-
-/** Request-time check; server components render once per request. */
-function isStale(syncedAtMs: number): boolean {
-  return Date.now() - syncedAtMs > STALE_AFTER_MS;
-}
 
 function param(value: string | string[] | undefined): string {
   return Array.isArray(value) ? value[0] ?? "" : value ?? "";
 }
 
+function href(path: string, values: Record<string, string | null | undefined>): string {
+  const query = new URLSearchParams();
+  for (const [key, value] of Object.entries(values)) if (value) query.set(key, value);
+  const qs = query.toString();
+  return qs ? `${path}?${qs}` : path;
+}
+
 export default async function OverviewPage({ searchParams }: OverviewPageProps) {
+  const now = new Date();
   const [params, { user, workspaceId }, role] = await Promise.all([
     searchParams,
     getActiveWorkspace(),
@@ -50,39 +73,23 @@ export default async function OverviewPage({ searchParams }: OverviewPageProps) 
   ]);
   const showSetup =
     isManager(role) && !gate.completed && (gate.started || (gate.connections === 0 && gate.locations === 0));
-  const clientId = resolved.clientId;
-  const groupId = resolved.groupId;
-  const locationId = resolved.locationId;
-  const range = parseDateRange(params, DEFAULT_RANGE);
+  const { clientId, groupId, locationId } = resolved;
   const scope = { clientId, groupId, locationId };
+  const scoped = { client: clientId, group: groupId, location: locationId };
+  const range = todayRange(params, now);
+  const rangeQuery = dateRangeParams(range, "all");
   const start = range.start?.toISOString() ?? null;
   const end = range.end?.toISOString() ?? null;
-  const insightScope = {
-    locationIds: resolved.locationIds,
-    clientId,
-    groupId,
-    locationId,
-    start,
-    end,
-  };
-  const [loaded, signals, insights, exactReport, latestReport] = await Promise.all([
+
+  const [loaded, signals, insights, summary, extras, rows] = await Promise.all([
     getDashboardContext(workspaceId, range, scope),
     loadOverviewSignals(workspaceId, resolved.locationIds, range),
     loadInsightDashboard(workspaceId, { locationIds: resolved.locationIds, start, end }),
-    getReportByCacheKey(workspaceId, reportCacheKey(workspaceId, insightScope)),
-    getLatestReportForScope(workspaceId, {
-      clientId,
-      groupId,
-      locationId,
-      locationIds: resolved.locationIds,
-      rangeStart: start,
-      rangeEnd: end,
-    }),
+    getShellSummary(workspaceId, null, resolved.locationIds, user.id),
+    loadNeedsYouExtras(workspaceId, resolved.locationIds, now),
+    loadTodayReviews(workspaceId, resolved.locationIds, range),
   ]);
-  const savedReport = [exactReport, latestReport].find(
-    (row) => row && (row.status === "completed" || row.status === "partial")
-  );
-  const severeLead = insights.severeIncidents[0];
+  const timeZone = loaded.timezone;
 
   const places = new Map(loaded.locations.map((location) => [location.id, location]));
   const groupNames = new Map(loaded.groups.map((group) => [group.id, group.name]));
@@ -101,64 +108,7 @@ export default async function OverviewPage({ searchParams }: OverviewPageProps) 
     }));
 
   const reviews = (extra?: Record<string, string>) => reviewDrillHref(range, scope, extra);
-  const escalations = (extra?: Record<string, string>) => {
-    const query = new URLSearchParams({ ...dateRangeParams(range, "all"), ...extra });
-    if (clientId) query.set("client", clientId);
-    if (groupId) query.set("group", groupId);
-    if (locationId) query.set("location", locationId);
-    const qs = query.toString();
-    return qs ? `/escalations?${qs}` : "/escalations";
-  };
-  const reports = new URLSearchParams(dateRangeParams(range, "all"));
-  if (clientId) reports.set("client", clientId);
-  if (groupId) reports.set("group", groupId);
-  if (locationId) reports.set("location", locationId);
-  const analytics = new URLSearchParams(dateRangeParams(range, DEFAULT_RANGE));
-  if (clientId) analytics.set("client", clientId);
-  if (groupId) analytics.set("group", groupId);
-  if (locationId) analytics.set("location", locationId);
-  const insightParams = new URLSearchParams(dateRangeParams(range, DEFAULT_RANGE));
-  if (clientId) insightParams.set("client", clientId);
-  if (groupId) insightParams.set("group", groupId);
-  if (locationId) insightParams.set("location", locationId);
-
-  const heldLocations = boardPlaces.filter((place) => places.get(place.id)?.holdReason).length;
-  const inactiveLocations = boardPlaces.filter((place) => places.get(place.id)?.isActive === false).length;
-  const attention = buildAttention({
-    facts: loaded.facts,
-    expiredConnections: loaded.expiredConnections,
-    revokedConnections: loaded.revokedConnections,
-    heldLocations,
-    inactiveLocations,
-    href: reviews,
-    escalationHref: escalations({ queue: "past_sla" }),
-  });
-  if (signals.oldestOverdue) {
-    const place = places.get(signals.oldestOverdue.locationId);
-    attention.unshift({
-      id: "oldest-overdue",
-      title: "Oldest escalation past SLA",
-      detail: place ? place.name : "Open the case",
-      href: `${escalations({ queue: "past_sla" })}#case-${signals.oldestOverdue.id}`,
-    });
-  }
-  if (signals.recentNegative) {
-    const place = places.get(signals.recentNegative.locationId);
-    if (place) {
-      attention.unshift({
-        id: "recent-negative",
-        title: `${signals.recentNegative.count.toLocaleString("en-US")} reviews of 1–3 stars in 48 hours`,
-        detail: `${place.name}. The inbox opens the calendar days covering that window.`,
-        href: reviews({
-          location: place.id,
-          stars: "low",
-          focusFrom: signals.recentNegative.fromDay,
-          focusTo: signals.recentNegative.toDay,
-        }),
-      });
-    }
-  }
-
+  const insightsHref = href("/insights", { ...scoped, ...rangeQuery });
   const board = buildOverviewBoard({
     facts: loaded.facts,
     previous: loaded.previous,
@@ -166,37 +116,97 @@ export default async function OverviewPage({ searchParams }: OverviewPageProps) 
     complaints: signals.complaints,
     topics: insights.aggregates.negative,
     praise: insights.aggregates.positive,
-    staff: insights.aggregates.staffPraise,
-    severeCount: insights.severeCount,
-    severeExcerpt: severeLead?.evidenceExcerpt ?? null,
-    severeStars: severeLead ? severeLead.starRating : null,
-    reportInsights: savedReport?.insights ?? null,
-    reportStatus: savedReport ? String(savedReport.status) : null,
-    reportFinishedAt: typeof savedReport?.finished_at === "string" ? savedReport.finished_at : null,
     periodLabel: range.label,
-    coverage: {
-      analysed: insights.counts.alreadyAnalysed,
-      ratingOnly: insights.counts.ratingOnly,
-    },
+    coverage: { analysed: insights.counts.alreadyAnalysed, ratingOnly: insights.counts.ratingOnly },
     links: {
       reviews,
-      escalations,
-      location: (place) => {
-        const query = new URLSearchParams(dateRangeParams(range, DEFAULT_RANGE));
-        if (place.clientId) query.set("client", place.clientId);
-        query.set("location", place.id);
-        const qs = query.toString();
-        return qs ? `/overview?${qs}` : "/overview";
-      },
-      analytics: analytics.size ? `/analytics?${analytics.toString()}` : "/analytics",
-      insights: insightParams.size ? `/insights?${insightParams.toString()}` : "/insights",
-      reports: reports.size ? `/reports?${reports.toString()}` : "/reports",
+      escalations: (extra) => href("/reviews", { ...scoped, tab: "follow-ups", ...extra }),
+      location: (place) => href("/overview", { client: place.clientId, location: place.id, ...rangeQuery }),
+      analytics: insightsHref,
+      insights: insightsHref,
+      reports: insightsHref,
       settings: "/settings",
     },
-    attention,
+    attention: [],
   });
 
-  const summary = scopeSummary(resolved);
+  // "Needs you" counts are everything waiting now, not just this period.
+  const tasks = buildNeedsYou(
+    {
+      unhappyUnreplied: extras.unhappyUnreplied,
+      oldestUnhappyAt: extras.oldestUnhappyAt,
+      followUps: summary.escalations,
+      overdueFollowUps: extras.overdueFollowUps,
+      nextFollowUpDue: extras.nextFollowUpDue,
+      drafts: summary.drafts,
+      failed: summary.failed,
+    },
+    {
+      unhappy: href("/reviews", { ...scoped, filter: "unanswered", stars: "negative" }),
+      "follow-ups": href("/reviews", { ...scoped, tab: "follow-ups" }),
+      drafts: href("/reviews", { ...scoped, filter: "draft" }),
+      failed: href("/reviews", { ...scoped, filter: "failed" }),
+    },
+    now,
+    timeZone
+  );
+  const notices = shellAlerts(summary, role).filter((alert) => alert.id.startsWith("notice:"));
+
+  const days = buildDays(rows, { days: rangeDays(range), now, timeZone });
+  const kpis = buildKpis(board.kpis, sparkSeries(days));
+  const dayTotal = days.reduce((sum, day) => sum + day.reviews, 0);
+  const lowDays = days.filter((day) => day.low > 0).length;
+  const peak = Math.max(0, ...days.map((day) => day.reviews));
+  const period = range.label.toLowerCase();
+
+  const clientNames = new Map(loaded.clients.map((client) => [client.id, client.name]));
+  const earlier = new Map((loaded.previous?.locations ?? []).map((row) => [row.locationId, row]));
+  const current = new Map(loaded.facts.locations.map((row) => [row.locationId, row]));
+  const waiting = new Map(summary.profiles.map((profile) => [profile.id, profile.unreplied]));
+  const businesses = new Set(boardPlaces.map((place) => place.clientId ?? ""));
+  const table = buildLocationTable(
+    boardPlaces.map((place) => ({
+      id: place.id,
+      name: place.name,
+      clientId: place.clientId,
+      reviews: current.get(place.id)?.reviews ?? 0,
+      ratingSum: current.get(place.id)?.ratingSum ?? 0,
+      previousReviews: earlier.get(place.id)?.reviews ?? 0,
+      previousRatingSum: earlier.get(place.id)?.ratingSum ?? 0,
+      unreplied: waiting.get(place.id) ?? 0,
+    })),
+    {
+      group: !clientId && businesses.size > 1,
+      businessName: (id) => (id ? clientNames.get(id) ?? null : null),
+    }
+  );
+
+  const themes = buildThemes(board.praiseThemes, board.themes);
+  const topComplaint = [...signals.complaints]
+    .filter((row) => row.count > 0 && places.has(row.locationId))
+    .sort((a, b) => b.count - a.count || a.topic.localeCompare(b.topic))[0];
+  const themeNote = topComplaint
+    ? `${insightTopicLabel(topComplaint.topic)} came up ${topComplaint.count.toLocaleString("en-US")} ${topComplaint.count === 1 ? "time" : "times"}${
+        boardPlaces.length > 1 ? ` at ${places.get(topComplaint.locationId)?.name}` : ""
+      } in the ${period}.`
+    : null;
+
+  const placeLabel = !clientId && resolved.level === "organisation" ? "All businesses" : resolved.title;
+  const periods = DAY_RANGE_PRESETS.map((preset) => {
+    const next = new URLSearchParams();
+    for (const [key, value] of Object.entries(params)) {
+      if (key === "range" || key === "from" || key === "to" || key === "page") continue;
+      const first = param(value);
+      if (first) next.set(key, first);
+    }
+    next.set("range", preset.key);
+    return {
+      key: preset.key,
+      label: preset.label.replace("Last ", ""),
+      href: `/overview?${next.toString()}`,
+      pressed: preset.key === range.key,
+    };
+  });
   const rendered = overviewQueryKey((key) => param(params[key]) || null);
 
   // Banners from data the page already has.
@@ -206,7 +216,7 @@ export default async function OverviewPage({ searchParams }: OverviewPageProps) 
     .filter((time) => Number.isFinite(time));
   const neverSynced = scopedPlaces.filter((place) => !place.lastSyncedAt).length;
   const newestSync = syncTimes.length > 0 ? Math.max(...syncTimes) : null;
-  const stale = newestSync !== null && isStale(newestSync);
+  const stale = newestSync !== null && now.getTime() - newestSync > STALE_AFTER_MS;
   const brokenConnections = loaded.expiredConnections + loaded.revokedConnections;
   const publishingPaused =
     loaded.pauses.workspace ||
@@ -216,81 +226,16 @@ export default async function OverviewPage({ searchParams }: OverviewPageProps) 
         (place.clientId !== null && loaded.pauses.clientIds.includes(place.clientId))
     );
   const canOpenSettings = canOpenPath("/settings", role);
-  const auditHref = canOpenPath("/audit", role) ? "/audit" : null;
   const firstUse = board.kpis.reviews === 0 && (board.kpis.previousReviews ?? 0) === 0;
-
-  const placeName = (id: string) => places.get(id)?.name ?? "a location";
-  const recent: OverviewRecentChange[] = [];
-  const latestSynced = scopedPlaces
-    .filter((place) => place.lastSyncedAt)
-    .sort((a, b) => Date.parse(b.lastSyncedAt ?? "") - Date.parse(a.lastSyncedAt ?? ""));
-  if (latestSynced[0]?.lastSyncedAt) {
-    recent.push({
-      id: "sync",
-      tone: "ok",
-      title: "Google sync",
-      detail:
-        latestSynced.length > 1
-          ? `${latestSynced[0].name} and ${(latestSynced.length - 1).toLocaleString("en-US")} more synced`
-          : `${latestSynced[0].name} synced`,
-      at: latestSynced[0].lastSyncedAt,
-    });
-  }
-  if (savedReport && typeof savedReport.finished_at === "string") {
-    recent.push({
-      id: "report",
-      tone: "ai",
-      title: "Insights report saved",
-      detail: savedReport.status === "partial" ? "partial coverage" : "for this scope",
-      at: savedReport.finished_at,
-      href: board.insightsHref,
-    });
-  }
-  if (signals.oldestOverdue) {
-    recent.push({
-      id: "overdue",
-      tone: "bad",
-      title: "Escalation passed its SLA",
-      detail: placeName(signals.oldestOverdue.locationId),
-      at: signals.oldestOverdue.dueAt,
-      href: `${escalations({ queue: "past_sla" })}#case-${signals.oldestOverdue.id}`,
-    });
-  }
-  if (signals.recentNegative) {
-    recent.push({
-      id: "negative",
-      tone: "bad",
-      title: `${signals.recentNegative.count.toLocaleString("en-US")} low-star reviews`,
-      detail: `${placeName(signals.recentNegative.locationId)} in the last 48 hours`,
-      at: `${signals.recentNegative.toDay}T12:00:00.000Z`,
-      href: reviews({
-        location: signals.recentNegative.locationId,
-        stars: "low",
-        focusFrom: signals.recentNegative.fromDay,
-        focusTo: signals.recentNegative.toDay,
-      }),
-    });
-  }
-  recent.sort((a, b) => Date.parse(b.at) - Date.parse(a.at));
-
-  const unrepliedByLocation = Object.fromEntries(
-    loaded.facts.locations.map((row) => [row.locationId, row.unreplied])
-  );
-  const unanswered = reviews({ filter: "unanswered" });
-  const scopeLine = [scopeKindLabel(summary.eyebrow), summary.title, summary.trail, range.label].filter(Boolean).join(" · ");
 
   return (
     <TransitionScope>
-      <div className="space-y-4">
-        <PageHeader title="Overview" description={scopeLine}>
-          <Button variant="outline" nativeButton={false} render={<Link href={board.reportsHref} />}>
-            Send digest
-          </Button>
-          <Button nativeButton={false} render={<Link href={board.kpis.unreplied > 0 ? unanswered : reviews()} />}>
-            Open inbox
-            {board.kpis.unreplied > 0 ? ` · ${board.kpis.unreplied.toLocaleString("en-US")}` : ""}
-          </Button>
-        </PageHeader>
+      <div className="mx-auto flex max-w-[1120px] flex-col gap-5">
+        <TodayHeader
+          dateLine={`${longDate(now, timeZone)} · ${placeLabel}`}
+          title={greeting(now, timeZone, user.name ?? user.user_metadata.full_name ?? user.user_metadata.name ?? null)}
+          periods={periods}
+        />
         {resolved.dropped ? (
           <Banner tone="info" title="That place is not available.">
             Showing {resolved.title}.
@@ -366,46 +311,79 @@ export default async function OverviewPage({ searchParams }: OverviewPageProps) 
             Reply rules will not send replies on their own. Replies you write or approve still work as usual.
           </Banner>
         ) : null}
-        <PendingRegion label="Updating overview…">
+        <PendingRegion label="Updating Today…">
           <FreshMetrics rendered={rendered} surface="overview">
             {boardPlaces.length === 0 ? (
               <EmptyState
                 title="No locations in this scope yet"
-                description="Import Google profiles and assign them to a business. The overview fills in once reviews sync."
+                description="Import Google profiles and assign them to a business. Today fills in once reviews sync."
               >
                 <Button size="sm" nativeButton={false} render={<Link href="/locations" />}>
                   Open locations
                 </Button>
               </EmptyState>
             ) : (
-              <>
+              <div className="flex flex-col gap-5">
+                <NeedsYouStrip tasks={tasks} startHref={href("/reviews", { ...scoped, filter: "unanswered" })} />
+                {notices.length > 0 ? (
+                  <ul aria-label="Alerts" className="flex flex-col gap-1 rounded-[14px] border border-line bg-white px-5 py-3 text-[13px]">
+                    {notices.map((notice) => (
+                      <li key={notice.id}>
+                        <Link href={notice.href} className="text-ink hover:text-brand">
+                          {notice.title}
+                        </Link>
+                      </li>
+                    ))}
+                  </ul>
+                ) : null}
                 {firstUse ? (
                   <Banner
                     tone="info"
                     title="No reviews in this period yet."
-                    className="mb-4"
                     actions={
                       <Button size="sm" variant="outline" nativeButton={false} render={<Link href={reviews()} />}>
-                        Open inbox
+                        Open reviews
                       </Button>
                     }
                   >
-                    Trends appear once reviews arrive. Pick a longer period in the top bar, or work from the inbox.
+                    Trends appear once reviews arrive. Pick a longer period above, or work from Reviews.
                   </Banner>
                 ) : null}
-                <ClientOverviewView
-                  board={board}
-                  reviewsHref={reviews()}
-                  negativeHref={reviews({ stars: "low" })}
-                  unansweredHref={unanswered}
-                  escalationsHref={escalations()}
-                  lowUnansweredHref={reviews({ stars: "low", filter: "unanswered" })}
-                  unrepliedByLocation={unrepliedByLocation}
-                  recent={recent}
-                  auditHref={auditHref}
-                  hideLocationRanking={Boolean(locationId)}
-                />
-              </>
+                <KpiTiles kpis={kpis} />
+                <div className="flex flex-wrap items-stretch gap-4">
+                  <VolumeCard
+                    days={days.map((day) => ({
+                      day: day.day,
+                      label: shortDay(day.day),
+                      reviews: day.reviews,
+                      avgRating: day.reviews > 0 ? day.ratingSum / day.reviews : null,
+                      low: day.low,
+                    }))}
+                    yMax={niceMax(days.map((day) => day.reviews))}
+                    caption={`${dayTotal.toLocaleString("en-US")} ${dayTotal === 1 ? "review" : "reviews"} in the ${period} · ${lowDays.toLocaleString("en-US")} ${lowDays === 1 ? "day" : "days"} with a low rating`}
+                    summary={`Bar chart of new reviews per day over the ${period}: ${dayTotal.toLocaleString("en-US")} in total, peak ${peak.toLocaleString("en-US")} in a day, ${lowDays.toLocaleString("en-US")} ${lowDays === 1 ? "day" : "days"} with a 1–2 star review.`}
+                  />
+                  <StarCard rows={board.starMix} average={board.kpis.avgRating} />
+                </div>
+                <div className="flex flex-wrap items-stretch gap-4">
+                  <LocationsCard
+                    table={table}
+                    allHref="/locations"
+                    unrepliedHref={(id) => href("/reviews", { client: places.get(id)?.clientId, location: id, filter: "unanswered" })}
+                    placeHref={(id) => href("/overview", { client: places.get(id)?.clientId, location: id, ...rangeQuery })}
+                  />
+                  <ThemesCard
+                    themes={themes}
+                    note={themeNote}
+                    insightsHref={insightsHref}
+                    emptyText={
+                      insights.counts.alreadyAnalysed > 0
+                        ? "No themes stood out in this period."
+                        : "No analysed review text in this period yet. Insights reads reviews to find what comes up."
+                    }
+                  />
+                </div>
+              </div>
             )}
           </FreshMetrics>
         </PendingRegion>

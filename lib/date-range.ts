@@ -11,7 +11,16 @@ export const DATE_RANGE_PRESETS = [
 ] as const;
 
 export type DateRangePresetKey = (typeof DATE_RANGE_PRESETS)[number]["key"];
-export type DateRangeKey = DateRangePresetKey | "custom" | "all";
+
+/** Rolling day windows for the Today page toggle. Not offered in the month dropdowns. */
+export const DAY_RANGE_PRESETS = [
+  { key: "7d", label: "Last 7 days", days: 7 },
+  { key: "30d", label: "Last 30 days", days: 30 },
+  { key: "90d", label: "Last 90 days", days: 90 },
+] as const;
+
+export type DayRangeKey = (typeof DAY_RANGE_PRESETS)[number]["key"];
+export type DateRangeKey = DateRangePresetKey | DayRangeKey | "custom" | "all";
 
 export const DATE_RANGE_OPTIONS: ReadonlyArray<{ key: DateRangeKey; label: string }> = [
   ...DATE_RANGE_PRESETS,
@@ -69,8 +78,16 @@ function presetMonths(key: string): number | null {
   return DATE_RANGE_PRESETS.find((p) => p.key === key)?.months ?? null;
 }
 
+function presetDays(key: string): number | null {
+  return DAY_RANGE_PRESETS.find((p) => p.key === key)?.days ?? null;
+}
+
+export function isDayRangeKey(value: string): value is DayRangeKey {
+  return presetDays(value) !== null;
+}
+
 export function isDateRangeKey(value: string): value is DateRangeKey {
-  return DATE_RANGE_OPTIONS.some((o) => o.key === value);
+  return DATE_RANGE_OPTIONS.some((o) => o.key === value) || isDayRangeKey(value);
 }
 
 /**
@@ -107,6 +124,18 @@ export function parseDateRange(
         : fromDay
           ? `Since ${dayLabel(fromDay)}`
           : `Until ${dayLabel(toDay!)}`,
+    };
+  }
+
+  const days = presetDays(key);
+  if (days) {
+    return {
+      key,
+      from: "",
+      to: "",
+      start: new Date(now.getTime() - days * DAY_MS),
+      end: null,
+      label: DAY_RANGE_PRESETS.find((p) => p.key === key)!.label,
     };
   }
 
