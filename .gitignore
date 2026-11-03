@@ -47,3 +47,7 @@ next-env.d.ts
 # Local browser verification artifacts
 .playwright-cli/
 output/playwright/
+
+# Session worktrees and local launch settings
+.claude/worktrees/
+.claude/launch.json
