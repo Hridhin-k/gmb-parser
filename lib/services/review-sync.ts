@@ -36,19 +36,23 @@ export interface SyncLocationOptions {
   mode?: ReviewSyncMode;
   checkpoint?: SyncCheckpoint;
   deadlineAt?: number;
+  start?: string | null;
+  end?: string | null;
+  onCheckpoint?: (checkpoint: SyncCheckpoint) => Promise<void>;
 }
 
 /** Saved only at slice boundaries. Re-fetching a page after a crash is safe. */
 export interface SyncCheckpoint {
   mode: ReviewSyncMode;
   startedAt: string;
-  pageToken: string;
+  pageToken?: string;
   reviewsSynced: number;
   reviewsUpdated: number;
   freshReviews: number;
   pagesProcessed: number;
   unchangedPages: number;
   seenNames: string[];
+  completed?: boolean;
 }
 
 export interface BulkSyncOptions extends SyncLocationOptions {
@@ -107,6 +111,7 @@ export interface LocationSyncResult {
   errorClass: string | null;
   errorMessage: string | null;
   continuation?: SyncCheckpoint;
+  resumeCheckpoint?: SyncCheckpoint;
 }
 
 export interface BulkSyncResult {
@@ -253,9 +258,9 @@ export class ReviewSyncService {
     });
 
     // --- 3. Get a valid access token ---
-    let accessToken: string;
+    let accessToken = "";
     try {
-      accessToken = await GoogleOAuthService.getValidAccessToken(connectionId);
+      if (!options.checkpoint?.completed) accessToken = await GoogleOAuthService.getValidAccessToken(connectionId);
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : "Unknown auth error";
       await this.markLocationFailed(db, locationId, workspaceId, userId, "failed", errorMessage);
@@ -267,7 +272,10 @@ export class ReviewSyncService {
     // `last_synced_at` cannot be used for this: location discovery stamps it
     // before any review exists. `reviews_full_synced_at` is only set below,
     // after a full crawl finishes every page without failing.
-    const mode: ReviewSyncMode = options.checkpoint?.mode ?? (
+    const bounded = Boolean(options.start || options.end);
+    const rangeStart = options.start ? Date.parse(options.start) : null;
+    const rangeEnd = options.end ? Date.parse(options.end) : null;
+    const mode: ReviewSyncMode = bounded ? "full" : options.checkpoint?.mode ?? (
       options.mode === "full" || !location.reviews_full_synced_at
         ? "full"
         : "incremental");
@@ -287,7 +295,7 @@ export class ReviewSyncService {
     let googleAverageRating: number | null = null;
     const seenNames = new Set<string>(options.checkpoint?.seenNames ?? []);
 
-    do {
+    if (!options.checkpoint?.completed) do {
       let retries = 0;
       let pageResult: Awaited<ReturnType<typeof GoogleReviewService.listReviews>> | null = null;
 
@@ -333,10 +341,14 @@ export class ReviewSyncService {
         googleAverageRating = pageResult.averageRating;
       }
       const pageReviews = pageResult.reviews ?? [];
-      for (const review of pageReviews) seenNames.add(review.name);
+      const selected = bounded ? pageReviews.filter((review) => {
+        const created = Date.parse(review.createTime);
+        return Number.isFinite(created) && (rangeStart === null || created >= rangeStart) && (rangeEnd === null || created < rangeEnd);
+      }) : pageReviews;
+      if (!bounded) for (const review of pageReviews) seenNames.add(review.name);
       const pageUpdated = await this.upsertReviewPage(
         db,
-        pageReviews,
+        selected,
         locationId,
         workspaceId
       );
@@ -349,7 +361,7 @@ export class ReviewSyncService {
         abortSync = true;
         break;
       }
-      reviewsSynced += pageReviews.length;
+      reviewsSynced += selected.length;
       reviewsUpdated += pageUpdated.written;
       freshReviews += pageUpdated.fresh;
 
@@ -357,6 +369,19 @@ export class ReviewSyncService {
       else unchangedPages = 0;
 
       pageToken = pageResult.nextPageToken;
+
+      const reachedStart = rangeStart !== null && pageReviews.length > 0 && pageReviews.every((review) =>
+        Number.isFinite(Date.parse(review.updateTime ?? review.createTime))) && pageReviews.some((review) =>
+        Date.parse(review.updateTime ?? review.createTime) < rangeStart);
+      const checkpoint: SyncCheckpoint = { mode, startedAt: syncStarted, pageToken, reviewsSynced, reviewsUpdated,
+        freshReviews, pagesProcessed, unchangedPages, seenNames: mode === "full" && !bounded ? [...seenNames] : [],
+        completed: !pageToken || reachedStart };
+      // A committed page is durable before the next provider call begins.
+      await options.onCheckpoint?.(checkpoint);
+
+      // Google sorts by updateTime, not creation time. An old review updated
+      // recently must not make us stop before newer reviews further down.
+      if (reachedStart) break;
 
       if (mode === "incremental" && unchangedPages >= UNCHANGED_PAGES_TO_STOP) {
         truncated = Boolean(pageToken);
@@ -379,7 +404,7 @@ export class ReviewSyncService {
     // --- 5. Mark location sync complete ---
     const now = new Date().toISOString();
 
-    if (absenceIsConfirmed({ mode, providerFailed: abortSync, truncated })) {
+    if (!bounded && absenceIsConfirmed({ mode, providerFailed: abortSync, truncated })) {
       try {
         await markConfirmedAbsences(db, {
           workspaceId,
@@ -402,7 +427,7 @@ export class ReviewSyncService {
         : "success";
 
     const completedFullCrawl =
-      mode === "full" && !abortSync && !truncated;
+      !bounded && mode === "full" && !abortSync && !truncated;
 
     await db
       .from("grm_google_locations")
@@ -447,6 +472,8 @@ export class ReviewSyncService {
         pagesProcessed,
         truncated,
         mode,
+        rangeStart: options.start ?? null,
+        rangeEnd: options.end ?? null,
         status: finalStatus,
         googleTotalReviewCount,
         errorClass,
@@ -463,6 +490,8 @@ export class ReviewSyncService {
       mode,
       errorClass,
       errorMessage,
+      ...(abortSync ? { resumeCheckpoint: { mode, startedAt: syncStarted, pageToken, reviewsSynced, reviewsUpdated,
+        freshReviews, pagesProcessed, unchangedPages, seenNames: mode === "full" && !bounded ? [...seenNames] : [] } } : {}),
     };
   }
 

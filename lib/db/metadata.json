@@ -442,7 +442,8 @@
         "started_at": "timestamptz",
         "finished_at": "timestamptz",
         "created_at": "timestamptz",
-        "updated_at": "timestamptz"
+        "updated_at": "timestamptz",
+        "error_code": "text"
       },
       "relations": [
         {
@@ -2103,7 +2104,12 @@
         "error": "text",
         "created_at": "timestamptz",
         "updated_at": "timestamptz",
-        "finished_at": "timestamptz"
+        "finished_at": "timestamptz",
+        "range_key": "text",
+        "range_label": "text",
+        "range_start": "timestamptz",
+        "range_end": "timestamptz",
+        "error_code": "text"
       },
       "relations": [
         {
@@ -2247,6 +2253,27 @@
       "relations": [
         {
           "name": "grm_onboarding_workspace_id_fkey",
+          "table": "grm_workspaces",
+          "columns": [
+            "workspace_id"
+          ],
+          "references": [
+            "id"
+          ],
+          "many": false
+        }
+      ]
+    },
+    "grm_pipeline_ai_blocks": {
+      "columns": {
+        "workspace_id": "uuid",
+        "error_code": "text",
+        "message": "text",
+        "created_at": "timestamptz"
+      },
+      "relations": [
+        {
+          "name": "grm_pipeline_ai_blocks_workspace_id_fkey",
           "table": "grm_workspaces",
           "columns": [
             "workspace_id"
@@ -4212,6 +4239,17 @@
         {
           "name": "grm_onboarding_workspace_id_fkey",
           "table": "grm_onboarding",
+          "columns": [
+            "id"
+          ],
+          "references": [
+            "workspace_id"
+          ],
+          "many": false
+        },
+        {
+          "name": "grm_pipeline_ai_blocks_workspace_id_fkey",
+          "table": "grm_pipeline_ai_blocks",
           "columns": [
             "id"
           ],

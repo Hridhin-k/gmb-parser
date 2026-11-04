@@ -20,6 +20,10 @@ function safeError(error: unknown): AiError | AppError {
     return new AiError("AI returned an invalid structured response. Please try again.", "AI_INVALID_RESPONSE");
   }
   if (APICallError.isInstance(error)) {
+    const billing = `${error.responseBody ?? ""} ${error.message}`;
+    if (error.statusCode === 402 || /insufficient_quota|billing_hard_limit|credit[_ ]balance|out of credits|insufficient credits|billing.*(?:disabled|exhausted)|quota.*limit[^\d]*0\b/i.test(billing)) {
+      return new AiError("AI credits are exhausted. Add credits, then resume processing. Saved reviews and completed analysis are kept.", "AI_CREDITS_EXHAUSTED", false, 402);
+    }
     if (error.statusCode === 429) return new AiError("AI generation quota exceeded. Please try again later.", "AI_QUOTA", true);
     if ([500, 502, 503, 504].includes(error.statusCode ?? 0)) return new AiError("AI service is temporarily unavailable. Please try again shortly.", "AI_UNAVAILABLE", true);
     if ([401, 403, 404].includes(error.statusCode ?? 0)) return new AiError("The AI credentials or model configuration is invalid.", "CONFIG_ERROR");
@@ -27,7 +31,7 @@ function safeError(error: unknown): AiError | AppError {
   }
   if (error instanceof Error && ["AbortError", "TimeoutError"].includes(error.name)) return new AiError("AI generation timed out. Please try again.", "AI_TIMEOUT", false, 504);
   // Unknown network outcomes may already have been billed. Never auto-fallback.
-  return new AiError("Failed to reach AI service. Please try again.", "AI_UNAVAILABLE");
+  return new AiError("The AI result could not be confirmed. Progress is saved. Check the provider before resuming this request.", "AI_OUTCOME_UNKNOWN");
 }
 
 export function normalizeUsage(usage: LanguageModelUsage | undefined) {

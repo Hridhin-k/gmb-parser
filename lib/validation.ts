@@ -7,6 +7,7 @@
 
 import { z } from "zod";
 import { ValidationError } from "@/lib/errors";
+import { DATE_RANGE_OPTIONS, type DateRangeKey } from "@/lib/date-range";
 
 // ---------------------------------------------------------------------------
 // Primitives
@@ -118,10 +119,18 @@ export const bulkReviewsBodySchema = z.object({
 });
 
 /** POST /api/reviews/sync */
+const syncPeriodSchema = z.object({
+  range: z.enum(DATE_RANGE_OPTIONS.map((option) => option.key) as [DateRangeKey, ...DateRangeKey[]]),
+  from: z.iso.date().optional(),
+  to: z.iso.date().optional(),
+}).refine((period) => period.range !== "custom" || Boolean(period.from && period.to && period.from <= period.to),
+  { message: "Choose a valid start and end date for the sync period." });
+
 export const syncBodySchema = z.discriminatedUnion("all", [
   z.object({
     all: z.literal(true),
     full: z.boolean().optional(),
+    period: syncPeriodSchema.optional(),
     /** Narrow the sync to these locations (the page's scope). Omit for the whole workspace. */
     locationIds: z.array(uuidSchema).min(1).max(1000).optional(),
   }),
@@ -130,6 +139,7 @@ export const syncBodySchema = z.discriminatedUnion("all", [
     locationId: uuidSchema,
     connectionId: uuidSchema.optional(),
     full: z.boolean().optional(),
+    period: syncPeriodSchema.optional(),
   }),
 ]);
 

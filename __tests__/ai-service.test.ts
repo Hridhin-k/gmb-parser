@@ -63,6 +63,22 @@ describe("shared AI service through the real AI SDK", () => {
     await expect(generateAi(input)).rejects.toMatchObject({ code: "AI_UNAVAILABLE" });
     expect(call).toHaveBeenCalledTimes(1);
   });
+  it.each([402, 429])("pauses on exhausted provider credits (%s) without a paid fallback", async (statusCode) => {
+    vi.stubEnv("AI_FALLBACK_PROVIDER", "google"); vi.stubEnv("AI_FALLBACK_MODEL", "gemini-3.8-flash"); vi.stubEnv("GOOGLE_GENERATIVE_AI_API_KEY", "test");
+    const call = vi.fn(async () => { throw new APICallError({ message: "Provider quota exhausted", url: "https://example.test", requestBodyValues: {}, statusCode,
+      responseBody: JSON.stringify({ error: { code: "insufficient_quota", type: "insufficient_quota" } }) }); });
+    vi.mocked(languageModel).mockReturnValue(new MockLanguageModelV4({ doGenerate: call }));
+    await expect(generateAi(input)).rejects.toMatchObject({ code: "AI_CREDITS_EXHAUSTED", retryable: false });
+    expect(call).toHaveBeenCalledTimes(1);
+    expect(languageModel).toHaveBeenCalledTimes(1);
+  });
+  it("keeps ordinary provider throttling retryable", async () => {
+    vi.mocked(languageModel).mockReturnValue(new MockLanguageModelV4({ doGenerate: async () => {
+      throw new APICallError({ message: "Too many requests", url: "https://example.test", requestBodyValues: {}, statusCode: 429,
+        responseBody: JSON.stringify({ error: { code: "rate_limit_exceeded" } }) });
+    } }));
+    await expect(generateAi(input)).rejects.toMatchObject({ code: "AI_QUOTA", retryable: true });
+  });
   it("uses only an explicitly configured fallback and accounts for both attempts", async () => {
     vi.stubEnv("AI_FALLBACK_PROVIDER", "google"); vi.stubEnv("AI_FALLBACK_MODEL", "gemini-3.8-flash"); vi.stubEnv("GOOGLE_GENERATIVE_AI_API_KEY", "test");
     const primary = new MockLanguageModelV4({ doGenerate: async () => { throw new APICallError({ message: "down", url: "https://example.test", requestBodyValues: {}, statusCode: 503 }); } });

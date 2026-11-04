@@ -24,7 +24,7 @@ export type DateRangeKey = DateRangePresetKey | DayRangeKey | "today" | "custom"
 
 export const DATE_RANGE_OPTIONS: ReadonlyArray<{ key: DateRangeKey; label: string }> = [
   { key: "today", label: "Today" },
-  ...DAY_RANGE_PRESETS.filter((preset) => preset.key !== "90d"),
+  ...DAY_RANGE_PRESETS,
   ...DATE_RANGE_PRESETS,
   { key: "custom", label: "Custom dates" },
   { key: "all", label: "All time" },
