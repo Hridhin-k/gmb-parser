@@ -187,6 +187,38 @@ describe("ReplyPublishingService.publishReply", () => {
     expect(mockReplyToReview).not.toHaveBeenCalled();
   });
 
+  it("publishes human-added business contacts unchanged", async () => {
+    const content = "We are sorry about your visit. Call +91 98470 12345 or email desk@example.com.";
+    const reply = { ...buildReply({}), content, approved_by: "owner-1" };
+    fromSequences.push(makeChain({ single: vi.fn(() => ({ data: reply, error: null })) }));
+    fromSequences.push(makeChain({ single: vi.fn(() => ({ data: { id: reply.id }, error: null })) }));
+    mockReplyToReview.mockResolvedValue({ comment: content, updateTime: "2026-11-04T12:00:00.000Z" });
+
+    const { ReplyPublishingService } = await import("@/lib/services/reply-publishing");
+    const result = await ReplyPublishingService.publishReply(reply.id, "review-1", "ws-1", "user-1");
+    expect(result.replyId).toBe(reply.id);
+    expect(mockReplyToReview).toHaveBeenCalledWith("valid-access-token", reply.grm_reviews.google_review_name, content);
+  });
+
+  it("does not automatically publish contact details", async () => {
+    const reply = { ...buildReply({}), content: "Please email desk@example.com." };
+    fromSequences.push(makeChain({ single: vi.fn(() => ({ data: reply, error: null })) }));
+    const { ReplyPublishingService } = await import("@/lib/services/reply-publishing");
+    await expect(ReplyPublishingService.publishReply(reply.id, "review-1", "ws-1", "user-1", { automated: true }))
+      .rejects.toThrow("Automatic replies cannot include");
+    expect(mockReplyToReview).not.toHaveBeenCalled();
+  });
+
+  it("still requires approval for a negative review with business contacts", async () => {
+    const reply = { ...buildReply({}), content: "Please call +91 98470 12345." };
+    const review = { ...reply, grm_reviews: { ...reply.grm_reviews, star_rating: 2 } };
+    fromSequences.push(makeChain({ single: vi.fn(() => ({ data: review, error: null })) }));
+    const { ReplyPublishingService } = await import("@/lib/services/reply-publishing");
+    await expect(ReplyPublishingService.publishReply(reply.id, "review-1", "ws-1", "user-1"))
+      .rejects.toThrow("approved by an owner or admin");
+    expect(mockReplyToReview).not.toHaveBeenCalled();
+  });
+
   it("throws 409 if reply is already in pending_publish (concurrency)", async () => {
     const replyData = buildReply({ status: "pending_publish" });
     const loadChain = makeChain({ single: vi.fn(() => ({ data: replyData, error: null })) });

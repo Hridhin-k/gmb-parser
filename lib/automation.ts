@@ -1,4 +1,4 @@
-import { checkReplyGuardrails } from "@/lib/reply-guardrails";
+import { checkGeneratedReplyGuardrails, checkReplyGuardrails } from "@/lib/reply-guardrails";
 
 export const WARMTH = ["formal", "friendly"] as const;
 export const REPLY_LENGTHS = ["brief", "standard", "detailed"] as const;
@@ -236,7 +236,7 @@ export function automationVerdict(input: {
   }
   const ageMinutes = (input.now.getTime() - input.createdAt.getTime()) / 60000;
   if (ageMinutes < input.settings.holdbackMinutes) reasons.push("The holdback period has not elapsed.");
-  if (input.replyText && checkReplyGuardrails(input.replyText).length) {
+  if (input.replyText && checkGeneratedReplyGuardrails(input.replyText).length) {
     reasons.push("Guardrails blocked the reply.");
   }
   return { draft: true, publish: reasons.length === 0, reasons };

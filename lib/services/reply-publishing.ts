@@ -3,7 +3,7 @@ import { GoogleReviewService } from "./google-reviews";
 import { GoogleOAuthService } from "./google-oauth";
 import { AuditService } from "./audit";
 import { AppError, GoogleApiError, ValidationError } from "@/lib/errors";
-import { checkReplyGuardrails, negativeReviewNeedsApproval } from "@/lib/reply-guardrails";
+import { checkGeneratedReplyGuardrails, checkReplyGuardrails, negativeReviewNeedsApproval } from "@/lib/reply-guardrails";
 import { comparePublishedReply } from "@/lib/reply-adjustments";
 import { forgetReviewList } from "@/lib/services/dashboard";
 
@@ -214,7 +214,9 @@ export class ReplyPublishingService {
       );
     }
 
-    const violations = checkReplyGuardrails(reply.content);
+    const violations = options?.automated
+      ? checkGeneratedReplyGuardrails(reply.content)
+      : checkReplyGuardrails(reply.content);
     if (violations.length) {
       await AuditService.log({
         workspaceId,

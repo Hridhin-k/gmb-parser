@@ -11,7 +11,7 @@ import type { Json } from "@/lib/types/database-schema";
 import { toneInstruction, type ToneVoice } from "@/lib/onboarding";
 import { draftsPausedForLocation, resolvedToneForLocation } from "@/lib/services/hierarchy";
 import { adjustmentInstruction, type DraftAdjustment } from "@/lib/reply-adjustments";
-import { checkReplyGuardrails } from "@/lib/reply-guardrails";
+import { checkGeneratedReplyGuardrails } from "@/lib/reply-guardrails";
 import { EscalationService } from "@/lib/services/escalations";
 import {
   claimAiGenerationJob,
@@ -371,7 +371,7 @@ export class AIReviewService {
         );
       }
 
-      const violations = checkReplyGuardrails(cleaned);
+      const violations = checkGeneratedReplyGuardrails(cleaned);
       const forbidden = [
         ...neverSayViolations(cleaned, promptContext.config.snapshot.tone.neverSay ?? []),
         ...inventedPromiseViolations(cleaned, [org.policies]),
