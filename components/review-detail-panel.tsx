@@ -98,6 +98,11 @@ interface ReviewDetailPanelProps {
   onDirtyChange?: (dirty: boolean) => void;
   /** Phone sheet only: back to the list. */
   onClose?: () => void;
+  /**
+   * "panel": the full card with the review header (side panel, phone sheet).
+   * "row": only the reply half; the row around it shows the review.
+   */
+  variant?: "panel" | "row";
 }
 
 /** Server validation limit for reply content. */
@@ -158,14 +163,16 @@ export function ReviewDetailPanel({
   onSaved,
   onDirtyChange,
   onClose,
+  variant = "panel",
 }: ReviewDetailPanelProps) {
+  const inRow = variant === "row";
   const searchParams = useSearchParams();
   // The list remounts this panel per review (key), so initial state is per review.
   const [editing, setEditing] = useState(false);
   const [own, setOwn] = useState(false);
   const [content, setContent] = useState(reply?.content ?? "");
   const [editedHere, setEditedHere] = useState(false);
-  const [loading, setLoading] = useState<null | "save" | "submit" | "flag" | "assign" | "note">(null);
+  const [loading, setLoading] = useState<null | "save" | "submit" | "flag" | "assign" | "note" | "approve">(null);
   const [localError, setLocalError] = useState<string | null>(null);
   const [assignee, setAssignee] = useState(review.assigned_to ?? "");
   const [note, setNote] = useState("");
@@ -270,6 +277,37 @@ export function ReviewDetailPanel({
       toast.success("Sent for approval", { description: "Someone who can approve will read it before it goes to Google." });
     } catch (caught) {
       setLocalError(caught instanceof Error ? caught.message : "Could not submit the draft.");
+    } finally {
+      setLoading(null);
+    }
+  }
+
+  /** Marks the draft approved so "Send approved drafts" includes it. The text is unchanged. */
+  async function approveForBulk() {
+    if (!reply) return;
+    if (editing && !(await saveText())) return;
+    setLocalError(null);
+    setLoading("approve");
+    try {
+      await apiCall(`/api/reviews/${review.id}/reply/approve`, "POST", { replyId: reply.id });
+      onSaved({ ...reply, status: "approved", approved_at: new Date().toISOString() });
+    } catch (caught) {
+      setLocalError(caught instanceof Error ? caught.message : "Could not approve the draft.");
+    } finally {
+      setLoading(null);
+    }
+  }
+
+  /** Saving the same text again puts an approved reply back to draft. */
+  async function removeApproval() {
+    if (!reply) return;
+    setLocalError(null);
+    setLoading("approve");
+    try {
+      await apiCall(`/api/reviews/${review.id}/reply`, "PUT", { replyId: reply.id, content: reply.content });
+      onSaved({ ...reply, status: "draft", approved_at: null, approved_by: null });
+    } catch (caught) {
+      setLocalError(caught instanceof Error ? caught.message : "Could not remove the approval.");
     } finally {
       setLoading(null);
     }
@@ -390,7 +428,7 @@ export function ReviewDetailPanel({
 
   return (
     <div className="flex flex-col gap-5">
-      {onClose ? (
+      {onClose && !inRow ? (
         <button
           type="button"
           onClick={onClose}
@@ -401,7 +439,9 @@ export function ReviewDetailPanel({
         </button>
       ) : null}
 
-      {/* Header */}
+      {/* Header and the review itself: the row shows these on its left half. */}
+      {inRow ? null : (
+      <>
       <div className="flex flex-wrap items-start gap-3.5">
         <span
           aria-hidden
@@ -458,6 +498,8 @@ export function ReviewDetailPanel({
           <p className="text-[15px] italic text-ink-3">Rating only. No written comment.</p>
         )}
       </div>
+      </>
+      )}
 
       {shownError ? (
         <Banner tone="bad" title={stage === "failed" ? "Google did not take this reply." : "That didn’t work."} role="alert">
@@ -614,6 +656,16 @@ export function ReviewDetailPanel({
                 Save draft
               </button>
             )}
+            {canSend && reply && !own ? (
+              <button
+                type="button"
+                className={pill("outline")}
+                disabled={busy || saving}
+                onClick={() => void (reply.status === "approved" ? removeApproval() : approveForBulk())}
+              >
+                {loading === "approve" ? "Saving…" : reply.status === "approved" ? "Remove approval" : "Approve for bulk send"}
+              </button>
+            ) : null}
             {aiOnly ? null : own ? (
               <button
                 type="button"
@@ -645,7 +697,9 @@ export function ReviewDetailPanel({
           </div>
           <span className="text-xs text-ink-3">
             {canSend
-              ? `Posts publicly on Google as ${business}. After sending, the next review opens.`
+              ? inRow
+                ? `Posts publicly on Google as ${business}. Approved drafts go out together with "Send approved drafts".`
+                : `Posts publicly on Google as ${business}. After sending, the next review opens.`
               : aiOnly
                 ? "A higher role approves this draft. After that, you can send it."
                 : "An owner or admin approves 1–3 star replies before they go to Google."}

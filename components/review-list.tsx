@@ -1,14 +1,13 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Check, Phone, Send, Sparkles } from "lucide-react";
-import { ContactDraftButton, ContactTag } from "@/components/contact-draft-menu";
+import { AlertCircle, Check, Phone, Send, Sparkles } from "lucide-react";
+import { ContactDraftButton } from "@/components/contact-draft-menu";
 import { cn } from "@/lib/utils";
 import { Checkbox } from "@/components/ui/checkbox";
-import { ConfirmDialog } from "@/components/confirm-dialog";
 import { InlineStars } from "@/components/reviews-badges";
 import { splitGoogleTranslation } from "@/lib/review-text";
-import { hasResolutionContact, type ResolutionContact, type ResolutionContactKind } from "@/lib/resolution-contact";
+import type { ResolutionContact, ResolutionContactKind } from "@/lib/resolution-contact";
 import { useServerRefresh, useSettleWhenUpdated } from "@/hooks/use-server-refresh";
 import { pollBulkJob, type BulkJobItemResult } from "@/lib/bulk-job-client";
 import { pollAiGeneration } from "@/lib/ai-generation-client";
@@ -23,8 +22,8 @@ import {
 import {
   canSendReply,
   defaultPicked,
+  isLowRating,
   isSendable,
-  nextOpenId,
   plural,
   replyStage,
   shortAge,
@@ -129,8 +128,6 @@ export function ReviewList({
 }: ReviewListProps) {
   const { pending: refreshing, refresh, settle } = useServerRefresh();
   useSettleWhenUpdated(refreshing, settle, reviews);
-  const [selectedId, setSelectedId] = useState<string | null>(initialSelectedId);
-  const [sheetOpen, setSheetOpen] = useState(Boolean(initialSelectedId));
   const [picks, setPicks] = useState<Record<string, boolean>>({});
   const [patches, setPatches] = useState<Record<string, ReplyPatch>>({});
   const [writing, setWriting] = useState<Flags>({});
@@ -142,8 +139,6 @@ export function ReviewList({
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [job, setJob] = useState<Job | null>(null);
   const [notice, setNotice] = useState<Notice | null>(null);
-  const [panelDirty, setPanelDirty] = useState(false);
-  const [pendingTarget, setPendingTarget] = useState<{ id: string | null } | null>(null);
   const holdTimers = useRef(new Map<string, ReturnType<typeof setTimeout>>());
 
   const [serverPayload, setServerPayload] = useState({ reviews, replies });
@@ -193,41 +188,26 @@ export function ReviewList({
   const rows = viewReviews.map((review) => ({ review, stage: stageOf(review) }));
   const open = tab === "to-reply" ? rows.filter((row) => !["held", "sending", "sent", "unconfirmed"].includes(row.stage)) : [];
   const idle = open.filter((row) => row.stage !== "writing");
+  // Someone approving a draft has read it, so it starts ticked whatever the rating.
   const isPicked = (row: (typeof rows)[number]) =>
-    picks[row.review.id] ?? defaultPicked(row.review.star_rating, isSendable(row.stage));
+    picks[row.review.id] ??
+    (viewReplies[row.review.id]?.status === "approved" ? true : defaultPicked(row.review.star_rating, isSendable(row.stage)));
   const picked = idle.filter(isPicked);
   const undrafted = idle.filter((row) => row.stage === "none");
   const drafts = idle.filter((row) => isSendable(row.stage));
   const pickDraft = undrafted.filter(isPicked);
-  const pickSend = drafts.filter((row) => isPicked(row) && sendAllowed(row.review));
+  /** Only approved drafts go out together; the rest are sent from their row. */
+  const isApproved = (row: (typeof rows)[number]) => viewReplies[row.review.id]?.status === "approved";
+  const approved = drafts.filter(isApproved);
+  const pickSend = approved.filter((row) => isPicked(row) && sendAllowed(row.review));
   const noDrafts = drafts.length === 0;
+  const lowUnread = drafts.filter((row) => isLowRating(row.review.star_rating) && !isApproved(row)).length;
 
-  const selected = rows.find((row) => row.review.id === selectedId) ?? null;
-  const current = selected ?? open[0] ?? rows[0] ?? null;
-  const currentId = current?.review.id ?? null;
-
-  /** Change the open review, asking first when the panel has unsaved edits. */
-  function requestSelect(id: string | null, openSheet = true) {
-    if (id === currentId && id !== null) {
-      if (openSheet) setSheetOpen(true);
-      return;
-    }
-    if (panelDirty && currentId) {
-      setPendingTarget({ id });
-      return;
-    }
-    setSelectedId(id);
-    if (openSheet) setSheetOpen(id !== null);
-  }
-
+  // A review opened from a link (?review=) scrolls into view once.
   useEffect(() => {
-    if (!sheetOpen) return;
-    function onKey(event: KeyboardEvent) {
-      if (event.key === "Escape" && !event.defaultPrevented && !pendingTarget) setSheetOpen(false);
-    }
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-  }, [sheetOpen, pendingTarget]);
+    if (!initialSelectedId) return;
+    document.getElementById(`review-${initialSelectedId}`)?.scrollIntoView({ block: "center" });
+  }, [initialSelectedId]);
 
   // Leaving the page must not lose a send that is waiting out its Undo window.
   useEffect(() => {
@@ -267,12 +247,6 @@ export function ReviewList({
 
   function patchReply(id: string, status: string, reply: InboxReply | null) {
     setPatches((prev) => ({ ...prev, [id]: { status, reply } }));
-  }
-
-  function selectNext(afterId: string, skip: string[] = []) {
-    const openIds = open.map((row) => row.review.id);
-    const next = nextOpenId(openIds, afterId, new Set([...skip, ...Object.keys(held), ...Object.keys(sending)]));
-    if (next) setSelectedId(next);
   }
 
   // ── Drafting ─────────────────────────────────────────────────────────────
@@ -455,7 +429,6 @@ export function ReviewList({
     setError(id, null);
     setHeld((prev) => withFlag(prev, [id], true));
     setNotice({ text: `Reply to ${nameOf(id)} queued to send.`, tone: "ok", undoId: id });
-    selectNext(id, [id]);
     holdTimers.current.set(
       id,
       setTimeout(() => {
@@ -471,7 +444,6 @@ export function ReviewList({
     clearTimeout(timer);
     holdTimers.current.delete(id);
     setHeld((prev) => withFlag(prev, [id], false));
-    setSelectedId(id);
     setNotice(null);
   }
 
@@ -496,7 +468,6 @@ export function ReviewList({
     }
     setFlagged((prev) => ({ ...prev, [id]: { id: data.id!, dueAt: new Date().toISOString() } }));
     setNotice({ text: `${nameOf(id)} moved to Follow-ups.`, tone: "ok" });
-    selectNext(id);
     refresh();
   }
 
@@ -513,7 +484,13 @@ export function ReviewList({
 
   const showBar = tab === "to-reply" && (idle.length > 0 || job !== null);
   const jobPct = job ? Math.round((job.done / Math.max(1, job.total)) * 100) : 0;
-  const currentReply = current ? (viewReplies[current.review.id] ?? null) : null;
+  const barHint = noDrafts
+    ? "AI writes each reply in your brand voice. Nothing goes to Google until you send."
+    : approved.length > 0
+      ? `${plural(approved.length, "approved draft", "approved drafts")} ready to send.${lowUnread > 0 ? ` ${plural(lowUnread, "low rating waits", "low ratings wait")} for a read first.` : ""}`
+      : drafts.some((row) => !sendAllowed(row.review))
+        ? "Drafts you can’t post wait for someone who can approve them."
+        : "Read each draft, then approve it for bulk send or send it from its row.";
 
   return (
     <div className="flex flex-col gap-4">
@@ -521,10 +498,10 @@ export function ReviewList({
         <div
           role="status"
           className={cn(
-            "flex flex-wrap items-center gap-2.5 rounded-[10px] border py-2.5 pr-3 pl-4 text-sm",
+            "flex flex-wrap items-center gap-3 rounded-xl border px-4 py-3 text-sm",
             notice.tone === "ok" && "border-ok-line bg-ok-tint text-[#14532d]",
-            notice.tone === "warn" && "border-warn-line bg-warn-tint text-[#7c2d12]",
-            notice.tone === "bad" && "border-bad-line bg-bad-tint text-[#7f1d1d]"
+            notice.tone === "warn" && "border-warn-line bg-warn-tint text-warn",
+            notice.tone === "bad" && "border-bad-line bg-bad-tint text-bad"
           )}
         >
           {notice.tone === "ok" ? <Check className="size-4" strokeWidth={2} aria-hidden /> : null}
@@ -555,7 +532,7 @@ export function ReviewList({
                   <Sparkles className="size-4 text-ai" aria-hidden />
                 )}
                 <span className="font-semibold">
-                  {job.kind === "send" ? "Sending replies to Google" : job.withContact ? "Drafting replies with contact details" : "Drafting replies with AI"}
+                  {job.kind === "send" ? "Sending approved drafts to Google" : job.withContact ? "Drafting replies with contact details" : "Drafting replies with AI"}
                 </span>
                 <span className="text-ink-3 tabular-nums">
                   {job.done} of {job.total}
@@ -565,8 +542,8 @@ export function ReviewList({
                   {job.kind === "send"
                     ? "Each reply posts as its business."
                     : job.withContact
-                      ? "Your saved contact line ends each draft. Replies appear in the list as they’re written."
-                      : "Replies appear in the list as they’re written."}
+                      ? "Your saved contact line ends each draft. Replies appear in the rows as they’re written."
+                      : "Replies appear in the rows as they’re written."}
                 </span>
               </div>
               <div className="h-1.5 overflow-hidden rounded-full bg-line-2">
@@ -588,13 +565,7 @@ export function ReviewList({
                 />
                 {picked.length} of {idle.length} selected
               </label>
-              <span className="hidden min-w-0 flex-[1_1_200px] text-[13px] text-ink-3 sm:block">
-                {noDrafts
-                  ? "AI writes each reply in your brand voice. Nothing goes to Google until you send."
-                  : drafts.some((row) => !sendAllowed(row.review))
-                    ? "Drafts you can’t post wait for someone who can approve them."
-                    : "1 and 2 star replies start unticked so you read them first."}
-              </span>
+              <span className="hidden min-w-0 flex-[1_1_200px] text-[13px] text-ink-3 sm:block">{barHint}</span>
               {undrafted.length > 0 ? (
                 <ContactDraftButton
                   label={noDrafts ? `Draft ${plural(pickDraft.length, "reply", "replies")} with AI` : `Draft ${pickDraft.length} more`}
@@ -610,10 +581,11 @@ export function ReviewList({
                   type="button"
                   onClick={bulkSend}
                   disabled={pickSend.length === 0}
+                  title={pickSend.length === 0 ? "Approve a draft for bulk send first, or send it from its row." : undefined}
                   className="inline-flex h-11 items-center gap-2 rounded-full bg-brand px-[22px] text-sm font-semibold text-white hover:bg-brand-hover disabled:cursor-not-allowed disabled:opacity-40"
                 >
                   <Send className="size-4" aria-hidden />
-                  Send {plural(pickSend.length, "reply", "replies")}
+                  Send {plural(pickSend.length, "approved draft", "approved drafts")}
                 </button>
               )}
             </>
@@ -621,257 +593,142 @@ export function ReviewList({
         </div>
       ) : null}
 
-      <div className="flex flex-col gap-4 xl:grid xl:grid-cols-[minmax(340px,400px)_minmax(0,1fr)] xl:items-start">
-        <section aria-label="Review list" className="min-w-0 overflow-hidden rounded-xl border border-line bg-white">
-          <div className="flex flex-wrap items-center gap-x-3 gap-y-1 border-b border-line-2 px-4 py-2 text-xs text-ink-3">
-            {rangeLabel ? <span className="tabular-nums">{rangeLabel}</span> : null}
-            <span className="ml-auto">{sortControl}</span>
-          </div>
-          <ul>
-            {rows.length === 0 ? <li className="px-4 py-6 text-sm text-ink-3" role="status">All reviews on this page have been replied to. Updating the queue…</li> : null}
-            {rows.map(({ review, stage }) => {
-              const id = review.id;
-              const active = id === currentId;
-              const name = reviewerName(review);
-              const text = review.comment ? splitGoogleTranslation(review.comment).original : null;
-              const reply = viewReplies[id];
-              const selectable = tab === "to-reply" && idle.some((row) => row.review.id === id);
-              const followUp = flagged[id] ?? followUps[id];
-              return (
-                <li
-                  key={id}
-                  className={cn(
-                    "flex flex-col gap-2 border-b border-line-2 px-4 py-3.5 last:border-b-0",
-                    active ? "bg-[#f3f6fe] shadow-[inset_3px_0_0_var(--color-brand)]" : "bg-white"
-                  )}
-                >
-                  <div className="flex items-start gap-3">
-                    {selectable ? (
-                      <Checkbox
-                        className="mt-0.5 size-[18px]"
-                        checked={isPicked({ review, stage })}
-                        onCheckedChange={(next) => setPicks((prev) => ({ ...prev, [id]: next }))}
-                        aria-label={`Select review from ${name}`}
-                      />
-                    ) : (
-                      <span aria-hidden className="w-[18px] shrink-0" />
-                    )}
-                    <button
-                      type="button"
-                      onClick={() => requestSelect(id)}
-                      aria-current={active ? "true" : undefined}
-                      aria-label={`Open review by ${name}, ${review.star_rating} stars`}
-                      className="flex min-w-0 flex-1 flex-col gap-[5px] rounded-sm text-left outline-none focus-visible:ring-2 focus-visible:ring-brand-line"
-                    >
-                      <span className="flex items-baseline gap-2 text-sm">
-                        <span className="min-w-0 flex-1 truncate font-semibold text-ink">{name}</span>
-                        <span className="whitespace-nowrap text-xs text-ink-3">{shortAge(review.review_create_time)}</span>
-                      </span>
-                      <span className="flex min-w-0 items-center gap-2 text-xs text-ink-3">
-                        <InlineStars rating={review.star_rating} />
-                        <span className="truncate">{review.location_title}</span>
-                        {followUp ? (
-                          <span className="ml-auto inline-flex shrink-0 items-center gap-1 font-semibold text-info">
-                            <Phone className="size-3" aria-hidden />
-                            Call back
-                          </span>
-                        ) : null}
-                      </span>
-                      <span
-                        className={cn(
-                          "line-clamp-2 text-[13px] leading-[1.45]",
-                          text ? "text-ink-2" : "italic text-ink-3"
-                        )}
-                      >
-                        {text || "Rating only. No written comment."}
-                      </span>
-                    </button>
-                  </div>
-                  <StatusLine
-                    tab={tab}
-                    stage={stage}
-                    reply={reply}
-                    name={name}
-                    sentHere={Boolean(sentHere[id])}
-                    canSend={sendAllowed(review)}
-                    error={errors[id] ?? null}
-                    onSend={() => queueSend(id)}
-                    onUndo={() => undoSend(id)}
-                  />
-                </li>
-              );
-            })}
+      <div className="flex flex-wrap items-center gap-x-4 gap-y-1 px-1 text-xs text-ink-3">
+        {rangeLabel ? <span className="tabular-nums">{rangeLabel}</span> : null}
+        <span>{sortControl}</span>
+        <span className="flex-1" />
+        {tab === "to-reply" ? (
+          <ul className="flex flex-wrap items-center gap-3.5" aria-label="Row status legend">
+            <LegendItem color="bg-ai" label="Draft ready" />
+            <LegendItem color="bg-brand" label="Approved for bulk send" />
+            <LegendItem color="bg-[#c9cfda]" label="Writing" />
+            <LegendItem color="bg-warn" label="Needs a read first" />
+            <LegendItem color="bg-ok" label="Sent" />
           </ul>
-        </section>
-
-        {current ? (
-          <>
-            {sheetOpen ? (
-              <div className="fixed inset-0 z-40 bg-ink/30 xl:hidden" role="presentation" onClick={() => setSheetOpen(false)} />
-            ) : null}
-            <section
-              aria-label="Selected review"
-              className={cn(
-                "min-w-0 bg-white xl:sticky xl:top-[84px] xl:block xl:max-h-[calc(100dvh-100px)] xl:overflow-y-auto xl:rounded-xl xl:border xl:border-line xl:p-6",
-                sheetOpen
-                  ? "fixed inset-x-0 bottom-0 top-8 z-50 overflow-y-auto rounded-t-2xl p-4 pb-8 shadow-[0_-8px_24px_rgba(20,24,31,0.12)] sm:p-6 xl:inset-auto xl:z-auto xl:shadow-none"
-                  : "hidden"
-              )}
-            >
-              <ReviewDetailPanel
-                key={current.review.id}
-                review={current.review}
-                reply={currentReply}
-                stage={current.stage}
-                justSent={Boolean(sentHere[current.review.id])}
-                saving={Boolean(saving[current.review.id])}
-                error={errors[current.review.id] ?? null}
-                canSend={sendAllowed(current.review)}
-                aiOnly={aiOnly}
-                contact={contact}
-                members={members}
-                followUp={flagged[current.review.id] ?? followUps[current.review.id] ?? null}
-                undraftedCount={undrafted.length}
-                onDraft={(rewrite, contactKind) => void draftOne(current.review.id, rewrite, contactKind)}
-                onSend={() => queueSend(current.review.id)}
-                onUndo={() => undoSend(current.review.id)}
-                onFlag={() => flagOne(current.review.id)}
-                onSaved={(reply) => {
-                  setError(current.review.id, null);
-                  patchReply(current.review.id, reply.status, reply);
-                }}
-                onDirtyChange={setPanelDirty}
-                onClose={() => setSheetOpen(false)}
-              />
-            </section>
-          </>
         ) : null}
       </div>
+
+      <ul className="flex flex-col gap-3" aria-label="Reviews">
+        {rows.length === 0 ? (
+          <li className="rounded-xl border border-line bg-white px-4 py-6 text-sm text-ink-3" role="status">
+            All reviews on this page have been replied to. Updating the queue…
+          </li>
+        ) : null}
+        {rows.map(({ review, stage }) => {
+          const id = review.id;
+          const name = reviewerName(review);
+          const text = review.comment ? splitGoogleTranslation(review.comment).original : null;
+          const reply = viewReplies[id] ?? null;
+          const selectable = tab === "to-reply" && idle.some((row) => row.review.id === id);
+          const followUp = flagged[id] ?? followUps[id] ?? null;
+          const low = isLowRating(review.star_rating);
+          const holdForRead = low && isSendable(stage) && reply?.status !== "approved";
+          return (
+            <li
+              key={id}
+              id={`review-${id}`}
+              className={cn(
+                "grid overflow-hidden rounded-xl border bg-white xl:grid-cols-[minmax(300px,420px)_minmax(0,1fr)]",
+                holdForRead ? "border-warn-line bg-[#fffdf7]" : "border-line",
+                initialSelectedId === id && "ring-2 ring-brand-line"
+              )}
+            >
+              <div className="flex flex-col gap-2 border-b border-line-2 px-4 py-4 xl:border-r xl:border-b-0">
+                <div className="flex items-start gap-3">
+                  {selectable ? (
+                    <Checkbox
+                      className="mt-2 size-[18px]"
+                      checked={isPicked({ review, stage })}
+                      onCheckedChange={(next) => setPicks((prev) => ({ ...prev, [id]: next }))}
+                      aria-label={`Select review from ${name}`}
+                    />
+                  ) : (
+                    <span aria-hidden className="w-[18px] shrink-0" />
+                  )}
+                  <span
+                    aria-hidden
+                    className="flex size-9 shrink-0 items-center justify-center rounded-full bg-line-2 text-[13px] font-semibold text-ink-2"
+                  >
+                    {name.slice(0, 1).toUpperCase()}
+                  </span>
+                  <div className="flex min-w-0 flex-1 flex-col gap-0.5">
+                    <span className="flex items-baseline gap-2 text-sm">
+                      <span className="min-w-0 flex-1 truncate font-semibold text-ink">{name}</span>
+                      <span className="whitespace-nowrap text-xs text-ink-3">{shortAge(review.review_create_time)}</span>
+                    </span>
+                    <span className="truncate text-xs text-ink-3">{review.location_title}</span>
+                  </div>
+                </div>
+                <div className="flex flex-wrap items-center gap-2 pl-[30px] text-xs text-ink-3">
+                  <InlineStars rating={review.star_rating} />
+                  <span>{review.star_rating} of 5</span>
+                  {low ? (
+                    <span className="inline-flex items-center gap-1 rounded-full bg-bad-tint px-2 py-0.5 text-[11px] font-semibold text-bad">
+                      <AlertCircle className="size-3" aria-hidden />
+                      Low rating
+                    </span>
+                  ) : null}
+                  {followUp ? (
+                    <span className="ml-auto inline-flex shrink-0 items-center gap-1 font-semibold text-info">
+                      <Phone className="size-3" aria-hidden />
+                      Call back
+                    </span>
+                  ) : null}
+                </div>
+                <p
+                  className={cn(
+                    "pl-[30px] text-[14px] leading-relaxed",
+                    text ? "text-ink" : "italic text-ink-3"
+                  )}
+                >
+                  {text || "Rating only. No written comment."}
+                </p>
+              </div>
+              <div className="min-w-0 px-4 py-4 sm:px-5">
+                <ReviewDetailPanel
+                  key={id}
+                  variant="row"
+                  review={review}
+                  reply={reply}
+                  stage={stage}
+                  justSent={Boolean(sentHere[id])}
+                  saving={Boolean(saving[id])}
+                  error={errors[id] ?? null}
+                  canSend={sendAllowed(review)}
+                  aiOnly={aiOnly}
+                  contact={contact}
+                  members={members}
+                  followUp={followUp}
+                  undraftedCount={undrafted.length}
+                  onDraft={(rewrite, contactKind) => void draftOne(id, rewrite, contactKind)}
+                  onSend={() => queueSend(id)}
+                  onUndo={() => undoSend(id)}
+                  onFlag={() => flagOne(id)}
+                  onSaved={(saved) => {
+                    setError(id, null);
+                    patchReply(id, saved.status, saved);
+                  }}
+                />
+              </div>
+            </li>
+          );
+        })}
+      </ul>
 
       {totalCount > rows.length && tab === "to-reply" && idle.length > 0 ? (
         <p className="text-xs text-ink-3">
           The bar above works on this page. {plural(totalCount, "review", "reviews")} in all.
         </p>
       ) : null}
-
-      <ConfirmDialog
-        open={pendingTarget !== null}
-        onOpenChange={(isOpen) => {
-          if (!isOpen) setPendingTarget(null);
-        }}
-        title="Discard your edits to this reply?"
-        description="You changed the reply but have not saved it. Cancel to keep editing, or discard the changes."
-        confirmLabel="Discard edits"
-        tone="danger"
-        onConfirm={() => {
-          const target = pendingTarget;
-          setPanelDirty(false);
-          setPendingTarget(null);
-          if (target) {
-            setSelectedId(target.id);
-            setSheetOpen(target.id !== null);
-          }
-        }}
-      />
     </div>
   );
 }
 
-function StatusLine({
-  tab,
-  stage,
-  reply,
-  name,
-  sentHere,
-  canSend,
-  error,
-  onSend,
-  onUndo,
-}: {
-  tab: "to-reply" | "sent";
-  stage: ReplyStage;
-  reply: InboxReply | undefined;
-  name: string;
-  sentHere: boolean;
-  canSend: boolean;
-  error: string | null;
-  onSend: () => void;
-  onUndo: () => void;
-}) {
-  const word = reply?.source === "ai" ? (reply.status === "approved" ? "Approved" : "Draft ready") : "Your reply";
+function LegendItem({ color, label }: { color: string; label: string }) {
   return (
-    <div className="flex flex-col gap-1 pl-[30px]">
-      <div className="flex min-h-[34px] items-center gap-2">
-        {stage === "none" ? (
-          <span className="inline-flex items-center gap-1.5 rounded-full border border-dashed border-[#c3c9d3] px-[9px] py-[3px] text-xs font-medium text-ink-3">
-            <span aria-hidden className="size-1.5 rounded-full bg-[#9aa3b2]" />
-            No reply yet
-          </span>
-        ) : null}
-        {stage === "writing" || stage === "sending" ? (
-          <>
-            <span className="inline-flex items-center gap-1.5 text-xs font-semibold text-ai">
-              <Sparkles className="size-3" aria-hidden />
-              {stage === "sending" ? "Sending…" : "Writing reply…"}
-            </span>
-            <span aria-hidden className="h-2 flex-1 animate-pulse rounded-md bg-[#ebe5f8] motion-reduce:animate-none" />
-          </>
-        ) : null}
-        {stage === "draft" || stage === "failed" ? (
-          <>
-            <span className="flex min-w-0 flex-1 items-center gap-1.5 text-xs">
-              {stage === "failed" ? (
-                <span className="whitespace-nowrap font-semibold text-bad">Not sent</span>
-              ) : (
-                <>
-                  <Sparkles className="size-3 shrink-0 text-ai" aria-hidden />
-                  <span className="whitespace-nowrap font-semibold text-[#5b21b6]">{word}</span>
-                  {hasResolutionContact(reply?.content) ? <ContactTag /> : null}
-                </>
-              )}
-              <span className="truncate text-ink-3">{reply?.content || "Not written yet"}</span>
-            </span>
-            {canSend ? (
-              <button
-                type="button"
-                onClick={onSend}
-                aria-label={`Send reply to ${name}`}
-                className="inline-flex h-[34px] shrink-0 items-center gap-1.5 rounded-full bg-ink px-3.5 text-xs font-semibold text-white hover:bg-graphite"
-              >
-                <Send className="size-3" aria-hidden />
-                {stage === "failed" ? "Retry" : "Send"}
-              </button>
-            ) : (
-              <span className="shrink-0 text-xs text-ink-3">Needs approval</span>
-            )}
-          </>
-        ) : null}
-        {stage === "held" || stage === "sent" ? (
-          <>
-            <span className="inline-flex flex-1 items-center gap-1.5 text-xs font-semibold text-ok">
-              <Check className="size-[13px]" strokeWidth={2.5} aria-hidden />
-              {stage === "held" || (sentHere && tab === "to-reply") ? "Sent to Google just now" : "Replied · live on Google"}
-            </span>
-            {stage === "held" ? (
-              <button
-                type="button"
-                onClick={onUndo}
-                className="rounded-lg px-2 py-1.5 text-xs font-semibold text-[#14532d] hover:bg-ok-tint"
-              >
-                Undo
-              </button>
-            ) : null}
-          </>
-        ) : null}
-        {stage === "unconfirmed" ? (
-          <span className="text-xs font-semibold text-warn">Waiting for Google to confirm</span>
-        ) : null}
-      </div>
-      {error ? (
-        <p role="alert" className="text-xs text-bad">
-          {error}
-        </p>
-      ) : null}
-    </div>
+    <li className="inline-flex items-center gap-1.5">
+      <span aria-hidden className={cn("size-2 rounded-full", color)} />
+      {label}
+    </li>
   );
 }
