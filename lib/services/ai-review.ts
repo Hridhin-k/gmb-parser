@@ -12,7 +12,8 @@ import { toneInstruction, type ToneVoice } from "@/lib/onboarding";
 import { draftsPausedForLocation, resolvedToneForLocation } from "@/lib/services/hierarchy";
 import { adjustmentInstruction, type DraftAdjustment } from "@/lib/reply-adjustments";
 import { checkGeneratedReplyGuardrails } from "@/lib/reply-guardrails";
-import { EscalationService } from "@/lib/services/escalations";
+import { EscalationContactStore, EscalationService } from "@/lib/services/escalations";
+import { existingResolutionContactSentence, insertResolutionContact, removeResolutionContact, selectedResolutionContactSentence, type ResolutionContactSelection } from "@/lib/resolution-contact";
 import {
   claimAiGenerationJob,
   completeAiGenerationJob,
@@ -34,7 +35,7 @@ import { inventedPromiseViolations, neverSayViolations, retrieveKnowledge } from
 // Config
 // ---------------------------------------------------------------------------
 
-const PROMPT_VERSION = "v3.1";
+const PROMPT_VERSION = "v3.2";
 const REQUEST_TIMEOUT_MS = 30_000;
 const MAX_COMMENT_CHARS = 4000;
 
@@ -80,6 +81,8 @@ export interface GenerateDraftParams {
   adjustment?: DraftAdjustment;
   /** True only when the user explicitly asked to replace a draft they edited. */
   replaceEdited?: boolean;
+  /** A person's explicit choice to append saved business contacts after generation. */
+  contactDetails?: ResolutionContactSelection;
   /** True only for a background worker. A pause blocks this path. A person drafting is unaffected. */
   automated?: boolean;
   /**
@@ -176,6 +179,7 @@ RULES
 - Never claim an action the business has not confirmed (for example "we have retrained our staff", "we are adding more counters", "it is back in stock"). Say the feedback will be shared with the team instead.
 - Never offer refunds, discounts, gifts, or compensation.
 - Never invent facts, staff names, policies, opening hours, phone numbers, email addresses, or URLs. Never use placeholders like [Name].
+- Do not include phone numbers or email addresses in the generated text. Any selected business contact details are added after drafting.
 - Avoid stock phrases such as "We appreciate your kind words" or "Your feedback is valuable to us".
 ${toneInstruction(ctx.tone?.voice, ctx.tone?.note)}${ctx.voiceGuide ?? ""}${orgContextPromptBlock(ctx.orgContext ?? { industry: "", positioning: "", priorities: "", policies: "", legacyVoice: "", legacyNote: "" })}${knowledgePromptBlock(ctx.knowledge ?? [])}${templatesPromptBlock(ctx.templates ?? [])}${previousDraftBlock(ctx.previousDraft)}${adjustmentInstruction(ctx.adjustment, ctx.currentDraft)}
 OUTPUT
@@ -207,6 +211,9 @@ export class AIReviewService {
   static async generateDraft(
     params: GenerateDraftParams
   ): Promise<GenerateDraftResult> {
+    if (params.automated && (params.contactDetails?.phone || params.contactDetails?.email)) {
+      throw new ValidationError("Contact details can only be added when a person drafts a reply.");
+    }
     assertAiCredentials(resolveAiRoute("reply"));
 
     const admin = createAdminClient();
@@ -299,8 +306,16 @@ export class AIReviewService {
         "This draft has manual edits. Use Shorter, Warmer, More formal, Add apology, Regenerate, a language, or a template when you want to replace it."
       );
     }
-    const previousDraft = activeReply?.content;
     const revising = params.adjustment && params.adjustment.kind !== "regenerate";
+    const contactSentence = params.contactDetails?.phone || params.contactDetails?.email
+      ? selectedResolutionContactSentence(params.contactDetails, await EscalationContactStore.read(params.workspaceId))
+      : revising && !params.contactDetails && activeReply
+        ? existingResolutionContactSentence(activeReply.content)
+        : null;
+    // Selected contacts are appended after validation; do not ask AI to reproduce an older contact line.
+    const previousDraft = contactSentence && activeReply
+      ? removeResolutionContact(activeReply.content)
+      : activeReply?.content;
 
     const [tone, configured, promptContext] = await Promise.all([
       resolvedToneForLocation(params.workspaceId, review.location_id),
@@ -391,7 +406,7 @@ export class AIReviewService {
         throw new ValidationError(violations[0].message);
       }
 
-      responseText = cleaned;
+      responseText = contactSentence ? insertResolutionContact(cleaned, contactSentence) : cleaned;
       logger.info("ai_review.generate_ok", {
         workspaceId: params.workspaceId,
         reviewId: params.reviewId,

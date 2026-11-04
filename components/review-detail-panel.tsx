@@ -11,6 +11,7 @@ import { Banner } from "@/components/ui/banner";
 import { Textarea } from "@/components/ui/textarea";
 import { Input } from "@/components/ui/input";
 import { SelectField } from "@/components/ui/select-field";
+import { DraftContactMenu } from "@/components/draft-contact-menu";
 import { formatFriendlyDateTime } from "@/lib/format-date";
 import { cn } from "@/lib/utils";
 import { languageLabel, themeLabel } from "@/lib/review-inbox";
@@ -20,6 +21,7 @@ import {
   resolutionContactSentence,
   type ResolutionContact,
   type ResolutionContactKind,
+  type ResolutionContactSelection,
 } from "@/lib/resolution-contact";
 import { isLowRating, longAge, type ReplyStage } from "@/components/reviews-status";
 
@@ -85,7 +87,7 @@ interface ReviewDetailPanelProps {
   followUp: FollowUpRef | null;
   /** Reviews still without a draft, for the "draft them all" tip. */
   undraftedCount: number;
-  onDraft: (rewrite?: RewriteKind) => void;
+  onDraft: (rewrite?: RewriteKind, contactDetails?: ResolutionContactSelection) => void;
   onSend: () => void;
   onUndo: () => void;
   onFlag: () => Promise<void>;
@@ -452,6 +454,7 @@ export function ReviewDetailPanel({
               <Sparkles className="size-[15px]" aria-hidden />
               Draft with AI
             </button>
+            <DraftContactMenu contact={contact} disabled={busy || saving} onDraft={(selection) => onDraft(undefined, selection)} />
             {aiOnly ? null : (
               <button
                 type="button"
@@ -540,6 +543,7 @@ export function ReviewDetailPanel({
                   {label}
                 </button>
               ))}
+              <DraftContactMenu contact={contact} disabled={busy || editing || saving} onDraft={(selection) => onDraft(undefined, selection)} />
             </div>
           )}
           <div className="flex flex-wrap items-center gap-2 pt-1">

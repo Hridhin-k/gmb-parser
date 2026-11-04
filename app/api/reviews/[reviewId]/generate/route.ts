@@ -10,6 +10,7 @@ import { checkRateLimit, AI_GENERATE_LIMIT, WORKSPACE_AI_LIMIT } from "@/lib/rat
 import { ensurePersonalWorkspace } from "@/lib/services/workspace";
 import { persistAiGenerationJob } from "@/lib/services/ai-generation-persist";
 import { assertReviewAction } from "@/lib/services/access";
+import type { ResolutionContactSelection } from "@/lib/resolution-contact";
 
 interface RouteParams {
   params: Promise<{ reviewId: string }>;
@@ -25,6 +26,7 @@ const generateBodySchema = z.object({
   adjustment: z.enum(["regenerate", "shorter", "warmer", "formal", "apology"]).optional(),
   language: z.enum(["en", "ml", "manglish", "hi", "hinglish", "ar"]).optional(),
   replaceEdited: z.boolean().optional(),
+  contactDetails: z.object({ phone: z.boolean(), email: z.boolean() }).strict().optional(),
 });
 
 export async function POST(request: Request, { params }: RouteParams) {
@@ -72,6 +74,7 @@ export async function POST(request: Request, { params }: RouteParams) {
 
   let adjustment: DraftAdjustment | undefined;
   let replaceEdited = false;
+  let contactDetails: ResolutionContactSelection | undefined;
   const rawBody = await request.text();
   if (rawBody.trim()) {
     let parsedBody: unknown;
@@ -85,6 +88,7 @@ export async function POST(request: Request, { params }: RouteParams) {
       return NextResponse.json({ error: "That reply adjustment is not supported." }, { status: 400 });
     }
     replaceEdited = parsed.data.replaceEdited ?? false;
+    contactDetails = parsed.data.contactDetails;
     if (parsed.data.language) {
       adjustment = { kind: "language", language: parsed.data.language as ReplyLanguage };
     } else if (parsed.data.adjustment) {
@@ -99,6 +103,7 @@ export async function POST(request: Request, { params }: RouteParams) {
       userId: user.id,
       adjustment,
       replaceEdited,
+      contactDetails,
       deferPersistence: true,
     });
 

@@ -7,7 +7,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { ConfirmDialog } from "@/components/confirm-dialog";
 import { InlineStars } from "@/components/reviews-badges";
 import { splitGoogleTranslation } from "@/lib/review-text";
-import type { ResolutionContact } from "@/lib/resolution-contact";
+import type { ResolutionContact, ResolutionContactSelection } from "@/lib/resolution-contact";
 import { useServerRefresh, useSettleWhenUpdated } from "@/hooks/use-server-refresh";
 import { pollBulkJob, type BulkJobItemResult } from "@/lib/bulk-job-client";
 import { pollAiGeneration } from "@/lib/ai-generation-client";
@@ -290,20 +290,21 @@ export function ReviewList({
     });
   }
 
-  async function draftOne(id: string, rewrite?: RewriteKind) {
+  async function draftOne(id: string, rewrite?: RewriteKind, contactDetails?: ResolutionContactSelection) {
     if (writing[id] || saving[id]) return;
     setError(id, null);
     setWriting((prev) => withFlag(prev, [id], true));
     try {
-      const body = rewrite
+      const adjustment = rewrite
         ? { adjustment: rewrite, replaceEdited: true }
         : viewReplies[id]
           ? { adjustment: "regenerate", replaceEdited: true }
           : null;
+      const body = { ...adjustment, ...(contactDetails ? { contactDetails } : {}) };
       const response = await fetch(`/api/reviews/${id}/generate`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        ...(body ? { body: JSON.stringify(body) } : {}),
+        body: JSON.stringify(body),
       });
       const data = (await response.json().catch(() => ({}))) as {
         error?: string;
@@ -724,7 +725,7 @@ export function ReviewList({
                 members={members}
                 followUp={flagged[current.review.id] ?? followUps[current.review.id] ?? null}
                 undraftedCount={undrafted.length}
-                onDraft={(rewrite) => void draftOne(current.review.id, rewrite)}
+                onDraft={(rewrite, contactDetails) => void draftOne(current.review.id, rewrite, contactDetails)}
                 onSend={() => queueSend(current.review.id)}
                 onUndo={() => undoSend(current.review.id)}
                 onFlag={() => flagOne(current.review.id)}

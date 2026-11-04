@@ -40,3 +40,13 @@ export async function retryAiGeneration(jobId: string): Promise<boolean> {
     return false;
   }
 }
+
+/** Do not let reply actions use a provisional id while the background save is running. */
+export async function savedReplyId(result: { replyId?: string; jobId?: string | null }): Promise<string> {
+  const saved = result.jobId ? await pollAiGeneration(result.jobId) : { status: "saved", replyId: result.replyId };
+  const id = saved.replyId;
+  if (saved.status !== "saved" || !id || id.startsWith("pending:")) {
+    throw new Error("The new draft has not finished saving. Refresh the page before sending it.");
+  }
+  return id;
+}
