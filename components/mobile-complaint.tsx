@@ -38,7 +38,7 @@ export function MobileComplaintView({ data, aiOnly = false }: { data: MobileComp
   const [pending, setPending] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
-  const violations = checkReplyGuardrails(content).map((item) => item.message);
+  const violations = checkReplyGuardrails(content, { phone: data.resolutionPhone, email: data.resolutionEmail }).map((item) => item.message);
   const chosen = RESOLUTION_ACTIONS.find((action) => action.id === card?.resolutionCode);
   const [retry, setRetry] = useState<(() => Promise<void>) | null>(null);
 

@@ -5,6 +5,7 @@ import { AppError } from "@/lib/errors";
 import { logger } from "@/lib/logger";
 import { validateId } from "@/lib/validation";
 import { type DraftAdjustment, type ReplyLanguage } from "@/lib/reply-adjustments";
+import type { ResolutionContactKind } from "@/lib/resolution-contact";
 import { z } from "zod";
 import { checkRateLimit, AI_GENERATE_LIMIT, WORKSPACE_AI_LIMIT } from "@/lib/rate-limit";
 import { ensurePersonalWorkspace } from "@/lib/services/workspace";
@@ -25,6 +26,8 @@ const generateBodySchema = z.object({
   adjustment: z.enum(["regenerate", "shorter", "warmer", "formal", "apology"]).optional(),
   language: z.enum(["en", "ml", "manglish", "hi", "hinglish", "ar"]).optional(),
   replaceEdited: z.boolean().optional(),
+  /** End the draft with the saved resolution phone and/or email. */
+  contact: z.enum(["phone", "email", "both"]).optional(),
 });
 
 export async function POST(request: Request, { params }: RouteParams) {
@@ -72,6 +75,7 @@ export async function POST(request: Request, { params }: RouteParams) {
 
   let adjustment: DraftAdjustment | undefined;
   let replaceEdited = false;
+  let contact: ResolutionContactKind | null = null;
   const rawBody = await request.text();
   if (rawBody.trim()) {
     let parsedBody: unknown;
@@ -85,6 +89,7 @@ export async function POST(request: Request, { params }: RouteParams) {
       return NextResponse.json({ error: "That reply adjustment is not supported." }, { status: 400 });
     }
     replaceEdited = parsed.data.replaceEdited ?? false;
+    contact = parsed.data.contact ?? null;
     if (parsed.data.language) {
       adjustment = { kind: "language", language: parsed.data.language as ReplyLanguage };
     } else if (parsed.data.adjustment) {
@@ -99,6 +104,7 @@ export async function POST(request: Request, { params }: RouteParams) {
       userId: user.id,
       adjustment,
       replaceEdited,
+      contact,
       deferPersistence: true,
     });
 

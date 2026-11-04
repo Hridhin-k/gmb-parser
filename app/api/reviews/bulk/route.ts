@@ -12,6 +12,7 @@ import { ensurePersonalWorkspace } from "@/lib/services/workspace";
 import { assertCanAssignReviews, assertCanEditReplyText, assertPublishAccess, assertReviewAction } from "@/lib/services/access";
 import { assertSafePublicReply } from "@/lib/services/reply-checks";
 import { createBulkJob, processBulkJob } from "@/lib/services/bulk-jobs";
+import type { ResolutionContactKind } from "@/lib/resolution-contact";
 
 export const maxDuration = 60;
 
@@ -27,7 +28,7 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Not authenticated" }, { status: 401 });
   }
 
-  let body: { action: BulkAction; reviewIds: string[]; assigneeId?: string | null };
+  let body: { action: BulkAction; reviewIds: string[]; assigneeId?: string | null; contact?: ResolutionContactKind };
   try {
     body = await parseBody(request, bulkReviewsBodySchema);
   } catch (e) {
@@ -98,8 +99,9 @@ export async function POST(request: Request) {
       reviewIds: body.reviewIds,
     });
     if (jobId) {
+      const contact = body.action === "generate" ? body.contact ?? null : null;
       after(async () => {
-        await processBulkJob(jobId);
+        await processBulkJob(jobId, { contact });
       });
       return NextResponse.json(
         { jobId, status: "queued", total: body.reviewIds.length },
@@ -178,6 +180,7 @@ export async function POST(request: Request) {
           reviewId,
           workspaceId,
           userId: user.id,
+          contact: body.contact ?? null,
         });
         results.push({
           reviewId,

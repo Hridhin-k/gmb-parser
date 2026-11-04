@@ -7,6 +7,7 @@ import { AppError } from "@/lib/errors";
 import { logger } from "@/lib/logger";
 import { mapPool } from "@/lib/pool";
 import type { Json } from "@/lib/types/database-schema";
+import type { ResolutionContactKind } from "@/lib/resolution-contact";
 
 export type BulkJobAction = "generate" | "publish";
 export type BulkJobStatus = "queued" | "running" | "done" | "failed";
@@ -115,11 +116,17 @@ async function approveReply(admin: Admin, replyId: string, userId: string): Prom
 }
 
 /** One generate or publish for one review. Mirrors the single-item API behaviour. */
+export interface BulkGenerateOptions {
+  /** Ends each draft with the saved resolution phone and/or email. */
+  contact?: ResolutionContactKind | null;
+}
+
 export async function processBulkItem(input: {
   action: BulkJobAction;
   reviewId: string;
   workspaceId: string;
   userId: string;
+  options?: BulkGenerateOptions;
 }): Promise<BulkItemResult> {
   const { action, reviewId, workspaceId, userId } = input;
   const admin = createAdminClient();
@@ -127,7 +134,7 @@ export async function processBulkItem(input: {
     if (action === "generate") {
       const denied = await reviewAllowed(userId, workspaceId, reviewId, "draft");
       if (denied) return { reviewId, ok: false, error: denied };
-      const draft = await AIReviewService.generateDraft({ reviewId, workspaceId, userId });
+      const draft = await AIReviewService.generateDraft({ reviewId, workspaceId, userId, contact: input.options?.contact ?? null });
       return { reviewId, ok: true, replyId: draft.replyId, content: draft.content };
     }
 
@@ -169,7 +176,7 @@ export async function processBulkItem(input: {
  * progress back after every item so pollers see live counts. Safe to call
  * twice: only the caller that wins the queued→running claim does the work.
  */
-export async function processBulkJob(jobId: string): Promise<void> {
+export async function processBulkJob(jobId: string, options: BulkGenerateOptions = {}): Promise<void> {
   const admin = createAdminClient();
   const { data: claimed } = await admin
     .from("grm_bulk_jobs")
@@ -190,6 +197,7 @@ export async function processBulkJob(jobId: string): Promise<void> {
         reviewId,
         workspaceId: job.workspace_id,
         userId: job.user_id,
+        options,
       });
       results.push(result);
       await admin

@@ -4,6 +4,7 @@ import { GoogleOAuthService } from "./google-oauth";
 import { AuditService } from "./audit";
 import { AppError, GoogleApiError, ValidationError } from "@/lib/errors";
 import { checkReplyGuardrails, negativeReviewNeedsApproval } from "@/lib/reply-guardrails";
+import { EscalationContactStore } from "@/lib/services/escalations";
 import { comparePublishedReply } from "@/lib/reply-adjustments";
 import { forgetReviewList } from "@/lib/services/dashboard";
 
@@ -214,7 +215,7 @@ export class ReplyPublishingService {
       );
     }
 
-    const violations = checkReplyGuardrails(reply.content);
+    const violations = checkReplyGuardrails(reply.content, await EscalationContactStore.read(workspaceId));
     if (violations.length) {
       await AuditService.log({
         workspaceId,

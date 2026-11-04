@@ -11,6 +11,35 @@ const PHONE = /^[+()\d][\d\s()+-]{5,39}$/;
 const EMAIL = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const CONTACT_LINE = /^You can reach us at .+ so we can resolve this with you\.$/;
 
+export const RESOLUTION_CONTACT_KINDS: ResolutionContactKind[] = ["phone", "email", "both"];
+
+export function isResolutionContactKind(value: unknown): value is ResolutionContactKind {
+  return typeof value === "string" && (RESOLUTION_CONTACT_KINDS as string[]).includes(value);
+}
+
+/** True when the reply already ends with the saved contact line. */
+export function hasResolutionContact(content: string | null | undefined): boolean {
+  if (!content) return false;
+  return content.split("\n").some((line) => CONTACT_LINE.test(line.trim()));
+}
+
+/** Takes the contact line off a reply, leaving the rest as it was. */
+export function removeResolutionContact(content: string): string {
+  return content
+    .split("\n")
+    .filter((line) => !CONTACT_LINE.test(line.trim()))
+    .join("\n")
+    .replace(/\n{3,}/g, "\n\n")
+    .trim();
+}
+
+/** Which contact details a kind needs. Missing details mean the option cannot be offered. */
+export function contactKindAvailable(kind: ResolutionContactKind, contact: ResolutionContact): boolean {
+  const phone = Boolean(contact.phone?.trim());
+  const email = Boolean(contact.email?.trim());
+  return kind === "phone" ? phone : kind === "email" ? email : phone && email;
+}
+
 export function normalizeResolutionContact(input: { phone: string; email: string }): ResolutionContact {
   const phone = input.phone.trim();
   const email = input.email.trim();
@@ -39,11 +68,6 @@ export function resolutionContactSentence(kind: ResolutionContactKind, contact: 
 
 /** Puts the contact sentence on the reply and replaces an earlier one. */
 export function insertResolutionContact(content: string, sentence: string): string {
-  const kept = content
-    .split("\n")
-    .filter((line) => !CONTACT_LINE.test(line.trim()))
-    .join("\n")
-    .replace(/\n{3,}/g, "\n\n")
-    .trim();
+  const kept = removeResolutionContact(content);
   return kept ? `${kept}\n\n${sentence}` : sentence;
 }

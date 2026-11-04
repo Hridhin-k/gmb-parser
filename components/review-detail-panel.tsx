@@ -16,11 +16,14 @@ import { cn } from "@/lib/utils";
 import { languageLabel, themeLabel } from "@/lib/review-inbox";
 import { splitGoogleTranslation } from "@/lib/review-text";
 import {
+  hasResolutionContact,
   insertResolutionContact,
+  removeResolutionContact,
   resolutionContactSentence,
   type ResolutionContact,
   type ResolutionContactKind,
 } from "@/lib/resolution-contact";
+import { ContactChip, ContactDraftButton, ContactTag } from "@/components/contact-draft-menu";
 import { isLowRating, longAge, type ReplyStage } from "@/components/reviews-status";
 
 // ---------------------------------------------------------------------------
@@ -85,7 +88,8 @@ interface ReviewDetailPanelProps {
   followUp: FollowUpRef | null;
   /** Reviews still without a draft, for the "draft them all" tip. */
   undraftedCount: number;
-  onDraft: (rewrite?: RewriteKind) => void;
+  /** Draft or rewrite with AI. `contact` ends the draft with the saved resolution details. */
+  onDraft: (rewrite?: RewriteKind, contact?: ResolutionContactKind | null) => void;
   onSend: () => void;
   onUndo: () => void;
   onFlag: () => Promise<void>;
@@ -316,6 +320,30 @@ export function ReviewDetailPanel({
     setEditing(true);
   }
 
+  /**
+   * Adds, changes or removes the contact line on a saved AI draft and saves it
+   * straight away. While the person is typing it only changes the text box.
+   */
+  async function setContactLine(kind: ResolutionContactKind | null) {
+    const sentence = kind ? resolutionContactSentence(kind, contact) : null;
+    if (kind && !sentence) return;
+    const next = sentence ? insertResolutionContact(content, sentence) : removeResolutionContact(content);
+    setContent(next);
+    if (editing || !reply || own) return;
+    if (next === reply.content) return;
+    setLocalError(null);
+    setLoading("save");
+    try {
+      await apiCall(`/api/reviews/${review.id}/reply`, "PUT", { replyId: reply.id, content: next });
+      onSaved({ ...reply, content: next, status: reply.status === "failed" ? "failed" : "draft" });
+    } catch (caught) {
+      setContent(reply.content);
+      setLocalError(caught instanceof Error ? caught.message : "The reply could not be saved.");
+    } finally {
+      setLoading(null);
+    }
+  }
+
   function followUpHref(): string {
     const query = new URLSearchParams();
     for (const key of ["client", "group", "location"]) {
@@ -448,10 +476,13 @@ export function ReviewDetailPanel({
             </span>
           </div>
           <div className="flex flex-wrap items-center gap-2">
-            <button type="button" onClick={() => onDraft()} disabled={busy} className={pill("ai")}>
-              <Sparkles className="size-[15px]" aria-hidden />
-              Draft with AI
-            </button>
+            <ContactDraftButton
+              label="Draft with AI"
+              plainLabel="Draft reply"
+              contact={contact}
+              disabled={busy}
+              onDraft={(kind) => onDraft(undefined, kind)}
+            />
             {aiOnly ? null : (
               <button
                 type="button"
@@ -500,6 +531,7 @@ export function ReviewDetailPanel({
               {draftTag}
             </span>
             {reply?.status === "approved" ? <Badge variant="brand">Approved</Badge> : null}
+            {hasResolutionContact(content) ? <ContactTag long /> : null}
             {saving ? <span className="text-xs text-ink-3">Saving…</span> : null}
           </div>
           {editing ? (
@@ -540,6 +572,15 @@ export function ReviewDetailPanel({
                   {label}
                 </button>
               ))}
+              {aiOnly ? null : (
+                <ContactChip
+                  contact={contact}
+                  present={hasResolutionContact(content)}
+                  disabled={busy || saving}
+                  onAdd={(kind) => void setContactLine(kind)}
+                  onRemove={() => void setContactLine(null)}
+                />
+              )}
             </div>
           )}
           <div className="flex flex-wrap items-center gap-2 pt-1">
@@ -609,7 +650,7 @@ export function ReviewDetailPanel({
                 ? "A higher role approves this draft. After that, you can send it."
                 : "An owner or admin approves 1–3 star replies before they go to Google."}
           </span>
-          {editing && !aiOnly ? <ContactActions contact={contact} onAdd={addContact} /> : null}
+          {editing && own && !aiOnly ? <ContactActions contact={contact} onAdd={addContact} /> : null}
         </div>
       ) : null}
 

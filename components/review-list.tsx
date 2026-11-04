@@ -2,12 +2,13 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Check, Phone, Send, Sparkles } from "lucide-react";
+import { ContactDraftButton, ContactTag } from "@/components/contact-draft-menu";
 import { cn } from "@/lib/utils";
 import { Checkbox } from "@/components/ui/checkbox";
 import { ConfirmDialog } from "@/components/confirm-dialog";
 import { InlineStars } from "@/components/reviews-badges";
 import { splitGoogleTranslation } from "@/lib/review-text";
-import type { ResolutionContact } from "@/lib/resolution-contact";
+import { hasResolutionContact, type ResolutionContact, type ResolutionContactKind } from "@/lib/resolution-contact";
 import { useServerRefresh, useSettleWhenUpdated } from "@/hooks/use-server-refresh";
 import { pollBulkJob, type BulkJobItemResult } from "@/lib/bulk-job-client";
 import { pollAiGeneration } from "@/lib/ai-generation-client";
@@ -56,7 +57,7 @@ const UNDO_MS = 5000;
 
 type ReplyPatch = { status: string; reply: InboxReply | null };
 type Notice = { text: string; tone: "ok" | "warn" | "bad"; undoId?: string };
-type Job = { kind: "draft" | "send"; total: number; done: number };
+type Job = { kind: "draft" | "send"; total: number; done: number; withContact?: boolean };
 type Flags = Record<string, true>;
 
 function withFlag(flags: Flags, ids: string[], on: boolean): Flags {
@@ -290,16 +291,17 @@ export function ReviewList({
     });
   }
 
-  async function draftOne(id: string, rewrite?: RewriteKind) {
+  async function draftOne(id: string, rewrite?: RewriteKind, contactKind: ResolutionContactKind | null = null) {
     if (writing[id] || saving[id]) return;
     setError(id, null);
     setWriting((prev) => withFlag(prev, [id], true));
     try {
-      const body = rewrite
+      const base = rewrite
         ? { adjustment: rewrite, replaceEdited: true }
         : viewReplies[id]
           ? { adjustment: "regenerate", replaceEdited: true }
           : null;
+      const body = contactKind ? { ...(base ?? {}), contact: contactKind } : base;
       const response = await fetch(`/api/reviews/${id}/generate`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -328,12 +330,13 @@ export function ReviewList({
   async function runBulk(
     action: "generate" | "publish",
     ids: string[],
-    onItem: (item: BulkJobItemResult) => void
+    onItem: (item: BulkJobItemResult) => void,
+    contactKind: ResolutionContactKind | null = null
   ): Promise<{ ok: number; failed: number; firstError?: string } | { error: string }> {
     const response = await fetch("/api/reviews/bulk", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ action, reviewIds: ids }),
+      body: JSON.stringify(contactKind ? { action, reviewIds: ids, contact: contactKind } : { action, reviewIds: ids }),
     }).catch(() => null);
     if (!response) return { error: "No connection. Nothing was sent. Check your network and try again." };
     const data = (await response.json().catch(() => ({}))) as {
@@ -370,17 +373,22 @@ export function ReviewList({
     };
   }
 
-  async function bulkDraft() {
+  async function bulkDraft(contactKind: ResolutionContactKind | null = null) {
     const ids = pickDraft.map((row) => row.review.id);
     if (ids.length === 0 || job) return;
     setNotice(null);
     setWriting((prev) => withFlag(prev, ids, true));
-    setJob({ kind: "draft", total: ids.length, done: 0 });
-    const outcome = await runBulk("generate", ids, (item) => {
-      setWriting((prev) => withFlag(prev, [item.reviewId], false));
-      if (item.ok && item.replyId && item.content) patchReply(item.reviewId, "draft", draftReply(item.replyId, item.content));
-      else if (!item.ok) setError(item.reviewId, item.error ?? "Couldn't write a draft.");
-    });
+    setJob({ kind: "draft", total: ids.length, done: 0, withContact: Boolean(contactKind) });
+    const outcome = await runBulk(
+      "generate",
+      ids,
+      (item) => {
+        setWriting((prev) => withFlag(prev, [item.reviewId], false));
+        if (item.ok && item.replyId && item.content) patchReply(item.reviewId, "draft", draftReply(item.replyId, item.content));
+        else if (!item.ok) setError(item.reviewId, item.error ?? "Couldn't write a draft.");
+      },
+      contactKind
+    );
     setWriting((prev) => withFlag(prev, ids, false));
     setJob(null);
     if ("error" in outcome) {
@@ -547,14 +555,18 @@ export function ReviewList({
                   <Sparkles className="size-4 text-ai" aria-hidden />
                 )}
                 <span className="font-semibold">
-                  {job.kind === "send" ? "Sending replies to Google" : "Drafting replies with AI"}
+                  {job.kind === "send" ? "Sending replies to Google" : job.withContact ? "Drafting replies with contact details" : "Drafting replies with AI"}
                 </span>
                 <span className="text-ink-3 tabular-nums">
                   {job.done} of {job.total}
                 </span>
                 <span className="flex-1" />
                 <span className="text-[13px] text-ink-3">
-                  {job.kind === "send" ? "Each reply posts as its business." : "Replies appear in the list as they’re written."}
+                  {job.kind === "send"
+                    ? "Each reply posts as its business."
+                    : job.withContact
+                      ? "Your saved contact line ends each draft. Replies appear in the list as they’re written."
+                      : "Replies appear in the list as they’re written."}
                 </span>
               </div>
               <div className="h-1.5 overflow-hidden rounded-full bg-line-2">
@@ -584,18 +596,14 @@ export function ReviewList({
                     : "1 and 2 star replies start unticked so you read them first."}
               </span>
               {undrafted.length > 0 ? (
-                <button
-                  type="button"
-                  onClick={() => void bulkDraft()}
+                <ContactDraftButton
+                  label={noDrafts ? `Draft ${plural(pickDraft.length, "reply", "replies")} with AI` : `Draft ${pickDraft.length} more`}
+                  plainLabel={`Draft ${plural(pickDraft.length, "reply", "replies")}`}
+                  contact={contact}
                   disabled={pickDraft.length === 0}
-                  className={cn(
-                    "inline-flex h-11 items-center gap-2 rounded-full border px-[18px] text-sm font-semibold disabled:cursor-not-allowed disabled:opacity-40",
-                    noDrafts ? "border-ai bg-ai text-white hover:bg-[#5b21b6]" : "border-ai-line bg-[#faf7ff] text-[#5b21b6]"
-                  )}
-                >
-                  <Sparkles className="size-[15px]" aria-hidden />
-                  {noDrafts ? `Draft ${plural(pickDraft.length, "reply", "replies")} with AI` : `Draft ${pickDraft.length} more`}
-                </button>
+                  tone={noDrafts ? "solid" : "soft"}
+                  onDraft={(kind) => void bulkDraft(kind)}
+                />
               ) : null}
               {noDrafts ? null : (
                 <button
@@ -724,7 +732,7 @@ export function ReviewList({
                 members={members}
                 followUp={flagged[current.review.id] ?? followUps[current.review.id] ?? null}
                 undraftedCount={undrafted.length}
-                onDraft={(rewrite) => void draftOne(current.review.id, rewrite)}
+                onDraft={(rewrite, contactKind) => void draftOne(current.review.id, rewrite, contactKind)}
                 onSend={() => queueSend(current.review.id)}
                 onUndo={() => undoSend(current.review.id)}
                 onFlag={() => flagOne(current.review.id)}
@@ -818,6 +826,7 @@ function StatusLine({
                 <>
                   <Sparkles className="size-3 shrink-0 text-ai" aria-hidden />
                   <span className="whitespace-nowrap font-semibold text-[#5b21b6]">{word}</span>
+                  {hasResolutionContact(reply?.content) ? <ContactTag /> : null}
                 </>
               )}
               <span className="truncate text-ink-3">{reply?.content || "Not written yet"}</span>

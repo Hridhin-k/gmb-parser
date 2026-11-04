@@ -1,3 +1,5 @@
+import type { ResolutionContact } from "@/lib/resolution-contact";
+
 export type GuardrailCode =
   | "compensation"
   | "medical"
@@ -34,9 +36,24 @@ const RULES: Array<{ code: GuardrailCode; pattern: RegExp; message: string }> = 
   },
 ];
 
-/** Blocks text that must not be posted publicly. This is not a quality score and cannot approve a reply. */
-export function checkReplyGuardrails(content: string): GuardrailViolation[] {
-  const text = content.trim();
+/** Removes the workspace's saved resolution phone and email so only other contact details are caught. */
+function withoutAllowedContact(text: string, allowed: ResolutionContact | null | undefined): string {
+  if (!allowed) return text;
+  let result = text;
+  for (const value of [allowed.phone, allowed.email]) {
+    const needle = value?.trim();
+    if (!needle) continue;
+    result = result.split(needle).join(" ");
+  }
+  return result;
+}
+
+/**
+ * Blocks text that must not be posted publicly. This is not a quality score and cannot approve a reply.
+ * The workspace's saved resolution contact, when given, is the one phone number and email a reply may carry.
+ */
+export function checkReplyGuardrails(content: string, allowedContact?: ResolutionContact | null): GuardrailViolation[] {
+  const text = withoutAllowedContact(content.trim(), allowedContact);
   if (!text) return [];
   const found: GuardrailViolation[] = [];
   for (const rule of RULES) {

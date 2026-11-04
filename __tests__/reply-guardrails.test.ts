@@ -39,3 +39,19 @@ describe("reply adjustments", () => {
     expect(comparePublishedReply("Thank you.", "A different reply")).toBe("different");
   });
 });
+
+describe("saved resolution contact", () => {
+  const saved = { phone: "+91 98470 11111", email: "care@example.com" };
+
+  it("lets the saved phone and email through and still blocks any other", () => {
+    const line = "You can reach us at +91 98470 11111 or care@example.com so we can resolve this with you.";
+    expect(checkReplyGuardrails(line, saved)).toEqual([]);
+    expect(checkReplyGuardrails(line)).toHaveLength(1);
+    expect(checkReplyGuardrails("Call me on 98470 12345.", saved).map((item) => item.code)).toContain("personal_contact");
+    expect(checkReplyGuardrails("Write to boss@example.com.", saved).map((item) => item.code)).toContain("personal_contact");
+  });
+
+  it("ignores an empty saved contact", () => {
+    expect(checkReplyGuardrails("Email desk@example.com.", { phone: null, email: null })).toHaveLength(1);
+  });
+});

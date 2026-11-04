@@ -65,6 +65,11 @@ vi.mock("@/lib/services/audit", () => ({
   AuditService: { log: vi.fn() },
 }));
 
+// The publish guardrail reads the saved resolution contact; none is saved here.
+vi.mock("@/lib/services/escalations", () => ({
+  EscalationContactStore: { read: vi.fn(async () => ({ phone: null, email: null })) },
+}));
+
 // ---------------------------------------------------------------------------
 // Test helper: build the nested reply object the service expects
 // ---------------------------------------------------------------------------

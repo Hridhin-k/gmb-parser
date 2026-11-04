@@ -115,6 +115,8 @@ export const bulkReviewsBodySchema = z.object({
   action: z.enum(["generate", "approve", "publish", "discard", "assign"]),
   reviewIds: z.array(uuidSchema).min(1).max(50),
   assigneeId: z.string().uuid().nullable().optional(),
+  /** generate only: end each draft with the saved resolution phone and/or email. */
+  contact: z.enum(["phone", "email", "both"]).optional(),
 });
 
 /** POST /api/reviews/sync */
