@@ -12,6 +12,7 @@ import { generateReport, reportCacheKey, requestReport } from "@/lib/services/in
 import { loadTodayDays } from "@/lib/services/today";
 import { parseDateRange } from "@/lib/date-range";
 import { loadThemeEvidence } from "@/lib/services/insight-drilldown";
+import { EscalationContactStore } from "@/lib/services/escalations";
 
 // No provider traffic or paid calls. These tests exercise real Postgres locks,
 // leases, triggers, transactions, daily partitions and report reuse.
@@ -234,6 +235,29 @@ describe.skipIf(!enabled)("durable location pipeline and daily summaries", () =>
     expect(a.fingerprint).toBe(b.fingerprint);
     const c = await loadDailySummaryRange(ws, { ...scope, start: "2026-11-01T11:00:00Z" });
     expect(c.fingerprint).not.toBe(b.fingerprint);
+  });
+
+  it("saves first-time follow-up contacts without invalidating existing daily summaries", async () => {
+    await review("2026-11-01T20:00:00Z");
+    const before = await loadDailySummaryRange(ws, scope);
+    const revisions = await getPool().query("SELECT day,timezone,revision FROM grm_insight_days WHERE workspace_id=$1 ORDER BY day,timezone", [ws]);
+    await EscalationContactStore.save(ws, user, { phone: "+91 98470 11111", email: "Care@example.test" });
+    expect(await EscalationContactStore.read(ws)).toEqual({ phone: "+91 98470 11111", email: "care@example.test" });
+    await EscalationContactStore.save(ws, user, { phone: "", email: "updated@example.test" });
+    expect(await EscalationContactStore.read(ws)).toEqual({ phone: null, email: "updated@example.test" });
+    expect((await getPool().query("SELECT day,timezone,revision FROM grm_insight_days WHERE workspace_id=$1 ORDER BY day,timezone", [ws])).rows).toEqual(revisions.rows);
+    expect((await loadDailySummaryRange(ws, scope)).fingerprint).toBe(before.fingerprint);
+  });
+
+  it("rebuilds daily partitions for real workspace timezone changes and removal", async () => {
+    await review("2026-11-01T20:00:00Z");
+    expect((await loadDailySummaryRange(ws, scope)).sources[0]).toMatchObject({ day: "2026-11-02", timezone: "Asia/Kolkata" });
+    await getPool().query("INSERT INTO grm_escalation_policies(workspace_id,timezone) VALUES($1,'UTC')", [ws]);
+    expect((await loadDailySummaryRange(ws, scope)).sources[0]).toMatchObject({ day: "2026-11-01", timezone: "UTC" });
+    await getPool().query("UPDATE grm_escalation_policies SET timezone='America/New_York' WHERE workspace_id=$1", [ws]);
+    expect((await loadDailySummaryRange(ws, scope)).sources[0]).toMatchObject({ day: "2026-11-01", timezone: "America/New_York" });
+    await getPool().query("DELETE FROM grm_escalation_policies WHERE workspace_id=$1", [ws]);
+    expect((await loadDailySummaryRange(ws, scope)).sources[0]).toMatchObject({ day: "2026-11-02", timezone: "Asia/Kolkata" });
   });
 
   it("allows workspace deletion to cascade when a timezone policy and summaries exist", async () => {
