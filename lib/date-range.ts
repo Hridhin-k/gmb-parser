@@ -12,7 +12,7 @@ export const DATE_RANGE_PRESETS = [
 
 export type DateRangePresetKey = (typeof DATE_RANGE_PRESETS)[number]["key"];
 
-/** Rolling day windows for the Today page toggle. Not offered in the month dropdowns. */
+/** Rolling windows, independent of calendar-month lengths. */
 export const DAY_RANGE_PRESETS = [
   { key: "7d", label: "Last 7 days", days: 7 },
   { key: "30d", label: "Last 30 days", days: 30 },
@@ -20,9 +20,11 @@ export const DAY_RANGE_PRESETS = [
 ] as const;
 
 export type DayRangeKey = (typeof DAY_RANGE_PRESETS)[number]["key"];
-export type DateRangeKey = DateRangePresetKey | DayRangeKey | "custom" | "all";
+export type DateRangeKey = DateRangePresetKey | DayRangeKey | "today" | "custom" | "all";
 
 export const DATE_RANGE_OPTIONS: ReadonlyArray<{ key: DateRangeKey; label: string }> = [
+  { key: "today", label: "Today" },
+  ...DAY_RANGE_PRESETS.filter((preset) => preset.key !== "90d"),
   ...DATE_RANGE_PRESETS,
   { key: "custom", label: "Custom dates" },
   { key: "all", label: "All time" },
@@ -97,7 +99,8 @@ export function isDateRangeKey(value: string): value is DateRangeKey {
 export function parseDateRange(
   params: { range?: unknown; from?: unknown; to?: unknown },
   fallback: DateRangeKey = "all",
-  now: Date = new Date()
+  now: Date = new Date(),
+  timeZone = "UTC"
 ): DateRange {
   const rawKey = str(params.range);
   let fromDay = isoDay(str(params.from));
@@ -108,8 +111,22 @@ export function parseDateRange(
       ? "custom"
       : fallback;
 
+  if (key === "today") {
+    const parts = new Intl.DateTimeFormat("en-CA", { timeZone, year: "numeric", month: "2-digit", day: "2-digit" }).formatToParts(now);
+    const part = (type: string) => Number(parts.find((p) => p.type === type)!.value);
+    const wallMidnight = Date.UTC(part("year"), part("month") - 1, part("day"));
+    let instant = wallMidnight;
+    const formatter = new Intl.DateTimeFormat("en-GB", { timeZone, year: "numeric", month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit", second: "2-digit", hourCycle: "h23" });
+    for (let i = 0; i < 3; i++) {
+      const local = Object.fromEntries(formatter.formatToParts(new Date(instant)).map((p) => [p.type, p.value]));
+      const displayed = Date.UTC(Number(local.year), Number(local.month) - 1, Number(local.day), Number(local.hour), Number(local.minute), Number(local.second));
+      instant += wallMidnight - displayed;
+    }
+    return { key, from: "", to: "", start: new Date(instant), end: null, label: "Today" };
+  }
+
   if (key === "custom") {
-    if (!fromDay && !toDay) return parseDateRange({}, fallback === "custom" ? "all" : fallback, now);
+    if (!fromDay && !toDay) return parseDateRange({}, fallback === "custom" ? "all" : fallback, now, timeZone);
     if (fromDay && toDay && fromDay > toDay) [fromDay, toDay] = [toDay, fromDay];
     const from = fromDay ? toIsoDay(fromDay) : "";
     const to = toDay ? toIsoDay(toDay) : "";

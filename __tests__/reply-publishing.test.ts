@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { AppError, GoogleApiError } from "@/lib/errors";
+import { peek, put } from "@/lib/ttl-cache";
 
 // ---------------------------------------------------------------------------
 // Shared mutable state for mock chains
@@ -124,6 +125,15 @@ describe("ReplyPublishingService.publishReply", () => {
   beforeEach(resetMocks);
 
   it("successfully publishes an approved reply", async () => {
+    // Another page can load the old inbox while Google is still responding.
+    const cacheKey = "inbox:ws-1:publish-refresh-regression";
+    mockReplyToReview.mockImplementation(async () => {
+      put(cacheKey, "old inbox", 20_000);
+      put("shell:user-1:ws-1:scope", "old sidebar count", 60_000);
+      put("chrome:user-1:ws-1", "old navigation count", 60_000);
+      put("dashctx:ws-1:scope", "old dashboard metrics", 45_000);
+      return { comment: "Thank you for your feedback!", updateTime: "2026-01-01T00:00:00.000Z" };
+    });
     const replyData = buildReply({ status: "approved" });
 
     // Call 1: load reply
@@ -147,6 +157,10 @@ describe("ReplyPublishingService.publishReply", () => {
     const result = await ReplyPublishingService.publishReply(
       "reply-1", "review-1", "ws-1", "user-1"
     );
+    expect(peek(cacheKey)).toBeUndefined();
+    expect(peek("shell:user-1:ws-1:scope")).toBeUndefined();
+    expect(peek("chrome:user-1:ws-1")).toBeUndefined();
+    expect(peek("dashctx:ws-1:scope")).toBeUndefined();
 
     expect(result.replyId).toBe("reply-1");
     expect(result.reviewId).toBe("review-1");

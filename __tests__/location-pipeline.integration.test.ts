@@ -13,6 +13,7 @@ import { loadTodayDays } from "@/lib/services/today";
 import { parseDateRange } from "@/lib/date-range";
 import { loadThemeEvidence } from "@/lib/services/insight-drilldown";
 import { EscalationContactStore } from "@/lib/services/escalations";
+import { workspaceDateRange } from "@/lib/services/date-range";
 
 // No provider traffic or paid calls. These tests exercise real Postgres locks,
 // leases, triggers, transactions, daily partitions and report reuse.
@@ -258,6 +259,20 @@ describe.skipIf(!enabled)("durable location pipeline and daily summaries", () =>
     expect((await loadDailySummaryRange(ws, scope)).sources[0]).toMatchObject({ day: "2026-11-01", timezone: "America/New_York" });
     await getPool().query("DELETE FROM grm_escalation_policies WHERE workspace_id=$1", [ws]);
     expect((await loadDailySummaryRange(ws, scope)).sources[0]).toMatchObject({ day: "2026-11-02", timezone: "Asia/Kolkata" });
+  });
+
+  it("resolves Today by workspace or selected-location timezone and scopes its review totals", async () => {
+    const now = new Date("2026-11-03T01:00:00Z");
+    const workspaceRange = await workspaceDateRange(ws, { range: "today" }, "3m", now);
+    expect(workspaceRange.start?.toISOString()).toBe("2026-11-02T18:30:00.000Z");
+    await getPool().query("UPDATE grm_google_locations SET review_timezone='America/New_York' WHERE id=$1", [location]);
+    const locationRange = await workspaceDateRange(ws, { range: "today" }, "3m", now, location);
+    expect(locationRange.start?.toISOString()).toBe("2026-11-02T05:00:00.000Z");
+    await review("2026-11-02T06:00:00Z");
+    await review("2026-11-02T04:00:00Z");
+    await review("2026-11-02T06:00:00Z", otherLocation);
+    const days = await loadTodayDays(ws, [location], locationRange, now, "America/New_York");
+    expect(days.reduce((count, day) => count + day.reviews, 0)).toBe(1);
   });
 
   it("allows workspace deletion to cascade when a timezone policy and summaries exist", async () => {

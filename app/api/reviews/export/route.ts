@@ -5,6 +5,7 @@ import { readPageScope } from "@/lib/services/scope-catalog";
 import { reviewCsvLines, type ReviewExportFilters } from "@/lib/services/review-export";
 import { checkRateLimit, EXPORT_LIMIT } from "@/lib/rate-limit";
 import { logger } from "@/lib/logger";
+import { workspaceDateRange } from "@/lib/services/date-range";
 import { parseDateRange, parseFocusWindow } from "@/lib/date-range";
 import { parseRatingParams, parseStatusParams } from "@/lib/review-filter-params";
 
@@ -57,8 +58,13 @@ export async function GET(request: Request) {
     group: search.get("group") ?? undefined,
     location: search.get("location") ?? undefined,
   });
+  const window = parseFocusWindow(Object.fromEntries(search)) ?? await workspaceDateRange(
+    membership.workspace_id, Object.fromEntries(search), "all", new Date(), resolved.locationId
+  );
   const filters = {
     ...requested,
+    since: window.start?.toISOString() ?? null,
+    until: window.end?.toISOString() ?? null,
     clientId: resolved.clientId,
     groupId: resolved.groupId,
     locationId: resolved.locationId,

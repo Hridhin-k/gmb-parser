@@ -3,7 +3,7 @@ import { getCurrentUser } from "@/lib/auth/server";
 import { checkRateLimit, AI_GENERATE_LIMIT, WORKSPACE_AI_LIMIT } from "@/lib/rate-limit";
 import { ensurePersonalWorkspace } from "@/lib/services/workspace";
 import { readPageScope } from "@/lib/services/scope-catalog";
-import { parseDateRange } from "@/lib/date-range";
+import { workspaceDateRange } from "@/lib/services/date-range";
 import {
   ANALYSIS_RUN_SLICE_MS,
   createAnalysisRun,
@@ -68,13 +68,16 @@ export async function POST(request: Request) {
     );
   }
 
-  const range = parseDateRange(
+  const range = await workspaceDateRange(
+    workspaceId,
     {
       range: typeof body.range === "string" ? body.range : undefined,
       from: typeof body.from === "string" ? body.from : undefined,
       to: typeof body.to === "string" ? body.to : undefined,
     },
-    "12m"
+    "12m",
+    new Date(),
+    scope.locationId
   );
 
   const runScope = {

@@ -10,6 +10,9 @@ import type { OverviewKpis, OverviewThemeBar } from "@/lib/overview-board";
 
 export const TODAY_DEFAULT_RANGE: DateRangeKey = "3m";
 export const TODAY_RANGE_PRESETS = [
+  { key: "today", label: "Today" },
+  { key: "7d", label: "Last 7 days" },
+  { key: "30d", label: "Last 30 days" },
   { key: "3m", label: "Last 3 months" },
   { key: "6m", label: "Last 6 months" },
   { key: "12m", label: "Last 12 months" },

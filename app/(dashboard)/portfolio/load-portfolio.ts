@@ -1,6 +1,7 @@
+import { workspaceDateRange } from "@/lib/services/date-range";
 import { redirect } from "next/navigation";
 import { getAgencyHome } from "@/lib/services/agency-home";
-import { AGENCY_DEFAULT_RANGE, dateRangeParams, parseDateRange } from "@/lib/date-range";
+import { AGENCY_DEFAULT_RANGE, dateRangeParams } from "@/lib/date-range";
 import { getActiveRole, getActiveWorkspace } from "@/lib/services/session";
 import { canSyncWorkspace } from "@/lib/services/workspace";
 import { getMemberAccess, visibleClientIds } from "@/lib/services/access";
@@ -23,7 +24,7 @@ export async function loadPortfolio(searchParams: Promise<PortfolioSearchParams>
 
   const resolved = await readPageScope(user.id, workspaceId, params);
   const clientId = resolved.clientId ?? "";
-  const range = parseDateRange(params, AGENCY_DEFAULT_RANGE);
+  const range = await workspaceDateRange(workspaceId, params, AGENCY_DEFAULT_RANGE);
   const query = validateFilterString(params.q);
   const page = validatePage(params.page);
 

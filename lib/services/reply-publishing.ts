@@ -138,7 +138,22 @@ export class ReplyPublishingService {
     userId: string,
     options?: { automated?: boolean }
   ): Promise<PublishResult> {
-    forgetReviewList(workspaceId);
+    forgetReviewList(workspaceId, userId);
+    try {
+      return await this.performPublishReply(replyId, reviewId, workspaceId, userId, options);
+    } finally {
+      // Refreshes during the Google request can cache the old queue again.
+      forgetReviewList(workspaceId, userId);
+    }
+  }
+
+  private static async performPublishReply(
+    replyId: string,
+    reviewId: string,
+    workspaceId: string,
+    userId: string,
+    options?: { automated?: boolean }
+  ): Promise<PublishResult> {
     const db = createAdminClient();
 
     // ── 1. Load reply with full relationship chain ────────────────────────
@@ -480,6 +495,19 @@ export class ReplyPublishingService {
    * Read the review from Google before anyone retries the write.
    */
   static async reconcilePendingPublish(
+    replyId: string,
+    reviewId: string,
+    workspaceId: string,
+    userId: string
+  ): Promise<PublishResult> {
+    try {
+      return await this.performReconcilePendingPublish(replyId, reviewId, workspaceId, userId);
+    } finally {
+      forgetReviewList(workspaceId, userId);
+    }
+  }
+
+  private static async performReconcilePendingPublish(
     replyId: string,
     reviewId: string,
     workspaceId: string,

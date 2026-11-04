@@ -1,3 +1,4 @@
+import { workspaceDateRange } from "@/lib/services/date-range";
 import { createAdminClient } from "@/lib/db/client";
 import { getWorkspaceRoster } from "@/lib/services/workspace";
 import { EmptyState } from "@/components/empty-state";
@@ -5,7 +6,6 @@ import { AuditLogFilters } from "@/components/audit-log-filters";
 import { PendingRegion, TransitionScope } from "@/components/transition-scope";
 import { AuditLogTable, type AuditTableRow } from "@/components/audit-log-table";
 import { ClipboardList } from "lucide-react";
-import { parseDateRange } from "@/lib/date-range";
 import { PaginationBar } from "@/components/pagination-bar";
 import { validatePage } from "@/lib/validation";
 import { formatFriendlyDateTime } from "@/lib/format-date";
@@ -182,7 +182,7 @@ export async function AuditLogSection({ params, workspaceId }: { params: Params;
 
   const actionFilter = typeof params.action === "string" ? params.action : "";
   const userFilter = typeof params.user === "string" ? params.user : "";
-  const range = parseDateRange(params, "all");
+  const range = await workspaceDateRange(workspaceId, params, "all");
   const entityFilter = typeof params.entity === "string" ? params.entity : "";
   const currentPage = validatePage(params.page);
 

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { dateRangeParams, parseDateRange, parseFocusWindow, previousDateRange } from "@/lib/date-range";
+import { DATE_RANGE_OPTIONS, dateRangeParams, parseDateRange, parseFocusWindow, previousDateRange } from "@/lib/date-range";
 import { scopeFilterApply, timeFilterApply } from "@/lib/filter-apply";
 
 const now = new Date("2026-10-08T12:00:00Z");
@@ -101,6 +101,21 @@ describe("filter apply copy", () => {
 
 describe("day range presets", () => {
   const now = new Date("2026-11-03T10:00:00Z");
+
+  it("offers short and long reporting periods together", () => {
+    expect(DATE_RANGE_OPTIONS.map((option) => option.key)).toEqual(expect.arrayContaining(["today", "7d", "30d", "3m", "6m", "12m", "all", "custom"]));
+  });
+
+  it("starts Today at local midnight, including day boundaries and DST", () => {
+    const early = new Date("2026-11-03T01:00:00Z");
+    expect(parseDateRange({ range: "today" }, "all", early, "Asia/Kolkata")).toMatchObject({
+      key: "today", label: "Today", start: new Date("2026-11-02T18:30:00Z"), end: null,
+    });
+    expect(parseDateRange({ range: "today" }, "all", early, "America/New_York").start).toEqual(new Date("2026-11-02T05:00:00Z"));
+    expect(parseDateRange({ range: "today" }, "all", new Date("2026-11-01T18:00:00Z"), "America/New_York").start).toEqual(new Date("2026-11-01T04:00:00Z"));
+    expect(parseDateRange({ range: "today" }, "all", new Date("2026-03-08T18:00:00Z"), "America/New_York").start).toEqual(new Date("2026-03-08T05:00:00Z"));
+    expect(dateRangeParams(parseDateRange({ range: "today" }, "all", early), "3m")).toEqual({ range: "today" });
+  });
 
   it("parses 7d, 30d and 90d as rolling windows", () => {
     const range = parseDateRange({ range: "30d" }, "all", now);

@@ -44,12 +44,14 @@ export function remember<T>(key: string, ttlMs: number, load: () => Promise<T>):
   if (pending) return pending as Promise<T>;
   const promise = load()
     .then((value) => {
-      put(key, value, ttlMs);
-      inflight.delete(key);
+      if (inflight.get(key) === promise) {
+        put(key, value, ttlMs);
+        inflight.delete(key);
+      }
       return value;
     })
     .catch((error: unknown) => {
-      inflight.delete(key);
+      if (inflight.get(key) === promise) inflight.delete(key);
       throw error;
     });
   inflight.set(key, promise);
@@ -58,11 +60,12 @@ export function remember<T>(key: string, ttlMs: number, load: () => Promise<T>):
 
 export function forget(key: string): void {
   store.delete(key);
+  inflight.delete(key);
 }
 
 export function forgetPrefix(prefix: string): void {
-  for (const key of store.keys()) {
-    if (key.startsWith(prefix)) store.delete(key);
+  for (const key of new Set([...store.keys(), ...inflight.keys()])) {
+    if (key.startsWith(prefix)) forget(key);
   }
 }
 

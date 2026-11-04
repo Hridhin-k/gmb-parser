@@ -19,6 +19,7 @@ import { formatFriendlyDateTime } from "@/lib/format-date";
 import { insightTopicLabel } from "@/lib/insight-dashboard";
 import { reviewDrillHref } from "@/lib/metrics";
 import { buildOverviewBoard, overviewQueryKey, type BoardPlace } from "@/lib/overview-board";
+import { workspaceDateRange } from "@/lib/services/date-range";
 import { getDashboardContext } from "@/lib/services/dashboard-metrics";
 import { loadInsightDashboard } from "@/lib/services/insight-dashboard";
 import { getOnboardingGate } from "@/lib/services/onboarding";
@@ -38,7 +39,7 @@ import {
   niceMax,
   shortDay,
   sparkSeries,
-  todayRange,
+  TODAY_DEFAULT_RANGE,
   TODAY_RANGE_PRESETS,
   volumeDays,
 } from "@/lib/today";
@@ -78,7 +79,7 @@ export default async function OverviewPage({ searchParams }: OverviewPageProps) 
   const { clientId, groupId, locationId } = resolved;
   const scope = { clientId, groupId, locationId };
   const scoped = { client: clientId, group: groupId, location: locationId };
-  const range = todayRange(params, now);
+  const range = await workspaceDateRange(workspaceId, params, TODAY_DEFAULT_RANGE, now, locationId);
   const rangeQuery = { range: range.key, ...dateRangeParams(range, "all") };
   const start = range.start?.toISOString() ?? null;
   const end = range.end?.toISOString() ?? null;
@@ -160,7 +161,7 @@ export default async function OverviewPage({ searchParams }: OverviewPageProps) 
   const lowDays = days.filter((day) => day.low > 0).length;
   const peak = Math.max(0, ...days.map((day) => day.reviews));
   const period = range.label.toLowerCase();
-  const periodPhrase = range.key === "all" ? "across all time" : `in the ${period}`;
+  const periodPhrase = range.key === "all" ? "across all time" : range.key === "today" ? "today" : `in the ${period}`;
 
   const clientNames = new Map(loaded.clients.map((client) => [client.id, client.name]));
   const earlier = new Map((loaded.previous?.locations ?? []).map((row) => [row.locationId, row]));

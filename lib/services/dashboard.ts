@@ -120,8 +120,13 @@ const EMPTY_KPIS: DashboardKpis = {
   criticalReviews: 0,
 };
 
-export function forgetReviewList(workspaceId: string): void {
+export function forgetReviewList(workspaceId: string, userId?: string): void {
   forgetPrefix(`inbox:${workspaceId}:`);
+  forgetPrefix(`dashctx:${workspaceId}:`);
+  if (userId) {
+    forgetPrefix(`shell:${userId}:${workspaceId}:`);
+    forgetPrefix(`chrome:${userId}:${workspaceId}`);
+  }
 }
 
 export async function getDashboardData(

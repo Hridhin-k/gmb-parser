@@ -1,8 +1,9 @@
+import { workspaceDateRange } from "@/lib/services/date-range";
 import { NextResponse } from "next/server";
 import { getCurrentUser } from "@/lib/auth/server";
 import { ensurePersonalWorkspace } from "@/lib/services/workspace";
 import { getAgencyHome } from "@/lib/services/agency-home";
-import { AGENCY_DEFAULT_RANGE, parseDateRange } from "@/lib/date-range";
+import { AGENCY_DEFAULT_RANGE } from "@/lib/date-range";
 import { csvRow } from "@/lib/services/review-export";
 import { usageExportLines } from "@/lib/agency-portal";
 import { getMemberAccess, visibleClientIds } from "@/lib/services/access";
@@ -40,7 +41,7 @@ export async function GET(request: Request) {
   const allowedClientIds = await visibleClientIds(membership.workspace_id, access?.scope);
   const params = new URL(request.url).searchParams;
   const client = params.get("client") ?? "";
-  const range = parseDateRange(Object.fromEntries(params), AGENCY_DEFAULT_RANGE);
+  const range = await workspaceDateRange(membership.workspace_id, Object.fromEntries(params), AGENCY_DEFAULT_RANGE);
   const query = (params.get("q") ?? "").slice(0, 200);
 
   try {

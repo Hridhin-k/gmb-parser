@@ -79,8 +79,12 @@ function prunePatches(
   for (const [id, patch] of Object.entries(current)) {
     const server = reviews.find((review) => review.id === id);
     const serverReply = replies[id];
-    // A review that left this tab (sent, say) keeps its patch so the row stays put.
-    if (!server) continue;
+    // The refreshed page is authoritative once a review leaves this tab.
+    if (!server) {
+      delete next[id];
+      changed = true;
+      continue;
+    }
     const statusOk = server.reply_status === patch.status;
     const replyOk = patch.reply
       ? serverReply?.id === patch.reply.id && serverReply.content === patch.reply.content
@@ -141,27 +145,10 @@ export function ReviewList({
   const [pendingTarget, setPendingTarget] = useState<{ id: string | null } | null>(null);
   const holdTimers = useRef(new Map<string, ReturnType<typeof setTimeout>>());
 
-  // Rows sent here keep their place until the next navigation, even after the
-  // server drops them from To reply, so the list does not jump under the cursor.
-  const [kept, setKept] = useState<InboxReview[]>(reviews);
   const [serverPayload, setServerPayload] = useState({ reviews, replies });
   if (serverPayload.reviews !== reviews || serverPayload.replies !== replies) {
     setServerPayload({ reviews, replies });
     setPatches((current) => prunePatches(current, reviews, replies));
-    setKept((current) => {
-      const serverIds = new Set(reviews.map((review) => review.id));
-      const stay = current.filter((review) => !serverIds.has(review.id) && sentHere[review.id]);
-      if (stay.length === 0) return reviews;
-      // Put each kept row back above the server row that followed it before.
-      const merged = [...reviews];
-      for (const row of stay) {
-        const oldIndex = current.indexOf(row);
-        const after = current.slice(oldIndex + 1).find((review) => serverIds.has(review.id));
-        const at = after ? merged.findIndex((review) => review.id === after.id) : merged.length;
-        merged.splice(at < 0 ? merged.length : at, 0, row);
-      }
-      return merged;
-    });
   }
 
   const viewReplies = useMemo(() => {
@@ -174,11 +161,11 @@ export function ReviewList({
   }, [replies, patches]);
   const viewReviews = useMemo(
     () =>
-      kept.map((review) => {
+      reviews.map((review) => {
         const patch = patches[review.id];
         return patch ? { ...review, reply_status: patch.status } : review;
-      }),
-    [kept, patches]
+      }).filter((review) => tab !== "to-reply" || review.reply_status !== "published"),
+    [reviews, patches, tab]
   );
 
   const stageOf = useCallback(
@@ -445,7 +432,7 @@ export function ReviewList({
       setNotice({ text: `${plural(outcome.ok, "reply", "replies")} sent to Google.`, tone: "ok" });
     } else {
       // The Undo window is over: keep the confirmation, drop the button.
-      setNotice((prev) => (prev?.undoId === ids[0] ? { text: prev.text, tone: "ok" } : prev));
+      setNotice((prev) => (prev?.undoId === ids[0] ? { text: `Reply to ${nameOf(ids[0]!)} sent to Google.`, tone: "ok" } : prev));
     }
     refresh();
   }
@@ -459,7 +446,7 @@ export function ReviewList({
     }
     setError(id, null);
     setHeld((prev) => withFlag(prev, [id], true));
-    setNotice({ text: `Reply to ${nameOf(id)} sent to Google.`, tone: "ok", undoId: id });
+    setNotice({ text: `Reply to ${nameOf(id)} queued to send.`, tone: "ok", undoId: id });
     selectNext(id, [id]);
     holdTimers.current.set(
       id,
@@ -633,6 +620,7 @@ export function ReviewList({
             <span className="ml-auto">{sortControl}</span>
           </div>
           <ul>
+            {rows.length === 0 ? <li className="px-4 py-6 text-sm text-ink-3" role="status">All reviews on this page have been replied to. Updating the queue…</li> : null}
             {rows.map(({ review, stage }) => {
               const id = review.id;
               const active = id === currentId;

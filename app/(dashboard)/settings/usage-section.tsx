@@ -1,8 +1,9 @@
+import { workspaceDateRange } from "@/lib/services/date-range";
 import Link from "next/link";
 import { ExportUsageButton } from "@/components/export-usage-button";
 import { SettingsDetail, SettingsSection, SettingsValueRow } from "@/components/settings-section";
 import { Banner } from "@/components/ui/banner";
-import { AGENCY_DEFAULT_RANGE, dateRangeParams, parseDateRange } from "@/lib/date-range";
+import { AGENCY_DEFAULT_RANGE, dateRangeParams } from "@/lib/date-range";
 import { getMemberAccess, visibleClientIds } from "@/lib/services/access";
 import { getAgencyHome } from "@/lib/services/agency-home";
 import { readPageScope } from "@/lib/services/scope-catalog";
@@ -20,7 +21,7 @@ function n(value: number) {
 export async function UsageSection({ params, userId, workspaceId }: { params: Params; userId: string; workspaceId: string }) {
   const resolved = await readPageScope(userId, workspaceId, params);
   const clientId = resolved.clientId ?? "";
-  const range = parseDateRange(params, AGENCY_DEFAULT_RANGE);
+  const range = await workspaceDateRange(workspaceId, params, AGENCY_DEFAULT_RANGE);
   const access = await getMemberAccess(userId, workspaceId);
   const allowedClientIds = await visibleClientIds(workspaceId, access?.scope);
   const data = await getAgencyHome(workspaceId, {

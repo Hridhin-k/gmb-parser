@@ -1,4 +1,4 @@
-import { parseDateRange, type DateRange } from "@/lib/date-range";
+import type { DateRange } from "@/lib/date-range";
 import { mergeThemes, spotMonthlyChanges, type SpottedChange, type ThemeRow } from "@/lib/insight-changes";
 import type { InsightDashboardData } from "@/lib/insight-dashboard";
 import {
@@ -10,6 +10,7 @@ import {
 } from "@/lib/insight-mood";
 import { nextActions, shortVersion, type InsightRecord, type NextAction, type ShortVersion } from "@/lib/insight-report";
 import type { ResolvedScope } from "@/lib/scope";
+import { workspaceDateRange } from "@/lib/services/date-range";
 import { loadInsightDashboard } from "@/lib/services/insight-dashboard";
 import { loadInsightMood, type InsightMoodData } from "@/lib/services/insight-mood";
 import { listInsightNotes, type InsightNote } from "@/lib/services/insight-notes";
@@ -60,7 +61,7 @@ export async function loadInsightsPage(
   now: Date = new Date()
 ): Promise<InsightsPageData> {
   const scope = await readPageScope(userId, workspaceId, params);
-  const range = parseDateRange(params, INSIGHTS_DEFAULT_RANGE, now);
+  const range = await workspaceDateRange(workspaceId, params, INSIGHTS_DEFAULT_RANGE, now, scope.locationId);
   const start = range.start ? range.start.toISOString() : null;
   const end = range.end ? range.end.toISOString() : null;
   const months = chartMonths(range.start, range.end, now);

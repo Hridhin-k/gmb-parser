@@ -1,3 +1,5 @@
+import { redirect } from "next/navigation";
+import { workspaceDateRange } from "@/lib/services/date-range";
 import { after } from "next/server";
 import { getDashboardData, type DashboardFilters } from "@/lib/services/dashboard";
 import { COMPLAINT_THEMES, REVIEW_LANGUAGES, type InboxSort } from "@/lib/review-inbox";
@@ -38,7 +40,7 @@ import {
   serializeParamValues,
   splitParamValues,
 } from "@/lib/review-filter-params";
-import { dateRangeParams, parseDateRange, parseFocusWindow } from "@/lib/date-range";
+import { dateRangeParams, parseFocusWindow } from "@/lib/date-range";
 import { canReceiveEscalation, canReassignEscalation, formatInTimezone, slaClock } from "@/lib/escalations";
 import { overviewQueryKey } from "@/lib/overview-board";
 import { logger } from "@/lib/logger";
@@ -78,7 +80,7 @@ export default async function ReviewsPage({ searchParams }: ReviewsPageProps) {
   const clientParam = resolved.clientId ?? "";
   const locationParam = resolved.locationId ?? "";
   const groupParam = resolved.groupId ?? "";
-  const range = parseDateRange(params, "all");
+  const range = await workspaceDateRange(workspaceId, params, "all", new Date(), resolved.locationId);
   const focus = parseFocusWindow(params);
   const window = focus ?? range;
   const hasRange = range.key !== "all";
@@ -398,6 +400,13 @@ async function ReviewTabBody({
     selectedReviewId: string | null;
   };
 }) {
+  if (data.reviews.length === 0 && data.totalReviewCount > 0 && currentPage > 1) {
+    const query = new URLSearchParams(carried);
+    if (tab !== "to-reply") query.set("tab", tab);
+    if (narrowing.length > 0) query.set("filter", narrowing.join(","));
+    query.set("page", String(Math.max(1, Math.ceil(data.totalReviewCount / data.pageSize))));
+    redirect(`/reviews?${query.toString()}`);
+  }
   if (data.reviews.length === 0) {
     if (filterState.hasLocal || (filterState.hasScope && data.hasConnections && tab === "sent")) {
       return (
@@ -459,6 +468,7 @@ async function ReviewTabBody({
   return (
     <>
       <ReviewList
+        key={`${tab}:${carried.toString()}:${narrowing.join(",")}:${currentPage}`}
         tab={tab}
         reviews={data.reviews}
         replies={data.replies}
