@@ -128,7 +128,7 @@ export const syncBodySchema = z.discriminatedUnion("all", [
   z.object({
     all: z.literal(false).optional(),
     locationId: uuidSchema,
-    connectionId: uuidSchema,
+    connectionId: uuidSchema.optional(),
     full: z.boolean().optional(),
   }),
 ]);

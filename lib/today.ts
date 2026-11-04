@@ -1,16 +1,20 @@
-import { DAY_RANGE_PRESETS, isDayRangeKey, parseDateRange, type DateRange, type DayRangeKey } from "@/lib/date-range";
+import { parseDateRange, type DateRange, type DateRangeKey } from "@/lib/date-range";
 import type { OverviewKpis, OverviewThemeBar } from "@/lib/overview-board";
 
 /**
  * Today page numbers. Pure helpers so the page and tests share them.
  *
- * The page only offers 7, 30 and 90 days. Another period carried in from a
- * different page maps to the nearest of those, and no period means 30 days.
  * A day is a calendar day in the workspace timezone. A "low" day has at least
  * one 1–2 star review.
  */
 
-export const TODAY_DEFAULT_RANGE: DayRangeKey = "30d";
+export const TODAY_DEFAULT_RANGE: DateRangeKey = "3m";
+export const TODAY_RANGE_PRESETS = [
+  { key: "3m", label: "Last 3 months" },
+  { key: "6m", label: "Last 6 months" },
+  { key: "12m", label: "Last 12 months" },
+  { key: "all", label: "All time" },
+] as const;
 
 const DAY_MS = 86_400_000;
 
@@ -18,18 +22,13 @@ export function todayRange(
   params: { range?: unknown; from?: unknown; to?: unknown },
   now: Date = new Date()
 ): DateRange {
-  const asked = parseDateRange(params, "all", now);
-  if (isDayRangeKey(asked.key)) return asked;
-  let key: DayRangeKey = TODAY_DEFAULT_RANGE;
-  if (asked.start) {
-    const span = ((asked.end ?? now).getTime() - asked.start.getTime()) / DAY_MS;
-    key = span <= 10 ? "7d" : span <= 45 ? "30d" : "90d";
-  }
-  return parseDateRange({ range: key }, TODAY_DEFAULT_RANGE, now);
+  return parseDateRange(params, TODAY_DEFAULT_RANGE, now);
 }
 
-export function rangeDays(range: DateRange): number {
-  return DAY_RANGE_PRESETS.find((preset) => preset.key === range.key)?.days ?? 30;
+export function rangeDays(range: DateRange, now: Date = new Date(), oldest?: string, timeZone = "UTC"): number {
+  const start = range.start ? dayKeyInZone(range.start, timeZone) : oldest ?? dayKeyInZone(now, timeZone);
+  const end = dayKeyInZone(range.end ? new Date(Math.min(range.end.getTime() - 1, now.getTime())) : now, timeZone);
+  return Math.max(1, Math.round((Date.parse(end) - Date.parse(start)) / DAY_MS) + 1);
 }
 
 /** One review in the window, reduced to what the Today charts need. */
@@ -113,6 +112,21 @@ function buckets(days: TodayDay[], count: number): TodayDay[][] {
 
 function sum(days: TodayDay[], key: keyof Omit<TodayDay, "day">): number {
   return days.reduce((total, day) => total + day[key], 0);
+}
+
+/** Keep long histories legible without dropping reviews or averaging ratings. */
+export function volumeDays(days: TodayDay[]): { days: TodayDay[]; interval: "day" | "week" | "month" } {
+  const interval = days.length <= 100 ? "day" : days.length <= 210 ? "week" : "month";
+  if (interval === "day") return { days, interval };
+  const grouped = new Map<string, TodayDay>();
+  for (const day of days) {
+    const date = new Date(`${day.day}T00:00:00Z`);
+    const key = interval === "month" ? `${day.day.slice(0, 7)}-01` : shiftDay(day.day, -((date.getUTCDay() + 6) % 7));
+    const entry = grouped.get(key) ?? { day: key, reviews: 0, ratingSum: 0, low: 0, replied: 0, responseHoursSum: 0, responseCount: 0 };
+    for (const field of ["reviews", "ratingSum", "low", "replied", "responseHoursSum", "responseCount"] as const) entry[field] += day[field];
+    grouped.set(key, entry);
+  }
+  return { days: [...grouped.values()], interval };
 }
 
 export interface TodaySparks {
@@ -316,12 +330,12 @@ function ageHint(iso: string | null, now: Date): string {
   if (!iso) return "No reply yet";
   const days = Math.floor((now.getTime() - Date.parse(iso)) / DAY_MS);
   if (!Number.isFinite(days) || days <= 0) return "Oldest from today";
-  return `Oldest ${days} ${days === 1 ? "day" : "days"}`;
+  return `Oldest waiting ${days} ${days === 1 ? "day" : "days"}`;
 }
 
 function dueHint(input: NeedsYouInput, now: Date, timeZone: string): string {
   if (input.overdueFollowUps > 0) {
-    return `${input.overdueFollowUps.toLocaleString("en-US")} past due`;
+    return `${input.overdueFollowUps.toLocaleString("en-US")} overdue`;
   }
   if (!input.nextFollowUpDue) return "Nothing due";
   const due = new Date(input.nextFollowUpDue);
@@ -345,7 +359,7 @@ export function buildNeedsYou(
     {
       id: "unhappy",
       count: input.unhappyUnreplied,
-      label: "Unhappy, no reply",
+      label: "Negative reviews awaiting reply",
       hint: input.unhappyUnreplied > 0 ? ageHint(input.oldestUnhappyAt, now) : "All answered",
       tone: "bad",
       href: hrefs.unhappy,
@@ -353,7 +367,7 @@ export function buildNeedsYou(
     {
       id: "follow-ups",
       count: input.followUps,
-      label: input.followUps === 1 ? "Call back" : "Call backs",
+      label: "Open follow-ups",
       hint: input.followUps > 0 ? dueHint(input, now, timeZone) : "None open",
       tone: "info",
       href: hrefs["follow-ups"],
@@ -369,7 +383,7 @@ export function buildNeedsYou(
     {
       id: "failed",
       count: input.failed,
-      label: "Didn’t reach Google",
+      label: "Replies failed to publish",
       hint: input.failed > 0 ? "Retry needed" : "All published",
       tone: "warn",
       href: hrefs.failed,

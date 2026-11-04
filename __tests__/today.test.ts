@@ -13,6 +13,8 @@ import {
   sparkSeries,
   sparkShape,
   todayRange,
+  rangeDays,
+  volumeDays,
   type TodayLocationInput,
 } from "@/lib/today";
 
@@ -25,13 +27,12 @@ describe("todayRange", () => {
     expect(todayRange({ range: "90d" }, now).key).toBe("90d");
   });
 
-  it("defaults to 30 days and maps other periods to the nearest window", () => {
-    expect(todayRange({}, now).key).toBe("30d");
-    expect(todayRange({ range: "all" }, now).key).toBe("30d");
-    expect(todayRange({ range: "1m" }, now).key).toBe("30d");
-    expect(todayRange({ range: "3m" }, now).key).toBe("90d");
-    expect(todayRange({ range: "12m" }, now).key).toBe("90d");
-    expect(todayRange({ range: "custom", from: "2026-10-28", to: "2026-11-02" }, now).key).toBe("7d");
+  it("defaults to three months and preserves longer, all-time and custom windows", () => {
+    expect(todayRange({}, now).key).toBe("3m");
+    for (const key of ["all", "1m", "3m", "6m", "12m"] as const) expect(todayRange({ range: key }, now).key).toBe(key);
+    expect(todayRange({ range: "custom", from: "2026-10-28", to: "2026-11-02" }, now).key).toBe("custom");
+    expect(rangeDays(todayRange({ range: "12m" }, now), now)).toBe(366);
+    expect(rangeDays(todayRange({ range: "all" }, now), now, "2024-11-03")).toBe(731);
   });
 });
 
@@ -62,6 +63,17 @@ describe("buildDays", () => {
 });
 
 describe("sparklines", () => {
+  it("groups long volume charts without losing counts, rating totals or low ratings", () => {
+    const rows = [{ createdAt: "2026-11-01T10:00:00Z", stars: 2, replied: false, responseHours: null },
+      { createdAt: "2026-10-01T10:00:00Z", stars: 5, replied: true, responseHours: 2 }];
+    for (const [count, interval] of [[90, "day"], [180, "week"], [366, "month"]] as const) {
+      const grouped = volumeDays(buildDays(rows, { days: count, now, timeZone: zone }));
+      expect(grouped.interval).toBe(interval);
+      expect(grouped.days.reduce((n, d) => n + d.reviews, 0)).toBe(2);
+      expect(grouped.days.reduce((n, d) => n + d.ratingSum, 0)).toBe(7);
+      expect(grouped.days.reduce((n, d) => n + d.low, 0)).toBe(1);
+    }
+  });
   it("skips empty runs and needs two points", () => {
     expect(sparkShape([null, 4])).toBeNull();
     const shape = sparkShape([1, null, 3]);
@@ -153,7 +165,7 @@ describe("buildNeedsYou", () => {
       zone
     );
     expect(tasks.map((task) => [task.id, task.count, task.hint, task.href])).toEqual([
-      ["unhappy", 3, "Oldest 2 days", "/u"],
+      ["unhappy", 3, "Oldest waiting 2 days", "/u"],
       ["follow-ups", 1, "Due 5 pm", "/f"],
       ["drafts", 6, "Ready to send", "/d"],
       ["failed", 0, "All published", "/x"],
@@ -167,7 +179,7 @@ describe("buildNeedsYou", () => {
       now,
       zone
     );
-    expect(followUps).toMatchObject({ label: "Call backs", hint: "2 past due" });
+    expect(followUps).toMatchObject({ label: "Open follow-ups", hint: "2 overdue" });
   });
 });
 

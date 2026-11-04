@@ -1,6 +1,7 @@
 import { createAdminClient } from "@/lib/db/client";
 import { inScope, type ResourceRef, type ScopeIds } from "@/lib/access";
 import { logger } from "@/lib/logger";
+import { getPool } from "@/lib/db/pool";
 
 export const FRESH_REVIEW_MS = 7 * 24 * 60 * 60 * 1000;
 
@@ -103,24 +104,25 @@ export async function notifyProfileEvent(input: {
   }
 }
 
-export async function listUnreadNotices(workspaceId: string, userId: string): Promise<ProfileNotice[]> {
+export async function listUnreadNotices(workspaceId: string, userId: string, locationIds: string[] | null = null): Promise<ProfileNotice[]> {
+  if (locationIds?.length === 0) return [];
   try {
-    const admin = createAdminClient();
-    const { data, error } = await admin
-      .from("grm_notifications")
-      .select("id, title, href")
-      .eq("workspace_id", workspaceId)
-      .eq("user_id", userId)
-      .is("read_at", null)
-      .order("created_at", { ascending: false })
-      .limit(8);
-    if (error) {
-      if (!schemaMissing(error)) {
-        logger.error("notifications.read_failed", { workspaceId, userId, message: error.message });
-      }
-      return [];
-    }
-    return data ?? [];
+    const { rows } = await getPool().query<ProfileNotice & { kind: string; location_title: string; ticket_no: number | null; reviewer_display_name: string | null }>(`
+      SELECT n.id,n.title,n.href,n.kind,l.location_title,e.ticket_no,r.reviewer_display_name FROM (
+        SELECT * FROM (
+          SELECT DISTINCT ON (kind,href) * FROM grm_notifications
+          WHERE workspace_id=$1 AND user_id=$2 AND read_at IS NULL
+            AND ($3::uuid[] IS NULL OR location_id=ANY($3))
+          ORDER BY kind,href,created_at DESC,id DESC
+        ) grouped ORDER BY created_at DESC,id DESC LIMIT 8
+      ) n LEFT JOIN grm_google_locations l ON l.workspace_id=n.workspace_id AND l.id=n.location_id
+      LEFT JOIN grm_escalations e ON e.workspace_id=n.workspace_id AND n.href='/escalations/'||e.id::text
+      LEFT JOIN grm_reviews r ON r.workspace_id=e.workspace_id AND r.id=e.review_id
+      ORDER BY n.created_at DESC,n.id DESC`, [workspaceId, userId, locationIds]);
+    return rows.map((row) => ({ id: row.id, href: row.href,
+      title: row.kind === "sla_reminder" && row.ticket_no
+        ? `${row.location_title}: Follow-up #${row.ticket_no} · ${row.reviewer_display_name || "Customer review"}`
+        : row.title }));
   } catch (error) {
     logger.error("notifications.read_failed", {
       workspaceId,
@@ -132,18 +134,14 @@ export async function listUnreadNotices(workspaceId: string, userId: string): Pr
 }
 
 export async function markNoticeRead(workspaceId: string, userId: string, noticeId: string): Promise<boolean> {
-  const admin = createAdminClient();
-  const { data, error } = await admin
-    .from("grm_notifications")
-    .update({ read_at: new Date().toISOString() })
-    .eq("id", noticeId)
-    .eq("workspace_id", workspaceId)
-    .eq("user_id", userId)
-    .is("read_at", null)
-    .select("id");
-  if (error) {
-    if (schemaMissing(error)) return false;
+  try {
+    const result = await getPool().query(`UPDATE grm_notifications n SET read_at=now()
+      FROM grm_notifications target WHERE target.id=$1 AND target.workspace_id=$2 AND target.user_id=$3
+        AND n.workspace_id=target.workspace_id AND n.user_id=target.user_id
+        AND n.kind=target.kind AND n.href=target.href AND n.read_at IS NULL`, [noticeId, workspaceId, userId]);
+    return (result.rowCount ?? 0) > 0;
+  } catch (error) {
+    if (schemaMissing(error as { code?: string; message?: string })) return false;
     throw new Error("Could not update that notification.");
   }
-  return (data ?? []).length > 0;
 }

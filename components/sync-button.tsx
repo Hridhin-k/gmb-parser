@@ -8,6 +8,7 @@ import { OperationStatus, FailureBanner } from "@/components/status-banner";
 import { ACTION_STATUS } from "@/lib/ui-status";
 import { RefreshCw } from "lucide-react";
 import { cn } from "@/lib/utils";
+import type { PipelineJobView } from "@/lib/services/location-pipeline";
 
 interface SyncButtonProps {
   locationId?: string;
@@ -31,6 +32,8 @@ export function SyncButton({
   const [syncing, setSyncing] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [needsReconnect, setNeedsReconnect] = useState(false);
+  const [jobIds, setJobIds] = useState<string[]>([]);
+  const [jobs, setJobs] = useState<PipelineJobView[]>([]);
   // Seconds until retrying makes sense (Google throttling): stops hammering a spent quota.
   const [cooldown, setCooldown] = useState(0);
 
@@ -40,11 +43,55 @@ export function SyncButton({
     return () => clearTimeout(id);
   }, [cooldown]);
 
+  useEffect(() => {
+    if (jobIds.length === 0) return;
+    let cancelled = false;
+    let timer: ReturnType<typeof setTimeout>;
+    async function poll() {
+      try {
+        const next: PipelineJobView[] = [];
+        for (let offset = 0; offset < jobIds.length; offset += 80) {
+          const params = new URLSearchParams();
+          for (const id of jobIds.slice(offset, offset + 80)) params.append("jobId", id);
+          const response = await fetch(`/api/reviews/sync/status?${params}`, { cache: "no-store" });
+          if (!response.ok) throw new Error("Could not read sync progress. Reviews continue processing in the background.");
+          const data = await response.json() as { jobs: PipelineJobView[] };
+          next.push(...data.jobs);
+        }
+        if (cancelled) return;
+        setJobs(next);
+        if (next.every((job) => ["completed", "partial", "failed"].includes(job.status))) {
+          setSyncing(false);
+          setJobIds([]);
+          const problem = next.find((job) => job.status !== "completed");
+          if (problem) {
+            setError(problem.error ?? "Some reviews could not finish processing. Retry to resume.");
+            setNeedsReconnect(/reconnect|access|authentication/i.test(problem.error ?? ""));
+          } else {
+            const updated = next.reduce((total, job) => total + job.reviewsUpdated, 0);
+            toast.success(updated > 0 ? `${updated} reviews added or updated` : "Everything is up to date", {
+              description: "Review analysis and daily insights are ready.",
+            });
+          }
+          router.refresh();
+          return;
+        }
+      } catch {
+        // The durable queue is independent of this poll. Retry transient reads.
+      }
+      if (!cancelled) timer = setTimeout(poll, 3000);
+    }
+    void poll();
+    return () => { cancelled = true; clearTimeout(timer); };
+  }, [jobIds, router]);
+
   async function handleSync() {
     if (cooldown > 0) return;
     setError(null);
     setNeedsReconnect(false);
+    setJobs([]);
     setSyncing(true);
+    let queued = false;
 
     try {
       const body = syncAll
@@ -68,6 +115,7 @@ export function SyncButton({
         retryable?: boolean;
         retryAfterSeconds?: number;
         action?: "reconnect" | "check_access";
+        jobIds?: string[];
       };
       if (!response.ok) {
         setError(
@@ -80,6 +128,12 @@ export function SyncButton({
         const retryAfter =
           data.retryAfterSeconds ?? Number(response.headers.get("Retry-After") ?? 0);
         if (data.retryable !== false && retryAfter > 0) setCooldown(Math.min(retryAfter, 300));
+        return;
+      }
+
+      if (data.jobIds?.length) {
+        queued = true;
+        setJobIds(data.jobIds);
         return;
       }
 
@@ -107,7 +161,7 @@ export function SyncButton({
     } catch {
       setError("Unable to connect to the server. Please check your connection.");
     } finally {
-      setSyncing(false);
+      if (!queued) setSyncing(false);
     }
   }
 
@@ -128,7 +182,19 @@ export function SyncButton({
           ? syncAll ? ACTION_STATUS.syncAll.short : ACTION_STATUS.sync.short
           : cooldown > 0 ? `Try again in ${cooldown}s` : label}
       </Button>
-      {syncing ? (
+      {syncing && jobIds.length > 0 ? (
+        <div role="status" aria-live="polite" className="mt-1 max-w-sm text-xs text-ink-2">
+          <p className="font-medium">
+            {jobs.some((job) => !["completed", "partial", "failed"].includes(job.status) && job.phase === "fetching") || jobs.length === 0
+              ? "Fetching reviews…"
+              : jobs.some((job) => !["completed", "partial", "failed"].includes(job.status) && job.phase === "analysing")
+                ? `Analysing reviews: ${jobs.reduce((n, job) => n + job.analysed, 0)} / ${jobs.reduce((n, job) => n + job.eligible, 0)}`
+                : "Updating daily insights…"}
+          </p>
+          <p className="mt-1 text-ink-3">You can leave this page. Processing continues in the background.</p>
+          {jobs.find((job) => job.status === "queued" && job.error)?.error ? <p className="mt-1 text-warn">Waiting to retry automatically.</p> : null}
+        </div>
+      ) : syncing ? (
         <OperationStatus className="mt-1 max-w-sm" copy={syncAll ? ACTION_STATUS.syncAll : ACTION_STATUS.sync} />
       ) : null}
       {error ? (

@@ -20,6 +20,7 @@ export interface ReportStatusView {
   insightCount?: number;
   error?: string | null;
   updatedAt?: string;
+  staleAt?: string | null;
 }
 
 /** A job that has not reported progress in five minutes has lost its worker. */
@@ -132,7 +133,7 @@ export function InsightReportPanel({
         : report?.status === "failed"
           ? "Retry report"
           : hasSavedReport
-            ? "Regenerate report"
+            ? report?.staleAt ? "Refresh report" : "Regenerate report"
             : "Generate report";
   const statusBadge = !report ? (
     hasSavedReport ? <Badge variant="ok">Saved</Badge> : <Badge>Not generated</Badge>
@@ -143,6 +144,8 @@ export function InsightReportPanel({
       <Spinner size="xs" />
       Running
     </Badge>
+  ) : report.staleAt ? (
+    <Badge variant="warn">New data available</Badge>
   ) : report.status === "completed" ? (
     <Badge variant="ok">Completed</Badge>
   ) : report.status === "partial" ? (
@@ -158,7 +161,7 @@ export function InsightReportPanel({
           {running || starting
             ? `Writing the AI summary${report?.phase ? ` — ${phaseLabel(report.phase).toLowerCase()}` : "…"}`
             : hasSavedReport
-              ? "Written by AI from your saved reviews."
+              ? report?.staleAt ? "New review data is available. Refresh the AI summary." : "Written by AI from your daily review summaries."
               : "Counted from your reviews. Ask AI to write it up with suggested actions."}
         </span>
         <Button type="button" variant="ai" size="sm" onClick={start} loading={starting || running}>
@@ -180,7 +183,7 @@ export function InsightReportPanel({
             {statusBadge}
           </div>
           <p className="mt-1 text-[13px] text-ink-3">
-            {hasSavedReport
+            {report?.staleAt ? "New review data is available. The previous report stays readable while you refresh it." : hasSavedReport
               ? "A saved report exists for these filters. Regenerating reuses it when the underlying reviews have not changed."
               : "Generate an evidence-backed report for this scope and range. Missing review analysis runs first, automatically."}
           </p>

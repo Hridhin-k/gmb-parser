@@ -2,6 +2,12 @@
 
 Implementation status (27 October 2026): native Postgres, NextAuth, fresh migrations, parameterized queries, and composite tenant foreign keys are implemented on Launch. The current domain model is retained for this migration; this document's schema reorganization, persistent workers, time rollups, Redis, separate auth role, and budget reservations remain a proposed next phase. See README for the runnable setup.
 
+Update (4 November 2026): the current domain model now has a durable location
+pipeline, resumable fetches, transactional observation replacement, and
+versioned daily summaries used by reports. Its workers run bounded invocations
+from the scheduler and optional request kick-offs. The broader separate-process
+worker/Redis redesign below remains a proposal. See [Review pipeline](REVIEW_PIPELINE.md).
+
 Design proposal · 27 October 2026 · Broader redesign pending
 
 ## Decisions

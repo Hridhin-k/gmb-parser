@@ -34,6 +34,21 @@ export type ReviewSyncMode = "incremental" | "full";
 
 export interface SyncLocationOptions {
   mode?: ReviewSyncMode;
+  checkpoint?: SyncCheckpoint;
+  deadlineAt?: number;
+}
+
+/** Saved only at slice boundaries. Re-fetching a page after a crash is safe. */
+export interface SyncCheckpoint {
+  mode: ReviewSyncMode;
+  startedAt: string;
+  pageToken: string;
+  reviewsSynced: number;
+  reviewsUpdated: number;
+  freshReviews: number;
+  pagesProcessed: number;
+  unchangedPages: number;
+  seenNames: string[];
 }
 
 export interface BulkSyncOptions extends SyncLocationOptions {
@@ -91,6 +106,7 @@ export interface LocationSyncResult {
   mode: ReviewSyncMode;
   errorClass: string | null;
   errorMessage: string | null;
+  continuation?: SyncCheckpoint;
 }
 
 export interface BulkSyncResult {
@@ -203,7 +219,7 @@ export class ReviewSyncService {
     options: SyncLocationOptions = {}
   ): Promise<LocationSyncResult> {
     const db = createAdminClient();
-    const syncStarted = new Date().toISOString();
+    const syncStarted = options.checkpoint?.startedAt ?? new Date().toISOString();
 
     // --- 1. Fetch location record ---
     const { data: location, error: locError } = await db
@@ -251,25 +267,25 @@ export class ReviewSyncService {
     // `last_synced_at` cannot be used for this: location discovery stamps it
     // before any review exists. `reviews_full_synced_at` is only set below,
     // after a full crawl finishes every page without failing.
-    const mode: ReviewSyncMode =
+    const mode: ReviewSyncMode = options.checkpoint?.mode ?? (
       options.mode === "full" || !location.reviews_full_synced_at
         ? "full"
-        : "incremental";
+        : "incremental");
 
     // --- 4. Paginate newest-first. Incremental stops once we hit known pages. ---
-    let reviewsSynced = 0;
-    let reviewsUpdated = 0;
-    let freshReviews = 0;
-    let pagesProcessed = 0;
-    let unchangedPages = 0;
+    let reviewsSynced = options.checkpoint?.reviewsSynced ?? 0;
+    let reviewsUpdated = options.checkpoint?.reviewsUpdated ?? 0;
+    let freshReviews = options.checkpoint?.freshReviews ?? 0;
+    let pagesProcessed = options.checkpoint?.pagesProcessed ?? 0;
+    let unchangedPages = options.checkpoint?.unchangedPages ?? 0;
     let truncated = false;
     let errorClass: string | null = null;
     let errorMessage: string | null = null;
-    let pageToken: string | undefined;
+    let pageToken: string | undefined = options.checkpoint?.pageToken;
     let abortSync = false;
     let googleTotalReviewCount: number | null = null;
     let googleAverageRating: number | null = null;
-    const seenNames = new Set<string>();
+    const seenNames = new Set<string>(options.checkpoint?.seenNames ?? []);
 
     do {
       let retries = 0;
@@ -346,7 +362,15 @@ export class ReviewSyncService {
         truncated = Boolean(pageToken);
         break;
       }
-      if (mode === "incremental" && pagesProcessed >= MAX_INCREMENTAL_PAGES) {
+      if (pageToken && options.deadlineAt && Date.now() >= options.deadlineAt) {
+        return {
+          locationId, reviewsSynced, reviewsUpdated, pagesProcessed, truncated: true, mode,
+          errorClass: null, errorMessage: null,
+          continuation: { mode, startedAt: syncStarted, pageToken, reviewsSynced, reviewsUpdated,
+            freshReviews, pagesProcessed, unchangedPages, seenNames: mode === "full" ? [...seenNames] : [] },
+        };
+      }
+      if (mode === "incremental" && !options.deadlineAt && pagesProcessed >= MAX_INCREMENTAL_PAGES) {
         truncated = Boolean(pageToken);
         break;
       }
@@ -632,7 +656,7 @@ export class ReviewSyncService {
     for (const review of reviews) {
       const hash = reviewHash(review);
       const prior = existing.get(review.name);
-      if (prior?.hash === hash) continue;
+      if (prior?.hash === hash && !prior.missingOnGoogleAt) continue;
 
       const stars = STAR_RATING_MAP[review.starRating];
       if (!stars) continue;

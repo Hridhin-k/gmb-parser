@@ -4,7 +4,7 @@ import {
   type ObservationAggregates,
 } from "@/lib/review-intelligence";
 
-export const INSIGHT_PROMPT_VERSION = "insight-v3";
+export const INSIGHT_PROMPT_VERSION = "insight-v4-daily";
 
 export type InsightSentiment = "positive" | "negative";
 

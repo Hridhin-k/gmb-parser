@@ -140,7 +140,8 @@ export default async function InsightsPage({ searchParams }: InsightsPageProps) 
   const placeName = modernizeCopy(scope.title);
   const report = data.report;
   const reportView = report
-    ? { reportId: report.id as string, status: report.status as string, phase: (report.phase as string | null) ?? null }
+    ? { reportId: report.id as string, status: report.status as string, phase: (report.phase as string | null) ?? null,
+        staleAt: (report.stale_at as string | null) ?? null, updatedAt: report.updated_at as string }
     : null;
   const notReadYet = (
     <EmptyState

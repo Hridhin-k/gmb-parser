@@ -94,7 +94,7 @@ async function loadShellSummary(
   userId: string | null
 ): Promise<ShellSummary> {
   const admin = createAdminClient();
-  const noticesPromise = userId ? listUnreadNotices(workspaceId, userId) : Promise.resolve([] as ProfileNotice[]);
+  const noticesFor = (ids: string[] | null) => userId ? listUnreadNotices(workspaceId, userId, ids) : Promise.resolve([] as ProfileNotice[]);
   const connections = admin
     .from("grm_google_connections")
     .select("id", { count: "exact", head: true })
@@ -103,12 +103,12 @@ async function loadShellSummary(
 
   if (locationIds) {
     if (locationIds.length === 0) {
-      return { ...EMPTY, notices: await noticesPromise };
+      return { ...EMPTY };
     }
     const [profiles, expiredConnections, notices] = await Promise.all([
       profileAttention(workspaceId, locationIds),
       count(allowedClientIds ? connections.in("client_id", allowedClientIds) : connections),
-      noticesPromise,
+      noticesFor(locationIds),
     ]);
     return {
       unreplied: profiles.reduce((sum, profile) => sum + profile.unreplied, 0),
@@ -123,7 +123,7 @@ async function loadShellSummary(
 
   let scopedLocationIds: string[] | null = null;
   if (allowedClientIds) {
-    if (allowedClientIds.length === 0) return { ...EMPTY, notices: await noticesPromise };
+    if (allowedClientIds.length === 0) return { ...EMPTY };
     const { data, error } = await admin
       .from("grm_google_locations")
       .select("id")
@@ -131,7 +131,7 @@ async function loadShellSummary(
       .in("client_id", allowedClientIds);
     if (error) throw new Error(`Failed to load navigation counts: ${error.message}`);
     scopedLocationIds = (data ?? []).map((location) => location.id);
-    if (scopedLocationIds.length === 0) return { ...EMPTY, notices: await noticesPromise };
+    if (scopedLocationIds.length === 0) return { ...EMPTY };
   }
 
   const reviews = admin.from("grm_reviews").select("id", { count: "exact", head: true }).eq("workspace_id", workspaceId).is("missing_on_google_at", null);
@@ -162,7 +162,7 @@ async function loadShellSummary(
     count(scopedLocationIds ? draftQuery.in("location_id", scopedLocationIds) : draftQuery),
     count(scopedLocationIds ? failedQuery.in("location_id", scopedLocationIds) : failedQuery),
     count(allowedClientIds ? connections.in("client_id", allowedClientIds) : connections),
-    noticesPromise,
+    noticesFor(scopedLocationIds),
   ]);
 
   return { unreplied, escalations, drafts, failed, expiredConnections, profiles: [], notices };

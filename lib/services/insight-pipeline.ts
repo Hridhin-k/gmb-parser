@@ -21,6 +21,7 @@ import {
 import { brandContextBlock } from "@/lib/brand-profile";
 import { loadBrandContexts, type ClientBrandContext } from "@/lib/services/brand-profile";
 import { logger } from "@/lib/logger";
+import { getPool } from "@/lib/db/pool";
 
 type Admin = ReturnType<typeof createAdminClient>;
 
@@ -299,7 +300,24 @@ export async function executeAnalysisRun(
   options?: { sliceMs?: number }
 ): Promise<void> {
   const admin = createAdminClient();
+  const lease = await getPool().connect();
+  const lockKeys: string[] = [];
   try {
+    // Report generation, scheduled catch-up and location sync can overlap.
+    // Acquire all scope locks in stable order; yield rather than paying for
+    // the same review extraction in two workers.
+    for (const locationId of [...new Set(input.locationIds)].sort()) {
+      const key = `review-analysis:${workspaceId}:${locationId}`;
+      const { rows: [lock] } = await lease.query<{ locked: boolean }>("SELECT pg_try_advisory_lock(hashtextextended($1,0)) locked", [key]);
+      if (!lock.locked) return;
+      lockKeys.push(key);
+    }
+    const { error: resetError } = await admin.from("grm_analysis_runs").update({
+      status: "running", error: null, finished_at: null, discovered: 0, eligible: 0, already_analysed: 0,
+      newly_analysed: 0, failed: 0, pending: 0, batches_completed: 0, batches_total: 0,
+      input_tokens: 0, output_tokens: 0, retries: 0,
+    }).eq("id", runId).eq("workspace_id", workspaceId);
+    if (resetError) throw new Error(`Failed to resume analysis: ${resetError.message}`);
     const processor = makeRunProcessor(runId, workspaceId, hooks, {
       deadlineAt: options?.sliceMs ? Date.now() + options.sliceMs : undefined,
     });
@@ -318,6 +336,12 @@ export async function executeAnalysisRun(
       failedCount += page.failedCount;
       await markRatingOnlyBulk(admin, workspaceId, page.ratingOnlyToMark).catch(() => undefined);
       processor.state.pendingTotal += page.pendingReviews.length;
+      // Publish the discovered denominator before the slow model call, so
+      // progress never reads "25 / 0" while the first page is being processed.
+      await admin.from("grm_analysis_runs").update({ discovered, eligible, already_analysed: alreadyAnalysed,
+        pending: Math.max(processor.state.pendingTotal - processor.state.newlyAnalysed - processor.state.failed, 0),
+        failed: failedCount,
+      }).eq("id", runId).eq("workspace_id", workspaceId);
       // Once the slice is spent, keep counting (cheap) but stop analysing;
       // the next slice re-discovers and resumes the remainder.
       if (!processor.state.exhausted) {
@@ -329,8 +353,8 @@ export async function executeAnalysisRun(
           discovered,
           eligible,
           already_analysed: alreadyAnalysed,
-          pending: processor.state.pendingTotal,
-          failed: failedCount,
+          pending: Math.max(processor.state.pendingTotal - processor.state.newlyAnalysed - processor.state.failed, 0),
+          failed: processor.state.failed,
           batches_total: processor.state.batchesTotal,
         })
         .eq("id", runId)
@@ -353,6 +377,9 @@ export async function executeAnalysisRun(
       .eq("id", runId)
       .then(undefined, () => undefined);
     logger.error("insight_pipeline.run_failed", { runId, message });
+  } finally {
+    try { for (const key of lockKeys) await lease.query("SELECT pg_advisory_unlock(hashtextextended($1,0))", [key]); }
+    finally { lease.release(); }
   }
 }
 
@@ -517,6 +544,7 @@ function makeRunProcessor(
         for (const reviews of buildBatches(toBatchReviews(group))) batches.push({ reviews, brandContext });
       }
       state.batchesTotal += batches.length;
+      await updateProgress();
       for (let i = 0; i < batches.length; i += BATCH_CONCURRENCY) {
         // Slice deadline: stop starting new batches so this invocation can
         // exit before the platform kills it. Remaining reviews stay pending

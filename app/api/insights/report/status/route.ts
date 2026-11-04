@@ -85,5 +85,6 @@ export async function GET(request: Request) {
     error: report.error,
     finishedAt: report.finished_at,
     updatedAt: report.updated_at,
+    staleAt: report.stale_at,
   }, { headers: NO_STORE });
 }

@@ -3,6 +3,7 @@ import { extractionSchema } from "@/lib/ai/schemas";
 import { createAdminClient } from "@/lib/db/client";
 
 import { logger } from "@/lib/logger";
+import { getPool } from "@/lib/db/pool";
 import { contentFingerprint } from "@/lib/review-version";
 import { detectReviewLanguage } from "@/lib/review-inbox";
 import {
@@ -127,54 +128,40 @@ export async function persistAnalysisResult(
   observations: ReturnType<typeof validateObservations>,
   model: string
 ): Promise<void> {
-  const fingerprint = fingerprintOf(review);
-  const analysisId = await upsertAnalysisRow(admin, workspaceId, review, fingerprint, "processing");
   const context = await loadLocationContext(admin, workspaceId, review.location_id);
   const language = review.review_language ?? detectReviewLanguage(review.comment ?? "");
+  const db = await getPool().connect();
+  try {
+    await db.query("BEGIN");
+    const { rows: [live] } = await db.query<ReviewForAnalysis>(`SELECT id,location_id,star_rating,comment,
+      review_create_time,review_language,content_fingerprint FROM grm_reviews
+      WHERE workspace_id=$1 AND id=$2 AND missing_on_google_at IS NULL FOR UPDATE`, [workspaceId, review.id]);
+    if (!live || live.location_id !== review.location_id || fingerprintOf(live) !== fingerprintOf(review)) throw new Error("Review changed while analysis was running. It will be retried.");
+    const { rows: [analysis] } = await db.query<{ id: string }>(`INSERT INTO grm_review_analyses
+      (workspace_id,review_id,location_id,analysis_version,content_fingerprint,status)
+      VALUES($1,$2,$3,$4,$5,'processing') ON CONFLICT(review_id,analysis_version)
+      DO UPDATE SET content_fingerprint=excluded.content_fingerprint,status='processing',error=NULL RETURNING id`,
+      [workspaceId, review.id, review.location_id, ANALYSIS_VERSION, fingerprintOf(review)]);
+    await db.query("DELETE FROM grm_review_observations WHERE workspace_id=$1 AND analysis_id=$2", [workspaceId, analysis.id]);
+    if (observations.length > 0) await db.query(`INSERT INTO grm_review_observations
+      (workspace_id,analysis_id,review_id,location_id,client_id,group_id,review_create_time,star_rating,language,
+       topic,subtopic,sentiment,detail,entity_type,entity_name,severity,severity_rationale,
+       evidence_excerpt,evidence_start,evidence_end,basis,confidence,is_ambiguous,dedupe_key)
+      SELECT $1,$2,$3,$4,$5,$6,$7,$8,$9,
+        o.topic,o.subtopic,o.sentiment,o.detail,o."entityType",o."entityName",o.severity,o."severityRationale",
+        o."evidenceExcerpt",o."evidenceStart",o."evidenceEnd",o.basis,o.confidence,o."isAmbiguous",o."dedupeKey"
+      FROM jsonb_to_recordset($10::jsonb) AS o(topic text,subtopic text,sentiment text,detail text,
+        "entityType" text,"entityName" text,severity smallint,"severityRationale" text,
+        "evidenceExcerpt" text,"evidenceStart" integer,"evidenceEnd" integer,basis text,confidence numeric,
+        "isAmbiguous" boolean,"dedupeKey" text)`,
+      [workspaceId, analysis.id, review.id, review.location_id, context.clientId, context.groupId,
+        review.review_create_time, review.star_rating, language, JSON.stringify(observations)]);
+    await db.query(`UPDATE grm_review_analyses SET status='ready',observation_count=$3,model=$4,error=NULL,processed_at=now()
+      WHERE workspace_id=$1 AND id=$2`, [workspaceId, analysis.id, observations.length, model]);
+    await db.query("COMMIT");
+  } catch (error) { await db.query("ROLLBACK"); throw error; }
+  finally { db.release(); }
 
-  await admin.from("grm_review_observations").delete().eq("analysis_id", analysisId);
-  if (observations.length > 0) {
-    const { error: insertError } = await admin.from("grm_review_observations").insert(
-      observations.map((obs) => ({
-        workspace_id: workspaceId,
-        analysis_id: analysisId,
-        review_id: review.id,
-        location_id: review.location_id,
-        client_id: context.clientId,
-        group_id: context.groupId,
-        review_create_time: review.review_create_time,
-        star_rating: review.star_rating,
-        language,
-        topic: obs.topic,
-        subtopic: obs.subtopic,
-        sentiment: obs.sentiment,
-        detail: obs.detail,
-        entity_type: obs.entityType,
-        entity_name: obs.entityName,
-        severity: obs.severity,
-        severity_rationale: obs.severityRationale,
-        evidence_excerpt: obs.evidenceExcerpt,
-        evidence_start: obs.evidenceStart,
-        evidence_end: obs.evidenceEnd,
-        basis: obs.basis,
-        confidence: obs.confidence,
-        is_ambiguous: obs.isAmbiguous,
-        dedupe_key: obs.dedupeKey,
-      }))
-    );
-    if (insertError) throw new Error(insertError.message);
-  }
-  const { error } = await admin
-    .from("grm_review_analyses")
-    .update({
-      status: "ready",
-      observation_count: observations.length,
-      model,
-      error: null,
-      processed_at: new Date().toISOString(),
-    })
-    .eq("id", analysisId);
-  if (error) throw new Error(error.message);
 }
 
 /** Records a failed analysis so the review is accounted for and can be retried later. */

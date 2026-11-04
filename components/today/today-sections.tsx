@@ -37,12 +37,22 @@ const TASK_TONES: Record<NeedsYouTask["tone"], string> = {
 
 export function NeedsYouStrip({ tasks, startHref }: { tasks: NeedsYouTask[]; startHref: string }) {
   return (
-    <section aria-label="Needs you" className={cn(CARD, "flex flex-wrap items-stretch gap-1 p-2")}>
+    <section aria-labelledby="today-needs-attention" className={cn(CARD, "p-5")}>
+      <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+        <div>
+          <h2 id="today-needs-attention" className="text-[15px] font-semibold text-ink">Needs attention</h2>
+          <p className="mt-1 text-xs text-ink-3">All outstanding tasks for the selected locations, across all dates.</p>
+        </div>
+        <Link href={startHref} className="inline-flex min-h-10 items-center gap-2 rounded-full bg-ink px-4 text-sm font-semibold text-white hover:bg-graphite hover:text-white">
+          Start replying <ArrowRight className="size-4" aria-hidden="true" />
+        </Link>
+      </div>
+      <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 xl:grid-cols-4">
       {tasks.map((task) => (
         <Link
           key={task.id}
           href={task.href}
-          className="flex min-w-0 flex-[1_1_170px] items-center gap-3 rounded-[10px] px-3.5 py-3 text-ink outline-none hover:bg-paper hover:text-ink focus-visible:ring-2 focus-visible:ring-brand"
+          className="flex min-w-0 items-start gap-3 rounded-[10px] bg-paper/60 px-3.5 py-4 text-ink outline-none hover:bg-paper hover:text-ink focus-visible:ring-2 focus-visible:ring-brand"
         >
           <span
             className={cn(
@@ -58,13 +68,7 @@ export function NeedsYouStrip({ tasks, startHref }: { tasks: NeedsYouTask[]; sta
           </span>
         </Link>
       ))}
-      <Link
-        href={startHref}
-        className="mx-1.5 my-1 inline-flex h-11 flex-none items-center gap-2 self-center rounded-full bg-ink px-5 text-sm font-semibold text-white outline-none hover:bg-graphite hover:text-white focus-visible:ring-2 focus-visible:ring-brand focus-visible:ring-offset-2"
-      >
-        Start replying
-        <ArrowRight className="size-4" aria-hidden="true" />
-      </Link>
+      </div>
     </section>
   );
 }
@@ -74,6 +78,33 @@ const DELTA_TONES: Record<TodayKpi["tone"], string> = {
   bad: "text-bad",
   flat: "text-ink-3",
 };
+
+export function RecentNotifications({ notices }: { notices: Array<{ id: string; title: string; href: string }> }) {
+  const rows = (items: typeof notices) => items.map((notice) => (
+    <li key={notice.id}>
+      <Link href={notice.href} className="flex min-h-11 items-center justify-between gap-4 py-3 text-sm text-ink hover:text-brand">
+        <span>{notice.title}</span>
+        <span className="shrink-0 text-xs font-medium text-brand">View details →</span>
+      </Link>
+    </li>
+  ));
+  return (
+    <section aria-labelledby="today-reminders" className={cn(CARD, "p-5")}>
+      <h2 id="today-reminders" className="text-[15px] font-semibold text-ink">Recent notifications</h2>
+      <p className="mt-1 text-xs text-ink-3">One update per review or follow-up, with the latest reminder shown.</p>
+      <ul className="mt-3 divide-y divide-line-2">{rows(notices.slice(0, 3))}</ul>
+      {notices.length > 3 ? (
+        <details className="group border-t border-line-2">
+          <summary className="cursor-pointer py-3 text-xs font-medium text-brand">
+            <span className="group-open:hidden">Show {notices.length - 3} more notifications</span>
+            <span className="hidden group-open:inline">Show fewer notifications</span>
+          </summary>
+          <ul className="divide-y divide-line-2">{rows(notices.slice(3))}</ul>
+        </details>
+      ) : null}
+    </section>
+  );
+}
 
 function DeltaIcon({ direction }: { direction: TodayKpi["direction"] }) {
   const props = { className: "size-3", strokeWidth: 2.25, "aria-hidden": true } as const;
@@ -124,22 +155,24 @@ export function VolumeCard({
   yMax,
   caption,
   summary,
+  interval = "day",
 }: {
   days: VolumeDay[];
   yMax: number;
   caption: string;
   summary: string;
+  interval?: "day" | "week" | "month";
 }) {
   return (
     <section className={cn(CARD, "flex flex-[999_1_520px] flex-col gap-4 p-5")}>
       <div className="flex flex-wrap items-baseline justify-between gap-2">
         <div className="flex flex-col gap-0.5">
-          <h2 className="m-0 text-[15px] font-semibold text-ink">New reviews per day</h2>
+          <h2 className="m-0 text-[15px] font-semibold text-ink">New reviews per {interval}</h2>
           <span className="text-[13px] text-ink-3">{caption}</span>
         </div>
         <span className="inline-flex items-center gap-1.5 text-xs text-ink-2">
           <span className="size-2.5 rounded-[3px] bg-bad" aria-hidden="true" />
-          Day with a 1–2 star review
+          {interval === "day" ? "Day" : interval === "week" ? "Week" : "Month"} with a 1–2 star review
         </span>
       </div>
       <VolumeChart days={days} yMax={yMax} summary={summary} />

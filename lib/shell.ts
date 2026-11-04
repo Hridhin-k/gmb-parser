@@ -102,7 +102,11 @@ function attentionScore(profile: ShellProfileAttention): number {
 /** Only alerts the person can open. Scoped people see each of their profiles. */
 export function shellAlerts(summary: ShellAlertInput, role: ShellRole): ShellAlert[] {
   const items: ShellAlert[] = [];
-  for (const notice of (summary.notices ?? []).slice(0, 8)) {
+  const seenNotices = new Set<string>();
+  for (const notice of (summary.notices ?? [])) {
+    if (seenNotices.has(notice.href)) continue;
+    seenNotices.add(notice.href);
+    if (seenNotices.size > 8) break;
     items.push({ id: `notice:${notice.id}`, title: notice.title, href: notice.href });
   }
   const built = [...(summary.profiles ?? [])]

@@ -239,7 +239,7 @@ export default async function ReviewsPage({ searchParams }: ReviewsPageProps) {
             Follow-up settings
           </Link>
         ) : null}
-        {canSync ? <SyncButton syncAll locationIds={syncIds} label={syncLabel} size="default" /> : null}
+        {canSync ? <SyncButton key={syncIds?.join(",") ?? "all"} syncAll locationIds={syncIds} label={syncLabel} size="default" /> : null}
       </PageHeader>
 
       <TransitionScope>
@@ -438,7 +438,7 @@ async function ReviewTabBody({
         title="Every review has a reply"
         description="New reviews land here as soon as Google sends them."
       >
-        {canSync ? <SyncButton syncAll locationIds={syncIds} label="Sync reviews now" size="sm" /> : null}
+        {canSync ? <SyncButton key={syncIds?.join(",") ?? "all"} syncAll locationIds={syncIds} label="Sync reviews now" size="sm" /> : null}
       </EmptyState>
     ) : (
       <EmptyState icon={MessageSquareText} title="Nothing sent yet" description="Replies you send show here." />

@@ -3,6 +3,7 @@ import path from "path";
 
 export default defineConfig({
   test: {
+    include: ["__tests__/**/*.test.{ts,tsx}"],
     globals: true,
     environment: "node",
     // No pacing or long backoff in unit tests; gate behaviour has its own tests.

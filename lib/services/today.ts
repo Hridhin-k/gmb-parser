@@ -1,67 +1,30 @@
 import { createAdminClient } from "@/lib/db/client";
 import type { DateRange } from "@/lib/date-range";
-import type { TodayReviewRow } from "@/lib/today";
 import { remember } from "@/lib/ttl-cache";
+import { getPool } from "@/lib/db/pool";
+import { buildDays, rangeDays, type TodayDay } from "@/lib/today";
 
 const CHUNK = 150;
-const PAGE = 1000;
+
+/** Group in Postgres so All time does not download every historical review. */
+export async function loadTodayDays(workspaceId: string, locationIds: string[], range: DateRange, now: Date, timeZone: string): Promise<TodayDay[]> {
+  if (locationIds.length === 0) return [];
+  const { rows } = await getPool().query<TodayDay>(`SELECT to_char(review_create_time AT TIME ZONE $5,'YYYY-MM-DD') AS "day",
+    count(*)::integer reviews,sum(star_rating)::integer "ratingSum",count(*) FILTER(WHERE star_rating<=2)::integer low,
+    count(*) FILTER(WHERE google_reply_comment IS NOT NULL OR reply_status='published')::integer replied,
+    coalesce(sum(extract(epoch FROM google_reply_update_time-review_create_time)/3600)
+      FILTER(WHERE google_reply_update_time>=review_create_time),0)::float8 "responseHoursSum",
+    count(*) FILTER(WHERE google_reply_update_time>=review_create_time)::integer "responseCount"
+    FROM grm_reviews WHERE workspace_id=$1 AND location_id=ANY($2::uuid[]) AND missing_on_google_at IS NULL
+      AND ($3::timestamptz IS NULL OR review_create_time>=$3) AND review_create_time<$4
+    GROUP BY 1 ORDER BY 1`, [workspaceId, locationIds, range.start?.toISOString() ?? null, range.end?.toISOString() ?? now.toISOString(), timeZone]);
+  const days = buildDays([], { days: rangeDays(range, now, rows[0]?.day, timeZone), now: range.end ? new Date(Math.min(now.getTime(), range.end.getTime() - 1)) : now, timeZone });
+  const byDay = new Map(rows.map((row) => [row.day, row]));
+  return days.map((day) => byDay.get(day.day) ?? day);
+}
 
 function scopeKey(ids: string[]): string {
   return [...ids].sort().join(",");
-}
-
-/**
- * Star, reply and reply time for each review in the window, for the per-day
- * bars and sparklines. Today windows are at most 90 days, so this stays small.
- * "Replied" matches `grm_review_trends`: a Google reply or a published reply.
- */
-export async function loadTodayReviews(
-  workspaceId: string,
-  locationIds: string[],
-  range: DateRange
-): Promise<TodayReviewRow[]> {
-  if (locationIds.length === 0 || !range.start) return [];
-  const start = range.start.toISOString();
-  const end = range.end?.toISOString() ?? null;
-  const key = `today:reviews:${workspaceId}:${start.slice(0, 13)}:${end ?? ""}:${scopeKey(locationIds)}`;
-  return remember(key, 45_000, async () => {
-    const admin = createAdminClient();
-    const rows: TodayReviewRow[] = [];
-    for (let index = 0; index < locationIds.length; index += CHUNK) {
-      const chunk = locationIds.slice(index, index + CHUNK);
-      for (let from = 0; ; from += PAGE) {
-        let query = admin
-          .from("grm_reviews")
-          .select("id, review_create_time, star_rating, reply_status, google_reply_comment, google_reply_update_time")
-          .eq("workspace_id", workspaceId)
-          .in("location_id", chunk)
-          .is("missing_on_google_at", null)
-          .gte("review_create_time", start)
-          .order("review_create_time", { ascending: true })
-          .order("id", { ascending: true })
-          .range(from, from + PAGE - 1);
-        if (end) query = query.lt("review_create_time", end);
-        const { data, error } = await query;
-        if (error) throw new Error(`Failed to load Today reviews: ${error.message}`);
-        const page = data ?? [];
-        for (const row of page) {
-          const created = Date.parse(row.review_create_time);
-          const replyAt = row.google_reply_update_time ? Date.parse(row.google_reply_update_time) : Number.NaN;
-          rows.push({
-            createdAt: row.review_create_time,
-            stars: Number(row.star_rating),
-            replied: row.google_reply_comment !== null || row.reply_status === "published",
-            responseHours:
-              Number.isFinite(replyAt) && Number.isFinite(created) && replyAt >= created
-                ? (replyAt - created) / 3_600_000
-                : null,
-          });
-        }
-        if (page.length < PAGE) break;
-      }
-    }
-    return rows;
-  });
 }
 
 export interface NeedsYouExtras {

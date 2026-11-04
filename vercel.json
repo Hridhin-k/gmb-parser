@@ -1,6 +1,10 @@
 {
   "crons": [
     {
+      "path": "/api/cron/review-pipeline",
+      "schedule": "* * * * *"
+    },
+    {
       "path": "/api/cron/insights",
       "schedule": "30 6 * * *"
     },

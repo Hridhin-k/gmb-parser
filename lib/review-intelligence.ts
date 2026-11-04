@@ -305,7 +305,7 @@ function entityCounts(rows: ObservationRow[]): Array<{ name: string; count: numb
 }
 
 /** Counts computed from stored observations. Frequency never filters anything out. */
-export function aggregateObservations(rows: ObservationRow[]): ObservationAggregates {
+export function aggregateObservations(rows: ObservationRow[], options?: { retainRelationships?: boolean }): ObservationAggregates {
   const positive = rows.filter((row) => row.sentiment === "positive");
   const negative = rows.filter((row) => row.sentiment === "negative");
 
@@ -366,9 +366,9 @@ export function aggregateObservations(rows: ObservationRow[]): ObservationAggreg
     byOutlet: [...outlets.values()].sort((a, b) => b.negative - a.negative || b.positive - a.positive),
     byMonth: [...months.values()].sort((a, b) => a.month.localeCompare(b.month)),
     topicRelationships: [...pairs.values()]
-      .filter((entry) => entry.reviews >= 2)
+      .filter((entry) => options?.retainRelationships || entry.reviews >= 2)
       .sort((a, b) => b.reviews - a.reviews)
-      .slice(0, 20),
+      .slice(0, options?.retainRelationships ? undefined : 20),
     outletReviews: Object.fromEntries(
       [...outletReviewSets.entries()].map(([locationId, set]) => [locationId, set.size])
     ),

@@ -9,24 +9,20 @@ import {
   assembleInsights,
   buildEvidenceItems,
   computeReportCacheKey,
-  computeScopeDataFingerprint,
   normaliseLocationIds,
   reportRangeMatches,
   parseSynthesisResponse,
   synthesisPrompt,
-  type SampleObservation,
 } from "@/lib/insight-report";
 import {
   createAnalysisRun,
-  discoverScopeReviews,
   executeAnalysisRun,
   failStaleAnalysisRuns,
   type AnalysisRunScope,
 } from "@/lib/services/insight-pipeline";
-import {
-  fingerprintOf,
-  loadObservationAggregates,
-} from "@/lib/services/review-observations";
+import { getPool } from "@/lib/db/pool";
+import { loadDailySummaryRange } from "@/lib/services/daily-insights";
+import { dailySourceFingerprint } from "@/lib/daily-insights";
 import { logger } from "@/lib/logger";
 import type { Database } from "@/lib/types/database-schema";
 
@@ -35,7 +31,6 @@ type ReportUpdate = Database["public"]["Tables"]["grm_insight_reports"]["Update"
 type Admin = ReturnType<typeof createAdminClient>;
 
 const REQUEST_TIMEOUT_MS = 120_000;
-const SAMPLE_LIMIT = 2000;
 
 export interface ReportRequestInput extends AnalysisRunScope {
   prevStart: string | null;
@@ -175,7 +170,13 @@ export async function requestReport(
     if ((existing.status === "processing" || existing.status === "pending") && fresh) {
       return { reportId: existing.id as string, status: existing.status as string, action: "wait" };
     }
-    return { reportId: existing.id as string, status: existing.status as string, action: "generate" };
+    // Claim before responding so the client polls a refresh of an already
+    // completed report. Keep its saved insights/fingerprint readable.
+    const { rows } = await getPool().query<{ id: string }>(`UPDATE grm_insight_reports
+      SET status='pending',phase='queued',error=NULL WHERE workspace_id=$1 AND id=$2
+        AND (status NOT IN ('pending','processing') OR updated_at<now()-interval '5 minutes') RETURNING id`,
+      [workspaceId, existing.id]);
+    return { reportId: existing.id as string, status: "pending", action: rows.length > 0 ? "generate" : "wait" };
   }
   const { data, error } = await admin
     .from("grm_insight_reports")
@@ -205,44 +206,6 @@ export async function requestReport(
     throw new Error(`Failed to create insight report: ${error?.message ?? "unknown"}`);
   }
   return { reportId: data.id as string, status: data.status as string, action: "generate" };
-}
-
-async function loadSamples(
-  admin: Admin,
-  workspaceId: string,
-  input: { locationIds: string[]; start: string | null; end: string | null }
-): Promise<SampleObservation[]> {
-  const out: SampleObservation[] = [];
-  for (let c = 0; c < input.locationIds.length && out.length < SAMPLE_LIMIT; c += 80) {
-    const locationChunk = input.locationIds.slice(c, c + 80);
-    let query = admin
-      .from("grm_review_observations")
-      .select(
-        "review_id, location_id, topic, sentiment, entity_type, entity_name, severity, evidence_excerpt, grm_review_analyses!inner(status)"
-      )
-      .eq("workspace_id", workspaceId)
-      .in("location_id", locationChunk)
-      .eq("grm_review_analyses.status", "ready")
-      .order("severity", { ascending: false, nullsFirst: false })
-      .limit(SAMPLE_LIMIT - out.length);
-    if (input.start) query = query.gte("review_create_time", input.start);
-    if (input.end) query = query.lt("review_create_time", input.end);
-    const { data, error } = await query;
-    if (error) throw new Error(`Failed to load evidence samples: ${error.message}`);
-    for (const row of data ?? []) {
-      out.push({
-        reviewId: row.review_id as string,
-        locationId: row.location_id as string,
-        topic: row.topic as string,
-        sentiment: row.sentiment as string,
-        entityType: (row.entity_type as string | null) ?? null,
-        entityName: (row.entity_name as string | null) ?? null,
-        severity: (row.severity as number | null) ?? null,
-        evidenceExcerpt: row.evidence_excerpt as string,
-      });
-    }
-  }
-  return out;
 }
 
 async function loadOutletNames(
@@ -281,9 +244,14 @@ export async function generateReport(
 ): Promise<void> {
   const admin = createAdminClient();
   const cacheKey = reportCacheKey(workspaceId, input);
+  const lease = await getPool().connect();
+  const lockKey = `insight-report:${workspaceId}:${reportId}`;
+  const { rows: [lock] } = await lease.query<{ locked: boolean }>("SELECT pg_try_advisory_lock(hashtextextended($1,0)) locked", [lockKey]);
+  if (!lock.locked) { lease.release(); return; }
 
   async function patch(fields: ReportUpdate) {
-    await admin.from("grm_insight_reports").update(fields).eq("id", reportId);
+    const { error } = await admin.from("grm_insight_reports").update(fields).eq("id", reportId).eq("workspace_id", workspaceId);
+    if (error) throw new Error(`Failed to save insight report: ${error.message}`);
   }
 
   try {
@@ -293,45 +261,36 @@ export async function generateReport(
 
     await patch({ status: "processing", phase: "checking data", started_at: new Date().toISOString(), error: null });
 
-    let scope = await discoverScopeReviews(admin, workspaceId, input);
-    const fingerprint = computeScopeDataFingerprint(
-      scope.eligible.map((r) => ({ reviewId: r.id, fingerprint: fingerprintOf(r) })),
-      scope.failedCount
-    );
-
-    // Cache hit: same filters, same underlying reviews, same versions.
-    // No AI call and no re-analysis — return the saved report as-is.
-    if (
-      (previousStatus === "completed" || previousStatus === "partial") &&
-      previousFingerprint === fingerprint
-    ) {
-      await patch({ status: previousStatus, phase: "reused", finished_at: new Date().toISOString() });
-      logger.info("insight_report.reused", { reportId });
+    let current = await loadDailySummaryRange(workspaceId, input);
+    let before = input.prevStart
+      ? await loadDailySummaryRange(workspaceId, { locationIds: input.locationIds, start: input.prevStart, end: input.prevEnd })
+      : null;
+    let sources = [...current.sources, ...(before?.sources ?? [])];
+    let fingerprint = dailySourceFingerprint(sources);
+    if (previousFingerprint === fingerprint && current.coverage.pending === 0) {
+      await patch({ status: previousStatus === "partial" ? "partial" : "completed", phase: "reused" });
       return;
     }
 
-    if (scope.pendingReviews.length > 0) {
+    if (current.coverage.pending > 0) {
       await patch({ phase: "analysing reviews" });
       await failStaleAnalysisRuns(workspaceId);
       const runId = await createAnalysisRun(workspaceId, null, input);
       await executeAnalysisRun(runId, workspaceId, input, {
         onProgress: () => patch({ phase: "analysing reviews" }),
-      });
-      scope = await discoverScopeReviews(admin, workspaceId, input);
+      }, { sliceMs: 45_000 });
+      current = await loadDailySummaryRange(workspaceId, input);
+      before = input.prevStart
+        ? await loadDailySummaryRange(workspaceId, { locationIds: input.locationIds, start: input.prevStart, end: input.prevEnd })
+        : null;
+      sources = [...current.sources, ...(before?.sources ?? [])];
+      fingerprint = dailySourceFingerprint(sources);
     }
 
     await patch({ phase: "synthesising insights" });
-    const [aggregates, previousAggregates, samples] = await Promise.all([
-      loadObservationAggregates(workspaceId, input),
-      input.prevStart
-        ? loadObservationAggregates(workspaceId, {
-            locationIds: input.locationIds,
-            start: input.prevStart,
-            end: input.prevEnd,
-          })
-        : Promise.resolve(null),
-      loadSamples(admin, workspaceId, input),
-    ]);
+    const aggregates = current.aggregates;
+    const previousAggregates = before?.aggregates ?? null;
+    const samples = current.samples;
     const outletNames = await loadOutletNames(
       admin,
       aggregates.byOutlet.map((o) => o.locationId)
@@ -360,13 +319,23 @@ export async function generateReport(
       insights = assembleInsights(items, parseSynthesisResponse(result.text), cacheKey);
     }
 
-    const failedReviewIds = scope.pendingReviews.slice(0, 500).map((r) => r.id);
-    const coverageComplete = scope.pendingReviews.length === 0;
+    const coverageComplete = current.coverage.pending === 0;
+    const { rows: failedRows } = await getPool().query<{ id: string }>(`SELECT r.id FROM grm_reviews r
+      LEFT JOIN grm_review_analyses a ON a.workspace_id=r.workspace_id AND a.review_id=r.id AND a.analysis_version=$5
+      WHERE r.workspace_id=$1 AND r.location_id=ANY($2::uuid[]) AND r.missing_on_google_at IS NULL
+        AND btrim(coalesce(r.comment,''))<>'' AND ($3::timestamptz IS NULL OR r.review_create_time>=$3)
+        AND ($4::timestamptz IS NULL OR r.review_create_time<$4)
+        AND (a.status IS DISTINCT FROM 'ready' OR (r.content_fingerprint IS NOT NULL AND a.content_fingerprint IS DISTINCT FROM r.content_fingerprint))
+      ORDER BY r.id LIMIT 500`, [workspaceId, input.locationIds, input.start, input.end, ANALYSIS_VERSION]);
+    const failedReviewIds = failedRows.map((r) => r.id);
     const limitations: string[] = [];
     if (!coverageComplete) {
       limitations.push(
-        `${scope.pendingReviews.length} eligible written reviews could not be analysed and are excluded from this report. Retry analysis to complete coverage.`
+        `${current.coverage.pending} eligible written reviews could not be analysed and are excluded from this report. Retry analysis to complete coverage.`
       );
+    }
+    if (before && before.coverage.pending > 0) {
+      limitations.push(`${before.coverage.pending} written reviews in the comparison period await analysis. Comparisons use analysed coverage only.`);
     }
     if (items.length === 0) {
       limitations.push("No analysed observations were available for this scope and range yet.");
@@ -379,23 +348,43 @@ export async function generateReport(
       evidence_summary: {
         byMonth: aggregates.byMonth,
         reviewsAnalysed: aggregates.reviewsAnalysed,
-        observations: aggregates.storedObservations,
+        observations: aggregates.observations,
+        dailySources: sources,
+        comparisonStart: input.prevStart,
+        comparisonEnd: input.prevEnd,
+        comparisonCoverage: before?.coverage ?? null,
         severeIncidents: aggregates.severeIncidents.length,
         dataVersion: fingerprint,
       },
       limitations,
       data_fingerprint: fingerprint,
       model,
-      discovered_count: scope.discovered.length,
-      eligible_count: scope.eligible.length,
-      analysed_count: scope.alreadyAnalysed,
-      failed_count: scope.failedCount,
-      pending_count: scope.pendingReviews.length,
+      discovered_count: current.coverage.discovered,
+      eligible_count: current.coverage.eligible,
+      analysed_count: current.coverage.analysed,
+      failed_count: current.coverage.failed,
+      pending_count: current.coverage.pending,
       failed_review_ids: failedReviewIds,
       input_tokens: inputTokens,
       output_tokens: outputTokens,
       finished_at: new Date().toISOString(),
     });
+    // Clear staleness only if the exact daily revisions used above still match.
+    // A concurrent edit/new day prevents this update, preserving the old report
+    // with an explicit refresh marker instead of mislabelling it as current.
+    await getPool().query(`UPDATE grm_insight_reports SET stale_at=NULL WHERE id=$1 AND workspace_id=$2
+      AND NOT EXISTS (
+        SELECT 1 FROM grm_insight_days d
+        LEFT JOIN jsonb_to_recordset($3::jsonb) AS s("locationId" text,day text,timezone text,revision bigint)
+          ON s."locationId"=d.location_id::text AND s.day=d.day::text AND s.timezone=d.timezone
+        WHERE d.workspace_id=$2 AND d.location_id=ANY($4::uuid[])
+          AND d.timezone=grm_review_timezone(d.workspace_id,d.location_id)
+          AND (($5::timestamptz IS NULL OR ((d.day+1)::timestamp AT TIME ZONE d.timezone)>$5)
+            AND ($6::timestamptz IS NULL OR (d.day::timestamp AT TIME ZONE d.timezone)<$6)
+            OR $7::timestamptz IS NOT NULL AND ((d.day+1)::timestamp AT TIME ZONE d.timezone)>$7
+              AND ($8::timestamptz IS NULL OR (d.day::timestamp AT TIME ZONE d.timezone)<$8))
+          AND (s.revision IS NULL OR s.revision<>d.revision))`,
+      [reportId, workspaceId, JSON.stringify(sources), input.locationIds, input.start, input.end, input.prevStart, input.prevEnd]);
     logger.info("insight_report.generated", {
       reportId,
       insights: insights.length,
@@ -410,5 +399,8 @@ export async function generateReport(
       finished_at: new Date().toISOString(),
     }).catch(() => undefined);
     logger.error("insight_report.failed", { reportId, message });
+  } finally {
+    try { await lease.query("SELECT pg_advisory_unlock(hashtextextended($1,0))", [lockKey]); }
+    finally { lease.release(); }
   }
 }

@@ -1,4 +1,5 @@
 import { createAdminClient } from "@/lib/db/client";
+import { ANALYSIS_VERSION } from "@/lib/review-intelligence";
 
 export interface ThemeEvidence {
   reviewId: string;
@@ -36,6 +37,7 @@ export async function loadThemeEvidence(
       .eq("topic", input.topic)
       .eq("sentiment", input.sentiment)
       .eq("grm_review_analyses.status", "ready")
+      .eq("grm_review_analyses.analysis_version", ANALYSIS_VERSION)
       .order("severity", { ascending: false, nullsFirst: false })
       .order("review_create_time", { ascending: false })
       .limit(limit);

@@ -6,6 +6,7 @@ import {
   KpiTiles,
   LocationsCard,
   NeedsYouStrip,
+  RecentNotifications,
   StarCard,
   ThemesCard,
   TodayHeader,
@@ -13,7 +14,7 @@ import {
 } from "@/components/today/today-sections";
 import { Banner } from "@/components/ui/banner";
 import { Button } from "@/components/ui/button";
-import { DAY_RANGE_PRESETS, dateRangeParams } from "@/lib/date-range";
+import { dateRangeParams } from "@/lib/date-range";
 import { formatFriendlyDateTime } from "@/lib/format-date";
 import { insightTopicLabel } from "@/lib/insight-dashboard";
 import { reviewDrillHref } from "@/lib/metrics";
@@ -25,10 +26,9 @@ import { loadOverviewSignals } from "@/lib/services/overview";
 import { readPageScope } from "@/lib/services/scope-catalog";
 import { getActiveRole, getActiveWorkspace } from "@/lib/services/session";
 import { getShellSummary } from "@/lib/services/shell-summary";
-import { loadNeedsYouExtras, loadTodayReviews } from "@/lib/services/today";
+import { loadNeedsYouExtras, loadTodayDays } from "@/lib/services/today";
 import { canOpenPath, isManager, shellAlerts } from "@/lib/shell";
 import {
-  buildDays,
   buildKpis,
   buildLocationTable,
   buildNeedsYou,
@@ -36,10 +36,11 @@ import {
   greeting,
   longDate,
   niceMax,
-  rangeDays,
   shortDay,
   sparkSeries,
   todayRange,
+  TODAY_RANGE_PRESETS,
+  volumeDays,
 } from "@/lib/today";
 
 interface OverviewPageProps {
@@ -48,6 +49,7 @@ interface OverviewPageProps {
 
 /** Newest Google sync older than this reads as stale. */
 const STALE_AFTER_MS = 24 * 60 * 60 * 1000;
+const BANNER_LAYOUT = "max-sm:[&>div+div]:basis-full max-sm:[&>div+div]:pl-[26px]";
 
 function param(value: string | string[] | undefined): string {
   return Array.isArray(value) ? value[0] ?? "" : value ?? "";
@@ -77,17 +79,16 @@ export default async function OverviewPage({ searchParams }: OverviewPageProps) 
   const scope = { clientId, groupId, locationId };
   const scoped = { client: clientId, group: groupId, location: locationId };
   const range = todayRange(params, now);
-  const rangeQuery = dateRangeParams(range, "all");
+  const rangeQuery = { range: range.key, ...dateRangeParams(range, "all") };
   const start = range.start?.toISOString() ?? null;
   const end = range.end?.toISOString() ?? null;
 
-  const [loaded, signals, insights, summary, extras, rows] = await Promise.all([
+  const [loaded, signals, insights, summary, extras] = await Promise.all([
     getDashboardContext(workspaceId, range, scope),
     loadOverviewSignals(workspaceId, resolved.locationIds, range),
     loadInsightDashboard(workspaceId, { locationIds: resolved.locationIds, start, end }),
     getShellSummary(workspaceId, null, resolved.locationIds, user.id),
     loadNeedsYouExtras(workspaceId, resolved.locationIds, now),
-    loadTodayReviews(workspaceId, resolved.locationIds, range),
   ]);
   const timeZone = loaded.timezone;
 
@@ -152,12 +153,14 @@ export default async function OverviewPage({ searchParams }: OverviewPageProps) 
   );
   const notices = shellAlerts(summary, role).filter((alert) => alert.id.startsWith("notice:"));
 
-  const days = buildDays(rows, { days: rangeDays(range), now, timeZone });
+  const days = await loadTodayDays(workspaceId, resolved.locationIds, range, now, timeZone);
+  const volume = volumeDays(days);
   const kpis = buildKpis(board.kpis, sparkSeries(days));
   const dayTotal = days.reduce((sum, day) => sum + day.reviews, 0);
   const lowDays = days.filter((day) => day.low > 0).length;
   const peak = Math.max(0, ...days.map((day) => day.reviews));
   const period = range.label.toLowerCase();
+  const periodPhrase = range.key === "all" ? "across all time" : `in the ${period}`;
 
   const clientNames = new Map(loaded.clients.map((client) => [client.id, client.name]));
   const earlier = new Map((loaded.previous?.locations ?? []).map((row) => [row.locationId, row]));
@@ -188,11 +191,13 @@ export default async function OverviewPage({ searchParams }: OverviewPageProps) 
   const themeNote = topComplaint
     ? `${insightTopicLabel(topComplaint.topic)} came up ${topComplaint.count.toLocaleString("en-US")} ${topComplaint.count === 1 ? "time" : "times"}${
         boardPlaces.length > 1 ? ` at ${places.get(topComplaint.locationId)?.name}` : ""
-      } in the ${period}.`
+      } ${periodPhrase}.`
     : null;
 
   const placeLabel = !clientId && resolved.level === "organisation" ? "All businesses" : resolved.title;
-  const periods = DAY_RANGE_PRESETS.map((preset) => {
+  const periodOptions: Array<{ key: string; label: string }> = [...TODAY_RANGE_PRESETS];
+  if (!periodOptions.some((preset) => preset.key === range.key)) periodOptions.unshift({ key: range.key, label: range.label });
+  const periods = periodOptions.map((preset) => {
     const next = new URLSearchParams();
     for (const [key, value] of Object.entries(params)) {
       if (key === "range" || key === "from" || key === "to" || key === "page") continue;
@@ -202,7 +207,7 @@ export default async function OverviewPage({ searchParams }: OverviewPageProps) 
     next.set("range", preset.key);
     return {
       key: preset.key,
-      label: preset.label.replace("Last ", ""),
+      label: preset.label,
       href: `/overview?${next.toString()}`,
       pressed: preset.key === range.key,
     };
@@ -243,6 +248,7 @@ export default async function OverviewPage({ searchParams }: OverviewPageProps) 
         ) : null}
         {showSetup ? (
           <Banner
+            className={BANNER_LAYOUT}
             tone="info"
             title="Setup is not finished."
             actions={
@@ -256,6 +262,7 @@ export default async function OverviewPage({ searchParams }: OverviewPageProps) 
         ) : null}
         {brokenConnections > 0 ? (
           <Banner
+            className={BANNER_LAYOUT}
             tone="bad"
             title={`${brokenConnections.toLocaleString("en-US")} Google ${brokenConnections === 1 ? "connection needs" : "connections need"} attention.`}
             actions={
@@ -272,6 +279,7 @@ export default async function OverviewPage({ searchParams }: OverviewPageProps) 
         ) : null}
         {stale && newestSync !== null ? (
           <Banner
+            className={BANNER_LAYOUT}
             tone="warn"
             title={`Numbers are from ${formatFriendlyDateTime(new Date(newestSync).toISOString())}.`}
             actions={
@@ -285,6 +293,7 @@ export default async function OverviewPage({ searchParams }: OverviewPageProps) 
         ) : null}
         {neverSynced > 0 && scopedPlaces.length > neverSynced ? (
           <Banner
+            className={BANNER_LAYOUT}
             tone="warn"
             title={`Partial data: ${neverSynced.toLocaleString("en-US")} of ${scopedPlaces.length.toLocaleString("en-US")} locations have never synced.`}
             actions={
@@ -298,6 +307,7 @@ export default async function OverviewPage({ searchParams }: OverviewPageProps) 
         ) : null}
         {publishingPaused ? (
           <Banner
+            className={BANNER_LAYOUT}
             tone="warn"
             title={loaded.pauses.workspace ? "Automatic replies are paused for this workspace." : "Automatic replies are paused for part of this scope."}
             actions={
@@ -326,18 +336,11 @@ export default async function OverviewPage({ searchParams }: OverviewPageProps) 
               <div className="flex flex-col gap-5">
                 <NeedsYouStrip tasks={tasks} startHref={href("/reviews", { ...scoped, filter: "unanswered" })} />
                 {notices.length > 0 ? (
-                  <ul aria-label="Alerts" className="flex flex-col gap-1 rounded-[14px] border border-line bg-white px-5 py-3 text-[13px]">
-                    {notices.map((notice) => (
-                      <li key={notice.id}>
-                        <Link href={notice.href} className="text-ink hover:text-brand">
-                          {notice.title}
-                        </Link>
-                      </li>
-                    ))}
-                  </ul>
+                  <RecentNotifications notices={notices} />
                 ) : null}
                 {firstUse ? (
                   <Banner
+            className={BANNER_LAYOUT}
                     tone="info"
                     title="No reviews in this period yet."
                     actions={
@@ -352,16 +355,17 @@ export default async function OverviewPage({ searchParams }: OverviewPageProps) 
                 <KpiTiles kpis={kpis} />
                 <div className="flex flex-wrap items-stretch gap-4">
                   <VolumeCard
-                    days={days.map((day) => ({
+                    interval={volume.interval}
+                    days={volume.days.map((day) => ({
                       day: day.day,
                       label: shortDay(day.day),
                       reviews: day.reviews,
                       avgRating: day.reviews > 0 ? day.ratingSum / day.reviews : null,
                       low: day.low,
                     }))}
-                    yMax={niceMax(days.map((day) => day.reviews))}
-                    caption={`${dayTotal.toLocaleString("en-US")} ${dayTotal === 1 ? "review" : "reviews"} in the ${period} · ${lowDays.toLocaleString("en-US")} ${lowDays === 1 ? "day" : "days"} with a low rating`}
-                    summary={`Bar chart of new reviews per day over the ${period}: ${dayTotal.toLocaleString("en-US")} in total, peak ${peak.toLocaleString("en-US")} in a day, ${lowDays.toLocaleString("en-US")} ${lowDays === 1 ? "day" : "days"} with a 1–2 star review.`}
+                    yMax={niceMax(volume.days.map((day) => day.reviews))}
+                    caption={`${dayTotal.toLocaleString("en-US")} ${dayTotal === 1 ? "review" : "reviews"} ${periodPhrase} · ${lowDays.toLocaleString("en-US")} ${lowDays === 1 ? "day" : "days"} with a low rating`}
+                    summary={`Bar chart of new reviews per ${volume.interval} over ${period}: ${dayTotal.toLocaleString("en-US")} in total, peak ${peak.toLocaleString("en-US")} in a day, ${lowDays.toLocaleString("en-US")} ${lowDays === 1 ? "day" : "days"} with a 1–2 star review.`}
                   />
                   <StarCard rows={board.starMix} average={board.kpis.avgRating} />
                 </div>

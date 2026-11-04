@@ -109,9 +109,12 @@ can access domain and auth data, while schema migrations use the owner role.
 
 The migration retains the product's current domain tables and analytics.
 Onboarding import buckets have their own location FK, separate from the editable
-region/city hierarchy. Daily/weekly insight rollups, a persistent worker, shared
-Redis rate limits/caches, separate auth runtime credentials, and transactional AI
-budget reservations remain the next architecture phase described in
+region/city hierarchy. Location sync now uses a durable Postgres queue and
+versioned daily insight summaries; weekly/monthly reports combine those daily
+records. See [`docs/REVIEW_PIPELINE.md`](docs/REVIEW_PIPELINE.md) for execution,
+recovery, migrations, and verification. Shared Redis rate limits/caches,
+separate auth runtime credentials, and transactional AI budget reservations
+remain future work described in
 [`docs/DATABASE_ARCHITECTURE_V2.md`](docs/DATABASE_ARCHITECTURE_V2.md).
 
 ## AI provider configuration

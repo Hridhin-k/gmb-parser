@@ -168,6 +168,13 @@ describe("classifyReviewError", () => {
 // ---------------------------------------------------------------------------
 
 describe("ReviewSyncService.syncLocation", () => {
+  it("returns a resumable checkpoint before declaring a long full sync complete", async () => {
+    mockApiResponse(200, { reviews: [makeReview("checkpoint-review")], nextPageToken: "next-page" });
+    const result = await ReviewSyncService.syncLocation("loc-1", "conn-1", "ws-1", "user-1", { mode: "full", deadlineAt: 1 });
+    expect(result.continuation).toMatchObject({ mode: "full", pageToken: "next-page", pagesProcessed: 1, reviewsUpdated: 1 });
+    expect(result.continuation?.seenNames).toContain("accounts/123/locations/456/reviews/checkpoint-review");
+    expect(updateCalls.some((row) => (row as { sync_status?: string }).sync_status === "success")).toBe(false);
+  });
   it("syncs a single page of reviews successfully", async () => {
     mockApiResponse(200, {
       reviews: [makeReview("r1"), makeReview("r2")],

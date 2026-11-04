@@ -1673,6 +1673,7 @@ export type Database = {
 
       grm_insight_reports: {
         Row: {
+          stale_at: string | null
           id: string
           workspace_id: string
           cache_key: string
@@ -1707,6 +1708,7 @@ export type Database = {
           updated_at: string
         }
         Insert: {
+          stale_at?: string | null
           id?: string
           workspace_id: string
           cache_key: string
@@ -1741,6 +1743,7 @@ export type Database = {
           updated_at?: string
         }
         Update: {
+          stale_at?: string | null
           status?: string
           phase?: string | null
           insights?: unknown

@@ -488,6 +488,17 @@
             "id"
           ],
           "many": false
+        },
+        {
+          "name": "grm_location_pipeline_jobs_analysis_run_id_fkey",
+          "table": "grm_location_pipeline_jobs",
+          "columns": [
+            "id"
+          ],
+          "references": [
+            "analysis_run_id"
+          ],
+          "many": true
         }
       ]
     },
@@ -926,6 +937,32 @@
         }
       ]
     },
+    "grm_daily_insights": {
+      "columns": {
+        "workspace_id": "uuid",
+        "location_id": "uuid",
+        "day": "date",
+        "timezone": "text",
+        "analysis_version": "text",
+        "summary_version": "int4",
+        "source_revision": "int8",
+        "summary": "jsonb",
+        "built_at": "timestamptz"
+      },
+      "relations": [
+        {
+          "name": "grm_daily_insights_workspace_id_fkey",
+          "table": "grm_workspaces",
+          "columns": [
+            "workspace_id"
+          ],
+          "references": [
+            "id"
+          ],
+          "many": false
+        }
+      ]
+    },
     "grm_escalation_events": {
       "columns": {
         "id": "uuid",
@@ -1242,7 +1279,8 @@
         "reviews_full_synced_at": "timestamptz",
         "brand_id": "uuid",
         "manager_user_id": "uuid",
-        "onboarding_group_id": "uuid"
+        "onboarding_group_id": "uuid",
+        "review_timezone": "text"
       },
       "relations": [
         {
@@ -1789,6 +1827,79 @@
         }
       ]
     },
+    "grm_insight_assignments": {
+      "columns": {
+        "workspace_id": "uuid",
+        "action_id": "text",
+        "title": "text",
+        "assignee_id": "uuid",
+        "assigned_by": "uuid",
+        "created_at": "timestamptz",
+        "updated_at": "timestamptz"
+      },
+      "relations": [
+        {
+          "name": "grm_insight_assignments_workspace_id_fkey",
+          "table": "grm_workspaces",
+          "columns": [
+            "workspace_id"
+          ],
+          "references": [
+            "id"
+          ],
+          "many": false
+        }
+      ]
+    },
+    "grm_insight_days": {
+      "columns": {
+        "workspace_id": "uuid",
+        "location_id": "uuid",
+        "day": "date",
+        "timezone": "text",
+        "revision": "int8"
+      },
+      "relations": [
+        {
+          "name": "grm_insight_days_workspace_id_fkey",
+          "table": "grm_workspaces",
+          "columns": [
+            "workspace_id"
+          ],
+          "references": [
+            "id"
+          ],
+          "many": false
+        }
+      ]
+    },
+    "grm_insight_notes": {
+      "columns": {
+        "id": "uuid",
+        "workspace_id": "uuid",
+        "client_id": "uuid",
+        "group_id": "uuid",
+        "location_id": "uuid",
+        "month": "date",
+        "body": "text",
+        "created_by": "uuid",
+        "created_at": "timestamptz",
+        "updated_at": "timestamptz"
+      },
+      "relations": [
+        {
+          "name": "grm_insight_notes_workspace_id_fkey",
+          "table": "grm_workspaces",
+          "columns": [
+            "workspace_id"
+          ],
+          "references": [
+            "id"
+          ],
+          "many": false
+        }
+      ]
+    },
     "grm_insight_reports": {
       "columns": {
         "id": "uuid",
@@ -1822,7 +1933,8 @@
         "started_at": "timestamptz",
         "finished_at": "timestamptz",
         "created_at": "timestamptz",
-        "updated_at": "timestamptz"
+        "updated_at": "timestamptz",
+        "stale_at": "timestamptz"
       },
       "relations": [
         {
@@ -1961,6 +2073,52 @@
         },
         {
           "name": "grm_location_managers_workspace_id_fkey",
+          "table": "grm_workspaces",
+          "columns": [
+            "workspace_id"
+          ],
+          "references": [
+            "id"
+          ],
+          "many": false
+        }
+      ]
+    },
+    "grm_location_pipeline_jobs": {
+      "columns": {
+        "id": "uuid",
+        "workspace_id": "uuid",
+        "location_id": "uuid",
+        "requested_by": "uuid",
+        "sync_mode": "text",
+        "status": "text",
+        "phase": "text",
+        "sync_result": "jsonb",
+        "sync_checkpoint": "jsonb",
+        "analysis_run_id": "uuid",
+        "attempts": "int4",
+        "lease_token": "uuid",
+        "lease_until": "timestamptz",
+        "available_at": "timestamptz",
+        "error": "text",
+        "created_at": "timestamptz",
+        "updated_at": "timestamptz",
+        "finished_at": "timestamptz"
+      },
+      "relations": [
+        {
+          "name": "grm_location_pipeline_jobs_analysis_run_id_fkey",
+          "table": "grm_analysis_runs",
+          "columns": [
+            "analysis_run_id"
+          ],
+          "references": [
+            "id"
+          ],
+          "many": false
+        },
+        {
+          "name": "grm_location_pipeline_jobs_workspace_id_fkey",
           "table": "grm_workspaces",
           "columns": [
             "workspace_id"
@@ -3854,6 +4012,17 @@
           "many": true
         },
         {
+          "name": "grm_daily_insights_workspace_id_fkey",
+          "table": "grm_daily_insights",
+          "columns": [
+            "id"
+          ],
+          "references": [
+            "workspace_id"
+          ],
+          "many": true
+        },
+        {
           "name": "grm_escalation_events_workspace_id_fkey",
           "table": "grm_escalation_events",
           "columns": [
@@ -3942,6 +4111,39 @@
           "many": true
         },
         {
+          "name": "grm_insight_assignments_workspace_id_fkey",
+          "table": "grm_insight_assignments",
+          "columns": [
+            "id"
+          ],
+          "references": [
+            "workspace_id"
+          ],
+          "many": true
+        },
+        {
+          "name": "grm_insight_days_workspace_id_fkey",
+          "table": "grm_insight_days",
+          "columns": [
+            "id"
+          ],
+          "references": [
+            "workspace_id"
+          ],
+          "many": true
+        },
+        {
+          "name": "grm_insight_notes_workspace_id_fkey",
+          "table": "grm_insight_notes",
+          "columns": [
+            "id"
+          ],
+          "references": [
+            "workspace_id"
+          ],
+          "many": true
+        },
+        {
           "name": "grm_insight_reports_workspace_id_fkey",
           "table": "grm_insight_reports",
           "columns": [
@@ -3966,6 +4168,17 @@
         {
           "name": "grm_location_managers_workspace_id_fkey",
           "table": "grm_location_managers",
+          "columns": [
+            "id"
+          ],
+          "references": [
+            "workspace_id"
+          ],
+          "many": true
+        },
+        {
+          "name": "grm_location_pipeline_jobs_workspace_id_fkey",
+          "table": "grm_location_pipeline_jobs",
           "columns": [
             "id"
           ],
@@ -4344,6 +4557,15 @@
         "p_timezone"
       ]
     },
+    "grm_dirty_insight_day": {
+      "set": false,
+      "type": "void",
+      "args": [
+        "p_workspace",
+        "p_location",
+        "p_time"
+      ]
+    },
     "grm_insight_dashboard": {
       "set": false,
       "type": "jsonb",
@@ -4414,6 +4636,14 @@
       "type": "jsonb",
       "args": [
         "p_workspace"
+      ]
+    },
+    "grm_review_timezone": {
+      "set": false,
+      "type": "text",
+      "args": [
+        "p_workspace",
+        "p_location"
       ]
     },
     "grm_review_trends": {
