@@ -121,10 +121,15 @@ CREATE TRIGGER grm_analysis_insight_changed AFTER INSERT OR UPDATE OR DELETE ON 
  FOR EACH ROW EXECUTE FUNCTION public.grm_analysis_insight_changed();
 
 -- Existing history gets summaries lazily, without repeating successful AI analysis.
+-- Resolve timezone catalog lookups once per location, not once per review.
+WITH zones AS MATERIALIZED (
+ SELECT l.workspace_id,l.id location_id,public.grm_review_timezone(l.workspace_id,l.id) zone
+ FROM public.grm_google_locations l
+)
 INSERT INTO public.grm_insight_days(workspace_id,location_id,day,timezone)
 SELECT DISTINCT r.workspace_id,r.location_id,(r.review_create_time AT TIME ZONE z.zone)::date,z.zone
 FROM public.grm_reviews r
-CROSS JOIN LATERAL (SELECT public.grm_review_timezone(r.workspace_id,r.location_id) zone) z;
+JOIN zones z ON z.workspace_id=r.workspace_id AND z.location_id=r.location_id;
 
 CREATE FUNCTION public.grm_insight_timezone_changed() RETURNS trigger LANGUAGE plpgsql AS $$
 DECLARE location record;
