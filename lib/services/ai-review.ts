@@ -11,7 +11,13 @@ import type { Json } from "@/lib/types/database-schema";
 import { toneInstruction, type ToneVoice } from "@/lib/onboarding";
 import { draftsPausedForLocation, resolvedToneForLocation } from "@/lib/services/hierarchy";
 import { adjustmentInstruction, type DraftAdjustment } from "@/lib/reply-adjustments";
-import { insertResolutionContact, resolutionContactSentence, type ResolutionContactKind } from "@/lib/resolution-contact";
+import {
+  existingResolutionContactSentence,
+  insertResolutionContact,
+  removeResolutionContact,
+  resolutionContactSentence,
+  type ResolutionContactKind,
+} from "@/lib/resolution-contact";
 import { checkGeneratedReplyGuardrails } from "@/lib/reply-guardrails";
 import { EscalationContactStore, EscalationService } from "@/lib/services/escalations";
 import {
@@ -35,7 +41,7 @@ import { inventedPromiseViolations, neverSayViolations, retrieveKnowledge } from
 // Config
 // ---------------------------------------------------------------------------
 
-const PROMPT_VERSION = "v3.1";
+const PROMPT_VERSION = "v3.2";
 const REQUEST_TIMEOUT_MS = 30_000;
 const MAX_COMMENT_CHARS = 4000;
 
@@ -182,6 +188,7 @@ RULES
 - Never claim an action the business has not confirmed (for example "we have retrained our staff", "we are adding more counters", "it is back in stock"). Say the feedback will be shared with the team instead.
 - Never offer refunds, discounts, gifts, or compensation.
 - Never invent facts, staff names, policies, opening hours, phone numbers, email addresses, or URLs. Never use placeholders like [Name].
+- Do not include phone numbers or email addresses in the generated text. Any selected business contact details are added after drafting.
 - Avoid stock phrases such as "We appreciate your kind words" or "Your feedback is valuable to us".
 ${toneInstruction(ctx.tone?.voice, ctx.tone?.note)}${ctx.voiceGuide ?? ""}${orgContextPromptBlock(ctx.orgContext ?? { industry: "", positioning: "", priorities: "", policies: "", legacyVoice: "", legacyNote: "" })}${knowledgePromptBlock(ctx.knowledge ?? [])}${templatesPromptBlock(ctx.templates ?? [])}${previousDraftBlock(ctx.previousDraft)}${adjustmentInstruction(ctx.adjustment, ctx.currentDraft)}
 OUTPUT
@@ -213,6 +220,9 @@ export class AIReviewService {
   static async generateDraft(
     params: GenerateDraftParams
   ): Promise<GenerateDraftResult> {
+    if (params.automated && params.contact) {
+      throw new ValidationError("Contact details can only be added when a person drafts a reply.");
+    }
     assertAiCredentials(resolveAiRoute("reply"));
 
     const admin = createAdminClient();
@@ -305,8 +315,18 @@ export class AIReviewService {
         "This draft has manual edits. Use Shorter, Warmer, More formal, Add apology, Regenerate, a language, or a template when you want to replace it."
       );
     }
-    const previousDraft = activeReply?.content;
     const revising = params.adjustment && params.adjustment.kind !== "regenerate";
+    // The saved contact line is appended after generation: a chosen one, or the one a rewrite must keep.
+    const contactSentence = params.contact
+      ? resolutionContactSentence(params.contact, await EscalationContactStore.read(params.workspaceId))
+      : revising && activeReply
+        ? existingResolutionContactSentence(activeReply.content)
+        : null;
+    if (params.contact && !contactSentence) {
+      throw new ValidationError("That contact detail is not saved for this workspace. Set it in Settings first.");
+    }
+    // Never ask the AI to reproduce a contact line.
+    const previousDraft = contactSentence && activeReply ? removeResolutionContact(activeReply.content) : activeReply?.content;
 
     const [tone, configured, promptContext] = await Promise.all([
       resolvedToneForLocation(params.workspaceId, review.location_id),
@@ -378,11 +398,6 @@ export class AIReviewService {
       }
 
       // The model's own text is checked before the saved contact line is added to it.
-      const savedContact = params.contact ? await EscalationContactStore.read(params.workspaceId) : null;
-      const contactSentence = params.contact && savedContact ? resolutionContactSentence(params.contact, savedContact) : null;
-      if (params.contact && !contactSentence) {
-        throw new ValidationError("That contact detail is not saved for this workspace. Set it in Settings first.");
-      }
       const violations = checkGeneratedReplyGuardrails(cleaned);
       const forbidden = [
         ...neverSayViolations(cleaned, promptContext.config.snapshot.tone.neverSay ?? []),

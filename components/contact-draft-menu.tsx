@@ -141,6 +141,41 @@ export function ContactDraftButton({ label, plainLabel, contact, disabled, tone 
   );
 }
 
+/** Trigger-only menu for screens that already have their own Draft button. */
+export function ContactDraftMenuButton({
+  contact,
+  disabled,
+  className,
+  onDraft,
+}: {
+  contact: ResolutionContact;
+  disabled?: boolean;
+  className?: string;
+  onDraft: (kind: ResolutionContactKind) => void;
+}) {
+  return (
+    <DropdownMenu>
+      <DropdownMenuTrigger
+        disabled={disabled}
+        className={cn(
+          "inline-flex h-9 items-center gap-1.5 rounded-md border border-ai-line bg-[#faf7ff] px-3 text-sm font-medium text-[#5b21b6] outline-none hover:bg-ai-tint focus-visible:ring-2 focus-visible:ring-brand-line disabled:cursor-not-allowed disabled:opacity-50",
+          className
+        )}
+      >
+        <Sparkles className="size-4" aria-hidden />
+        Draft with contact details
+        <ChevronDown className="size-3.5" aria-hidden />
+      </DropdownMenuTrigger>
+      <DropdownMenuContent align="start" className="w-[320px]">
+        <DropdownMenuGroup>
+          <ContactKindItems contact={contact} onPick={onDraft} />
+        </DropdownMenuGroup>
+        <MenuFooter contact={contact}>Adds “You can reach us at … so we can resolve this with you.” as the last line.</MenuFooter>
+      </DropdownMenuContent>
+    </DropdownMenu>
+  );
+}
+
 interface ContactChipProps {
   contact: ResolutionContact;
   /** The draft already ends with the contact line. */

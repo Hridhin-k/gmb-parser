@@ -27,6 +27,8 @@ import {
 import { themeLabel } from "@/lib/review-inbox";
 import type { EscalationQueueItem } from "@/lib/services/escalations";
 import { cn } from "@/lib/utils";
+import { ContactDraftMenuButton } from "@/components/contact-draft-menu";
+import { savedReplyId } from "@/lib/ai-generation-client";
 
 interface Member {
   userId: string;
@@ -476,13 +478,13 @@ function ResolutionReply({
     router.refresh();
   }
 
-  async function generate() {
+  async function generate(contactKind?: ResolutionContactKind) {
     setGenerating(true);
     setError(null);
     const response = await fetch(`/api/reviews/${reviewId}/generate`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ replaceEdited: true }),
+      body: JSON.stringify(contactKind ? { replaceEdited: true, contact: contactKind } : { replaceEdited: true }),
     }).catch(() => null);
     if (!response) {
       setGenerating(false);
@@ -493,14 +495,22 @@ function ResolutionReply({
       error?: string;
       content?: string;
       replyId?: string;
+      jobId?: string | null;
     };
-    setGenerating(false);
     if (!response.ok) {
+      setGenerating(false);
       setError(payload.error ?? "The reply could not be generated.");
       return;
     }
+    try {
+      setSavedId(await savedReplyId(payload));
+    } catch (error) {
+      setError(error instanceof Error ? error.message : "The draft has not finished saving.");
+      setGenerating(false);
+      return;
+    }
     if (payload.content) setContent(payload.content);
-    if (payload.replyId) setSavedId(payload.replyId);
+    setGenerating(false);
     setGenerated(true);
     toast.success("AI reply is ready. It is not on Google yet.");
     router.refresh();
@@ -513,10 +523,13 @@ function ResolutionReply({
           <h2 className="text-sm font-semibold text-ink">Public reply</h2>
           {replyBadge(replyStatus)}
         </div>
-        <Button type="button" size="sm" variant="ai" loading={generating} disabled={busy} onClick={() => void generate()}>
-          <Sparkles aria-hidden />
-          {generating ? "Writing…" : content.trim() ? "Regenerate AI reply" : "Draft AI reply"}
-        </Button>
+        <div className="flex flex-wrap items-center gap-2">
+          <Button type="button" size="sm" variant="ai" loading={generating} disabled={busy} onClick={() => void generate()}>
+            <Sparkles aria-hidden />
+            {generating ? "Writing…" : content.trim() ? "Regenerate AI reply" : "Draft AI reply"}
+          </Button>
+          <ContactDraftMenuButton contact={contact} disabled={busy} onDraft={(kind) => void generate(kind)} />
+        </div>
       </div>
       <div className="space-y-3 p-4">
         {replyStatus === "published" ? (

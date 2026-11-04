@@ -21,6 +21,8 @@ import { checkReplyGuardrails } from "@/lib/reply-guardrails";
 import type { MobileComplaint } from "@/lib/services/mobile-work";
 import { useServerRefresh } from "@/hooks/use-server-refresh";
 import { cn } from "@/lib/utils";
+import { ContactDraftMenuButton } from "@/components/contact-draft-menu";
+import { savedReplyId } from "@/lib/ai-generation-client";
 
 async function errorText(response: Response): Promise<string> {
   const payload = (await response.json().catch(() => ({}))) as { error?: string };
@@ -77,23 +79,29 @@ export function MobileComplaintView({ data, aiOnly = false }: { data: MobileComp
     router.refresh();
   }
 
-  async function generate() {
+  async function generate(contactKind?: ResolutionContactKind) {
     if (!card) return;
     setPending("generate");
     setError(null);
     const response = await fetch(`/api/reviews/${card.reviewId}/generate`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ language, replaceEdited: true }),
+      body: JSON.stringify(contactKind ? { language, replaceEdited: true, contact: contactKind } : { language, replaceEdited: true }),
     });
     if (!response.ok) {
       setError(await errorText(response));
       setPending(null);
       return;
     }
-    const payload = (await response.json()) as { replyId?: string; content?: string };
+    const payload = (await response.json()) as { replyId?: string; content?: string; jobId?: string | null };
+    try {
+      setReplyId(await savedReplyId(payload));
+    } catch (error) {
+      setError(error instanceof Error ? error.message : "The draft has not finished saving.");
+      setPending(null);
+      return;
+    }
     if (payload.content) setContent(payload.content);
-    if (payload.replyId) setReplyId(payload.replyId);
     setNotice("Draft is ready. Read it before you send it on.");
     setPending(null);
     refresh();
@@ -369,6 +377,12 @@ export function MobileComplaintView({ data, aiOnly = false }: { data: MobileComp
           <Sparkles aria-hidden />
           {content.trim() ? "Regenerate AI reply" : "Generate AI reply"}
         </Button>
+        <ContactDraftMenuButton
+          contact={{ phone: data.resolutionPhone, email: data.resolutionEmail }}
+          disabled={busy}
+          className="h-12 w-full justify-center rounded-md text-[15px]"
+          onDraft={(kind) => void guarded(() => generate(kind))()}
+        />
       </section>
 
       {card.canDraft ? (

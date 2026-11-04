@@ -22,6 +22,8 @@ import { mobileHref } from "@/lib/mobile-work";
 import { useServerRefresh } from "@/hooks/use-server-refresh";
 import { pollBulkJob } from "@/lib/bulk-job-client";
 import { cn } from "@/lib/utils";
+import { ContactDraftMenuButton } from "@/components/contact-draft-menu";
+import { savedReplyId } from "@/lib/ai-generation-client";
 
 async function errorText(response: Response): Promise<string> {
   const payload = (await response.json().catch(() => ({}))) as { error?: string };
@@ -60,7 +62,7 @@ export function MobileApprovalView({ data }: { data: MobileApproval }) {
     };
   }
 
-  async function generate(body: { adjustment?: "regenerate" | "shorter" | "warmer"; language?: ReplyLanguage }) {
+  async function generate(body: { adjustment?: "regenerate" | "shorter" | "warmer"; language?: ReplyLanguage; contact?: ResolutionContactKind }) {
     if (!card) return;
     setPending("generate");
     setError(null);
@@ -75,9 +77,15 @@ export function MobileApprovalView({ data }: { data: MobileApproval }) {
       setPending(null);
       return;
     }
-    const payload = (await response.json()) as { replyId?: string; content?: string };
+    const payload = (await response.json()) as { replyId?: string; content?: string; jobId?: string | null };
+    try {
+      setReplyId(await savedReplyId(payload));
+    } catch (error) {
+      setError(error instanceof Error ? error.message : "The draft has not finished saving.");
+      setPending(null);
+      return;
+    }
     if (payload.content) setContent(payload.content);
-    if (payload.replyId) setReplyId(payload.replyId);
     setReplyStatus("draft");
     setNotice("Draft is ready. Read it before you approve.");
     setPending(null);
@@ -340,6 +348,12 @@ export function MobileApprovalView({ data }: { data: MobileApproval }) {
                 <Sparkles aria-hidden />
                 Try again
               </Button>
+              <ContactDraftMenuButton
+                contact={{ phone: data.resolutionPhone, email: data.resolutionEmail }}
+                disabled={busy}
+                className="h-12 rounded-md px-4 text-[15px]"
+                onDraft={(contact) => void guarded(() => generate({ adjustment: "regenerate", contact }))()}
+              />
               <Button type="button" variant="outline" className="h-12 px-4 text-[15px]" disabled={busy} onClick={guarded(() => generate({ adjustment: "shorter" }))}>
                 Shorter
               </Button>

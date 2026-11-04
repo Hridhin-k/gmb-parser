@@ -66,6 +66,11 @@ export function resolutionContactSentence(kind: ResolutionContactKind, contact: 
   return `You can reach us at ${reach.join(" or ")} so we can resolve this with you.`;
 }
 
+/** The contact line already on a reply, so a rewrite can keep it without asking the AI to reproduce it. */
+export function existingResolutionContactSentence(content: string): string | null {
+  return content.split("\n").map((line) => line.trim()).find((line) => CONTACT_LINE.test(line)) ?? null;
+}
+
 /** Puts the contact sentence on the reply and replaces an earlier one. */
 export function insertResolutionContact(content: string, sentence: string): string {
   const kept = removeResolutionContact(content);
