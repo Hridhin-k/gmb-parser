@@ -42,7 +42,7 @@ export function MobileApprovalView({ data }: { data: MobileApproval }) {
   const [confirmPost, setConfirmPost] = useState(false);
   const [retry, setRetry] = useState<(() => Promise<void>) | null>(null);
   const dirty = card ? content !== card.content : false;
-  const violations = checkReplyGuardrails(content, { phone: data.resolutionPhone, email: data.resolutionEmail }).map((item) => item.message);
+  const violations = checkReplyGuardrails(content).map((item) => item.message);
   const publishable = card?.publishableIds.length ?? 0;
 
   /** Network failures (no signal) throw instead of returning a response. Say so and offer a retry. */

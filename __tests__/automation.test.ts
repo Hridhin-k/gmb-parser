@@ -68,6 +68,12 @@ describe("automation rules", () => {
     expect(withinPostingWindow(now, null, null, "Asia/Kolkata")).toBe(true);
   });
 
+  it("keeps generated contact details out of automatic publishing", () => {
+    const result = verdict(ready, { replyText: "Call +91 98470 12345 or email desk@example.com." });
+    expect(result.publish).toBe(false);
+    expect(result.reasons).toContain("Guardrails blocked the reply.");
+  });
+
   it("lets a brand override replace the organization and a clear restore it", () => {
     const inherited = resolveTone([
       { label: "ACME Fashion", fields: { greeting: "Hi" } },

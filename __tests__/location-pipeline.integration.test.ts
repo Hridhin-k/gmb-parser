@@ -4,9 +4,9 @@ import { getPool } from "@/lib/db/pool";
 import { createAdminClient } from "@/lib/db/client";
 import { contentFingerprint } from "@/lib/review-version";
 import { loadDailySummaryRange, refreshDailySummaries } from "@/lib/services/daily-insights";
-import { enqueueLocationPipelines, pipelineJobViews, runLocationPipeline } from "@/lib/services/location-pipeline";
+import { enqueueLocationPipelines, pipelineJobViews, resumeLocationPipelines, runLocationPipeline } from "@/lib/services/location-pipeline";
 import { ReviewSyncService } from "@/lib/services/review-sync";
-import { generateAi } from "@/lib/ai/service";
+import { AiError, generateAi } from "@/lib/ai/service";
 import { listUnreadNotices, markNoticeRead } from "@/lib/services/notifications";
 import { generateReport, reportCacheKey, requestReport } from "@/lib/services/insight-report";
 import { loadTodayDays } from "@/lib/services/today";
@@ -17,7 +17,7 @@ import { workspaceDateRange } from "@/lib/services/date-range";
 
 // No provider traffic or paid calls. These tests exercise real Postgres locks,
 // leases, triggers, transactions, daily partitions and report reuse.
-vi.mock("@/lib/ai/service", () => ({ generateAi: vi.fn() }));
+vi.mock("@/lib/ai/service", async (original) => ({ ...await original<typeof import("@/lib/ai/service")>(), generateAi: vi.fn() }));
 vi.mock("@/lib/ai/config", async (original) => ({ ...await original<typeof import("@/lib/ai/config")>(),
   aiConfigured: () => true, aiRouteIdentity: () => "test:daily" }));
 
@@ -55,7 +55,7 @@ describe.skipIf(!enabled)("durable location pipeline and daily summaries", () =>
       return { text: JSON.stringify({ results: ids.map((reviewId) => ({ reviewId, observations: [{ topic: "waiting", sentiment: "negative", evidenceExcerpt: "Long wait", severity: 2, confidence: 0.9 }] })) }),
         model: "test", usage: { inputTokens: 10, outputTokens: 2 } } as Awaited<ReturnType<typeof generateAi>>;
     });
-    for (const table of ["grm_location_pipeline_jobs", "grm_insight_reports", "grm_notifications", "grm_reviews", "grm_daily_insights", "grm_insight_days", "grm_analysis_runs"]) {
+    for (const table of ["grm_pipeline_ai_blocks", "grm_location_pipeline_jobs", "grm_insight_reports", "grm_notifications", "grm_reviews", "grm_daily_insights", "grm_insight_days", "grm_analysis_runs"]) {
       await getPool().query(`DELETE FROM ${table} WHERE workspace_id=$1`, [ws]);
     }
     await getPool().query("UPDATE grm_google_locations SET review_timezone=NULL WHERE workspace_id=$1", [ws]);
@@ -273,6 +273,109 @@ describe.skipIf(!enabled)("durable location pipeline and daily summaries", () =>
     await review("2026-11-02T06:00:00Z", otherLocation);
     const days = await loadTodayDays(ws, [location], locationRange, now, "America/New_York");
     expect(days.reduce((count, day) => count + day.reviews, 0)).toBe(1);
+  });
+
+  it("freezes a requested period and never analyses or summarises older history", async () => {
+    const inside = await review("2026-11-01T10:00:00Z");
+    const older = await review("2024-01-01T10:00:00Z");
+    const later = await review("2026-11-03T10:00:00Z");
+    const options = { period: { range: "custom" as const, from: "2026-11-01", to: "2026-11-02" } };
+    const [job] = await enqueueLocationPipelines(ws, user, [location], options);
+    expect(await enqueueLocationPipelines(ws, user, [location], options)).toEqual([job]);
+    await expect(enqueueLocationPipelines(ws, user, [location], { period: { range: "7d" } })).rejects.toMatchObject({ code: "SYNC_PERIOD_BUSY" });
+    await runLocationPipeline(job, ws);
+    expect(ReviewSyncService.syncLocation).toHaveBeenCalledWith(location, connection, ws, user, expect.objectContaining({ start: "2026-11-01T00:00:00.000Z", end: "2026-11-03T00:00:00.000Z" }));
+    const prompts = mockAi.mock.calls.map(([input]) => input.prompt).join(" ");
+    expect(prompts).toContain(inside);
+    expect(prompts).not.toContain(older);
+    expect(prompts).not.toContain(later);
+    expect((await getPool().query("SELECT 1 FROM grm_daily_insights WHERE workspace_id=$1 AND day<'2026-10-31'", [ws])).rowCount).toBe(0);
+    expect((await pipelineJobViews(ws, [job], [location]))[0]).toMatchObject({ status: "completed", periodLabel: "1 Nov 2026 – 2 Nov 2026" });
+  });
+
+  it("pauses on exhausted credits, preserves successful batches and resumes the same analysis without refetching", async () => {
+    for (let i = 0; i < 130; i++) await review();
+    const successful = mockAi.getMockImplementation()!;
+    let calls = 0;
+    mockAi.mockImplementation(async (...args) => {
+      calls++;
+      if (calls === 2) throw new AiError("Add credits, then resume.", "AI_CREDITS_EXHAUSTED", false, 402);
+      return successful(...args);
+    });
+    const [job] = await enqueueLocationPipelines(ws, user, [location]);
+    await runLocationPipeline(job, ws);
+    expect((await pipelineJobViews(ws, [job], [location]))[0]).toMatchObject({ status: "paused", phase: "analysing", errorCode: "AI_CREDITS_EXHAUSTED" });
+    expect(calls).toBe(4); // Only the already-started concurrency group, no following batches.
+    const saved = (await getPool().query("SELECT review_id,processed_at FROM grm_review_analyses WHERE workspace_id=$1 AND status='ready' ORDER BY review_id", [ws])).rows;
+    expect(saved.length).toBeGreaterThan(0);
+    expect((await getPool().query("SELECT 1 FROM grm_review_analyses WHERE workspace_id=$1 AND status='failed'", [ws])).rowCount).toBe(0);
+    await runLocationPipeline(job, ws);
+    expect(calls).toBe(4);
+    await review(undefined, otherLocation);
+    const [otherJob] = await enqueueLocationPipelines(ws, user, [otherLocation]);
+    await runLocationPipeline(otherJob, ws);
+    expect(calls).toBe(4); // Workspace credit block stops other locations too.
+    expect((await pipelineJobViews(ws, [otherJob], [otherLocation]))[0].status).toBe("paused");
+    const fetchCalls = vi.mocked(ReviewSyncService.syncLocation).mock.calls.length;
+    await expect(resumeLocationPipelines(ws, [job], [otherLocation])).rejects.toMatchObject({ code: "NOT_FOUND" });
+    await resumeLocationPipelines(ws, [job], [location]);
+    await runLocationPipeline(job, ws);
+    expect(vi.mocked(ReviewSyncService.syncLocation).mock.calls.length).toBe(fetchCalls);
+    expect((await pipelineJobViews(ws, [job], [location]))[0]).toMatchObject({ status: "completed", analysed: 130 });
+    const kept = (await getPool().query("SELECT review_id,processed_at FROM grm_review_analyses WHERE workspace_id=$1 AND review_id=ANY($2::uuid[]) ORDER BY review_id", [ws, saved.map((row) => row.review_id)])).rows;
+    expect(kept).toEqual(saved);
+  }, 20000);
+
+  it.each(["AI_BUDGET_EXCEEDED", "AI_OUTCOME_UNKNOWN"])("keeps %s paused until explicit resume", async (code) => {
+    await review();
+    mockAi.mockRejectedValue(new AiError("Restore funding or check the provider before resuming.", code, false));
+    const [job] = await enqueueLocationPipelines(ws, user, [location]);
+    await runLocationPipeline(job, ws);
+    expect((await pipelineJobViews(ws, [job], [location]))[0]).toMatchObject({ status: "paused", phase: "analysing", errorCode: code });
+    expect(mockAi).toHaveBeenCalledTimes(1);
+    await runLocationPipeline(job, ws);
+    expect(mockAi).toHaveBeenCalledTimes(1);
+    expect((await getPool().query("SELECT 1 FROM grm_pipeline_ai_blocks WHERE workspace_id=$1", [ws])).rowCount).toBe(code === "AI_OUTCOME_UNKNOWN" ? 0 : 1);
+  });
+
+  it("recovers a failed summary phase without repeating fetch or AI work", async () => {
+    await review();
+    const [job] = await enqueueLocationPipelines(ws, user, [location]);
+    await runLocationPipeline(job, ws);
+    const aiCalls = mockAi.mock.calls.length;
+    await getPool().query("UPDATE grm_location_pipeline_jobs SET status='paused',phase='summarising' WHERE id=$1", [job]);
+    await getPool().query("UPDATE grm_daily_insights SET source_revision=0 WHERE workspace_id=$1", [ws]);
+    await resumeLocationPipelines(ws, [job], [location]);
+    await runLocationPipeline(job, ws);
+    expect(mockAi.mock.calls.length).toBe(aiCalls);
+    expect(ReviewSyncService.syncLocation).toHaveBeenCalledTimes(1);
+    expect((await pipelineJobViews(ws, [job], [location]))[0].status).toBe("completed");
+  });
+
+  it("finishes unchanged periods without any AI call even while credits are blocked", async () => {
+    await review();
+    const [first] = await enqueueLocationPipelines(ws, user, [location]);
+    await runLocationPipeline(first, ws);
+    const calls = mockAi.mock.calls.length;
+    await getPool().query("INSERT INTO grm_pipeline_ai_blocks(workspace_id,error_code,message) VALUES($1,'AI_CREDITS_EXHAUSTED','Add credits')", [ws]);
+    const [again] = await enqueueLocationPipelines(ws, user, [location]);
+    await runLocationPipeline(again, ws);
+    expect(mockAi).toHaveBeenCalledTimes(calls);
+    expect((await pipelineJobViews(ws, [again], [location]))[0].status).toBe("completed");
+  });
+
+  it("restarts an expired Google page token within the same frozen period", async () => {
+    await review();
+    const [job] = await enqueueLocationPipelines(ws, user, [location]);
+    const checkpoint = { mode: "full" as const, startedAt: "2026-11-04T10:00:00Z", pageToken: "expired", reviewsSynced: 5, reviewsUpdated: 5, freshReviews: 5, pagesProcessed: 1, unchangedPages: 0, seenNames: [] };
+    await getPool().query("UPDATE grm_location_pipeline_jobs SET sync_checkpoint=$2::jsonb WHERE id=$1", [job, JSON.stringify(checkpoint)]);
+    vi.mocked(ReviewSyncService.syncLocation).mockResolvedValueOnce({ locationId: location, reviewsSynced: 5, reviewsUpdated: 5, pagesProcessed: 1, truncated: false, mode: "full", errorClass: "invalid_request", errorMessage: "Page token expired", resumeCheckpoint: checkpoint });
+    await runLocationPipeline(job, ws);
+    expect((await getPool().query("SELECT status,sync_checkpoint FROM grm_location_pipeline_jobs WHERE id=$1", [job])).rows[0]).toEqual({ status: "queued", sync_checkpoint: null });
+    await getPool().query("UPDATE grm_location_pipeline_jobs SET available_at=now() WHERE id=$1", [job]);
+    await runLocationPipeline(job, ws);
+    expect(vi.mocked(ReviewSyncService.syncLocation).mock.calls[1][4]?.checkpoint).toBeUndefined();
+    expect((await pipelineJobViews(ws, [job], [location]))[0].status).toBe("completed");
   });
 
   it("allows workspace deletion to cascade when a timezone policy and summaries exist", async () => {

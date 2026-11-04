@@ -6,6 +6,22 @@ The server resolves each connection through its location's Google account.
 An empty selection never expands to the workspace. An explicit organisation
 "Sync all" resolves to the caller's accessible locations.
 
+## Period selection
+
+The Sync button opens a period picker, defaulting to the page period or Last
+30 days when no period is selected. All time requires explicitly choosing it.
+Each job freezes its period and exact start/end instants. Fetching, analysis
+and summary rebuilds all use those bounds. A different period cannot silently
+reuse or widen an active job. Existing older reviews remain stored.
+
+Google's reviews.list API has no date filter or creation-time sort. It orders
+by updateTime descending. We page until updates are older than the requested
+start, filtering creation times against both period bounds before saving.
+An old review edited recently cannot prematurely end pagination. Period-bound
+fetches never mark unseen older reviews missing or claim a full-history crawl.
+Scheduled Google sync and insights catch-up use Last 30 days; historical AI
+backfill is explicit opt-in. Deploying 0012 pauses legacy unbounded jobs.
+
 ## Execution and recovery
 
 `grm_location_pipeline_jobs` holds one active job per workspace/location.
@@ -14,11 +30,11 @@ prevent overlapping workers even if a slow worker's lease appears expired.
 Leases heartbeat while provider requests run. No transaction is held open
 during provider calls.
 
-Fetch slices save the next Google page token, counts, and full-crawl seen names.
-A crash before a checkpoint can re-fetch committed pages safely. Full-crawl
-absence detection runs only after every page succeeds; an interrupted crawl
-cannot mark unseen reviews as deleted. Scheduled sync reconciles in full on
-Sundays and incrementally on other days.
+Every committed Google page checkpoints its next token and counts; the final
+page is marked complete. A crash before that checkpoint can safely replay the
+page, while a crash after the final checkpoint skips Google entirely. Expired
+Google page tokens restart only that period's fetch; upserts remain idempotent.
+Full-history absence detection is unavailable to period-bound jobs.
 
 Analysis reuses ready results for the current content fingerprint and analysis
 version. Written reviews are batched up to 25 reviews and an estimated token
@@ -27,9 +43,25 @@ the live review and commits all derived observations and the ready status in
 one transaction. Edited reviews cannot publish an analysis of their old text.
 Per-location analysis locks are shared by manual runs, reports, and sync jobs.
 
-Transient failures retry with backoff, with five attempts before a terminal
-failure/partial result. Successful reviews survive retries. Missing AI
-configuration leaves reviews saved and explicitly marks the job partial.
+Transient failures retry with backoff, with five attempts before pausing for
+manual attention. AI credit exhaustion, workspace budgets and configuration
+failures pause immediately and persist a workspace AI block. Already-started
+batches are allowed to commit; no following batch group is started. Later jobs
+can fetch reviews, but cannot make further AI calls while that block exists.
+Unknown provider outcomes and timeouts pause the job rather than automatically
+repeating a potentially billed request. Missing configuration also pauses.
+
+POST /api/reviews/sync/resume rechecks workspace permissions and location
+access, clears an acknowledged funding/configuration block, and resumes the
+same job/phase/checkpoint/frozen period. It never re-fetches if analysis was the
+unfinished phase. Successful per-review analyses are reused unchanged. Summary
+recovery repeats only dirty day rebuilds. Browser bookmarks restore progress
+after a reload; the database is authoritative if local storage is unavailable.
+
+Recovery is from the last committed checkpoint, not an exactly-once guarantee
+for external AI calls: a provider may finish a request whose response is lost.
+In that case, check the provider before explicitly resuming; a missing result
+may require another paid call. Completed persisted results are never repeated.
 
 ## Daily summaries and reports
 
@@ -61,7 +93,7 @@ without automatically paying for every possible report narrative.
 
 ## Deployment
 
-Run `npm run db:migrate` to apply migrations 0009 and 0010. Metadata is checked
+Run `npm run db:migrate` to apply all checked-in migrations, including 0012. Metadata is checked
 in with the source. Deploy the web app and the updated cron image: the
 `review-pipeline` endpoint is called every minute by `deploy/crontab` and the
 Vercel schedule. It resumes queued/interrupted jobs without an open browser.

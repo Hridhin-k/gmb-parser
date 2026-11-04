@@ -26,7 +26,7 @@ export async function POST(request: Request) {
     const allowed = new Set(scope.locationIds);
     if (wanted.length === 0) return NextResponse.json({ error: "Select a location to sync." }, { status: 400 });
     if (wanted.some((id) => !allowed.has(id))) return NextResponse.json({ error: "A selected location is outside your access." }, { status: 403 });
-    const jobIds = await enqueueLocationPipelines(workspaceId, user.id, wanted, body.full);
+    const jobIds = await enqueueLocationPipelines(workspaceId, user.id, wanted, { full: body.full, period: body.period });
     after(async () => {
       try { await drainLocationPipelines({ workspaceId, jobIds, limit: 2 }); }
       catch (error) { logger.error("pipeline.start_failed", { workspaceId, message: String(error) }); }

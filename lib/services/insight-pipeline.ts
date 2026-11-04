@@ -1,4 +1,6 @@
 import { generateAi } from "@/lib/ai/service";
+import { aiStopsRun } from "@/lib/ai/failure";
+import { AppError } from "@/lib/errors";
 import { batchExtractionSchema } from "@/lib/ai/schemas";
 import { createAdminClient } from "@/lib/db/client";
 
@@ -313,7 +315,7 @@ export async function executeAnalysisRun(
       lockKeys.push(key);
     }
     const { error: resetError } = await admin.from("grm_analysis_runs").update({
-      status: "running", error: null, finished_at: null, discovered: 0, eligible: 0, already_analysed: 0,
+      status: "running", error: null, error_code: null, finished_at: null, discovered: 0, eligible: 0, already_analysed: 0,
       newly_analysed: 0, failed: 0, pending: 0, batches_completed: 0, batches_total: 0,
       input_tokens: 0, output_tokens: 0, retries: 0,
     }).eq("id", runId).eq("workspace_id", workspaceId);
@@ -373,7 +375,7 @@ export async function executeAnalysisRun(
     const message = error instanceof Error ? error.message : "Analysis run failed";
     await admin
       .from("grm_analysis_runs")
-      .update({ status: "failed", error: message.slice(0, 500), finished_at: new Date().toISOString() })
+      .update({ status: "failed", error: message.slice(0, 500), error_code: error instanceof AppError ? error.code : null, finished_at: new Date().toISOString() })
       .eq("id", runId)
       .then(undefined, () => undefined);
     logger.error("insight_pipeline.run_failed", { runId, message });
@@ -520,6 +522,9 @@ function makeRunProcessor(
         })
       );
     } catch (error) {
+      // Credits/configuration are a run-level stop, not a failure of each review.
+      // Leave these reviews pending and preserve all successful batches.
+      if (aiStopsRun(error)) throw error;
       const message = error instanceof Error ? error.message : "Batch extraction failed";
       for (const review of batch) {
         await markAnalysisFailed(admin, workspaceId, review, message).catch(() => undefined);
@@ -553,7 +558,10 @@ function makeRunProcessor(
           state.exhausted = true;
           return;
         }
-        await Promise.all(batches.slice(i, i + BATCH_CONCURRENCY).map((b) => processBatch(b.reviews, b.brandContext)));
+        // Let already-started batches commit before reporting a blocking error.
+        const settled = await Promise.allSettled(batches.slice(i, i + BATCH_CONCURRENCY).map((b) => processBatch(b.reviews, b.brandContext)));
+        const blocked = settled.find((result) => result.status === "rejected");
+        if (blocked?.status === "rejected") throw blocked.reason;
       }
     },
     async finish(): Promise<void> {

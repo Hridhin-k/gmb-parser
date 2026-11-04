@@ -87,8 +87,8 @@ async function listDays(workspaceId: string, scope: SummaryScope): Promise<DayRo
 }
 
 /** Only dirty days are read from the observation store. Quiet history is reused. */
-export async function refreshDailySummaries(workspaceId: string, locationIds: string[], options?: { deadlineAt?: number }): Promise<boolean> {
-  const days = await listDays(workspaceId, { locationIds, start: null, end: null });
+export async function refreshDailySummaries(workspaceId: string, locationIds: string[], options?: { deadlineAt?: number; start?: string | null; end?: string | null }): Promise<boolean> {
+  const days = await listDays(workspaceId, { locationIds, start: options?.start ?? null, end: options?.end ?? null });
   for (const day of days) {
     if (day.summary && day.source_revision === day.revision) continue;
     if (options?.deadlineAt && Date.now() >= options.deadlineAt) return false;

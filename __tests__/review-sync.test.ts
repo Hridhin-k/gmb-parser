@@ -549,3 +549,73 @@ describe("audit logging", () => {
     expect(actions).toContain("review.sync_failed");
   });
 });
+
+describe("period-bound sync and page recovery", () => {
+  const window = { start: "2026-11-01T00:00:00Z", end: "2026-11-04T00:00:00Z" };
+
+  it("saves only selected review dates and stops at the update-time cutoff without marking full history complete", async () => {
+    syncState.locationFullSynced = null;
+    mockApiResponse(200, { reviews: [
+      makeReview("new", { createTime: "2026-11-02T10:00:00Z", updateTime: "2026-11-02T10:00:00Z" }),
+      makeReview("old", { createTime: "2020-01-01T10:00:00Z", updateTime: "2026-10-01T10:00:00Z" }),
+    ], nextPageToken: "years-of-history" });
+    const checkpoint = vi.fn();
+    const result = await ReviewSyncService.syncLocation("loc-1", "conn-1", "ws-1", "user-1", { ...window, onCheckpoint: checkpoint });
+    expect(mockFetch).toHaveBeenCalledTimes(1);
+    expect(result).toMatchObject({ reviewsSynced: 1, pagesProcessed: 1, errorClass: null });
+    expect(upsertCalls.flat()).toEqual([expect.objectContaining({ google_review_id: "new" })]);
+    expect(checkpoint).toHaveBeenCalledWith(expect.objectContaining({ completed: true }));
+    expect(updateCalls.some((row) => row && typeof row === "object" && ("reviews_full_synced_at" in row || "missing_on_google_at" in row))).toBe(false);
+  });
+
+  it("does not stop on old creation dates when Google places recently edited reviews first", async () => {
+    mockApiResponse(200, { reviews: [makeReview("edited-old", { createTime: "2020-01-01T10:00:00Z", updateTime: "2026-11-03T10:00:00Z" })], nextPageToken: "next" });
+    mockApiResponse(200, { reviews: [makeReview("recent", { createTime: "2026-11-02T10:00:00Z", updateTime: "2026-11-02T10:00:00Z" })] });
+    const result = await ReviewSyncService.syncLocation("loc-1", "conn-1", "ws-1", "user-1", window);
+    expect(mockFetch).toHaveBeenCalledTimes(2);
+    expect(result.reviewsSynced).toBe(1);
+    expect(upsertCalls.flat()).toEqual([expect.objectContaining({ google_review_id: "recent" })]);
+  });
+
+  it("excludes newer reviews when syncing a historical custom interval", async () => {
+    mockApiResponse(200, { reviews: [
+      makeReview("too-new", { createTime: "2026-11-04T10:00:00Z", updateTime: "2026-11-04T10:00:00Z" }),
+      makeReview("inside", { createTime: "2026-11-02T10:00:00Z", updateTime: "2026-11-02T10:00:00Z" }),
+    ] });
+    await ReviewSyncService.syncLocation("loc-1", "conn-1", "ws-1", "user-1", window);
+    expect(upsertCalls.flat()).toEqual([expect.objectContaining({ google_review_id: "inside" })]);
+  });
+
+  it("resumes after a failed page write from the last committed page token", async () => {
+    const first = makeReview("page-1", { createTime: "2026-11-03T10:00:00Z", updateTime: "2026-11-03T10:00:00Z" });
+    const second = makeReview("page-2", { createTime: "2026-11-02T10:00:00Z", updateTime: "2026-11-02T10:00:00Z" });
+    mockApiResponse(200, { reviews: [first], nextPageToken: "page-2" });
+    mockApiResponse(200, { reviews: [second] });
+    const checkpoints: import("@/lib/services/review-sync").SyncCheckpoint[] = [];
+    const result = await ReviewSyncService.syncLocation("loc-1", "conn-1", "ws-1", "user-1", {
+      ...window, onCheckpoint: async (checkpoint) => { checkpoints.push(checkpoint); syncState.upsertError = { message: "Temporary database failure" }; },
+    });
+    expect(result.errorClass).toBe("db_error");
+    expect(checkpoints).toHaveLength(1);
+    expect(checkpoints[0].pageToken).toBe("page-2");
+    syncState.upsertError = null;
+    mockApiResponse(200, { reviews: [second] });
+    const resumed = await ReviewSyncService.syncLocation("loc-1", "conn-1", "ws-1", "user-1", { ...window, checkpoint: checkpoints[0] });
+    expect(String(mockFetch.mock.calls.at(-1)![0])).toContain("pageToken=page-2");
+    expect(resumed).toMatchObject({ errorClass: null, reviewsSynced: 2 });
+  });
+
+  it("recovers a crash after the final page commit without fetching or writing that page again", async () => {
+    mockApiResponse(200, { reviews: [makeReview("last", { createTime: "2026-11-02T10:00:00Z", updateTime: "2026-11-02T10:00:00Z" })] });
+    let saved: import("@/lib/services/review-sync").SyncCheckpoint | undefined;
+    await expect(ReviewSyncService.syncLocation("loc-1", "conn-1", "ws-1", "user-1", { ...window,
+      onCheckpoint: async (checkpoint) => { saved = checkpoint; throw new Error("Process interrupted"); },
+    })).rejects.toThrow("Process interrupted");
+    expect(saved?.completed).toBe(true);
+    const writes = upsertCalls.length;
+    const resumed = await ReviewSyncService.syncLocation("loc-1", "conn-1", "ws-1", "user-1", { ...window, checkpoint: saved });
+    expect(mockFetch).toHaveBeenCalledTimes(1);
+    expect(upsertCalls).toHaveLength(writes);
+    expect(resumed).toMatchObject({ reviewsSynced: 1, errorClass: null });
+  });
+});

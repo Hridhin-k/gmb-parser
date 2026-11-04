@@ -1618,6 +1618,7 @@ export type Database = {
           retries: number
           input_tokens: number
           output_tokens: number
+          error_code: string | null
           error: string | null
           started_at: string
           finished_at: string | null
@@ -1645,6 +1646,7 @@ export type Database = {
           retries?: number
           input_tokens?: number
           output_tokens?: number
+          error_code?: string | null
           error?: string | null
           started_at?: string
           finished_at?: string | null
@@ -1664,6 +1666,7 @@ export type Database = {
           retries?: number
           input_tokens?: number
           output_tokens?: number
+          error_code?: string | null
           error?: string | null
           finished_at?: string | null
           updated_at?: string

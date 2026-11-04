@@ -3,7 +3,7 @@ import { AppError, ValidationError } from "@/lib/errors";
 import { logger } from "@/lib/logger";
 import { generateAi } from "@/lib/ai/service";
 import { aiConfigured } from "@/lib/ai/config";
-import { checkReplyGuardrails } from "@/lib/reply-guardrails";
+import { checkGeneratedReplyGuardrails } from "@/lib/reply-guardrails";
 import { voiceGuide } from "@/lib/automation";
 import { resolvedForLocation } from "@/lib/services/reply-settings";
 import { loadPromptContextForLocation, ensureActiveAiConfig } from "@/lib/services/ai-config";
@@ -132,7 +132,7 @@ export async function previewAiDraft(input: {
       .replace(/^(reply|response)\s*:\s*/i, "")
       .replace(/^["“]([\s\S]*)["”]$/, "$1")
       .trim();
-    const violations = checkReplyGuardrails(cleaned).map((item) => item.message);
+    const violations = checkGeneratedReplyGuardrails(cleaned).map((item) => item.message);
     logger.info("ai_preview.ok", {
       workspaceId: input.workspaceId,
       aiConfigVersion: config.version,

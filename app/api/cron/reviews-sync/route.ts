@@ -53,8 +53,8 @@ export async function GET(request: Request) {
         JOIN grm_google_connections c ON c.workspace_id=a.workspace_id AND c.id=a.connection_id
         WHERE l.workspace_id=$1 AND l.is_active AND c.status='active'`, [ws.workspaceId]);
       if (rows.length > 0) {
-        // Reconcile older edits and removals weekly; other days are incremental.
-        const jobIds = await enqueueLocationPipelines(ws.workspaceId, ws.userId, rows.map((l) => l.id), new Date().getUTCDay() === 0);
+        // Scheduled catch-up stays in the recent window; history is explicit opt-in.
+        const jobIds = await enqueueLocationPipelines(ws.workspaceId, ws.userId, rows.map((l) => l.id), { scheduled: true, period: { range: "30d" } });
         updated += jobIds.length;
       }
       await EscalationService.runScheduled(ws.workspaceId);

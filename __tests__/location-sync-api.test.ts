@@ -1,16 +1,17 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { AuthorizationError } from "@/lib/errors";
 
-const mocks = vi.hoisted(() => ({ user: vi.fn(), membership: vi.fn(), access: vi.fn(), scope: vi.fn(), enqueue: vi.fn(), drain: vi.fn(), views: vi.fn(), after: vi.fn() }));
+const mocks = vi.hoisted(() => ({ user: vi.fn(), membership: vi.fn(), access: vi.fn(), scope: vi.fn(), enqueue: vi.fn(), drain: vi.fn(), views: vi.fn(), resume: vi.fn(), after: vi.fn() }));
 vi.mock("next/server", async (original) => ({ ...await original<typeof import("next/server")>(), after: mocks.after }));
 vi.mock("@/lib/auth/server", () => ({ getCurrentUser: mocks.user }));
 vi.mock("@/lib/services/workspace", () => ({ ensurePersonalWorkspace: mocks.membership, assertCanSyncWorkspace: mocks.access }));
 vi.mock("@/lib/services/scope-catalog", () => ({ readPageScope: mocks.scope }));
-vi.mock("@/lib/services/location-pipeline", () => ({ enqueueLocationPipelines: mocks.enqueue, drainLocationPipelines: mocks.drain, pipelineJobViews: mocks.views }));
+vi.mock("@/lib/services/location-pipeline", () => ({ enqueueLocationPipelines: mocks.enqueue, drainLocationPipelines: mocks.drain, pipelineJobViews: mocks.views, resumeLocationPipelines: mocks.resume }));
 vi.mock("@/lib/rate-limit", () => ({ checkRateLimit: () => ({ allowed: true }), SYNC_LOCATION_LIMIT: {}, SYNC_ALL_LIMIT: {} }));
 
 import { POST } from "@/app/api/reviews/sync/route";
 import { GET } from "@/app/api/reviews/sync/status/route";
+import { POST as RESUME } from "@/app/api/reviews/sync/resume/route";
 
 const location = "d8ce1062-14e5-4aee-9f30-4f74f86d705c";
 const other = "cf6fd6b1-8384-4c78-a58d-9ecae7f42e52";
@@ -29,14 +30,14 @@ describe("location sync API", () => {
   it("returns a durable job immediately and uses only selected locations", async () => {
     const response = await POST(request({ all: true, locationIds: [location] }));
     expect(response.status).toBe(202);
-    expect(mocks.enqueue).toHaveBeenCalledWith("workspace", "user", [location], undefined);
+    expect(mocks.enqueue).toHaveBeenCalledWith("workspace", "user", [location], { full: undefined, period: undefined });
     expect((await response.json()).jobIds).toEqual([job]);
     expect(mocks.after).toHaveBeenCalledTimes(1);
     expect(mocks.drain).not.toHaveBeenCalled();
   });
   it("resolves the connection server-side for a single location", async () => {
     expect((await POST(request({ locationId: location }))).status).toBe(202);
-    expect(mocks.enqueue).toHaveBeenCalledWith("workspace", "user", [location], undefined);
+    expect(mocks.enqueue).toHaveBeenCalledWith("workspace", "user", [location], { full: undefined, period: undefined });
   });
   it("rejects an empty selection rather than falling back to all locations", async () => {
     expect((await POST(request({ all: true, locationIds: [] }))).status).toBe(400);
@@ -58,4 +59,20 @@ describe("location sync API", () => {
     expect((await GET(new Request(`http://localhost/api/reviews/sync/status?jobId=${job}`))).status).toBe(404);
     expect(mocks.after).not.toHaveBeenCalled();
   });
+  it("passes the selected period and rejects invalid custom periods", async () => {
+    expect((await POST(request({ locationId: location, period: { range: "7d" } }))).status).toBe(202);
+    expect(mocks.enqueue).toHaveBeenCalledWith("workspace", "user", [location], { full: undefined, period: { range: "7d" } });
+    expect((await POST(request({ locationId: location, period: { range: "custom", from: "2026-11-05", to: "2026-11-01" } }))).status).toBe(400);
+    expect((await POST(request({ locationId: location, period: { range: "custom" } }))).status).toBe(400);
+    expect((await POST(request({ locationId: location, period: { range: "invalid" } }))).status).toBe(400);
+  });
+  it("resumes saved jobs with location access and sync permission checks", async () => {
+    expect((await RESUME(request({ jobIds: [job] }))).status).toBe(202);
+    expect(mocks.resume).toHaveBeenCalledWith("workspace", [job], [location]);
+    mocks.access.mockRejectedValueOnce(new AuthorizationError());
+    expect((await RESUME(request({ jobIds: [job] }))).status).toBe(403);
+    expect(mocks.resume).toHaveBeenCalledTimes(1);
+    expect((await RESUME(request({ jobIds: [] }))).status).toBe(400);
+  });
+
 });

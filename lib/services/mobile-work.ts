@@ -562,7 +562,7 @@ export async function loadMobileApproval(input: {
       const reply = replyByReview.get(review.id);
       if (!location || !reply || review.star_rating < 4) return false;
       if (!allowed(loaded.view.access, location, reviewPermission(review.star_rating, "publish"))) return false;
-      return checkReplyGuardrails(reply.content, contact).length === 0;
+      return checkReplyGuardrails(reply.content).length === 0;
     })
     .slice(0, 50)
     .map((review) => review.id);
@@ -591,7 +591,7 @@ export async function loadMobileApproval(input: {
         ? allowed(loaded.view.access, location, reviewPermission(current.star_rating, "publish"))
         : false,
       canDraft: location ? allowed(loaded.view.access, location, "draft") : false,
-      violations: reply ? checkReplyGuardrails(reply.content, contact).map((item) => item.message) : [],
+      violations: reply ? checkReplyGuardrails(reply.content).map((item) => item.message) : [],
       sameNameCount: name === "No name stored" ? 0 : await sameNameCount(input.workspaceId, locationIds, name),
       openEscalationId: escalationByReview.get(current.id) ?? null,
       publishableIds,
@@ -736,9 +736,7 @@ export async function loadMobileComplaint(input: {
       photosStored: photos,
       position: rows.findIndex((row) => row.id === current.id) + 1,
       total: rows.length,
-      violations: reply
-        ? checkReplyGuardrails(reply.content, await EscalationContactStore.read(input.workspaceId)).map((item) => item.message)
-        : [],
+      violations: reply ? checkReplyGuardrails(reply.content).map((item) => item.message) : [],
     };
   }
 

@@ -2,7 +2,6 @@ import { createHash } from "crypto";
 import { AuditService } from "@/lib/services/audit";
 import { ValidationError } from "@/lib/errors";
 import { checkReplyGuardrails } from "@/lib/reply-guardrails";
-import { EscalationContactStore } from "@/lib/services/escalations";
 
 export function replyContentHash(content: string): string {
   return createHash("sha256").update(content.trim()).digest("hex").slice(0, 16);
@@ -16,7 +15,7 @@ export async function assertSafePublicReply(input: {
   content: string;
   stage: string;
 }): Promise<void> {
-  const violations = checkReplyGuardrails(input.content, await EscalationContactStore.read(input.workspaceId));
+  const violations = checkReplyGuardrails(input.content);
   if (!violations.length) return;
   await AuditService.log({
     workspaceId: input.workspaceId,

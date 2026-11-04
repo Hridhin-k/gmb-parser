@@ -12,7 +12,7 @@ import { toneInstruction, type ToneVoice } from "@/lib/onboarding";
 import { draftsPausedForLocation, resolvedToneForLocation } from "@/lib/services/hierarchy";
 import { adjustmentInstruction, type DraftAdjustment } from "@/lib/reply-adjustments";
 import { insertResolutionContact, resolutionContactSentence, type ResolutionContactKind } from "@/lib/resolution-contact";
-import { checkReplyGuardrails } from "@/lib/reply-guardrails";
+import { checkGeneratedReplyGuardrails } from "@/lib/reply-guardrails";
 import { EscalationContactStore, EscalationService } from "@/lib/services/escalations";
 import {
   claimAiGenerationJob,
@@ -377,12 +377,13 @@ export class AIReviewService {
         );
       }
 
+      // The model's own text is checked before the saved contact line is added to it.
       const savedContact = params.contact ? await EscalationContactStore.read(params.workspaceId) : null;
       const contactSentence = params.contact && savedContact ? resolutionContactSentence(params.contact, savedContact) : null;
       if (params.contact && !contactSentence) {
         throw new ValidationError("That contact detail is not saved for this workspace. Set it in Settings first.");
       }
-      const violations = checkReplyGuardrails(cleaned, savedContact);
+      const violations = checkGeneratedReplyGuardrails(cleaned);
       const forbidden = [
         ...neverSayViolations(cleaned, promptContext.config.snapshot.tone.neverSay ?? []),
         ...inventedPromiseViolations(cleaned, [org.policies]),
