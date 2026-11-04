@@ -21,8 +21,7 @@ import { checkReplyGuardrails } from "@/lib/reply-guardrails";
 import type { MobileComplaint } from "@/lib/services/mobile-work";
 import { useServerRefresh } from "@/hooks/use-server-refresh";
 import { cn } from "@/lib/utils";
-import { DraftContactMenu } from "@/components/draft-contact-menu";
-import type { ResolutionContactSelection } from "@/lib/resolution-contact";
+import { ContactDraftMenuButton } from "@/components/contact-draft-menu";
 import { savedReplyId } from "@/lib/ai-generation-client";
 
 async function errorText(response: Response): Promise<string> {
@@ -80,14 +79,14 @@ export function MobileComplaintView({ data, aiOnly = false }: { data: MobileComp
     router.refresh();
   }
 
-  async function generate(contactDetails?: ResolutionContactSelection) {
+  async function generate(contactKind?: ResolutionContactKind) {
     if (!card) return;
     setPending("generate");
     setError(null);
     const response = await fetch(`/api/reviews/${card.reviewId}/generate`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ language, replaceEdited: true, contactDetails }),
+      body: JSON.stringify(contactKind ? { language, replaceEdited: true, contact: contactKind } : { language, replaceEdited: true }),
     });
     if (!response.ok) {
       setError(await errorText(response));
@@ -378,11 +377,11 @@ export function MobileComplaintView({ data, aiOnly = false }: { data: MobileComp
           <Sparkles aria-hidden />
           {content.trim() ? "Regenerate AI reply" : "Generate AI reply"}
         </Button>
-        <DraftContactMenu
+        <ContactDraftMenuButton
           contact={{ phone: data.resolutionPhone, email: data.resolutionEmail }}
           disabled={busy}
-          className="h-12 w-full"
-          onDraft={(selection) => void guarded(() => generate(selection))()}
+          className="h-12 w-full justify-center rounded-md text-[15px]"
+          onDraft={(kind) => void guarded(() => generate(kind))()}
         />
       </section>
 

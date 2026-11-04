@@ -37,7 +37,7 @@ const params = { workspaceId: "workspace-1", userId: "user-1", reviewId: "review
 const contacts = { phone: "+91 98470 12345", email: "care@example.com" };
 const generated = { text: "We are sorry about the wait.", model: "test-model", generationParams: {} };
 
-describe("drafting with selected business contacts", () => {
+describe("drafting with the saved business contact", () => {
   beforeEach(() => {
     vi.restoreAllMocks();
     vi.clearAllMocks();
@@ -47,13 +47,11 @@ describe("drafting with selected business contacts", () => {
     vi.spyOn(AIReviewService, "persistGeneratedDraft").mockResolvedValue({ draftId: "draft-1", replyId: "reply-1" });
   });
 
-  it.each([
-    { phone: true, email: false }, { phone: false, email: true }, { phone: true, email: true },
-  ])("appends only selected saved contacts and persists the same draft: %o", async (contactDetails) => {
-    const result = await AIReviewService.generateDraft({ ...params, contactDetails });
+  it.each(["phone", "email", "both"] as const)("appends only the chosen saved contact and persists the same draft: %s", async (contact) => {
+    const result = await AIReviewService.generateDraft({ ...params, contact });
     expect(result.content).toContain(generated.text);
-    expect(result.content.includes(contacts.phone)).toBe(contactDetails.phone);
-    expect(result.content.includes(contacts.email)).toBe(contactDetails.email);
+    expect(result.content.includes(contacts.phone)).toBe(contact !== "email");
+    expect(result.content.includes(contacts.email)).toBe(contact !== "phone");
     expect(EscalationContactStore.read).toHaveBeenCalledWith(params.workspaceId);
     expect(AIReviewService.persistGeneratedDraft).toHaveBeenCalledWith(expect.objectContaining({ content: result.content }));
     expect(vi.mocked(generateAi).mock.calls[0][0].prompt).not.toContain(contacts.phone);
@@ -66,17 +64,17 @@ describe("drafting with selected business contacts", () => {
     expect(EscalationContactStore.read).not.toHaveBeenCalled();
   });
 
-  it.each(["phone", "email"] as const)("rejects a missing selected %s before calling AI", async (kind) => {
+  it.each(["phone", "email"] as const)("rejects a missing chosen %s before calling AI", async (kind) => {
     vi.mocked(EscalationContactStore.read).mockResolvedValue({ ...contacts, [kind]: null });
-    await expect(AIReviewService.generateDraft({ ...params, contactDetails: { phone: kind === "phone", email: kind === "email" } }))
-      .rejects.toThrow("Settings → Follow-ups");
+    await expect(AIReviewService.generateDraft({ ...params, contact: kind }))
+      .rejects.toThrow("not saved for this workspace");
     expect(generateAi).not.toHaveBeenCalled();
     expect(AIReviewService.persistGeneratedDraft).not.toHaveBeenCalled();
   });
 
   it("does not let the AI invent a different contact when saved contacts are selected", async () => {
     vi.mocked(generateAi).mockResolvedValue({ ...generated, text: "Email invented@example.com for help." } as Awaited<ReturnType<typeof generateAi>>);
-    await expect(AIReviewService.generateDraft({ ...params, contactDetails: { phone: true, email: true } }))
+    await expect(AIReviewService.generateDraft({ ...params, contact: "both" }))
       .rejects.toThrow("Automatic replies cannot include");
     expect(AIReviewService.persistGeneratedDraft).not.toHaveBeenCalled();
   });
@@ -84,7 +82,7 @@ describe("drafting with selected business contacts", () => {
   it("replaces an earlier contact line without passing it back to AI", async () => {
     state.replies = [{ workspace_id: params.workspaceId, status: "draft", source: "manual",
       content: "We are sorry.\n\nYou can reach us at old@example.com so we can resolve this with you." }];
-    const result = await AIReviewService.generateDraft({ ...params, replaceEdited: true, contactDetails: { phone: true, email: false } });
+    const result = await AIReviewService.generateDraft({ ...params, replaceEdited: true, contact: "phone" });
     expect(vi.mocked(generateAi).mock.calls[0][0].prompt).not.toContain("old@example.com");
     expect(result.content).not.toContain("old@example.com");
     expect(result.content.match(/You can reach us/g)).toHaveLength(1);
@@ -92,7 +90,7 @@ describe("drafting with selected business contacts", () => {
 
   it("puts the final contact-bearing content in the durable generation job", async () => {
     vi.mocked(createAiGenerationJob).mockResolvedValue("job-1");
-    const result = await AIReviewService.generateDraft({ ...params, deferPersistence: true, contactDetails: { phone: false, email: true } });
+    const result = await AIReviewService.generateDraft({ ...params, deferPersistence: true, contact: "email" });
     expect(result.persistence).toBe("pending");
     expect(createAiGenerationJob).toHaveBeenCalledWith(expect.objectContaining({ content: result.content, workspaceId: params.workspaceId }));
     expect(result.content).toContain(contacts.email);
@@ -108,7 +106,7 @@ describe("drafting with selected business contacts", () => {
   });
 
   it("requires an explicit human request for contact drafting", async () => {
-    await expect(AIReviewService.generateDraft({ ...params, automated: true, contactDetails: { phone: true, email: false } }))
+    await expect(AIReviewService.generateDraft({ ...params, automated: true, contact: "phone" }))
       .rejects.toThrow("when a person drafts");
     expect(generateAi).not.toHaveBeenCalled();
   });

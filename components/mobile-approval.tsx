@@ -22,8 +22,7 @@ import { mobileHref } from "@/lib/mobile-work";
 import { useServerRefresh } from "@/hooks/use-server-refresh";
 import { pollBulkJob } from "@/lib/bulk-job-client";
 import { cn } from "@/lib/utils";
-import { DraftContactMenu } from "@/components/draft-contact-menu";
-import type { ResolutionContactSelection } from "@/lib/resolution-contact";
+import { ContactDraftMenuButton } from "@/components/contact-draft-menu";
 import { savedReplyId } from "@/lib/ai-generation-client";
 
 async function errorText(response: Response): Promise<string> {
@@ -63,7 +62,7 @@ export function MobileApprovalView({ data }: { data: MobileApproval }) {
     };
   }
 
-  async function generate(body: { adjustment?: "regenerate" | "shorter" | "warmer"; language?: ReplyLanguage; contactDetails?: ResolutionContactSelection }) {
+  async function generate(body: { adjustment?: "regenerate" | "shorter" | "warmer"; language?: ReplyLanguage; contact?: ResolutionContactKind }) {
     if (!card) return;
     setPending("generate");
     setError(null);
@@ -349,11 +348,11 @@ export function MobileApprovalView({ data }: { data: MobileApproval }) {
                 <Sparkles aria-hidden />
                 Try again
               </Button>
-              <DraftContactMenu
+              <ContactDraftMenuButton
                 contact={{ phone: data.resolutionPhone, email: data.resolutionEmail }}
                 disabled={busy}
-                className="h-12"
-                onDraft={(contactDetails) => void guarded(() => generate({ adjustment: "regenerate", contactDetails }))()}
+                className="h-12 rounded-md px-4 text-[15px]"
+                onDraft={(contact) => void guarded(() => generate({ adjustment: "regenerate", contact }))()}
               />
               <Button type="button" variant="outline" className="h-12 px-4 text-[15px]" disabled={busy} onClick={guarded(() => generate({ adjustment: "shorter" }))}>
                 Shorter

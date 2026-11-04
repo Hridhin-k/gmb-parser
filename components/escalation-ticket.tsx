@@ -27,8 +27,7 @@ import {
 import { themeLabel } from "@/lib/review-inbox";
 import type { EscalationQueueItem } from "@/lib/services/escalations";
 import { cn } from "@/lib/utils";
-import { DraftContactMenu } from "@/components/draft-contact-menu";
-import type { ResolutionContactSelection } from "@/lib/resolution-contact";
+import { ContactDraftMenuButton } from "@/components/contact-draft-menu";
 import { savedReplyId } from "@/lib/ai-generation-client";
 
 interface Member {
@@ -479,13 +478,13 @@ function ResolutionReply({
     router.refresh();
   }
 
-  async function generate(contactDetails?: ResolutionContactSelection) {
+  async function generate(contactKind?: ResolutionContactKind) {
     setGenerating(true);
     setError(null);
     const response = await fetch(`/api/reviews/${reviewId}/generate`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ replaceEdited: true, contactDetails }),
+      body: JSON.stringify(contactKind ? { replaceEdited: true, contact: contactKind } : { replaceEdited: true }),
     }).catch(() => null);
     if (!response) {
       setGenerating(false);
@@ -529,7 +528,7 @@ function ResolutionReply({
             <Sparkles aria-hidden />
             {generating ? "Writing…" : content.trim() ? "Regenerate AI reply" : "Draft AI reply"}
           </Button>
-          <DraftContactMenu contact={contact} disabled={busy} onDraft={(selection) => void generate(selection)} />
+          <ContactDraftMenuButton contact={contact} disabled={busy} onDraft={(kind) => void generate(kind)} />
         </div>
       </div>
       <div className="space-y-3 p-4">

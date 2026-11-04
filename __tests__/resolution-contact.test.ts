@@ -41,3 +41,18 @@ describe("resolution contact", () => {
     });
   });
 });
+
+describe("contact line helpers", () => {
+  it("detects, removes and reports availability", async () => {
+    const { contactKindAvailable, hasResolutionContact, removeResolutionContact, insertResolutionContact, resolutionContactSentence } = await import("@/lib/resolution-contact");
+    const contact = { phone: "+91 98470 11111", email: null };
+    const sentence = resolutionContactSentence("phone", contact)!;
+    const draft = insertResolutionContact("Thanks for the note.", sentence);
+    expect(hasResolutionContact(draft)).toBe(true);
+    expect(hasResolutionContact("Thanks for the note.")).toBe(false);
+    expect(removeResolutionContact(draft)).toBe("Thanks for the note.");
+    expect(contactKindAvailable("phone", contact)).toBe(true);
+    expect(contactKindAvailable("email", contact)).toBe(false);
+    expect(contactKindAvailable("both", contact)).toBe(false);
+  });
+});

@@ -7,14 +7,38 @@ export interface ResolutionContact {
 
 export type ResolutionContactKind = "phone" | "email" | "both";
 
-export interface ResolutionContactSelection {
-  phone: boolean;
-  email: boolean;
-}
-
 const PHONE = /^[+()\d][\d\s()+-]{5,39}$/;
 const EMAIL = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const CONTACT_LINE = /^You can reach us at .+ so we can resolve this with you\.$/;
+
+export const RESOLUTION_CONTACT_KINDS: ResolutionContactKind[] = ["phone", "email", "both"];
+
+export function isResolutionContactKind(value: unknown): value is ResolutionContactKind {
+  return typeof value === "string" && (RESOLUTION_CONTACT_KINDS as string[]).includes(value);
+}
+
+/** True when the reply already ends with the saved contact line. */
+export function hasResolutionContact(content: string | null | undefined): boolean {
+  if (!content) return false;
+  return content.split("\n").some((line) => CONTACT_LINE.test(line.trim()));
+}
+
+/** Takes the contact line off a reply, leaving the rest as it was. */
+export function removeResolutionContact(content: string): string {
+  return content
+    .split("\n")
+    .filter((line) => !CONTACT_LINE.test(line.trim()))
+    .join("\n")
+    .replace(/\n{3,}/g, "\n\n")
+    .trim();
+}
+
+/** Which contact details a kind needs. Missing details mean the option cannot be offered. */
+export function contactKindAvailable(kind: ResolutionContactKind, contact: ResolutionContact): boolean {
+  const phone = Boolean(contact.phone?.trim());
+  const email = Boolean(contact.email?.trim());
+  return kind === "phone" ? phone : kind === "email" ? email : phone && email;
+}
 
 export function normalizeResolutionContact(input: { phone: string; email: string }): ResolutionContact {
   const phone = input.phone.trim();
@@ -42,22 +66,7 @@ export function resolutionContactSentence(kind: ResolutionContactKind, contact: 
   return `You can reach us at ${reach.join(" or ")} so we can resolve this with you.`;
 }
 
-/** Resolve explicit choices against the saved business details, never browser-supplied values. */
-export function selectedResolutionContactSentence(selection: ResolutionContactSelection, contact: ResolutionContact): string | null {
-  if (selection.phone && !contact.phone?.trim()) {
-    throw new ValidationError("Add a phone number in Settings → Follow-ups before drafting with it.");
-  }
-  if (selection.email && !contact.email?.trim()) {
-    throw new ValidationError("Add an email address in Settings → Follow-ups before drafting with it.");
-  }
-  if (!selection.phone && !selection.email) return null;
-  return resolutionContactSentence(selection.phone && selection.email ? "both" : selection.phone ? "phone" : "email", contact);
-}
-
-export function removeResolutionContact(content: string): string {
-  return content.split("\n").filter((line) => !CONTACT_LINE.test(line.trim())).join("\n").replace(/\n{3,}/g, "\n\n").trim();
-}
-
+/** The contact line already on a reply, so a rewrite can keep it without asking the AI to reproduce it. */
 export function existingResolutionContactSentence(content: string): string | null {
   return content.split("\n").map((line) => line.trim()).find((line) => CONTACT_LINE.test(line)) ?? null;
 }

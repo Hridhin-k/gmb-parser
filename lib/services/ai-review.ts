@@ -11,9 +11,15 @@ import type { Json } from "@/lib/types/database-schema";
 import { toneInstruction, type ToneVoice } from "@/lib/onboarding";
 import { draftsPausedForLocation, resolvedToneForLocation } from "@/lib/services/hierarchy";
 import { adjustmentInstruction, type DraftAdjustment } from "@/lib/reply-adjustments";
+import {
+  existingResolutionContactSentence,
+  insertResolutionContact,
+  removeResolutionContact,
+  resolutionContactSentence,
+  type ResolutionContactKind,
+} from "@/lib/resolution-contact";
 import { checkGeneratedReplyGuardrails } from "@/lib/reply-guardrails";
 import { EscalationContactStore, EscalationService } from "@/lib/services/escalations";
-import { existingResolutionContactSentence, insertResolutionContact, removeResolutionContact, selectedResolutionContactSentence, type ResolutionContactSelection } from "@/lib/resolution-contact";
 import {
   claimAiGenerationJob,
   completeAiGenerationJob,
@@ -81,8 +87,11 @@ export interface GenerateDraftParams {
   adjustment?: DraftAdjustment;
   /** True only when the user explicitly asked to replace a draft they edited. */
   replaceEdited?: boolean;
-  /** A person's explicit choice to append saved business contacts after generation. */
-  contactDetails?: ResolutionContactSelection;
+  /**
+   * Ends the draft with the workspace's saved resolution phone and/or email,
+   * word for word. The model never sees or writes the details itself.
+   */
+  contact?: ResolutionContactKind | null;
   /** True only for a background worker. A pause blocks this path. A person drafting is unaffected. */
   automated?: boolean;
   /**
@@ -211,7 +220,7 @@ export class AIReviewService {
   static async generateDraft(
     params: GenerateDraftParams
   ): Promise<GenerateDraftResult> {
-    if (params.automated && (params.contactDetails?.phone || params.contactDetails?.email)) {
+    if (params.automated && params.contact) {
       throw new ValidationError("Contact details can only be added when a person drafts a reply.");
     }
     assertAiCredentials(resolveAiRoute("reply"));
@@ -307,15 +316,17 @@ export class AIReviewService {
       );
     }
     const revising = params.adjustment && params.adjustment.kind !== "regenerate";
-    const contactSentence = params.contactDetails?.phone || params.contactDetails?.email
-      ? selectedResolutionContactSentence(params.contactDetails, await EscalationContactStore.read(params.workspaceId))
-      : revising && !params.contactDetails && activeReply
+    // The saved contact line is appended after generation: a chosen one, or the one a rewrite must keep.
+    const contactSentence = params.contact
+      ? resolutionContactSentence(params.contact, await EscalationContactStore.read(params.workspaceId))
+      : revising && activeReply
         ? existingResolutionContactSentence(activeReply.content)
         : null;
-    // Selected contacts are appended after validation; do not ask AI to reproduce an older contact line.
-    const previousDraft = contactSentence && activeReply
-      ? removeResolutionContact(activeReply.content)
-      : activeReply?.content;
+    if (params.contact && !contactSentence) {
+      throw new ValidationError("That contact detail is not saved for this workspace. Set it in Settings first.");
+    }
+    // Never ask the AI to reproduce a contact line.
+    const previousDraft = contactSentence && activeReply ? removeResolutionContact(activeReply.content) : activeReply?.content;
 
     const [tone, configured, promptContext] = await Promise.all([
       resolvedToneForLocation(params.workspaceId, review.location_id),
@@ -386,6 +397,7 @@ export class AIReviewService {
         );
       }
 
+      // The model's own text is checked before the saved contact line is added to it.
       const violations = checkGeneratedReplyGuardrails(cleaned);
       const forbidden = [
         ...neverSayViolations(cleaned, promptContext.config.snapshot.tone.neverSay ?? []),
