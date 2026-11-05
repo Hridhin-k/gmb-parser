@@ -72,7 +72,7 @@ function classifyPublishError(error: unknown): PublishError {
         if (status === 404) {
           return {
             code: "GOOGLE_NOT_FOUND",
-            message: "The review could not be found on Google. It may have been deleted.",
+            message: "Google could not find the review or location for this request. Sync the location and check its Google access before retrying.",
             retryable: false,
           };
         }
@@ -167,6 +167,7 @@ export class ReplyPublishingService {
           comment,
           review_create_time,
           google_review_name,
+          missing_on_google_at,
           location_id,
           workspace_id,
           grm_google_locations!inner(
@@ -241,6 +242,9 @@ export class ReplyPublishingService {
 
     if (!reviewData) {
       throw new AppError("Review data not found", "NOT_FOUND", 404);
+    }
+    if (reviewData.missing_on_google_at) {
+      throw new AppError("This review is no longer available on Google. Its history is kept.", "GOOGLE_REVIEW_MISSING", 410);
     }
 
     const locationData = Array.isArray(reviewData.grm_google_locations)
@@ -387,10 +391,20 @@ export class ReplyPublishingService {
         })
         .eq("id", replyId);
 
-      await db
+      const missing = classified.code === "GOOGLE_REVIEW_MISSING";
+      const checkedAt = new Date().toISOString();
+      const { error: reviewUpdateError } = await db
         .from("grm_reviews")
-        .update({ reply_status: "failed" })
-        .eq("id", reviewId);
+        .update({
+          reply_status: "failed",
+          ...(missing ? { missing_on_google_at: checkedAt, downstream_stale_at: checkedAt } : {}),
+        })
+        .eq("id", reviewId)
+        .eq("workspace_id", workspaceId)
+        .eq("google_review_name", googleReviewName);
+      if (reviewUpdateError) {
+        throw new AppError("The reply failed and its review status could not be saved. Please sync the location.", "DB_ERROR", 500);
+      }
 
       await AuditService.log({
         workspaceId,
@@ -402,21 +416,24 @@ export class ReplyPublishingService {
           reviewId,
           errorCode: classified.code,
           retryable: classified.retryable,
+          reviewMissingOnGoogle: missing,
           // Never log access tokens, review content, or PII beyond what's needed
         },
       });
 
-      const { notifyProfileEvent } = await import("@/lib/services/notifications");
-      await notifyProfileEvent({
-        workspaceId,
-        locationId: locationData.id,
-        kind: "publish_failed",
-        detail: "A reply failed to publish.",
-        href: `/reviews?location=${locationData.id}&filter=failed`,
-        dedupeKey: `publish_failed:${replyId}:${reply.failure_count + 1}`,
-      });
+      if (!missing) {
+        const { notifyProfileEvent } = await import("@/lib/services/notifications");
+        await notifyProfileEvent({
+          workspaceId,
+          locationId: locationData.id,
+          kind: "publish_failed",
+          detail: "A reply failed to publish.",
+          href: `/reviews?location=${locationData.id}&filter=failed`,
+          dedupeKey: `publish_failed:${replyId}:${reply.failure_count + 1}`,
+        });
+      }
 
-      throw new AppError(classified.message, classified.code, 502);
+      throw new AppError(classified.message, classified.code, missing ? 410 : 502, { retryable: classified.retryable });
     }
 
     const outcome = comparePublishedReply(reply.content, googleReply.comment);

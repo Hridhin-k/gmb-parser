@@ -1,0 +1,2 @@
+COMMENT ON COLUMN public.grm_reviews.missing_on_google_at IS
+  'Set after a complete error-free full sync omits the review, or a publish-time 404 is confirmed by reviews.get returning 404 while reviews.list succeeds for the same parent and credentials without contradicting that result. Failed, truncated, or incremental syncs do not prove absence. Rows and reply history are kept; a later sync restores reviews returned by Google.';

@@ -63,6 +63,22 @@ for external AI calls: a provider may finish a request whose response is lost.
 In that case, check the provider before explicitly resuming; a missing result
 may require another paid call. Completed persisted results are never repeated.
 
+## Reply publishing and missing reviews
+
+A 404 from Google's reply endpoint does not establish that a review was deleted.
+Publishing checks the review with `reviews.get`. A readable review gets one
+additional write attempt, or is reconciled if Google already stores the approved
+reply. A second write-time 404 reports a publishing problem and keeps the review.
+Network or server failures on a write retain the uncertain-outcome state.
+
+When `reviews.get` also returns 404, the same account must successfully list
+reviews for the same parent location, without returning the supposedly missing
+review. Only then is `missing_on_google_at` set. This targeted check does not
+require fetching unrelated review history or running AI analysis. Missing
+reviews leave the active queues; their rows and reply history remain stored.
+Later syncs clear the marker if Google returns the review again. Failed or
+inconclusive access checks never hide a review.
+
 ## Daily summaries and reports
 
 Review and analysis triggers advance revisions in `grm_insight_days`. Both old

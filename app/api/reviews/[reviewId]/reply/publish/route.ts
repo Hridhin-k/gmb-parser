@@ -159,7 +159,7 @@ export async function POST(request: Request, { params }: RouteParams) {
       }
 
       return NextResponse.json(
-        { error: error.message, code: error.code, retryable: error.statusCode >= 500 },
+        { error: error.message, code: error.code, retryable: error.metadata?.retryable ?? error.statusCode >= 500 },
         { status: error.statusCode }
       );
     }

@@ -1,6 +1,7 @@
 import { GoogleApiError, AppError } from "@/lib/errors";
 import type { GoogleReview, GoogleReviewsResponse, GoogleApiErrorBody } from "@/lib/types/google";
-import { googleFetch, parseRetryAfter } from "@/lib/google-api-gate";
+import { googleFetch, parseRetryAfter, withGooglePriority } from "@/lib/google-api-gate";
+import { comparePublishedReply } from "@/lib/reply-adjustments";
 
 // Google My Business API v4 — the only official review API endpoint.
 // https://developers.google.com/my-business/reference/rest/v4/accounts.locations.reviews
@@ -8,6 +9,22 @@ const MY_BUSINESS_API = "https://mybusiness.googleapis.com/v4";
 
 // Maximum page size allowed by the API
 const PAGE_SIZE = 50;
+
+function verificationFailure(error?: unknown): AppError {
+  const status = error instanceof GoogleApiError ? error.googleErrorCode : undefined;
+  if (status === 401 || status === 403) {
+    return new AppError(
+      "Google could not verify this review with the connected account. Check the location's access in Settings.",
+      status === 401 ? "GOOGLE_AUTH" : "GOOGLE_FORBIDDEN",
+      403
+    );
+  }
+  return new AppError(
+    "Google could not verify whether this review is available. Nothing was removed. Please try again.",
+    "GOOGLE_REVIEW_CHECK_FAILED",
+    503
+  );
+}
 
 // ---------------------------------------------------------------------------
 // Error classification
@@ -133,6 +150,64 @@ export class GoogleReviewService {
    * An empty body is not treated as success.
    */
   static async replyToReview(
+    accessToken: string,
+    reviewName: string,
+    comment: string
+  ): Promise<{ comment: string; updateTime: string | null }> {
+    try {
+      return await this.writeReply(accessToken, reviewName, comment);
+    } catch (error) {
+      if (!(error instanceof GoogleApiError) || error.googleErrorCode !== 404) throw error;
+    }
+
+    // A 404 from the write endpoint alone does not prove that a review was deleted.
+    let review: GoogleReview;
+    try {
+      review = await withGooglePriority("interactive", () => this.getReview(accessToken, reviewName));
+    } catch (error) {
+      if (!(error instanceof GoogleApiError) || error.googleErrorCode !== 404) {
+        throw verificationFailure(error);
+      }
+      const match = /^(accounts\/[^/]+\/locations\/[^/]+)\/reviews\/([^/]+)$/.exec(reviewName);
+      if (!match) throw verificationFailure();
+      let page: GoogleReviewsResponse;
+      try {
+        // Check the same parent with the same credentials before hiding a review.
+        page = await withGooglePriority("interactive", () => this.listReviews(accessToken, match[1]));
+      } catch (parentError) {
+        throw verificationFailure(parentError);
+      }
+      if ((!Array.isArray(page.reviews) && page.totalReviewCount !== 0)
+        || page.reviews?.some((item) => item.name === reviewName || item.reviewId === match[2])) {
+        throw verificationFailure();
+      }
+      throw new AppError(
+        "Google no longer returns this review. It has been removed from the reply queue; its history is kept.",
+        "GOOGLE_REVIEW_MISSING",
+        410
+      );
+    }
+    if (review.name !== reviewName) throw verificationFailure();
+    if (comparePublishedReply(comment, review.reviewReply?.comment) === "matched") {
+      return { comment: review.reviewReply!.comment, updateTime: review.reviewReply!.updateTime ?? null };
+    }
+
+    // Google can still read this review: retry this approved write once, never loop.
+    try {
+      return await this.writeReply(accessToken, reviewName, comment);
+    } catch (error) {
+      if (error instanceof GoogleApiError && error.googleErrorCode === 404) {
+        throw new AppError(
+          "The review still exists on Google, but Google could not accept the reply. Please try again later or reply in Google Business Profile.",
+          "GOOGLE_REPLY_UNAVAILABLE",
+          503
+        );
+      }
+      throw error;
+    }
+  }
+
+  private static async writeReply(
     accessToken: string,
     reviewName: string,
     comment: string

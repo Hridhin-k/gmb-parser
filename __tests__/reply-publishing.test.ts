@@ -373,6 +373,56 @@ describe("ReplyPublishingService.publishReply", () => {
     ).catch((e: unknown) => e as AppError);
 
     expect((err as AppError).code).toBe("GOOGLE_QUOTA");
+    expect((err as AppError).metadata?.retryable).toBe(true);
+  });
+
+  it("hides a confirmed missing review without deleting it or its reply history", async () => {
+    fromSequences.push(makeChain({ single: vi.fn(() => ({ data: buildReply({}), error: null })) }));
+    fromSequences.push(makeChain({ single: vi.fn(() => ({ data: { id: "reply-1" }, error: null })) }));
+    fromSequences.push(makeChain());
+    const failedReply = makeChain();
+    const missingReview = makeChain();
+    fromSequences.push(failedReply, missingReview);
+    mockReplyToReview.mockRejectedValue(new AppError("Review no longer returned by Google", "GOOGLE_REVIEW_MISSING", 410));
+
+    const { ReplyPublishingService } = await import("@/lib/services/reply-publishing");
+    await expect(ReplyPublishingService.publishReply("reply-1", "review-1", "ws-1", "user-1"))
+      .rejects.toMatchObject({ code: "GOOGLE_REVIEW_MISSING", statusCode: 410, metadata: { retryable: false } });
+    expect(missingReview.update).toHaveBeenCalledWith({
+      reply_status: "failed",
+      missing_on_google_at: expect.any(String),
+      downstream_stale_at: expect.any(String),
+    });
+    expect(missingReview.eq).toHaveBeenCalledWith("workspace_id", "ws-1");
+    expect(missingReview.eq).toHaveBeenCalledWith("google_review_name", "accounts/123/locations/456/reviews/789");
+    expect(missingReview.delete).not.toHaveBeenCalled();
+    expect(failedReply.delete).not.toHaveBeenCalled();
+  });
+
+  it("keeps a readable review in the queue when Google rejects the retry", async () => {
+    fromSequences.push(makeChain({ single: vi.fn(() => ({ data: buildReply({}), error: null })) }));
+    fromSequences.push(makeChain({ single: vi.fn(() => ({ data: { id: "reply-1" }, error: null })) }));
+    fromSequences.push(makeChain(), makeChain());
+    const keptReview = makeChain();
+    fromSequences.push(keptReview);
+    mockReplyToReview.mockRejectedValue(new AppError("Review exists, but Google could not accept the reply", "GOOGLE_REPLY_UNAVAILABLE", 503));
+
+    const { ReplyPublishingService } = await import("@/lib/services/reply-publishing");
+    await expect(ReplyPublishingService.publishReply("reply-1", "review-1", "ws-1", "user-1"))
+      .rejects.toMatchObject({ code: "GOOGLE_REPLY_UNAVAILABLE", metadata: { retryable: true } });
+    expect(keptReview.update).toHaveBeenCalledWith({ reply_status: "failed" });
+  });
+
+  it("does not publish a review already confirmed missing", async () => {
+    const reply = buildReply({});
+    fromSequences.push(makeChain({ single: vi.fn(() => ({
+      data: { ...reply, grm_reviews: { ...reply.grm_reviews, missing_on_google_at: "2026-11-05T16:00:00Z" } },
+      error: null,
+    })) }));
+    const { ReplyPublishingService } = await import("@/lib/services/reply-publishing");
+    await expect(ReplyPublishingService.publishReply("reply-1", "review-1", "ws-1", "user-1"))
+      .rejects.toMatchObject({ code: "GOOGLE_REVIEW_MISSING", statusCode: 410 });
+    expect(mockReplyToReview).not.toHaveBeenCalled();
   });
 
   it("maps network failure to UNKNOWN with retryable=true", async () => {
