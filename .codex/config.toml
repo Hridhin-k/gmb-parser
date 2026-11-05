@@ -1,0 +1,3 @@
+[mcp_servers.upstep]
+url = "https://upstep.dev/api/mcp"
+bearer_token_env_var = "UPSTEP_MCP_KEY"

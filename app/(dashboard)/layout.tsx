@@ -1,5 +1,6 @@
 import { AppShell } from "@/components/app-shell";
 import { ExitSupportButton } from "@/components/exit-support-button";
+import { UpstepWidget } from "@/components/upstep-widget";
 import { loadDashboardChrome } from "@/lib/services/dashboard-chrome";
 import { isSuperAdmin } from "@/lib/services/platform";
 import { timed } from "@/lib/timing";
@@ -86,6 +87,7 @@ export default async function DashboardLayout({
     >
       {children}
     </AppShell>
+    {!supportTenantId ? <UpstepWidget userId={user.id} /> : null}
     </>
   );
 }
