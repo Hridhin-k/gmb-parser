@@ -336,12 +336,12 @@ export class AIReviewService {
     const revising = params.adjustment && params.adjustment.kind !== "regenerate";
     // The saved contact line is appended after generation: a chosen one, or the one a rewrite must keep.
     const contactSentence = params.contact
-      ? resolutionContactSentence(params.contact, await EscalationContactStore.read(params.workspaceId))
+      ? resolutionContactSentence(params.contact, await EscalationContactStore.read(params.workspaceId, review.location_id))
       : revising && activeReply
         ? existingResolutionContactSentence(activeReply.content)
         : null;
     if (params.contact && !contactSentence) {
-      throw new ValidationError("That contact detail is not saved for this workspace. Set it in Settings first.");
+      throw new ValidationError("That contact detail is not saved for this store. Set it in Settings first.");
     }
     // Never ask the AI to reproduce a contact line.
     const previousDraft = contactSentence && activeReply ? removeResolutionContact(activeReply.content) : activeReply?.content;

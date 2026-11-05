@@ -524,6 +524,8 @@ export type Database = {
           voice_of_merchant: boolean | null
           google_duplicate_of: string | null
           hold_reason: string | null
+          resolution_phone: string | null
+          resolution_email: string | null
           primary_phone: string | null
           store_code: string | null
           sync_completed_at: string | null
@@ -556,6 +558,8 @@ export type Database = {
           voice_of_merchant?: boolean | null
           google_duplicate_of?: string | null
           hold_reason?: string | null
+          resolution_phone?: string | null
+          resolution_email?: string | null
           primary_phone?: string | null
           store_code?: string | null
           sync_completed_at?: string | null
@@ -588,6 +592,8 @@ export type Database = {
           voice_of_merchant?: boolean | null
           google_duplicate_of?: string | null
           hold_reason?: string | null
+          resolution_phone?: string | null
+          resolution_email?: string | null
           primary_phone?: string | null
           store_code?: string | null
           sync_completed_at?: string | null

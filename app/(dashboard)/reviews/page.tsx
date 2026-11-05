@@ -134,7 +134,7 @@ export default async function ReviewsPage({ searchParams }: ReviewsPageProps) {
   };
   const reviewTab = tab === "follow-ups" ? null : tab;
 
-  const [role, toReply, failed, sent, caseCounts, roster, contact] = await Promise.all([
+  const [role, toReply, failed, sent, caseCounts, roster] = await Promise.all([
     getActiveRole(),
     getDashboardData(workspaceId, {
       ...baseFilters,
@@ -153,7 +153,6 @@ export default async function ReviewsPage({ searchParams }: ReviewsPageProps) {
     }),
     EscalationService.counts(workspaceId, caseScope),
     getWorkspaceRoster(workspaceId),
-    EscalationContactStore.read(workspaceId),
   ]);
   const data = reviewTab === "sent" ? sent : reviewTab === "failed" ? failed : toReply;
   const canApprove = canApproveReplies(role);
@@ -352,7 +351,6 @@ export default async function ReviewsPage({ searchParams }: ReviewsPageProps) {
                   canApprove,
                   canPublishPositive: allows(role, "publish_positive"),
                   aiOnly,
-                  contact,
                   members,
                   workspaceId,
                   selectedReviewId,
@@ -366,7 +364,6 @@ export default async function ReviewsPage({ searchParams }: ReviewsPageProps) {
                 caseScope={caseScope}
                 counts={caseCounts}
                 carried={carried}
-                contact={contact}
                 roster={roster.members}
               />
             )}
@@ -402,7 +399,6 @@ async function ReviewTabBody({
     canApprove: boolean;
     canPublishPositive: boolean;
     aiOnly: boolean;
-    contact: Awaited<ReturnType<typeof EscalationContactStore.read>>;
     members: Array<{ id: string; email: string }>;
     workspaceId: string;
     selectedReviewId: string | null;
@@ -470,6 +466,7 @@ async function ReviewTabBody({
     data.reviews.map((review) => review.id)
   );
   const totalPages = Math.max(1, Math.ceil(data.totalReviewCount / data.pageSize));
+  const contacts = await EscalationContactStore.readMany(listProps.workspaceId, data.reviews.map((review) => review.location_id));
   const firstShown = (currentPage - 1) * data.pageSize + 1;
   const lastShown = Math.min(data.totalReviewCount, firstShown + data.reviews.length - 1);
   const pageQuery = new URLSearchParams(carried);
@@ -487,7 +484,7 @@ async function ReviewTabBody({
         canApprove={listProps.canApprove}
         canPublishPositive={listProps.canPublishPositive}
         aiOnly={listProps.aiOnly}
-        contact={listProps.contact}
+        contactsByReview={Object.fromEntries(data.reviews.map((review) => [review.id, contacts[review.location_id]]))}
         members={listProps.members}
         initialSelectedId={listProps.selectedReviewId}
         totalCount={data.totalReviewCount}
@@ -508,7 +505,6 @@ async function FollowUpsBody({
   caseScope,
   counts,
   carried,
-  contact,
   roster,
 }: {
   params: Record<string, string | string[] | undefined>;
@@ -517,7 +513,6 @@ async function FollowUpsBody({
   caseScope: { clientId: string | null; locationId: string | null; groupId: string | null; since: string | null; until: string | null };
   counts: Awaited<ReturnType<typeof EscalationService.counts>>;
   carried: URLSearchParams;
-  contact: Awaited<ReturnType<typeof EscalationContactStore.read>>;
   roster: Awaited<ReturnType<typeof getWorkspaceRoster>>["members"];
 }) {
   const queue = parseFollowUpQueue(params.queue);
@@ -588,7 +583,7 @@ async function FollowUpsBody({
       counts={counts}
       items={list.items.map((item) => stampCase(item, policy.timezone))}
       selected={selected ? stampCase(selected, policy.timezone) : null}
-      contact={contact}
+      contact={selected ? await EscalationContactStore.read(workspaceId, selected.locationId) : { phone: null, email: null }}
       policy={policy}
       pauses={pauses}
       clients={scopes.clients}

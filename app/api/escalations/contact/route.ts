@@ -10,6 +10,7 @@ import { parseBody } from "@/lib/validation";
 const schema = z.object({
   phone: z.string().trim().max(40),
   email: z.string().trim().max(320),
+  locationId: z.string().uuid().optional(),
 });
 
 export async function POST(request: Request) {
@@ -25,6 +26,10 @@ export async function POST(request: Request) {
 
   try {
     const membership = await ensurePersonalWorkspace(user);
+    if (body.locationId) {
+      const contact = await EscalationContactStore.saveLocation(membership.workspace_id, user.id, body.locationId, body);
+      return NextResponse.json({ ok: true, ...contact });
+    }
     await assertScoped({
       userId: user.id,
       workspaceId: membership.workspace_id,

@@ -527,7 +527,7 @@ export async function loadMobileApproval(input: {
     return rank(a.reply_status) - rank(b.reply_status) || Date.parse(b.review_create_time) - Date.parse(a.review_create_time);
   });
   const reviewIds = reviews.map((review) => review.id);
-  const [replies, escalations, contact] = await Promise.all([
+  const [replies, escalations] = await Promise.all([
     reviewIds.length
       ? admin
           .from("grm_review_replies")
@@ -544,7 +544,6 @@ export async function loadMobileApproval(input: {
           .in("review_id", reviewIds)
           .neq("status", "resolved")
       : Promise.resolve({ data: [], error: null }),
-    EscalationContactStore.read(input.workspaceId),
   ]);
   if (replies.error || escalations.error) throw new Error("Could not load the approval queue.");
   const replyByReview = new Map<string, ReplyRow>();
@@ -598,6 +597,7 @@ export async function loadMobileApproval(input: {
     };
   }
 
+  const contact = current ? await EscalationContactStore.read(input.workspaceId, current.location_id) : { phone: null, email: null };
   return {
     clientId: loaded.clientId,
     groupId: keptId(loaded.view.scope.groupId),
@@ -740,7 +740,7 @@ export async function loadMobileComplaint(input: {
     };
   }
 
-  const contact = await EscalationContactStore.read(input.workspaceId);
+  const contact = current ? await EscalationContactStore.read(input.workspaceId, current.location_id) : { phone: null, email: null };
   return {
     clientId: loaded.clientId,
     groupId: keptId(loaded.view.scope.groupId),

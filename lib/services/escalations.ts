@@ -27,7 +27,8 @@ import type { Json } from "@/lib/types/database-schema";
 import { escapeOrSearchValue, orIlikeAny } from "@/lib/postgrest-search";
 import { escalationTiming, scopedGroupIds } from "@/lib/services/hierarchy";
 import { logger } from "@/lib/logger";
-import { normalizeResolutionContact, type ResolutionContact } from "@/lib/resolution-contact";
+import { normalizeResolutionContact, resolvedContact, type ResolutionContact } from "@/lib/resolution-contact";
+import { assertScoped } from "@/lib/services/access";
 
 const REMINDER_ATTEMPT_LIMIT = 5;
 
@@ -88,7 +89,12 @@ function missingContactColumn(error: { code?: string; message?: string } | null)
 }
 
 export class EscalationContactStore {
-  static async read(workspaceId: string): Promise<ResolutionContact> {
+  static async read(workspaceId: string, locationId?: string): Promise<ResolutionContact> {
+    if (locationId) {
+      const contacts = await this.readMany(workspaceId, [locationId]);
+      if (!contacts[locationId]) throw new ValidationError("That location is not in this organization.");
+      return contacts[locationId];
+    }
     const admin = createAdminClient();
     const { data, error } = await admin
       .from("grm_escalation_policies")
@@ -103,12 +109,51 @@ export class EscalationContactStore {
     };
   }
 
+  /** Two queries for a mixed-store queue; never return another workspace's store. */
+  static async readMany(workspaceId: string, locationIds: string[]): Promise<Record<string, ResolutionContact>> {
+    const ids = [...new Set(locationIds)];
+    if (!ids.length) return {};
+    const [workspace, locations] = await Promise.all([
+      this.read(workspaceId),
+      createAdminClient().from("grm_google_locations")
+        .select("id, resolution_phone, resolution_email")
+        .eq("workspace_id", workspaceId).in("id", ids),
+    ]);
+    if (locations.error) throw new AppError("Could not load store contacts.", "DB_ERROR", 500);
+    return Object.fromEntries((locations.data ?? []).map((row) => [row.id, resolvedContact({
+      phone: row.resolution_phone, email: row.resolution_email,
+    }, workspace)]));
+  }
+
+  static async saveLocation(workspaceId: string, userId: string, locationId: string,
+    input: { phone: string; email: string }): Promise<ResolutionContact> {
+    await assertScoped({ workspaceId, userId, permission: "edit_rules", target: { kind: "location", id: locationId } });
+    const contact = normalizeResolutionContact(input);
+    const admin = createAdminClient();
+    const previous = await admin.from("grm_google_locations").select("resolution_phone, resolution_email")
+      .eq("workspace_id", workspaceId).eq("id", locationId).maybeSingle();
+    if (previous.error) throw new AppError("Could not load the store contact.", "DB_ERROR", 500);
+    if (!previous.data) throw new ValidationError("That location is not in this organization.");
+    const saved = await admin.from("grm_google_locations").update({
+      resolution_phone: contact.phone, resolution_email: contact.email,
+    }).eq("workspace_id", workspaceId).eq("id", locationId).select("id").maybeSingle();
+    if (saved.error || !saved.data) throw new AppError("Could not save the store contact.", "DB_ERROR", 500);
+    await AuditService.log({ workspaceId, userId, action: "escalation.contact_updated",
+      entityType: "grm_google_locations", entityId: locationId,
+      metadata: { scope: "location", locationId, previous: {
+        phone: previous.data.resolution_phone, email: previous.data.resolution_email,
+      }, contact: { ...contact }, usesWorkspaceDefault: !contact.phone && !contact.email },
+    });
+    return contact;
+  }
+
   static async save(
     workspaceId: string,
     userId: string,
     input: { phone: string; email: string }
   ): Promise<ResolutionContact> {
     const contact = normalizeResolutionContact(input);
+    const previous = await this.read(workspaceId);
     const admin = createAdminClient();
     const { error } = await admin.from("grm_escalation_policies").upsert(
       {
@@ -129,7 +174,7 @@ export class EscalationContactStore {
       action: "escalation.contact_updated",
       entityType: "grm_escalation_policies",
       entityId: workspaceId,
-      metadata: { hasPhone: Boolean(contact.phone), hasEmail: Boolean(contact.email) },
+      metadata: { scope: "workspace", previous: { ...previous }, contact: { ...contact }, hasPhone: Boolean(contact.phone), hasEmail: Boolean(contact.email) },
     });
     return contact;
   }

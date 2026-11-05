@@ -7,7 +7,7 @@ import { cn } from "@/lib/utils";
 import { Checkbox } from "@/components/ui/checkbox";
 import { InlineStars } from "@/components/reviews-badges";
 import { splitGoogleTranslation } from "@/lib/review-text";
-import type { ResolutionContact, ResolutionContactKind } from "@/lib/resolution-contact";
+import { bulkContactAvailability, type ResolutionContact, type ResolutionContactKind } from "@/lib/resolution-contact";
 import { useServerRefresh, useSettleWhenUpdated } from "@/hooks/use-server-refresh";
 import { pollBulkJob, type BulkJobItemResult } from "@/lib/bulk-job-client";
 import { pollAiGeneration } from "@/lib/ai-generation-client";
@@ -42,7 +42,7 @@ interface ReviewListProps {
   canPublishPositive: boolean;
   /** Members generate with AI and publish only after approval. They cannot type the reply. */
   aiOnly?: boolean;
-  contact?: ResolutionContact;
+  contactsByReview?: Record<string, ResolutionContact>;
   members?: Array<{ id: string; email: string }>;
   /** Review opened from a link (`?review=`). */
   initialSelectedId?: string | null;
@@ -121,7 +121,7 @@ export function ReviewList({
   canApprove,
   canPublishPositive,
   aiOnly = false,
-  contact = { phone: null, email: null },
+  contactsByReview = {},
   members = [],
   initialSelectedId = null,
   totalCount,
@@ -572,7 +572,7 @@ export function ReviewList({
                 <ContactDraftButton
                   label={noDrafts ? `Draft ${plural(pickDraft.length, "reply", "replies")} with AI` : `Draft ${pickDraft.length} more`}
                   plainLabel={`Draft ${plural(pickDraft.length, "reply", "replies")}`}
-                  contact={contact}
+                  contact={bulkContactAvailability(pickDraft.map((row) => contactsByReview[row.review.id] ?? { phone: null, email: null }))}
                   disabled={pickDraft.length === 0}
                   tone={noDrafts ? "solid" : "soft"}
                   onDraft={(kind) => void bulkDraft(kind)}
@@ -697,7 +697,7 @@ export function ReviewList({
                   error={errors[id] ?? null}
                   canSend={sendAllowed(review)}
                   aiOnly={aiOnly}
-                  contact={contact}
+                  contact={contactsByReview[id] ?? { phone: null, email: null }}
                   members={members}
                   followUp={followUp}
                   undraftedCount={undrafted.length}

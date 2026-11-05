@@ -20,8 +20,8 @@ import {
 } from "@/components/settings-section";
 import { Badge } from "@/components/ui/badge";
 import { Banner } from "@/components/ui/banner";
-import { EscalationContactStore, EscalationService } from "@/lib/services/escalations";
-import { ResolutionContactForm } from "@/components/resolution-contact-form";
+import { EscalationService } from "@/lib/services/escalations";
+import { ContactSection } from "./contact-section";
 import { getMemberAccess, listScopeChoices, visibleClientIds } from "@/lib/services/access";
 import { loadReplySettings, type SettingsTarget } from "@/lib/services/reply-settings";
 import { loadAiBoard } from "@/lib/services/ai-config";
@@ -153,7 +153,7 @@ export default async function SettingsPage({
   if (section === "tone" || section === "templates") {
     content = await replySection(section, { workspaceId, userId: user.id, target, canEdit, allowedClients });
   } else if (section === "sla") {
-    content = await followUpSection(workspaceId, canEditWorkspace);
+    content = await followUpSection(workspaceId, user.id, canEditWorkspace);
   } else if (section === "team") {
     content = <TeamSection params={params} role={role} userId={user.id} workspaceId={workspaceId} />;
   } else if (section === "notifications") {
@@ -398,8 +398,8 @@ async function replySection(
   );
 }
 
-async function followUpSection(workspaceId: string, canEdit: boolean) {
-  const [policy, contact] = await Promise.all([EscalationService.policy(workspaceId), EscalationContactStore.read(workspaceId)]);
+async function followUpSection(workspaceId: string, userId: string, canEdit: boolean) {
+  const policy = await EscalationService.policy(workspaceId);
   const stars = policy.maxStars <= 1 ? "1 star" : `1 to ${policy.maxStars} star`;
   return (
     <>
@@ -442,12 +442,7 @@ async function followUpSection(workspaceId: string, canEdit: boolean) {
       </SettingsSection>
       <SettingsDetail id="follow-up-editor" title="Edit follow-up rules">
         <FollowUpSettings policy={policy} canEdit={canEdit} />
-        <details className="rounded-lg border border-line bg-white p-4">
-          <summary className="cursor-pointer text-[13px] font-medium text-ink">Optional: contact details customers can use</summary>
-          <div className="mt-4">
-            <ResolutionContactForm contact={contact} canEdit={canEdit} />
-          </div>
-        </details>
+        <ContactSection workspaceId={workspaceId} userId={userId} />
       </SettingsDetail>
     </>
   );

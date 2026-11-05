@@ -6,13 +6,13 @@ import { createAiGenerationJob } from "@/lib/services/ai-generation-jobs";
 import { AppError } from "@/lib/errors";
 import { RATING_ONLY_TEMPLATE_MODEL } from "@/lib/rating-only-fallback";
 
-const state = vi.hoisted(() => ({ replies: [] as Array<Record<string, unknown>>, comment: "The wait was long." as string | null }));
+const state = vi.hoisted(() => ({ replies: [] as Array<Record<string, unknown>>, comment: "The wait was long." as string | null, locationId: "location-1" }));
 vi.mock("@/lib/db/client", () => ({
   createAdminClient: () => ({ from: () => {
     const chain = {
       select: () => chain, eq: () => chain,
       single: async () => ({ data: {
-        id: "review-1", location_id: "location-1", star_rating: 2, comment: state.comment,
+        id: "review-1", location_id: state.locationId, star_rating: 2, comment: state.comment,
         reviewer_display_name: "Asha", reviewer_is_anonymous: false,
         grm_google_locations: { location_title: "Store", grm_clients: { name: "Business" } },
         grm_review_replies: state.replies,
@@ -45,6 +45,7 @@ describe("drafting with the saved business contact", () => {
     vi.clearAllMocks();
     state.replies = [];
     state.comment = "The wait was long.";
+    state.locationId = "location-1";
     vi.mocked(EscalationContactStore.read).mockResolvedValue(contacts);
     vi.mocked(generateAi).mockResolvedValue(generated as Awaited<ReturnType<typeof generateAi>>);
     vi.spyOn(AIReviewService, "persistGeneratedDraft").mockResolvedValue({ draftId: "draft-1", replyId: "reply-1" });
@@ -55,7 +56,7 @@ describe("drafting with the saved business contact", () => {
     expect(result.content).toContain(generated.text);
     expect(result.content.includes(contacts.phone)).toBe(contact !== "email");
     expect(result.content.includes(contacts.email)).toBe(contact !== "phone");
-    expect(EscalationContactStore.read).toHaveBeenCalledWith(params.workspaceId);
+    expect(EscalationContactStore.read).toHaveBeenCalledWith(params.workspaceId, "location-1");
     expect(AIReviewService.persistGeneratedDraft).toHaveBeenCalledWith(expect.objectContaining({ content: result.content }));
     expect(vi.mocked(generateAi).mock.calls[0][0].prompt).not.toContain(contacts.phone);
     expect(vi.mocked(generateAi).mock.calls[0][0].prompt).not.toContain(contacts.email);
@@ -67,10 +68,26 @@ describe("drafting with the saved business contact", () => {
     expect(EscalationContactStore.read).not.toHaveBeenCalled();
   });
 
+  it("resolves each review's store independently in a mixed-store drafting run", async () => {
+    vi.mocked(EscalationContactStore.read).mockImplementation(async (_workspaceId, locationId) => ({
+      phone: null, email: locationId === "location-1" ? "first@example.test" : "second@example.test",
+    }));
+    const first = await AIReviewService.generateDraft({ ...params, contact: "email" });
+    state.locationId = "location-2";
+    const second = await AIReviewService.generateDraft({ ...params, reviewId: "review-2", contact: "email" });
+    expect(first.content).toContain("first@example.test");
+    expect(first.content).not.toContain("second@example.test");
+    expect(second.content).toContain("second@example.test");
+    expect(second.content).not.toContain("first@example.test");
+    for (const [request] of vi.mocked(generateAi).mock.calls) {
+      expect(request.prompt).not.toContain("@example.test");
+    }
+  });
+
   it.each(["phone", "email"] as const)("rejects a missing chosen %s before calling AI", async (kind) => {
     vi.mocked(EscalationContactStore.read).mockResolvedValue({ ...contacts, [kind]: null });
     await expect(AIReviewService.generateDraft({ ...params, contact: kind }))
-      .rejects.toThrow("not saved for this workspace");
+      .rejects.toThrow("not saved for this store");
     expect(generateAi).not.toHaveBeenCalled();
     expect(AIReviewService.persistGeneratedDraft).not.toHaveBeenCalled();
   });

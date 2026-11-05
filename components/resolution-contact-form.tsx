@@ -10,9 +10,11 @@ import type { ResolutionContact } from "@/lib/resolution-contact";
 export function ResolutionContactForm({
   contact,
   canEdit,
+  locationId,
 }: {
   contact: ResolutionContact;
   canEdit: boolean;
+  locationId?: string;
 }) {
   const router = useRouter();
   const [phone, setPhone] = useState(contact.phone ?? "");
@@ -24,27 +26,33 @@ export function ResolutionContactForm({
     event.preventDefault();
     setPending(true);
     setError(null);
-    const response = await fetch("/api/escalations/contact", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ phone, email }),
-    });
-    const payload = (await response.json().catch(() => ({}))) as { error?: string };
-    setPending(false);
-    if (!response.ok) {
-      setError(payload.error ?? "That contact could not be saved.");
-      return;
+    try {
+      const response = await fetch("/api/escalations/contact", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ phone, email, locationId }),
+      });
+      const payload = (await response.json().catch(() => ({}))) as { error?: string };
+      if (!response.ok) {
+        setError(payload.error ?? "That contact could not be saved.");
+        return;
+      }
+      toast.success("Resolution contact saved.");
+      router.refresh();
+    } catch {
+      setError("That contact could not be saved. Check your connection and try again.");
+    } finally {
+      setPending(false);
     }
-    toast.success("Resolution contact saved.");
-    router.refresh();
   }
 
   return (
     <form onSubmit={save} className="space-y-3 rounded-lg border border-line bg-white p-4">
       <div>
-        <h2 className="text-sm font-semibold text-ink">Customer contact details</h2>
+        <h2 className="text-sm font-semibold text-ink">{locationId ? "Store contact details" : "Default contact details"}</h2>
         <p className="mt-1 text-[13px] text-ink-3">
-          Where a customer can reach you privately. You can add these details to a reply when needed; saving them does not send a message.
+          {locationId ? "Used only for reviews at this store. Leave both fields empty to use the default. A store contact replaces the entire default contact." : "Used for stores without their own contact. Where a customer can reach your team privately."}{" "}
+          These details appear in public replies when you choose to add them. Saving does not send a reply.
         </p>
       </div>
       <div className="grid max-w-2xl gap-3 sm:grid-cols-2">

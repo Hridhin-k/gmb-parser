@@ -1281,7 +1281,9 @@
         "brand_id": "uuid",
         "manager_user_id": "uuid",
         "onboarding_group_id": "uuid",
-        "review_timezone": "text"
+        "review_timezone": "text",
+        "resolution_phone": "text",
+        "resolution_email": "text"
       },
       "relations": [
         {

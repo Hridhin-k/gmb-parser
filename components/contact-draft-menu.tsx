@@ -20,7 +20,7 @@ const KINDS: Array<{ kind: ResolutionContactKind; label: string }> = [
   { kind: "both", label: "Phone and email" },
 ];
 
-const SETTINGS_HREF = "/settings?section=sla";
+const SETTINGS_HREF = "/settings?section=sla#resolution-contacts";
 
 function kindDetail(kind: ResolutionContactKind, contact: ResolutionContact): string {
   if (!contactKindAvailable(kind, contact)) return "Not saved";

@@ -5,6 +5,19 @@ export interface ResolutionContact {
   email: string | null;
 }
 
+/** A store override is one contact, never a mixture of two different teams. */
+export function resolvedContact(store: ResolutionContact, workspace: ResolutionContact): ResolutionContact {
+  return store.phone || store.email ? store : workspace;
+}
+
+/** Only offer a bulk option when every selected store has that detail. */
+export function bulkContactAvailability(contacts: ResolutionContact[]): ResolutionContact {
+  return {
+    phone: contacts.length > 0 && contacts.every((item) => item.phone) ? "Each store’s saved phone" : null,
+    email: contacts.length > 0 && contacts.every((item) => item.email) ? "Each store’s saved email" : null,
+  };
+}
+
 export type ResolutionContactKind = "phone" | "email" | "both";
 
 const PHONE = /^[+()\d][\d\s()+-]{5,39}$/;
