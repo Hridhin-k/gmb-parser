@@ -1,5 +1,7 @@
 "use client";
 
+import { syncGoogleConnections } from "@/lib/google-profile-sync-client";
+
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
@@ -488,7 +490,8 @@ function LocationsStep({
   onImportAndFinish: (body: Record<string, unknown>) => Promise<void>;
 }) {
   const router = useRouter();
-  const connection = data.connections[0] ?? null;
+  const activeConnections = data.connections.filter((item) => item.status === "active");
+  const connection = activeConnections[0] ?? data.connections[0] ?? null;
   const demo = Boolean(data.localDemo);
   const imported = data.locations;
   const initial = imported.length === 0;
@@ -510,13 +513,10 @@ function LocationsStep({
 
   async function lookup(force: boolean) {
     try {
-      const response = await fetch("/api/google/sync", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ connectionId: connection?.id, force, stage: true }),
-      });
-      const payload = (await response.json().catch(() => ({}))) as { error?: string };
-      if (!response.ok) throw new Error(payload.error ?? "Google would not list your profiles. Try again in a moment.");
+      if (!activeConnections.length) throw new Error("Reconnect a Google account before looking for profiles.");
+      const results = await syncGoogleConnections(activeConnections.map((item) => item.id), { force, stage: true });
+      const failures = results.filter((item) => item.error);
+      if (failures.length) setFindError(failures.map((item) => `${data.connections.find((connection) => connection.id === item.connectionId)?.google_email ?? "Google account"}: ${item.error}`).join(" "));
       setSearched(true);
       router.refresh();
     } catch (caught) {
@@ -625,12 +625,12 @@ function LocationsStep({
             <span className="flex min-w-0 items-center gap-2 text-ink">
               <Check className="size-4 shrink-0 text-ok" aria-hidden />
               <span className="truncate">
-                Connected as <b className="font-medium">{connection.google_email}</b>
+                {activeConnections.length > 1 ? `${activeConnections.length} Google accounts connected` : <>Connected as <b className="font-medium">{connection.google_email}</b></>}
               </span>
             </span>
             {!demo ? (
               <a href={CONNECT_HREF} className="text-xs font-medium text-brand hover:underline">
-                Use a different account
+                Connect another account
               </a>
             ) : null}
           </div>
@@ -698,7 +698,7 @@ function LocationsStep({
                   Search again
                 </Button>
                 <a href={CONNECT_HREF} className={buttonVariants({ variant: "ghost", size: "sm" })}>
-                  Use a different account
+                  Connect another account
                 </a>
               </div>
             </div>

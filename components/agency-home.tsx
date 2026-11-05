@@ -265,7 +265,7 @@ export function AgencyHomeView({
           </Button>
         ) : null}
         {data.connectionId && canSync ? (
-          <SyncLocationsButton connectionId={data.connectionId} />
+          <SyncLocationsButton connectionIds={data.connectionIds} label="Sync all Google accounts" />
         ) : data.connectionId ? null : (
           <Button nativeButton={false} render={<Link href="/settings" />}>
             Connect Google

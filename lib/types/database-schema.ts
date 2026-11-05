@@ -455,6 +455,7 @@ export type Database = {
           created_at: string
           google_email: string
           id: string
+          last_profile_sync_at: string | null
           last_refreshed_at: string | null
           refresh_token_enc: string
           scopes: string[]
@@ -470,6 +471,7 @@ export type Database = {
           created_at?: string
           google_email: string
           id?: string
+          last_profile_sync_at?: string | null
           last_refreshed_at?: string | null
           refresh_token_enc: string
           scopes?: string[]
@@ -485,6 +487,7 @@ export type Database = {
           created_at?: string
           google_email?: string
           id?: string
+          last_profile_sync_at?: string | null
           last_refreshed_at?: string | null
           refresh_token_enc?: string
           scopes?: string[]

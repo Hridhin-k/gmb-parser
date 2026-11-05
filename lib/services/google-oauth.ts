@@ -200,7 +200,7 @@ export class GoogleOAuthService {
       access_type: "offline",
       scope: GBP_SCOPES,
       state: signState(statePayload),
-      prompt: "consent",
+      prompt: "select_account consent",
       include_granted_scopes: false,
     });
   }
@@ -305,7 +305,8 @@ export class GoogleOAuthService {
           workspace_id: workspaceId,
           authorized_by_user_id: userId,
           ...(clientId ? { client_id: clientId } : {}),
-          google_email: googleEmail,
+          google_email: googleEmail.toLowerCase(),
+          last_profile_sync_at: null,
           access_token_enc: accessTokenEnc,
           refresh_token_enc: refreshTokenEnc,
           token_expires_at: new Date(expiryDate).toISOString(),

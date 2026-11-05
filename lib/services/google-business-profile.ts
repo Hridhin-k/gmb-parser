@@ -226,44 +226,26 @@ export class GoogleBusinessProfileService {
     const db = createAdminClient();
     const force = options.force === true;
 
-    // Quota guard: reuse DB state if locations were synced recently
+    const { data: connection, error: connectionError } = await db
+      .from("grm_google_connections").select("id, status, last_profile_sync_at")
+      .eq("id", connectionId).eq("workspace_id", workspaceId).single();
+    if (connectionError || !connection) throw new AppError("Google connection not found", "NOT_FOUND", 404);
+    if (connection.status !== "active") throw new AppError("Reconnect this Google account before syncing.", "OAUTH_REVOKED", 401);
     const COOLDOWN_MS = 10 * 60 * 1000;
-    if (!force) {
-      const { data: recent } = await db
-        .from("grm_google_locations")
-        .select("last_synced_at")
-        .eq("workspace_id", workspaceId)
-        .eq("is_active", true)
-        .not("last_synced_at", "is", null)
-        .order("last_synced_at", { ascending: false })
-        .limit(1)
-        .maybeSingle();
-
-      if (recent?.last_synced_at) {
-        const age = Date.now() - new Date(recent.last_synced_at).getTime();
-        if (age < COOLDOWN_MS) {
-          await refreshLocationHolds(workspaceId);
-          const provision = options.userId
-            ? await autoProvisionClientsFromLocations(workspaceId, options.userId)
-            : { clientsCreated: 0, clientsReused: 0, locationsLinked: 0 };
-
-          logger.info("gbp.sync.skipped_google_cooldown", {
-            workspaceId,
-            connectionId,
-            ageMs: age,
-          });
-
-          return {
-            accountsUpserted: 0,
-            locationsUpserted: 0,
-            clientsCreated: provision.clientsCreated,
-            clientsReused: provision.clientsReused,
-            locationsLinked: provision.locationsLinked,
-            skippedGoogleFetch: true,
-          };
-        }
-      }
+    if (!force && connection.last_profile_sync_at &&
+        Date.now() - Date.parse(connection.last_profile_sync_at) < COOLDOWN_MS) {
+      await refreshLocationHolds(workspaceId);
+      const provision = options.userId && !options.stage
+        ? await autoProvisionClientsFromLocations(workspaceId, options.userId)
+        : { clientsCreated: 0, clientsReused: 0, locationsLinked: 0 };
+      return { accountsUpserted: 0, locationsUpserted: 0, ...provision, skippedGoogleFetch: true };
     }
+    const markSynced = async () => {
+      const { error } = await db.from("grm_google_connections")
+        .update({ last_profile_sync_at: new Date().toISOString() })
+        .eq("id", connectionId).eq("workspace_id", workspaceId);
+      if (error) throw new AppError("Could not record this account's profile sync.", "DB_ERROR", 500);
+    };
 
     const accessToken =
       await GoogleOAuthService.getValidAccessToken(connectionId);
@@ -290,16 +272,26 @@ export class GoogleBusinessProfileService {
     let fallbackAccountName: string | null = null;
     let fallbackAccountId: string | null = null;
 
+    const { data: knownAccounts, error: knownAccountError } = await db.from("grm_google_accounts")
+      .select("google_account_name, connection_id, grm_google_connections(status)").eq("workspace_id", workspaceId);
+    if (knownAccountError) throw new AppError("Could not load existing Google accounts.", "DB_ERROR", 500);
+    const knownByName = new Map((knownAccounts ?? []).map((row) => [row.google_account_name, row]));
+
     for (const rawAccount of rawAccounts) {
       const normalized = normalizeAccount(rawAccount);
 
+      // A second login must not take a shared account away from a working login.
+      const known = knownByName.get(normalized.googleAccountName);
+      const linked = known?.grm_google_connections;
+      const owner = Array.isArray(linked) ? linked[0] : linked;
+      const owningConnectionId = owner?.status === "active" ? known!.connection_id : connectionId;
       // Upsert account — idempotent on (workspace_id, google_account_name)
       const { data: accountRow, error: accountError } = await db
         .from("grm_google_accounts")
         .upsert(
           {
             workspace_id: workspaceId,
-            connection_id: connectionId,
+            connection_id: owningConnectionId,
             google_account_name: normalized.googleAccountName,
             account_display_name: normalized.accountDisplayName,
             account_type: normalized.accountType,
@@ -315,7 +307,7 @@ export class GoogleBusinessProfileService {
           googleAccountName: normalized.googleAccountName,
           dbError: accountError?.message,
         });
-        continue;
+        throw new AppError("Could not save a Google Business Profile account.", "DB_ERROR", 500);
       }
 
       accountsUpserted += 1;
@@ -327,6 +319,7 @@ export class GoogleBusinessProfileService {
     }
 
     if (!fallbackAccountName || !fallbackAccountId) {
+      await markSynced();
       return {
         accountsUpserted,
         locationsUpserted: 0,
@@ -357,6 +350,7 @@ export class GoogleBusinessProfileService {
       });
     }
 
+    let locationFetchFailed = false;
     if (locationByName.size === 0) {
       for (const accountName of accountIdByName.keys()) {
         try {
@@ -368,6 +362,7 @@ export class GoogleBusinessProfileService {
             locationByName.set(loc.name, loc);
           }
         } catch (fetchErr) {
+          locationFetchFailed = true;
           logger.warn("gbp.sync.locations_fetch_failed", {
             googleAccountName: accountName,
             message: fetchErr instanceof Error ? fetchErr.message : "Unknown",
@@ -376,21 +371,29 @@ export class GoogleBusinessProfileService {
       }
     }
 
+    if (locationFetchFailed) throw new AppError("Google could not list all profiles for this account. Please retry.", "GOOGLE_API_ERROR", 502);
+
     // Batch write: one read of the existing rows for this workspace, then
     // one upsert per chunk — instead of a select + insert/update per location.
-    const existingByName = new Map<string, { id: string; client_id: string | null; is_active: boolean }>();
+    type SavedProfile = { id: string; client_id: string | null; is_active: boolean; google_location_name: string; google_account_id: string };
+    const existingByName = new Map<string, SavedProfile>();
+    const existingByLocation = new Map<string, SavedProfile>();
     {
-      const { data: existingRows } = await db
+      const { data: existingRows, error: existingError } = await db
         .from("grm_google_locations")
-        .select("id, client_id, google_location_name, is_active")
+        .select("id, client_id, google_location_name, google_account_id, is_active")
         .eq("workspace_id", workspaceId);
+      if (existingError) throw new AppError("Could not load existing Google profiles.", "DB_ERROR", 500);
       for (const row of existingRows ?? []) {
-        existingByName.set(row.google_location_name, { id: row.id, client_id: row.client_id, is_active: row.is_active });
+        existingByName.set(row.google_location_name, row);
+        const locationKey = row.google_location_name.match(/locations\/([^/]+)$/)?.[1];
+        if (locationKey && !existingByLocation.has(locationKey)) existingByLocation.set(locationKey, row);
       }
     }
 
     const syncedAt = new Date().toISOString();
     const payloads: Array<Record<string, unknown>> = [];
+    const seenLocationKeys = new Set<string>();
     for (const rawLocation of locationByName.values()) {
       const loc = normalizeLocation(rawLocation);
       const accountMatch = loc.googleLocationName.match(/^(accounts\/[^/]+)\//);
@@ -401,10 +404,15 @@ export class GoogleBusinessProfileService {
         owningAccountName
       );
 
+      const locationKey = googleLocationName.match(/locations\/([^/]+)$/)?.[1];
+      if (locationKey && seenLocationKeys.has(locationKey)) continue;
+      if (locationKey) seenLocationKeys.add(locationKey);
+      const existing = existingByName.get(googleLocationName) ?? (locationKey ? existingByLocation.get(locationKey) : undefined);
       payloads.push({
         workspace_id: workspaceId,
-        google_account_id: googleAccountId,
-        google_location_name: googleLocationName,
+        // Keep the canonical resource and its history when two logins see the same profile.
+        google_account_id: existing?.google_account_id ?? googleAccountId,
+        google_location_name: existing?.google_location_name ?? googleLocationName,
         location_title: loc.locationTitle,
         store_code: loc.storeCode,
         address_formatted: loc.addressFormatted,
@@ -416,11 +424,11 @@ export class GoogleBusinessProfileService {
         // A location the user already imported stays imported, and one they left
         // out stays out. Only locations Google returns for the first time depend
         // on the mode: staged ones wait for the user to pick them.
-        is_active: existingByName.get(googleLocationName)?.is_active ?? !options.stage,
+        is_active: existing?.is_active ?? !options.stage,
         last_synced_at: syncedAt,
         // Keep existing client mapping. New rows start unassigned, then
         // auto-provision creates/links clients without extra Google calls.
-        client_id: existingByName.get(googleLocationName)?.client_id ?? unassigned.id,
+        client_id: existing?.client_id ?? unassigned.id,
       });
     }
 
@@ -435,16 +443,18 @@ export class GoogleBusinessProfileService {
           dbError: locError.message,
           count: chunkRows.length,
         });
+        throw new AppError("Could not save Google profiles. Please retry this account.", "DB_ERROR", 500);
       } else {
         locationsUpserted += chunkRows.length;
       }
     }
 
     await refreshLocationHolds(workspaceId);
-    const provision = options.userId
+    const provision = options.userId && !options.stage
       ? await autoProvisionClientsFromLocations(workspaceId, options.userId)
       : { clientsCreated: 0, clientsReused: 0, locationsLinked: 0 };
 
+    await markSynced();
     return {
       accountsUpserted,
       locationsUpserted,

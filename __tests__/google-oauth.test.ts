@@ -120,6 +120,11 @@ describe("GoogleOAuthService", () => {
   // createAuthorizationUrl
   // =========================================================================
   describe("createAuthorizationUrl", () => {
+    it("shows the Google account chooser while retaining offline consent", () => {
+      GoogleOAuthService.createAuthorizationUrl("ws-123", "user-456");
+      expect(mockOAuthInstance.generateAuthUrl).toHaveBeenCalledWith(expect.objectContaining({ prompt: "select_account consent", access_type: "offline" }));
+    });
+
     it("returns a Google authorization URL", () => {
       const url = GoogleOAuthService.createAuthorizationUrl("ws-123", "user-456");
       expect(url).toContain("accounts.google.com");

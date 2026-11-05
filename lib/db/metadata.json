@@ -1211,7 +1211,8 @@
         "last_refreshed_at": "timestamptz",
         "created_at": "timestamptz",
         "updated_at": "timestamptz",
-        "client_id": "uuid"
+        "client_id": "uuid",
+        "last_profile_sync_at": "timestamptz"
       },
       "relations": [
         {

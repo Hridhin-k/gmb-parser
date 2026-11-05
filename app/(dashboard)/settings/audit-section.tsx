@@ -32,6 +32,7 @@ const ACTION_LABELS: Record<string, { label: string; tone: Tone }> = {
     label: "Disconnected a Google account",
     tone: "neutral",
   },
+  "google_sync.failed": { label: "Google profile sync failed", tone: "bad" },
   "google_sync.completed": { label: "Imported Google locations", tone: "info" },
   "client.created": { label: "Created a business", tone: "info" },
   "client.updated": { label: "Updated a business", tone: "info" },

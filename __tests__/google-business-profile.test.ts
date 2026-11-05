@@ -25,7 +25,7 @@ const mockInsert = vi.fn();
 const mockUpdate = vi.fn();
 
 function buildChain() {
-  mockSingle.mockResolvedValue({ data: mockSelectData[0] ?? null, error: mockSelectError });
+  mockSingle.mockResolvedValue({ data: mockSelectData[0] ?? { id: "conn-1", status: "active", last_profile_sync_at: null }, error: mockSelectError });
   mockLimit.mockReturnValue({ single: mockSingle, maybeSingle: mockSingle });
   mockIs.mockReturnValue({ eq: mockEq, order: mockOrder });
   mockOrder.mockImplementation(() => {

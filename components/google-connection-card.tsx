@@ -4,6 +4,7 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { ExternalLink, Unplug } from "lucide-react";
+import { SyncLocationsButton } from "@/components/sync-locations-button";
 import { ConfirmDialog } from "@/components/confirm-dialog";
 import { Banner } from "@/components/ui/banner";
 import { Button, buttonVariants } from "@/components/ui/button";
@@ -24,6 +25,7 @@ interface GoogleConnectionCardProps {
   initialMessage?: string | null;
   initialSuccess?: boolean;
   connectHref?: string;
+  canSync?: boolean;
 }
 
 function StatusBadge({ status }: { status: string }) {
@@ -64,6 +66,7 @@ export function GoogleMark({ className }: { className?: string }) {
 
 export function GoogleConnectionCard({
   connections,
+  canSync = false,
   connectHref = "/api/google/connect",
   initialMessage,
   initialSuccess,
@@ -182,6 +185,8 @@ export function GoogleConnectionCard({
                     </p>
                   </div>
                 </div>
+                <div className="flex flex-wrap items-start gap-2">
+                {canSync && conn.status === "active" ? <SyncLocationsButton connectionId={conn.id} label="Sync this account" pill /> : null}
                 <Button
                   variant="outline"
                   size="sm"
@@ -191,6 +196,7 @@ export function GoogleConnectionCard({
                   <Unplug className="size-3.5" aria-hidden />
                   {disconnecting === conn.id ? "Disconnecting…" : "Disconnect"}
                 </Button>
+                </div>
               </li>
             ))}
           </ul>

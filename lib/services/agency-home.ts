@@ -33,6 +33,7 @@ export interface AgencyHome {
   hasConnection: boolean;
   /** Active Google connection used by "Sync profiles"; null until Google is connected. */
   connectionId: string | null;
+  connectionIds: string[];
   hasReviews: boolean;
   hasPublished: boolean;
   kpis: {
@@ -99,6 +100,7 @@ export function buildAgencyHome(input: {
   stats: LocationStat[];
   hasConnection: boolean;
   connectionId?: string | null;
+  connectionIds?: string[];
   /** Reviews per location inside the selected range; omit for all time. */
   rangeCounts?: LocationCount[] | null;
   publishedCounts?: LocationCount[] | null;
@@ -229,6 +231,7 @@ export function buildAgencyHome(input: {
   return {
     hasConnection: input.hasConnection,
     connectionId: input.connectionId ?? null,
+    connectionIds: input.connectionIds ?? (input.connectionId ? [input.connectionId] : []),
     hasReviews: input.precomputed?.hasReviews ?? input.stats.some((stat) => stat.review_count > 0),
     hasPublished: input.precomputed?.hasPublished ?? input.stats.some((stat) => stat.published > 0),
     kpis: input.precomputed?.kpis ?? {
@@ -496,6 +499,7 @@ export async function getAgencyHome(
     }),
     hasConnection: Boolean(activeConnection),
     connectionId: activeConnection?.id ?? null,
+    connectionIds: (connectionsResult.data ?? []).filter((item) => item.status === "active").map((item) => item.id),
     rangeCounts: countsResult?.data ?? null,
     publishedCounts: [...counts.published.entries()]
       .filter(([locationId]) => matchedClientOfLocation.has(locationId))

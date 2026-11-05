@@ -5,10 +5,13 @@ import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { ActivityStatus } from "@/components/activity-status";
 import { RefreshCw } from "lucide-react";
+import { syncGoogleConnections, type ProfileSyncResult } from "@/lib/google-profile-sync-client";
 import { cn } from "@/lib/utils";
 
 interface SyncLocationsButtonProps {
-  connectionId: string;
+  connectionId?: string;
+  connectionIds?: string[];
+  accountNames?: Record<string, string>;
   label?: string;
   /** Find profiles without importing them; the user picks which to import. */
   stage?: boolean;
@@ -18,6 +21,8 @@ interface SyncLocationsButtonProps {
 
 export function SyncLocationsButton({
   connectionId,
+  connectionIds,
+  accountNames = {},
   label = "Sync profiles",
   stage = false,
   pill = false,
@@ -27,63 +32,39 @@ export function SyncLocationsButton({
   const [error, setError] = useState<string | null>(null);
   const [summary, setSummary] = useState<string | null>(null);
 
+  const [results, setResults] = useState<ProfileSyncResult[]>([]);
+  const [progress, setProgress] = useState({ done: 0, total: 0 });
+  const ids = connectionIds ?? (connectionId ? [connectionId] : []);
+  const busyLabel = progress.total > 1 ? `Syncing account ${Math.min(progress.done + 1, progress.total)} of ${progress.total}…` : "Reading Google…";
+
   async function handleSync(force = false) {
     setError(null);
     setSummary(null);
+    setResults([]);
     setSyncing(true);
-
     try {
-      const response = await fetch("/api/google/sync", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ connectionId, force, stage }),
-      });
-
-      const data = (await response.json()) as {
-        error?: string;
-        accountsUpserted?: number;
-        locationsUpserted?: number;
-        clientsCreated?: number;
-        clientsReused?: number;
-        locationsLinked?: number;
-        skippedGoogleFetch?: boolean;
-      };
-
-      if (!response.ok) {
-        setError(data.error ?? "Failed to sync profiles from Google.");
-        return;
-      }
-
-      if (data.skippedGoogleFetch) {
-        setSummary(
-          data.clientsCreated
-            ? `Used cached profiles. Created ${data.clientsCreated} client${data.clientsCreated === 1 ? "" : "s"} (no Google quota used).`
-            : "Profiles already synced recently. No Google API call made (quota saved)."
-        );
-      } else {
-        const parts: string[] = [];
-        parts.push(
-          stage
-            ? `Found ${data.locationsUpserted ?? 0} profile${(data.locationsUpserted ?? 0) === 1 ? "" : "s"}. Pick the ones to import below`
-            : `Synced ${data.locationsUpserted ?? 0} profile${(data.locationsUpserted ?? 0) === 1 ? "" : "s"}`
-        );
-        if ((data.clientsCreated ?? 0) > 0) {
-          parts.push(
-            `created ${data.clientsCreated} new client${data.clientsCreated === 1 ? "" : "s"}`
-          );
-        }
-        if ((data.clientsReused ?? 0) > 0) {
-          parts.push(`reused ${data.clientsReused} existing`);
-        }
-        setSummary(parts.join(", ") + ".");
-      }
+      const completed = await syncGoogleConnections(ids, { force, stage }, (done, total) => setProgress({ done, total }));
+      setResults(completed);
+      const succeeded = completed.filter((item) => !item.error);
+      const failed = completed.length - succeeded.length;
+      const found = succeeded.reduce((total, item) => total + (item.locationsUpserted ?? 0), 0);
+      const cached = succeeded.filter((item) => item.skippedGoogleFetch).length;
+      setSummary(`${succeeded.length} of ${completed.length} Google ${completed.length === 1 ? "account" : "accounts"} synced. ${found} ${found === 1 ? "profile" : "profiles"} read.${cached ? ` ${cached} ${cached === 1 ? "account" : "accounts"} already synced recently.` : ""}${stage && found ? " Pick the profiles to import below." : ""}`);
+      if (failed) setError(`${failed} ${failed === 1 ? "account needs" : "accounts need"} attention.${succeeded.length ? " Other accounts have finished syncing." : " Retry these accounts after fixing the errors below."}`);
       router.refresh();
-    } catch {
-      setError("Unable to connect to the server. Please try again.");
     } finally {
       setSyncing(false);
     }
   }
+
+  const failures = results.filter((item) => item.error);
+  const failureDetails = failures.length > 0 ? (
+    <ul className="max-w-md space-y-1 text-xs text-bad" aria-label="Account sync errors">
+      {failures.map((item) => <li key={item.connectionId}>
+        {accountNames[item.connectionId] ?? `Account ${ids.indexOf(item.connectionId) + 1}`}: {item.error}
+      </li>)}
+    </ul>
+  ) : null;
 
   if (pill) {
     return (
@@ -91,17 +72,18 @@ export function SyncLocationsButton({
         <button
           type="button"
           onClick={() => handleSync(false)}
-          disabled={syncing}
+          disabled={syncing || ids.length === 0}
           className="inline-flex h-10 items-center gap-2 rounded-full border border-line bg-white px-4 text-sm font-medium text-ink outline-none hover:bg-paper focus-visible:ring-2 focus-visible:ring-brand-line disabled:cursor-not-allowed disabled:opacity-60"
         >
           <RefreshCw className={cn("size-[15px]", syncing && "animate-spin")} aria-hidden />
-          {syncing ? "Reading Google…" : label}
+          {syncing ? busyLabel : label}
         </button>
         {summary ? (
           <p className="max-w-xs text-xs text-ink sm:text-right" role="status">
             {summary}
           </p>
         ) : null}
+        {failureDetails}
         {error ? (
           <p className="max-w-xs text-xs text-bad sm:text-right" role="alert">
             {error}
@@ -118,20 +100,20 @@ export function SyncLocationsButton({
           variant="outline"
           size="sm"
           onClick={() => handleSync(false)}
-          disabled={syncing}
+          disabled={syncing || ids.length === 0}
           className="gap-1.5"
         >
           <RefreshCw
             className={cn("h-3.5 w-3.5", syncing && "animate-spin")}
             aria-hidden
           />
-          {syncing ? "Reading Google…" : label}
+          {syncing ? busyLabel : label}
         </Button>
         <Button
           variant="ghost"
           size="sm"
           onClick={() => handleSync(true)}
-          disabled={syncing}
+          disabled={syncing || ids.length === 0}
           className="text-xs text-ink-3"
         >
           Force refresh
@@ -141,7 +123,7 @@ export function SyncLocationsButton({
         <ActivityStatus
           tone="google"
           title="Reading Business Profiles from Google"
-          detail="GRM is listing the locations this Google account manages and grouping them into clients. This can take a little while."
+          detail="Each connected Google account is checked separately. A failed account does not stop the others."
         />
       ) : null}
       {summary && (
@@ -149,6 +131,7 @@ export function SyncLocationsButton({
           {summary}
         </p>
       )}
+      {failureDetails}
       {error && (
         <p className="text-xs text-bad" role="alert">
           {error}

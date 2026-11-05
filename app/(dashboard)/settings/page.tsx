@@ -25,6 +25,7 @@ import { ContactSection } from "./contact-section";
 import { getMemberAccess, listScopeChoices, visibleClientIds } from "@/lib/services/access";
 import { loadReplySettings, type SettingsTarget } from "@/lib/services/reply-settings";
 import { loadAiBoard } from "@/lib/services/ai-config";
+import { canSyncWorkspace } from "@/lib/services/workspace";
 import { getActiveRole, getActiveWorkspace } from "@/lib/services/session";
 import { canOpenPath, canOpenTeam, type ShellRole } from "@/lib/shell";
 import { loadAgencyBranding } from "@/lib/services/agency-branding";
@@ -159,7 +160,7 @@ export default async function SettingsPage({
   } else if (section === "notifications") {
     content = notificationsSection(canOpenTeam(role));
   } else if (section === "integrations") {
-    content = await googleSection(workspaceId, allowedClients, {
+    content = await googleSection(workspaceId, allowedClients, canSyncWorkspace(role), {
       googleError: typeof params.google_error === "string" ? params.google_error : null,
       connected: params.google_connected === "true",
     });
@@ -508,6 +509,7 @@ function notificationsSection(canOpenTeamSection: boolean) {
 async function googleSection(
   workspaceId: string,
   allowedClients: string[] | null,
+  canSync: boolean,
   state: { googleError: string | null; connected: boolean }
 ) {
   const admin = createAdminClient();
@@ -539,7 +541,7 @@ async function googleSection(
     <>
       <SettingsSection
         title="Google connection"
-        description="The Google account that can read and reply to your Business Profiles. This is separate from how you sign in."
+        description="Connect multiple Google accounts to read and reply to their Business Profiles in this workspace. This is separate from how you sign in."
       >
         {rows.length === 0 ? (
           <SettingsValueRow
@@ -569,6 +571,7 @@ async function googleSection(
       <SettingsDetail id="google-accounts" title="Google accounts">
         <GoogleConnectionCard
           connections={rows}
+          canSync={canSync}
           initialMessage={state.googleError ? ERROR_MESSAGES[state.googleError] ?? ERROR_MESSAGES.unknown : null}
           initialSuccess={state.connected}
         />

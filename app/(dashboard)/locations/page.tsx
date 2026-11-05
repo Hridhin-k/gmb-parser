@@ -63,10 +63,9 @@ export default async function LocationsPage({
   const [{ data: connections }, clients, unassignedLocations, hierarchy, board, managers] = await Promise.all([
     admin
       .from("grm_google_connections")
-      .select("id")
+      .select("id, google_email")
       .eq("workspace_id", workspaceId)
-      .eq("status", "active")
-      .limit(1),
+      .eq("status", "active"),
     GoogleBusinessProfileService.getWorkspaceClients(workspaceId),
     GoogleBusinessProfileService.getUnlinkedLocations(workspaceId),
     view === "groups"
@@ -117,7 +116,7 @@ export default async function LocationsPage({
         }
       >
         {connectionId && canSync ? (
-          <SyncLocationsButton connectionId={connectionId} label="Sync from Google" pill />
+          <SyncLocationsButton connectionIds={(connections ?? []).map((item) => item.id)} accountNames={Object.fromEntries((connections ?? []).map((item) => [item.id, item.google_email]))} label="Sync all Google accounts" pill />
         ) : connectionId || !isManager(role) ? null : (
           <Button variant="outline" nativeButton={false} render={<Link href="/settings?section=integrations" />}>
             Connect Google

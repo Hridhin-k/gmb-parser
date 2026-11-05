@@ -29,6 +29,7 @@ export type AuditAction =
   | "google_connection.failed"
   | "google_connection.revoked"
   | "google_sync.completed"
+  | "google_sync.failed"
   | "client.created"
   | "client.updated"
   | "client.brand_profile_saved"

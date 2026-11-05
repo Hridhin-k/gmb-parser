@@ -9,6 +9,7 @@ import { assertCanSyncWorkspace } from "@/lib/services/workspace";
 import { logger } from "@/lib/logger";
 import { parseBody } from "@/lib/validation";
 import { checkRateLimit, SYNC_ALL_LIMIT } from "@/lib/rate-limit";
+import { auditErrorDetails } from "@/lib/audit-details";
 import { bustCatalogCache } from "@/lib/services/catalog-tables";
 
 export const maxDuration = 60;
@@ -32,17 +33,6 @@ export async function POST(request: Request) {
 
   if (!user) {
     return NextResponse.json({ error: "Not authenticated" }, { status: 401 });
-  }
-
-  const rl = checkRateLimit(user.id, "google.sync_locations", SYNC_ALL_LIMIT);
-  if (!rl.allowed) {
-    return NextResponse.json(
-      {
-        error:
-          "Sync rate limit reached. Wait a few minutes before syncing again to conserve Google API quota.",
-      },
-      { status: 429 }
-    );
   }
 
   let body: { connectionId: string; force?: boolean; stage?: boolean };
@@ -88,6 +78,17 @@ export async function POST(request: Request) {
     throw error;
   }
 
+  const rl = checkRateLimit(user.id, `google.sync_locations:${connectionId}`, SYNC_ALL_LIMIT);
+  if (!rl.allowed) {
+    return NextResponse.json(
+      {
+        error:
+          "Sync rate limit reached. Wait a few minutes before syncing again to conserve Google API quota.",
+      },
+      { status: 429 }
+    );
+  }
+
   try {
     const result = await GoogleBusinessProfileService.syncConnectionAccounts(
       connectionId,
@@ -101,7 +102,7 @@ export async function POST(request: Request) {
       action: "google_sync.completed",
       entityType: "grm_google_connections",
       entityId: connectionId,
-      metadata: result as Record<string, unknown>,
+      metadata: { ...result, connectionId, force: force === true, stage: stage === true },
     });
 
     bustCatalogCache();
@@ -110,6 +111,12 @@ export async function POST(request: Request) {
       ...result,
     });
   } catch (error) {
+    await AuditService.log({ workspaceId: connection.workspace_id, userId: user.id,
+      action: "google_sync.failed", entityType: "grm_google_connections", entityId: connectionId,
+      metadata: { ...auditErrorDetails(error), connectionId, force: force === true, stage: stage === true },
+    });
+    // Discovery may have saved a partial set before a later failure.
+    bustCatalogCache();
     if (error instanceof AppError) {
       if (error.code === "GBP_INSUFFICIENT_PERMISSION") {
         return NextResponse.json({ error: error.message }, { status: 403 });
