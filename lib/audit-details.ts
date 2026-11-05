@@ -54,6 +54,7 @@ const labels: Record<string, string> = {
   statusCode: "HTTP status", retryable: "Retryable", durationMs: "Duration (ms)", reviewId: "Review ID",
   replyId: "Reply ID", locationId: "Location ID", clientId: "Business ID", requestId: "Request ID",
   providerRequestId: "Provider request ID", failureCount: "Failed attempts", reviewMissingOnGoogle: "Missing on Google",
+  providerResponseId: "Provider response ID",
   reviewsSynced: "New reviews", reviewsUpdated: "Updated reviews", pagesProcessed: "Pages", googleEmail: "Google account",
   aiConfigVersion: "AI config version", jobId: "Job ID", runId: "Run ID", reportId: "Report ID",
 };

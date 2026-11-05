@@ -117,6 +117,7 @@ export async function generateAi(input: GenerateInput) {
     let finishReason: string | undefined;
     let rawFinishReason: string | undefined;
     let providerRequestId: string | undefined;
+    let providerResponseId: string | undefined;
     let usage = normalizeUsage(undefined);
     async function record(usageValue: LanguageModelUsage | undefined, status: string) {
       if (recorded) return;
@@ -144,14 +145,15 @@ export async function generateAi(input: GenerateInput) {
       stage = "validate_output";
       finishReason = result.finishReason;
       rawFinishReason = result.rawFinishReason;
-      providerRequestId = result.response.headers?.["x-request-id"] ?? result.response.id;
+      providerRequestId = result.response.headers?.["x-request-id"] ?? result.response.headers?.["x-goog-request-id"];
+      providerResponseId = result.response.id;
       await record(result.totalUsage, result.finishReason);
       if (result.finishReason === "length") throw new AiError("The AI response was cut off before it finished. Please try again.", "AI_INVALID_RESPONSE");
       if (result.finishReason === "content-filter") throw new AiError("AI generation was blocked due to content restrictions.", "AI_SAFETY_BLOCKED");
       const text = input.schema ? JSON.stringify(result.output) : result.text;
       if (!text?.trim()) throw new AiError("AI returned an empty or unusable response. Please try again.", "AI_INVALID_RESPONSE");
       if (result.finishReason !== "stop") throw new AiError("AI did not complete its response. Please try again.", "AI_INVALID_RESPONSE");
-      await audit("ai.request_completed", { provider: route.provider, model: routeId(route), providerRequestId, attempt, fallback: attempt > 1, durationMs: Date.now() - started, finishReason, rawFinishReason, ...usage });
+      await audit("ai.request_completed", { provider: route.provider, model: routeId(route), providerRequestId, providerResponseId, attempt, fallback: attempt > 1, durationMs: Date.now() - started, finishReason, rawFinishReason, ...usage });
       return {
         text, model: routeId(route), usage, requestId,
         generationParams: { provider: route.provider, model: route.model, maxOutputTokens: input.maxOutputTokens, providerOptions: providerOptions(route) },
@@ -165,9 +167,9 @@ export async function generateAi(input: GenerateInput) {
         retryable: safe instanceof AiError && safe.retryable,
         willFallback: attempt === 1 && Boolean(fallback && routeId(fallback) !== routeId(primary) && safe instanceof AiError && safe.retryable),
         finishReason: finishReason ?? (NoObjectGeneratedError.isInstance(error) ? error.finishReason : undefined), rawFinishReason,
-        ...(providerRequestId ? { providerRequestId } : {}), ...usage,
+        ...(providerRequestId ? { providerRequestId } : {}), ...(providerResponseId ? { providerResponseId } : {}), ...usage,
       });
-      logger.warn("ai.call_failed", { workspaceId: input.workspaceId, operation: input.operation, provider: route.provider, model: route.model, errorCode: safe.code, durationMs: Date.now() - started });
+      logger.warn("ai.call_failed", { requestId, workspaceId: input.workspaceId, operation: input.operation, provider: route.provider, model: route.model, errorCode: safe.code, durationMs: Date.now() - started });
       throw safe;
     }
   }
