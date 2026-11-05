@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { AppError, GoogleApiError } from "@/lib/errors";
 import { peek, put } from "@/lib/ttl-cache";
+import { AuditService } from "@/lib/services/audit";
 
 // ---------------------------------------------------------------------------
 // Shared mutable state for mock chains
@@ -296,6 +297,8 @@ describe("ReplyPublishingService.publishReply", () => {
     ).rejects.toMatchObject({ code: "OAUTH_REVOKED" });
 
     expect(mockReplyToReview).not.toHaveBeenCalled();
+    expect(AuditService.log).toHaveBeenCalledWith(expect.objectContaining({ action: "reply.publish_failed",
+      metadata: expect.objectContaining({ reviewId: "review-1", replyId: "reply-1", stage: "google_auth", errorCode: "OAUTH_REVOKED", retryable: false, durationMs: expect.any(Number) }) }));
   });
 
   it("marks reply as 'failed' on Google API error and includes failure count", async () => {
@@ -324,6 +327,8 @@ describe("ReplyPublishingService.publishReply", () => {
     await expect(
       ReplyPublishingService.publishReply("reply-1", "review-1", "ws-1", "user-1")
     ).rejects.toMatchObject({ code: "PUBLISH_UNCERTAIN" });
+    expect(AuditService.log).toHaveBeenCalledWith(expect.objectContaining({ action: "reply.publish_uncertain",
+      metadata: expect.objectContaining({ reviewId: "review-1", replyId: "reply-1", providerStatus: 500, stage: "google_publish", outcome: "unconfirmed", retryable: false }) }));
   });
 
   it("maps 403 Google error to GOOGLE_FORBIDDEN with retryable=false", async () => {
@@ -349,6 +354,11 @@ describe("ReplyPublishingService.publishReply", () => {
 
     expect(err).toBeInstanceOf(AppError);
     expect((err as AppError).code).toBe("GOOGLE_FORBIDDEN");
+    const failures = vi.mocked(AuditService.log).mock.calls.map(([entry]) => entry).filter((entry) => entry.action === "reply.publish_failed");
+    expect(failures).toHaveLength(1);
+    expect(failures[0]).toMatchObject({ metadata: { reviewId: "review-1", replyId: "reply-1", locationId: "loc-1", connectionId: "conn-1",
+      errorCode: "GOOGLE_FORBIDDEN", errorMessage: "You do not have permission to reply to this review on Google.", providerStatus: 403, stage: "google_publish", failureCount: 1, retryable: false } });
+    expect(JSON.stringify(failures)).not.toContain("valid-access-token");
   });
 
   it("maps 429 Google error to GOOGLE_QUOTA with retryable=true", async () => {

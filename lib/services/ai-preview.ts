@@ -125,6 +125,7 @@ export async function previewAiDraft(input: {
   try {
     const { text, model: modelId } = await generateAi({
       workspaceId: input.workspaceId, task: "reply", operation: "preview", prompt,
+      audit: { userId: input.userId, locationId, aiConfigVersion: config.version },
       fast: route === "fast", maxOutputTokens: 1024, timeoutMs: REQUEST_TIMEOUT_MS, temperature: 0.6,
     });
     const cleaned = text

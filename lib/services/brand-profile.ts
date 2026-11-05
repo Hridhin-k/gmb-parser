@@ -128,12 +128,14 @@ export async function draftBrandProfile(input: {
   const website = client.website ? normalizeWebsiteUrl(client.website) : null;
   if (!website) throw new ValidationError("Save the business's website first, then build its profile.");
 
-  return draftFromWebsite({ workspaceId: input.workspaceId, businessName: client.brand_name || client.name, website });
+  return draftFromWebsite({ workspaceId: input.workspaceId, userId: input.userId, clientId: input.clientId, businessName: client.brand_name || client.name, website });
 }
 
 /** Reads a public website and has the model write a brand profile. Nothing is saved. */
 export async function draftFromWebsite(input: {
   workspaceId: string;
+  userId?: string;
+  clientId?: string;
   businessName: string;
   website: URL;
 }): Promise<{ profile: BrandProfile; pages: string[] }> {
@@ -141,6 +143,7 @@ export async function draftFromWebsite(input: {
   const result = await generateAi({
     workspaceId: input.workspaceId,
     task: "insight",
+    audit: { userId: input.userId, clientId: input.clientId },
     operation: "insight_brief",
     prompt: brandProfilePrompt(input.businessName, pages),
     schema: brandProfileSchema,

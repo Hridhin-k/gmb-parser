@@ -1,4 +1,6 @@
 import { generateAi } from "@/lib/ai/service";
+import { AuditService } from "@/lib/services/audit";
+import { auditErrorDetails } from "@/lib/audit-details";
 import { aiStopsRun } from "@/lib/ai/failure";
 import { AppError } from "@/lib/errors";
 import { batchExtractionSchema } from "@/lib/ai/schemas";
@@ -246,9 +248,10 @@ export async function discoverScopeReviews(
   return all;
 }
 
-async function callBatchExtractor(reviews: BatchReview[], workspaceId: string, brandContext: string) {
+async function callBatchExtractor(reviews: BatchReview[], workspaceId: string, brandContext: string, runId: string) {
   return generateAi({
     workspaceId, task: "extract", operation: "extract_review",
+    audit: { runId, reviewIds: reviews.map((review) => review.id) },
     prompt: batchExtractionPrompt(reviews, brandContext), schema: batchExtractionSchema,
     temperature: 0.1, maxOutputTokens: 8192, timeoutMs: REQUEST_TIMEOUT_MS,
   });
@@ -379,6 +382,8 @@ export async function executeAnalysisRun(
       .eq("id", runId)
       .then(undefined, () => undefined);
     logger.error("insight_pipeline.run_failed", { runId, message });
+    await AuditService.log({ workspaceId, action: "analysis.run_failed", entityType: "grm_analysis_runs", entityId: runId,
+      metadata: { ...auditErrorDetails(error), runId, locationIds: input.locationIds, rangeStart: input.start, rangeEnd: input.end, stage: "analysis_run" } });
   } finally {
     try { for (const key of lockKeys) await lease.query("SELECT pg_advisory_unlock(hashtextextended($1,0))", [key]); }
     finally { lease.release(); }
@@ -471,7 +476,7 @@ function makeRunProcessor(
 
   async function processBatch(batch: BatchReview[], brandContext: string) {
     try {
-      const { text, model, usage } = await withRetry(() => callBatchExtractor(batch, workspaceId, brandContext), {
+      const { text, model, usage } = await withRetry(() => callBatchExtractor(batch, workspaceId, brandContext, runId), {
         attempts: 3,
         baseDelayMs: 1000,
         onRetry: () => {
@@ -498,6 +503,8 @@ function makeRunProcessor(
             await persistAnalysisResult(admin, workspaceId, review, observations, model);
             state.newlyAnalysed += 1;
           } catch (error) {
+            await AuditService.log({ workspaceId, action: "review.analysis_failed", entityType: "grm_reviews", entityId: reviewId,
+              metadata: { ...auditErrorDetails(error), runId, reviewId, locationId: review.location_id, model, stage: "persist_observations" } });
             await markAnalysisFailed(
               admin,
               workspaceId,
@@ -512,6 +519,9 @@ function makeRunProcessor(
       await Promise.all(
         missingReviewIds.map(async (reviewId) => {
           const review = byId.get(reviewId)!;
+          await AuditService.log({ workspaceId, action: "review.analysis_failed", entityType: "grm_reviews", entityId: reviewId,
+            metadata: { runId, reviewId, locationId: review.location_id, model, stage: "validate_batch_output", errorCode: "AI_MISSING_REVIEW",
+              errorMessage: "The AI batch response omitted this review." } });
           await markAnalysisFailed(
             admin,
             workspaceId,
@@ -531,6 +541,8 @@ function makeRunProcessor(
       }
       state.failed += batch.length;
       logger.error("insight_pipeline.batch_failed", { runId, message });
+      await AuditService.log({ workspaceId, action: "review.analysis_failed", entityType: "grm_analysis_runs", entityId: runId,
+        metadata: { ...auditErrorDetails(error), runId, reviewIds: batch.map((review) => review.id), stage: "extract_batch" } });
     } finally {
       state.batchesCompleted += 1;
       await updateProgress().catch(() => undefined);

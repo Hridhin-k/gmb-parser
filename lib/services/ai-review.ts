@@ -1,6 +1,7 @@
 import { createAdminClient } from "@/lib/db/client";
 import { AuditService } from "./audit";
 import { AppError, ValidationError } from "@/lib/errors";
+import { auditErrorDetails } from "@/lib/audit-details";
 import { logger } from "@/lib/logger";
 import { forgetReviewList } from "@/lib/services/dashboard";
 import { createHash } from "crypto";
@@ -220,6 +221,21 @@ export class AIReviewService {
   static async generateDraft(
     params: GenerateDraftParams
   ): Promise<GenerateDraftResult> {
+    const startedAt = Date.now();
+    try {
+      return await this.performGenerateDraft(params);
+    } catch (error) {
+      await AuditService.log({
+        workspaceId: params.workspaceId, userId: params.userId,
+        action: "reply.ai_failed", entityType: "grm_reviews", entityId: params.reviewId,
+        metadata: { ...auditErrorDetails(error), reviewId: params.reviewId, stage: "draft_workflow", automated: params.automated ?? false,
+          adjustment: params.adjustment?.kind ?? "generate", durationMs: Date.now() - startedAt },
+      });
+      throw error;
+    }
+  }
+
+  private static async performGenerateDraft(params: GenerateDraftParams): Promise<GenerateDraftResult> {
     if (params.automated && params.contact) {
       throw new ValidationError("Contact details can only be added when a person drafts a reply.");
     }
@@ -382,6 +398,7 @@ export class AIReviewService {
     try {
       const generated = await generateAi({
         workspaceId: params.workspaceId, task: "reply", operation: "reply_draft",
+        audit: { userId: params.userId, reviewId: params.reviewId, locationId: review.location_id, aiConfigVersion: promptContext.config.version },
         prompt: systemPrompt, fast: route === "fast", maxOutputTokens: 1024,
         timeoutMs: REQUEST_TIMEOUT_MS, temperature: 0.6,
       });
@@ -404,6 +421,10 @@ export class AIReviewService {
         ...inventedPromiseViolations(cleaned, [org.policies]),
       ];
       if (forbidden.length) {
+        await AuditService.log({ workspaceId: params.workspaceId, userId: params.userId, action: "reply.guardrail_blocked",
+          entityType: "grm_reviews", entityId: params.reviewId,
+          metadata: { reviewId: params.reviewId, locationId: review.location_id, model: modelId, stage: "generate",
+            errorCode: "AI_REPLY_RULE_VIOLATION", errorMessage: "The draft used a phrase this organisation's rules do not allow.", violations: forbidden } });
         throw new ValidationError("The draft used a phrase this organisation's rules do not allow.");
       }
       if (violations.length) {
@@ -413,7 +434,8 @@ export class AIReviewService {
           action: "reply.guardrail_blocked",
           entityType: "grm_reviews",
           entityId: params.reviewId,
-          metadata: { codes: violations.map((item) => item.code), stage: "generate" },
+          metadata: { reviewId: params.reviewId, locationId: review.location_id, model: modelId,
+            codes: violations.map((item) => item.code), errorMessage: violations[0].message, stage: "generate" },
         });
         throw new ValidationError(violations[0].message);
       }
@@ -702,6 +724,12 @@ export class AIReviewService {
       await completeAiGenerationJob(jobId, saved);
     } catch (error) {
       await failAiGenerationJob(jobId, job.attempts + 1, error);
+      await AuditService.log({
+        workspaceId: job.workspace_id, userId: job.user_id, action: "ai.persistence_failed",
+        entityType: "grm_ai_generation_jobs", entityId: jobId,
+        metadata: { ...auditErrorDetails(error), reviewId: job.review_id, locationId: job.location_id, jobId,
+          model: job.model, stage: "persist_draft", attempt: job.attempts + 1, retryable: job.attempts + 1 < 5 },
+      });
     }
   }
 }

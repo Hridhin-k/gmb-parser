@@ -6,6 +6,14 @@ import { AppError, GoogleApiError, ValidationError } from "@/lib/errors";
 import { checkGeneratedReplyGuardrails, checkReplyGuardrails, negativeReviewNeedsApproval } from "@/lib/reply-guardrails";
 import { comparePublishedReply } from "@/lib/reply-adjustments";
 import { forgetReviewList } from "@/lib/services/dashboard";
+import { auditErrorDetails } from "@/lib/audit-details";
+
+interface PublishAuditState {
+  stage: string;
+  terminalRecorded: boolean;
+  startedAt: number;
+  context: Record<string, unknown>;
+}
 
 // ---------------------------------------------------------------------------
 // Types
@@ -139,8 +147,19 @@ export class ReplyPublishingService {
     options?: { automated?: boolean }
   ): Promise<PublishResult> {
     forgetReviewList(workspaceId, userId);
+    const audit: PublishAuditState = { stage: "preflight", terminalRecorded: false, startedAt: Date.now(),
+      context: { requestId: crypto.randomUUID(), reviewId, replyId, automated: options?.automated ?? false } };
     try {
-      return await this.performPublishReply(replyId, reviewId, workspaceId, userId, options);
+      return await this.performPublishReply(replyId, reviewId, workspaceId, userId, audit, options);
+    } catch (error) {
+      if (!audit.terminalRecorded) {
+        const classified = classifyPublishError(error);
+        await AuditService.log({ workspaceId, userId, action: "reply.publish_failed", entityType: "grm_review_replies", entityId: replyId,
+          metadata: { ...audit.context, ...auditErrorDetails(error), errorCode: classified.code, errorMessage: classified.message,
+            cause: auditErrorDetails(error),
+            retryable: classified.retryable, stage: audit.stage, durationMs: Date.now() - audit.startedAt } });
+      }
+      throw error;
     } finally {
       // Refreshes during the Google request can cache the old queue again.
       forgetReviewList(workspaceId, userId);
@@ -152,6 +171,7 @@ export class ReplyPublishingService {
     reviewId: string,
     workspaceId: string,
     userId: string,
+    audit: PublishAuditState,
     options?: { automated?: boolean }
   ): Promise<PublishResult> {
     const db = createAdminClient();
@@ -255,6 +275,9 @@ export class ReplyPublishingService {
       throw new AppError("Location data not found", "NOT_FOUND", 404);
     }
 
+    Object.assign(audit.context, { locationId: locationData.id, clientId: locationData.client_id,
+      googleReviewName: reviewData.google_review_name, previousStatus: reply.status, failureCount: reply.failure_count, attempt: reply.failure_count + 1 });
+
     const accountData = Array.isArray(locationData.grm_google_accounts)
       ? locationData.grm_google_accounts[0]
       : locationData.grm_google_accounts;
@@ -291,12 +314,14 @@ export class ReplyPublishingService {
     }
 
     const connectionId = accountData.connection_id;
+    audit.context.connectionId = connectionId;
     const googleReviewName = reviewData.google_review_name;
     if (!googleReviewName) {
       throw new AppError("This review has no Google id, so it cannot be published.", "CONFIG_ERROR", 400);
     }
 
     // ── 4. Transition to `pending_publish` — acts as a distributed lock ───
+    audit.stage = "acquire_publish_lock";
     //    Use conditional update: only succeed if status is still `approved`.
     //    This prevents two simultaneous requests from both proceeding.
     const { data: locked, error: lockError } = await db
@@ -330,14 +355,13 @@ export class ReplyPublishingService {
       entityType: "grm_review_replies",
       entityId: replyId,
       metadata: {
-        reviewId,
-        locationId: locationData.id,
-        clientId: locationData.client_id,
+        ...audit.context,
       },
     });
 
     // ── 6. Get valid access token (auto-refresh if expired) ───────────────
     let accessToken: string;
+    audit.stage = "google_auth";
     try {
       accessToken = await GoogleOAuthService.getValidAccessToken(connectionId);
     } catch (tokenError) {
@@ -355,6 +379,7 @@ export class ReplyPublishingService {
 
     // ── 7. Call Google's official Business Profile review reply API ────────
     let googleReply: { comment: string; updateTime: string | null };
+    audit.stage = "google_publish";
     try {
       googleReply = await GoogleReviewService.replyToReview(accessToken, googleReviewName, reply.content);
     } catch (googleError) {
@@ -374,8 +399,10 @@ export class ReplyPublishingService {
           action: "reply.publish_uncertain",
           entityType: "grm_reviews",
           entityId: reviewId,
-          metadata: { replyId },
+          metadata: { ...audit.context, ...auditErrorDetails(googleError), errorMessage: message,
+            stage: audit.stage, durationMs: Date.now() - audit.startedAt, retryable: false, outcome: "unconfirmed", status: "pending_publish" },
         });
+        audit.terminalRecorded = true;
         throw new AppError(message, "PUBLISH_UNCERTAIN", 409);
       }
 
@@ -413,13 +440,21 @@ export class ReplyPublishingService {
         entityType: "grm_review_replies",
         entityId: replyId,
         metadata: {
-          reviewId,
+          ...audit.context,
+          ...auditErrorDetails(googleError),
+          cause: auditErrorDetails(googleError),
           errorCode: classified.code,
+          errorMessage: classified.message,
           retryable: classified.retryable,
           reviewMissingOnGoogle: missing,
+          failureCount: reply.failure_count + 1,
+          durationMs: Date.now() - audit.startedAt,
+          stage: audit.stage,
+          status: "failed",
           // Never log access tokens, review content, or PII beyond what's needed
         },
       });
+      audit.terminalRecorded = true;
 
       if (!missing) {
         const { notifyProfileEvent } = await import("@/lib/services/notifications");
@@ -453,12 +488,15 @@ export class ReplyPublishingService {
         action: "reply.publish_uncertain",
         entityType: "grm_reviews",
         entityId: reviewId,
-        metadata: { replyId, outcome },
+        metadata: { ...audit.context, outcome, errorCode: "PUBLISH_UNCERTAIN", errorMessage: message,
+          stage: "verify_google_reply", durationMs: Date.now() - audit.startedAt, retryable: false, status: "pending_publish" },
       });
+      audit.terminalRecorded = true;
       throw new AppError(message, "PUBLISH_UNCERTAIN", 409);
     }
 
     // ── 8. Google confirmed the same reply — mark as published ────────────
+    audit.stage = "persist_published_reply";
     const publishedAt = googleReply.updateTime ?? new Date().toISOString();
 
     await db
@@ -499,9 +537,8 @@ export class ReplyPublishingService {
       entityType: "grm_review_replies",
       entityId: replyId,
       metadata: {
-        reviewId,
-        locationId: locationData.id,
-        clientId: locationData.client_id,
+        ...audit.context,
+        durationMs: Date.now() - audit.startedAt,
         publishedAt,
       },
     });
@@ -519,8 +556,15 @@ export class ReplyPublishingService {
     workspaceId: string,
     userId: string
   ): Promise<PublishResult> {
+    const startedAt = Date.now();
     try {
       return await this.performReconcilePendingPublish(replyId, reviewId, workspaceId, userId);
+    } catch (error) {
+      await AuditService.log({ workspaceId, userId, action: "reply.publish_uncertain", entityType: "grm_reviews", entityId: reviewId,
+        metadata: { ...auditErrorDetails(error), replyId, reviewId, stage: "reconcile_google_reply",
+          durationMs: Date.now() - startedAt, retryable: false,
+          ...(error instanceof AppError && error.metadata?.cause ? { cause: error.metadata.cause } : {}) } });
+      throw error;
     } finally {
       forgetReviewList(workspaceId, userId);
     }
@@ -587,11 +631,12 @@ export class ReplyPublishingService {
       const remote = await GoogleReviewService.getReview(accessToken, googleReviewName);
       remoteComment = remote.reviewReply?.comment ?? null;
       remoteTime = remote.reviewReply?.updateTime ?? null;
-    } catch {
+    } catch (error) {
       throw new AppError(
         "Google could not be checked, so this reply is still not marked as published.",
         "PUBLISH_UNCERTAIN",
-        409
+        409,
+        { cause: auditErrorDetails(error) }
       );
     }
 
@@ -624,7 +669,7 @@ export class ReplyPublishingService {
         action: "reply.reconciled",
         entityType: "grm_reviews",
         entityId: reviewId,
-        metadata: { replyId, publishedAt },
+        metadata: { replyId, reviewId, locationId: locationData?.id, publishedAt, outcome: "matched", status: "published" },
       });
       return { replyId, reviewId, publishedAt };
     }

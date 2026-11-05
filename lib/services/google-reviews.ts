@@ -10,19 +10,21 @@ const MY_BUSINESS_API = "https://mybusiness.googleapis.com/v4";
 // Maximum page size allowed by the API
 const PAGE_SIZE = 50;
 
-function verificationFailure(error?: unknown): AppError {
+function verificationFailure(error?: unknown, verification: Record<string, unknown> = {}): AppError {
   const status = error instanceof GoogleApiError ? error.googleErrorCode : undefined;
   if (status === 401 || status === 403) {
     return new AppError(
       "Google could not verify this review with the connected account. Check the location's access in Settings.",
       status === 401 ? "GOOGLE_AUTH" : "GOOGLE_FORBIDDEN",
-      403
+      403,
+      { verification }
     );
   }
   return new AppError(
     "Google could not verify whether this review is available. Nothing was removed. Please try again.",
     "GOOGLE_REVIEW_CHECK_FAILED",
-    503
+    503,
+    { verification }
   );
 }
 
@@ -166,7 +168,7 @@ export class GoogleReviewService {
       review = await withGooglePriority("interactive", () => this.getReview(accessToken, reviewName));
     } catch (error) {
       if (!(error instanceof GoogleApiError) || error.googleErrorCode !== 404) {
-        throw verificationFailure(error);
+        throw verificationFailure(error, { writeStatus: 404, reviewStatus: error instanceof GoogleApiError ? error.googleErrorCode ?? null : null, reason: "review_read_failed" });
       }
       const match = /^(accounts\/[^/]+\/locations\/[^/]+)\/reviews\/([^/]+)$/.exec(reviewName);
       if (!match) throw verificationFailure();
@@ -175,16 +177,17 @@ export class GoogleReviewService {
         // Check the same parent with the same credentials before hiding a review.
         page = await withGooglePriority("interactive", () => this.listReviews(accessToken, match[1]));
       } catch (parentError) {
-        throw verificationFailure(parentError);
+        throw verificationFailure(parentError, { writeStatus: 404, reviewStatus: 404, parentStatus: parentError instanceof GoogleApiError ? parentError.googleErrorCode ?? null : null, reason: "parent_read_failed" });
       }
       if ((!Array.isArray(page.reviews) && page.totalReviewCount !== 0)
         || page.reviews?.some((item) => item.name === reviewName || item.reviewId === match[2])) {
-        throw verificationFailure();
+        throw verificationFailure(undefined, { writeStatus: 404, reviewStatus: 404, parentStatus: 200, reason: "parent_response_inconclusive" });
       }
       throw new AppError(
         "Google no longer returns this review. It has been removed from the reply queue; its history is kept.",
         "GOOGLE_REVIEW_MISSING",
-        410
+        410,
+        { verification: { writeStatus: 404, reviewStatus: 404, parentStatus: 200, reason: "confirmed_missing" } }
       );
     }
     if (review.name !== reviewName) throw verificationFailure();
@@ -200,7 +203,8 @@ export class GoogleReviewService {
         throw new AppError(
           "The review still exists on Google, but Google could not accept the reply. Please try again later or reply in Google Business Profile.",
           "GOOGLE_REPLY_UNAVAILABLE",
-          503
+          503,
+          { verification: { writeStatus: 404, reviewStatus: 200, writeAttempts: 2, reason: "readable_review_write_rejected" } }
         );
       }
       throw error;

@@ -2,6 +2,7 @@ import { createAdminClient } from "@/lib/db/client";
 import { AIReviewService } from "@/lib/services/ai-review";
 import { ReplyPublishingService } from "@/lib/services/reply-publishing";
 import { AuditService } from "@/lib/services/audit";
+import { auditErrorDetails } from "@/lib/audit-details";
 import { assertPublishAccess, assertReviewAction } from "@/lib/services/access";
 import { AppError } from "@/lib/errors";
 import { logger } from "@/lib/logger";
@@ -228,7 +229,8 @@ export async function processBulkJob(jobId: string, options: BulkGenerateOptions
       userId: job.user_id,
       action: `reviews.bulk_${job.action}`,
       entityType: "grm_reviews",
-      metadata: { succeeded, failed: results.length - succeeded, action: job.action, jobId } as Record<
+      metadata: { succeeded, failed: results.length - succeeded, action: job.action, jobId,
+        failures: results.filter((result) => !result.ok).map(({ reviewId, error }) => ({ reviewId, error })) } as Record<
         string,
         unknown
       >,
@@ -241,5 +243,8 @@ export async function processBulkJob(jobId: string, options: BulkGenerateOptions
       .eq("id", jobId)
       .then(undefined, () => undefined);
     logger.error("bulk_job.failed", { jobId, message });
+    await AuditService.log({ workspaceId: job.workspace_id, userId: job.user_id,
+      action: "reviews.bulk_failed", entityType: "grm_bulk_jobs", entityId: jobId,
+      metadata: { ...auditErrorDetails(error), jobId, operation: job.action, stage: "bulk_processing", total: job.review_ids.length } });
   }
 }

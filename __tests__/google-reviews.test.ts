@@ -42,7 +42,8 @@ describe("Google reply publishing after a 404", () => {
       .mockResolvedValueOnce(response(200, review))
       .mockResolvedValueOnce(response(404));
     await expect(GoogleReviewService.replyToReview("token", reviewName, comment))
-      .rejects.toMatchObject({ code: "GOOGLE_REPLY_UNAVAILABLE", statusCode: 503 });
+      .rejects.toMatchObject({ code: "GOOGLE_REPLY_UNAVAILABLE", statusCode: 503,
+        metadata: { verification: { writeStatus: 404, reviewStatus: 200, writeAttempts: 2, reason: "readable_review_write_rejected" } } });
     expect(fetchMock).toHaveBeenCalledTimes(3);
   });
 
@@ -51,7 +52,8 @@ describe("Google reply publishing after a 404", () => {
       .mockResolvedValueOnce(response(404))
       .mockResolvedValueOnce(response(200, { reviews: [{ name: "another-review", reviewId: "another-id" }], totalReviewCount: 1 }));
     await expect(GoogleReviewService.replyToReview("token", reviewName, comment))
-      .rejects.toMatchObject({ code: "GOOGLE_REVIEW_MISSING", statusCode: 410 });
+      .rejects.toMatchObject({ code: "GOOGLE_REVIEW_MISSING", statusCode: 410,
+        metadata: { verification: { writeStatus: 404, reviewStatus: 404, parentStatus: 200, reason: "confirmed_missing" } } });
     expect(fetchMock.mock.calls[2][0]).toContain("accounts/account-1/locations/location-1/reviews?");
     expect(fetchMock.mock.calls[2][1].headers.Authorization).toBe("Bearer token");
   });

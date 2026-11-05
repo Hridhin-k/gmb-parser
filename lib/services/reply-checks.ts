@@ -23,7 +23,7 @@ export async function assertSafePublicReply(input: {
     action: "reply.guardrail_blocked",
     entityType: "grm_reviews",
     entityId: input.reviewId,
-    metadata: { codes: violations.map((item) => item.code), stage: input.stage },
+    metadata: { reviewId: input.reviewId, codes: violations.map((item) => item.code), errorMessage: violations[0].message, stage: input.stage },
   });
   throw new ValidationError(violations[0].message);
 }

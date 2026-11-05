@@ -37,7 +37,7 @@ export function AuditLogTable({ rows, summary }: { rows: AuditTableRow[]; summar
     () =>
       needle
         ? rows.filter((row) =>
-            [row.actor, row.actionLabel, row.action, row.objectLabel, row.objectId ?? "", ...row.details.map((d) => `${d.label} ${d.value}`)]
+            [row.id, row.time, row.actor, row.actionLabel, row.action, row.objectLabel, row.objectId ?? "", ...row.details.map((d) => `${d.label} ${d.value}`)]
               .join(" ")
               .toLowerCase()
               .includes(needle)
@@ -86,7 +86,7 @@ export function AuditLogTable({ rows, summary }: { rows: AuditTableRow[]; summar
               {visible.map((row) => (
                 <tr key={row.id} className="border-b border-line-2 align-top last:border-0 hover:bg-[#fafbfd]">
                   <td className="whitespace-nowrap px-3 py-2.5 text-xs tabular-nums text-ink-3">
-                    <time dateTime={row.time}>{row.timeLabel}</time>
+                    <time dateTime={row.time} title={row.time}>{row.timeLabel}</time>
                   </td>
                   <td className="px-3 py-2.5">
                     <span className="flex min-w-0 items-center gap-2">
@@ -119,13 +119,24 @@ export function AuditLogTable({ rows, summary }: { rows: AuditTableRow[]; summar
                     {row.details.length === 0 ? (
                       "—"
                     ) : (
-                      <span className="flex flex-wrap gap-x-3 gap-y-0.5">
-                        {row.details.map((detail) => (
-                          <span key={detail.label}>
-                            {detail.label}: <span className="text-ink-2">{detail.value}</span>
-                          </span>
-                        ))}
-                      </span>
+                      <div className="min-w-64 max-w-xl">
+                        <p className="line-clamp-2 break-words text-ink-2">
+                          {row.details.find((detail) => detail.label === "Reason")?.value ??
+                            row.details.filter((detail) => !["Event ID", "Timestamp (UTC)", "Action", "Object type", "Object ID", "Actor ID"].includes(detail.label))
+                              .slice(0, 3).map((detail) => `${detail.label}: ${detail.value}`).join(" · ")}
+                        </p>
+                        <details className="mt-1">
+                          <summary className="w-fit cursor-pointer font-medium text-brand hover:text-brand-hover">View details ({row.details.length})</summary>
+                          <dl className="mt-2 space-y-2 rounded-md border border-line bg-paper p-3">
+                            {row.details.map((detail, index) => (
+                              <div key={`${detail.label}-${index}`}>
+                                <dt className="font-medium text-ink-3">{detail.label}</dt>
+                                <dd className="mt-0.5 whitespace-pre-wrap break-words text-ink-2 [overflow-wrap:anywhere]">{detail.value}</dd>
+                              </div>
+                            ))}
+                          </dl>
+                        </details>
+                      </div>
                     )}
                   </td>
                 </tr>

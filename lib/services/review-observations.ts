@@ -1,6 +1,8 @@
 import { generateAi } from "@/lib/ai/service";
 import { extractionSchema } from "@/lib/ai/schemas";
 import { createAdminClient } from "@/lib/db/client";
+import { AuditService } from "@/lib/services/audit";
+import { auditErrorDetails } from "@/lib/audit-details";
 
 import { logger } from "@/lib/logger";
 import { getPool } from "@/lib/db/pool";
@@ -69,9 +71,10 @@ async function loadLocationContext(
   return context;
 }
 
-async function callExtractor(comment: string, starRating: number, workspaceId: string) {
+async function callExtractor(comment: string, starRating: number, workspaceId: string, review: ReviewForAnalysis) {
   return generateAi({
     workspaceId, task: "extract", operation: "extract_review",
+    audit: { reviewId: review.id, locationId: review.location_id },
     prompt: extractionPrompt({ comment, starRating }), schema: extractionSchema,
     temperature: 0.1, maxOutputTokens: 4096, timeoutMs: REQUEST_TIMEOUT_MS,
   });
@@ -274,7 +277,7 @@ export async function analyzeReview(
   }
 
   try {
-    const { text, model } = await callExtractor(comment, typed.star_rating, workspaceId);
+    const { text, model } = await callExtractor(comment, typed.star_rating, workspaceId, typed);
     const observations = validateObservations(parseExtractionResponse(text), comment);
     await persistAnalysisResult(admin, workspaceId, typed, observations, model);
     return { reviewId, status: "ready", observationCount: observations.length, reused: false };
@@ -282,6 +285,8 @@ export async function analyzeReview(
     const message = error instanceof Error ? error.message : "Extraction failed";
     await markAnalysisFailed(admin, workspaceId, typed, message).catch(() => undefined);
     logger.error("review_observation.failed", { reviewId, message });
+    await AuditService.log({ workspaceId, action: "review.analysis_failed", entityType: "grm_reviews", entityId: reviewId,
+      metadata: { ...auditErrorDetails(error), reviewId, locationId: typed.location_id, stage: "extract_and_save_observations" } });
     return { reviewId, status: "failed", error: message };
   }
 }

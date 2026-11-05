@@ -9,6 +9,7 @@ import { ClipboardList } from "lucide-react";
 import { PaginationBar } from "@/components/pagination-bar";
 import { validatePage } from "@/lib/validation";
 import { formatFriendlyDateTime } from "@/lib/format-date";
+import { auditMetadataDetails } from "@/lib/audit-details";
 
 const AUDIT_PAGE_SIZE = 50;
 
@@ -58,6 +59,17 @@ const ACTION_LABELS: Record<string, { label: string; tone: Tone }> = {
   "review.synced": { label: "Synced reviews", tone: "good" },
   "review.sync_failed": { label: "Review sync failed", tone: "bad" },
   "reply.ai_generated": { label: "Generated an AI draft", tone: "info" },
+  "reply.ai_failed": { label: "AI draft failed", tone: "bad" },
+  "ai.request_failed": { label: "AI request failed", tone: "bad" },
+  "ai.request_completed": { label: "AI request completed", tone: "good" },
+  "ai.persistence_failed": { label: "AI result could not be saved", tone: "bad" },
+  "review.analysis_failed": { label: "Review analysis failed", tone: "bad" },
+  "analysis.run_failed": { label: "Analysis run failed", tone: "bad" },
+  "insight.report_failed": { label: "Insight report failed", tone: "bad" },
+  "reviews.bulk_failed": { label: "Bulk job failed", tone: "bad" },
+  "reply.reconciled": { label: "Checked reply against Google", tone: "info" },
+  "reviews.bulk_generate": { label: "Generated replies in bulk", tone: "info" },
+  "reviews.bulk_publish": { label: "Published replies in bulk", tone: "info" },
   "reply.edited": { label: "Edited a reply", tone: "info" },
   "reply.approved": { label: "Approved a reply", tone: "good" },
   "reply.publish_attempted": {
@@ -104,6 +116,11 @@ const ENTITY_LABELS: Record<string, string> = {
   grm_review_ai_drafts: "AI draft",
   grm_review_replies: "Reply",
   grm_reviews: "Review",
+  grm_ai_generation_jobs: "AI save job",
+  grm_bulk_jobs: "Bulk job",
+  grm_analysis_runs: "Analysis run",
+  grm_insight_reports: "Insight report",
+  ai_request: "AI request",
   grm_workspace_invites: "Invite",
   grm_workspace_members: "Member",
 };
@@ -133,20 +150,6 @@ function objectHref(entityType: string, entityId: string | null): string | null 
   }
 }
 
-const METADATA_LABELS: Record<string, string> = {
-  reviewsSynced: "New reviews",
-  reviewsUpdated: "Updated",
-  pagesProcessed: "Pages",
-  status: "Status",
-  errorClass: "Error",
-  publishedAt: "Published",
-  model: "Model",
-  googleEmail: "Google account",
-  email: "Email",
-  role: "Role",
-  previousRole: "Previous role",
-};
-
 function readableAction(action: string) {
   return (
     ACTION_LABELS[action] ?? {
@@ -154,12 +157,6 @@ function readableAction(action: string) {
       tone: "neutral" as Tone,
     }
   );
-}
-
-function metadataDetails(metadata: Record<string, unknown>) {
-  return Object.entries(metadata)
-    .filter(([k, v]) => k in METADATA_LABELS && v !== null && v !== undefined && v !== "")
-    .map(([k, v]) => ({ label: METADATA_LABELS[k], value: String(v) }));
 }
 
 type Params = Record<string, string | string[] | undefined>;
@@ -232,7 +229,15 @@ export async function AuditLogSection({ params, workspaceId }: { params: Params;
       objectLabel: ENTITY_LABELS[log.entity_type] ?? log.entity_type,
       objectId: log.entity_id ?? null,
       objectHref: objectHref(log.entity_type, log.entity_id ?? null),
-      details: metadataDetails((log.metadata ?? {}) as Record<string, unknown>),
+      details: [
+        ...auditMetadataDetails(log.metadata),
+        { label: "Event ID", value: log.id },
+        { label: "Timestamp (UTC)", value: log.created_at },
+        { label: "Action", value: log.action },
+        { label: "Object type", value: log.entity_type },
+        ...(log.entity_id ? [{ label: "Object ID", value: log.entity_id }] : []),
+        ...(log.user_id ? [{ label: "Actor ID", value: log.user_id }] : []),
+      ],
     };
   });
 
@@ -295,7 +300,7 @@ export async function AuditLogSection({ params, workspaceId }: { params: Params;
       <p className="mt-2 text-xs text-ink-3">
         People are shown by email; automatic work such as syncs appears as System, and someone who has left shows as Former
         member. Businesses, locations, groups and escalations link to their page. The search box covers the entries on this
-        page; the filters narrow the whole log.
+        page; the filters narrow the whole log. Expand an entry to see its saved diagnostic details and full IDs.
       </p>
     </TransitionScope>
   );

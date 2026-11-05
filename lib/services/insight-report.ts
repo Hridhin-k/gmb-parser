@@ -2,6 +2,8 @@ import { aiRouteIdentity } from "@/lib/ai/config";
 import { generateAi } from "@/lib/ai/service";
 import { insightSchema } from "@/lib/ai/schemas";
 import { createAdminClient } from "@/lib/db/client";
+import { AuditService } from "@/lib/services/audit";
+import { auditErrorDetails } from "@/lib/audit-details";
 
 import { ANALYSIS_VERSION, withRetry } from "@/lib/review-intelligence";
 import {
@@ -223,9 +225,10 @@ async function loadOutletNames(
   return names;
 }
 
-async function callSynthesis(prompt: string, workspaceId: string) {
+async function callSynthesis(prompt: string, workspaceId: string, reportId: string, userId: string | null) {
   return generateAi({
     workspaceId, task: "insight", operation: "insight_prose", prompt,
+    audit: { reportId, userId },
     schema: insightSchema, temperature: 0.2, maxOutputTokens: 8192, timeoutMs: REQUEST_TIMEOUT_MS,
   });
 }
@@ -310,7 +313,7 @@ export async function generateReport(
     let outputTokens = 0;
     if (items.length > 0) {
       const result = await withRetry(
-        () => callSynthesis(synthesisPrompt(items, input.scopeLabel), workspaceId),
+        () => callSynthesis(synthesisPrompt(items, input.scopeLabel), workspaceId, reportId, previous?.requested_by ?? null),
         { attempts: 2, baseDelayMs: 1000 }
       );
       model = result.model;
@@ -399,6 +402,8 @@ export async function generateReport(
       finished_at: new Date().toISOString(),
     }).catch(() => undefined);
     logger.error("insight_report.failed", { reportId, message });
+    await AuditService.log({ workspaceId, action: "insight.report_failed", entityType: "grm_insight_reports", entityId: reportId,
+      metadata: { ...auditErrorDetails(error), reportId, locationIds: input.locationIds, rangeStart: input.start, rangeEnd: input.end, stage: "generate_report" } });
   } finally {
     try { await lease.query("SELECT pg_advisory_unlock(hashtextextended($1,0))", [lockKey]); }
     finally { lease.release(); }

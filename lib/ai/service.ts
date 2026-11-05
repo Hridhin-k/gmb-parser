@@ -5,6 +5,8 @@ import { createAdminClient } from "@/lib/db/client";
 import { getAiBudget, recordAiUsage } from "@/lib/services/ai-usage-ledger";
 import { resolveAiPrice, type AiOperation } from "@/lib/ai-usage";
 import { logger } from "@/lib/logger";
+import { AuditService } from "@/lib/services/audit";
+import { auditErrorDetails } from "@/lib/audit-details";
 import { assertAiCredentials, resolveAiFallback, resolveAiRoute, routeId, type AiRoute, type AiTask } from "./config";
 import { languageModel, providerOptions } from "./registry";
 
@@ -45,36 +47,91 @@ export function normalizeUsage(usage: LanguageModelUsage | undefined) {
   };
 }
 
+export interface AiAuditContext {
+  userId?: string | null;
+  reviewId?: string;
+  locationId?: string | null;
+  clientId?: string | null;
+  runId?: string;
+  reportId?: string;
+  reviewIds?: string[];
+  aiConfigVersion?: number;
+}
+
 interface GenerateInput {
   workspaceId: string; task: AiTask; operation: AiOperation; prompt: string;
   maxOutputTokens: number; timeoutMs: number; temperature?: number;
   schema?: z.ZodType; fast?: boolean;
+  audit?: AiAuditContext;
+}
+
+function providerFailureDetails(error: unknown): Record<string, unknown> {
+  if (!APICallError.isInstance(error)) return {};
+  let providerErrorCode: string | undefined;
+  let providerErrorType: string | undefined;
+  try {
+    const detail = JSON.parse(error.responseBody ?? "{}").error;
+    // Provider messages/bodies can echo input. Keep only bounded machine identifiers.
+    const identifier = (value: unknown) => typeof value === "string" && /^[\w.-]{1,100}$/.test(value) ? value : undefined;
+    providerErrorCode = identifier(detail?.code);
+    providerErrorType = identifier(detail?.type ?? detail?.status);
+  } catch { /* The safe application error still explains the failure. */ }
+  return {
+    providerStatus: error.statusCode, providerErrorCode, providerErrorType,
+    providerRequestId: error.responseHeaders?.["x-request-id"] ?? error.responseHeaders?.["request-id"] ?? error.responseHeaders?.["x-goog-request-id"],
+  };
 }
 
 /** All paid calls pass through here, including previews and report synthesis. */
 export async function generateAi(input: GenerateInput) {
   const admin = createAdminClient();
-  const primary = resolveAiRoute(input.task, input.fast);
-  const fallback = resolveAiFallback();
-  for (const route of [primary, ...(fallback ? [fallback] : [])]) {
-    assertAiCredentials(route);
-    resolveAiPrice(routeId(route)); // Unknown pricing must not silently become $0.
+  const requestId = crypto.randomUUID();
+  const { userId, ...context } = input.audit ?? {};
+  async function audit(action: "ai.request_failed" | "ai.request_completed", detail: Record<string, unknown>) {
+    await AuditService.log({
+      workspaceId: input.workspaceId, userId, action,
+      entityType: context.reviewId ? "grm_reviews" : context.runId ? "grm_analysis_runs" : context.reportId ? "grm_insight_reports" : "ai_request",
+      entityId: context.reviewId ?? context.runId ?? context.reportId ?? requestId,
+      metadata: { ...context, requestId, task: input.task, operation: input.operation, timeoutMs: input.timeoutMs, maxOutputTokens: input.maxOutputTokens, ...detail },
+    });
+  }
+  let primary: AiRoute;
+  let fallback: AiRoute | undefined;
+  try {
+    primary = resolveAiRoute(input.task, input.fast);
+    fallback = resolveAiFallback();
+    for (const route of [primary, ...(fallback ? [fallback] : [])]) {
+      assertAiCredentials(route);
+      resolveAiPrice(routeId(route)); // Unknown pricing must not silently become $0.
+    }
+  } catch (error) {
+    await audit("ai.request_failed", { ...auditErrorDetails(error), stage: "configuration", retryable: false, providerCalled: false });
+    throw error;
   }
 
-  async function call(route: AiRoute) {
-    const budget = await getAiBudget(admin, input.workspaceId);
-    if (budget.exceeded) throw new AiError("This workspace has reached its monthly AI budget.", "AI_BUDGET_EXCEEDED", false, 429);
+  async function call(route: AiRoute, attempt: number) {
     const started = Date.now();
     let recorded = false;
-    async function record(usage: LanguageModelUsage | undefined, status: string) {
+    let providerCalled = false;
+    let stage = "budget";
+    let finishReason: string | undefined;
+    let rawFinishReason: string | undefined;
+    let providerRequestId: string | undefined;
+    let usage = normalizeUsage(undefined);
+    async function record(usageValue: LanguageModelUsage | undefined, status: string) {
       if (recorded) return;
       recorded = true;
+      usage = normalizeUsage(usageValue);
       await recordAiUsage(admin, {
         workspaceId: input.workspaceId, operation: input.operation,
-        model: routeId(route), ...normalizeUsage(usage), status,
+        model: routeId(route), ...usage, status,
       });
     }
     try {
+      const budget = await getAiBudget(admin, input.workspaceId);
+      if (budget.exceeded) throw new AiError("This workspace has reached its monthly AI budget.", "AI_BUDGET_EXCEEDED", false, 429);
+      stage = "provider_request";
+      providerCalled = true;
       const result = await generateText({
         model: languageModel(route), prompt: input.prompt,
         maxOutputTokens: input.maxOutputTokens,
@@ -84,26 +141,39 @@ export async function generateAi(input: GenerateInput) {
         output: input.schema ? Output.object({ schema: input.schema }) : Output.text(),
         abortSignal: AbortSignal.timeout(input.timeoutMs), maxRetries: 0,
       });
+      stage = "validate_output";
+      finishReason = result.finishReason;
+      rawFinishReason = result.rawFinishReason;
+      providerRequestId = result.response.headers?.["x-request-id"] ?? result.response.id;
       await record(result.totalUsage, result.finishReason);
       if (result.finishReason === "length") throw new AiError("The AI response was cut off before it finished. Please try again.", "AI_INVALID_RESPONSE");
       if (result.finishReason === "content-filter") throw new AiError("AI generation was blocked due to content restrictions.", "AI_SAFETY_BLOCKED");
       const text = input.schema ? JSON.stringify(result.output) : result.text;
       if (!text?.trim()) throw new AiError("AI returned an empty or unusable response. Please try again.", "AI_INVALID_RESPONSE");
       if (result.finishReason !== "stop") throw new AiError("AI did not complete its response. Please try again.", "AI_INVALID_RESPONSE");
+      await audit("ai.request_completed", { provider: route.provider, model: routeId(route), providerRequestId, attempt, fallback: attempt > 1, durationMs: Date.now() - started, finishReason, rawFinishReason, ...usage });
       return {
-        text, model: routeId(route), usage: normalizeUsage(result.totalUsage),
+        text, model: routeId(route), usage, requestId,
         generationParams: { provider: route.provider, model: route.model, maxOutputTokens: input.maxOutputTokens, providerOptions: providerOptions(route) },
       };
     } catch (error) {
-      if (!recorded) await record(NoObjectGeneratedError.isInstance(error) ? error.usage : undefined, "failed");
+      if (!recorded && providerCalled) await record(NoObjectGeneratedError.isInstance(error) ? error.usage : undefined, "failed");
       const safe = safeError(error);
+      await audit("ai.request_failed", {
+        ...auditErrorDetails(safe), ...providerFailureDetails(error), provider: route.provider, model: routeId(route),
+        attempt, fallback: attempt > 1, stage, providerCalled, durationMs: Date.now() - started,
+        retryable: safe instanceof AiError && safe.retryable,
+        willFallback: attempt === 1 && Boolean(fallback && routeId(fallback) !== routeId(primary) && safe instanceof AiError && safe.retryable),
+        finishReason: finishReason ?? (NoObjectGeneratedError.isInstance(error) ? error.finishReason : undefined), rawFinishReason,
+        ...(providerRequestId ? { providerRequestId } : {}), ...usage,
+      });
       logger.warn("ai.call_failed", { workspaceId: input.workspaceId, operation: input.operation, provider: route.provider, model: route.model, errorCode: safe.code, durationMs: Date.now() - started });
       throw safe;
     }
   }
 
-  try { return await call(primary); } catch (error) {
+  try { return await call(primary, 1); } catch (error) {
     if (!fallback || routeId(fallback) === routeId(primary) || !(error instanceof AiError) || !error.retryable) throw error;
-    return call(fallback);
+    return call(fallback, 2);
   }
 }

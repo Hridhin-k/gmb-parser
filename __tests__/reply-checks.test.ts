@@ -26,7 +26,7 @@ describe("manual reply checks", () => {
       content: "We will refund your visit. Email desk@example.com.", stage: "save",
     })).rejects.toThrow("compensation");
     expect(AuditService.log).toHaveBeenCalledWith(expect.objectContaining({
-      metadata: { codes: ["compensation"], stage: "save" },
+      metadata: expect.objectContaining({ codes: ["compensation"], stage: "save", reviewId: "review-1", errorMessage: expect.stringContaining("compensation") }),
     }));
   });
 });

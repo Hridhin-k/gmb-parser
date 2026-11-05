@@ -19,7 +19,7 @@ export type Database = {
           ip_address: unknown
           metadata: Json
           user_agent: string | null
-          user_id: string
+          user_id: string | null
           workspace_id: string
         }
         Insert: {
@@ -31,7 +31,7 @@ export type Database = {
           ip_address?: unknown
           metadata?: Json
           user_agent?: string | null
-          user_id: string
+          user_id?: string | null
           workspace_id: string
         }
         Update: {
@@ -43,7 +43,7 @@ export type Database = {
           ip_address?: unknown
           metadata?: Json
           user_agent?: string | null
-          user_id?: string
+          user_id?: string | null
           workspace_id?: string
         }
         Relationships: [
