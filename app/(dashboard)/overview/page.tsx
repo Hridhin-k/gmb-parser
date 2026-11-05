@@ -322,12 +322,12 @@ export default async function OverviewPage({ searchParams }: OverviewPageProps) 
             Reply rules will not send replies on their own. Replies you write or approve still work as usual.
           </Banner>
         ) : null}
-        <PendingRegion label="Updating Today…">
+        <PendingRegion label="Updating the dashboard…">
           <FreshMetrics rendered={rendered} surface="overview">
             {boardPlaces.length === 0 ? (
               <EmptyState
                 title="No locations in this scope yet"
-                description="Import Google profiles and assign them to a business. Today fills in once reviews sync."
+                description="Import Google profiles and assign them to a business. The dashboard fills in once reviews sync."
               >
                 <Button size="sm" nativeButton={false} render={<Link href="/locations" />}>
                   Open locations
