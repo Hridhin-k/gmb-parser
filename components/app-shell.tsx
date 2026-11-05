@@ -37,7 +37,7 @@ import { homePath, scopedHref, visibleNav, type ShellNavId } from "@/lib/shell";
 import { roleName } from "@/lib/ui/vocabulary";
 
 const NAV: Record<ShellNavId, { href: string; label: string; icon: LucideIcon }> = {
-  overview: { href: "/overview", label: "Today", icon: Home },
+  overview: { href: "/overview", label: "Dashboard", icon: Home },
   inbox: { href: "/reviews", label: "Reviews", icon: Inbox },
   insights: { href: "/insights", label: "Insights", icon: ChartColumn },
   requests: { href: "/requests", label: "Get reviews", icon: Send },
@@ -73,12 +73,12 @@ function under(pathname: string, href: string) {
 }
 
 function navActive(pathname: string, id: ShellNavId) {
-  // /portfolio/usage belongs to Settings, not to Today's /portfolio.
+  // /portfolio/usage belongs to Settings, not to the Dashboard's /portfolio.
   if (id === "overview" && under(pathname, "/portfolio/usage")) return false;
   return [NAV[id].href, ...(ALSO_UNDER[id] ?? [])].some((href) => under(pathname, href));
 }
 
-/** Today counts what is urgent; Reviews counts what has no reply. */
+/** Dashboard counts what is urgent; Reviews counts what has no reply. */
 function badgeFor(id: ShellNavId, summary: ShellSummary): { value: number; tone: "default" | "bad"; label: string } | null {
   if (id === "overview") {
     const urgent = summary.escalations + summary.failed;
