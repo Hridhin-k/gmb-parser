@@ -13,6 +13,7 @@ import {
   parseFollowUpQueue,
   parseInboxTab,
   replyStage,
+  reviewBelongsToTab,
   shortAge,
 } from "@/components/reviews-status";
 import { adjustmentInstruction } from "@/lib/reply-adjustments";
@@ -22,28 +23,36 @@ describe("inbox tabs", () => {
     expect(parseInboxTab(undefined)).toBe("to-reply");
     expect(parseInboxTab("follow-ups")).toBe("follow-ups");
     expect(parseInboxTab("sent")).toBe("sent");
+    expect(parseInboxTab("failed")).toBe("failed");
+    expect(parseInboxTab("failed-replies")).toBe("failed");
     expect(parseInboxTab(["sent", "to-reply"])).toBe("sent");
     expect(parseInboxTab("nonsense")).toBe("to-reply");
   });
 
-  it("sends old filter=published links to Sent and every other status to To reply", () => {
+  it("routes old published and failed links to their own tabs", () => {
     expect(parseInboxTab(undefined, ["published"])).toBe("sent");
+    expect(parseInboxTab(undefined, ["failed"])).toBe("failed");
     expect(parseInboxTab(undefined, ["draft"])).toBe("to-reply");
     expect(parseInboxTab(undefined, ["escalated", "failed"])).toBe("to-reply");
     // An explicit tab wins over the status.
     expect(parseInboxTab("to-reply", ["published"])).toBe("to-reply");
+    expect(parseInboxTab("to-reply", ["failed"])).toBe("to-reply");
   });
 
-  it("queries everything without a live reply on To reply, and published on Sent", () => {
-    expect(inboxStatuses("to-reply", [])).toEqual(["attention", "approved"]);
+  it("gives failed replies a separate query from the normal queue", () => {
+    expect(inboxStatuses("to-reply", [])).toEqual(["unanswered", "draft", "approved"]);
+    expect(inboxStatuses("failed", [])).toEqual(["failed"]);
+    expect(inboxStatuses("failed", ["draft", "published"])).toEqual(["failed"]);
     expect(inboxStatuses("sent", ["draft"])).toEqual(["published"]);
   });
 
   it("keeps a narrowing that fits inside To reply and drops one that does not", () => {
-    expect(inboxStatuses("to-reply", ["draft", "failed"])).toEqual(["draft", "failed"]);
-    expect(inboxStatuses("to-reply", ["published"])).toEqual(["attention", "approved"]);
+    expect(inboxStatuses("to-reply", ["draft", "failed"])).toEqual(["draft"]);
+    expect(inboxStatuses("to-reply", ["published"])).toEqual(["unanswered", "draft", "approved"]);
+    expect(inboxStatuses("to-reply", ["failed"])).toEqual(["unanswered", "draft", "approved"]);
     expect(inboxNarrowing("to-reply", ["escalated", "published"])).toEqual(["escalated"]);
     expect(inboxNarrowing("sent", ["draft"])).toEqual([]);
+    expect(inboxNarrowing("failed", ["draft"])).toEqual([]);
   });
 
   it("treats any status filter as a removable narrowing, since tabs own the status", () => {
@@ -56,6 +65,23 @@ describe("inbox tabs", () => {
     expect(keys).toContain("draft");
     expect(keys).not.toContain("published");
     expect(keys).not.toContain("answered");
+    expect(keys).not.toContain("failed");
+  });
+
+  it("removes failures from the live queue without removing the rest of the batch", () => {
+    const batch = [
+      { id: "failed-1", status: "failed" },
+      { id: "draft-1", status: "draft" },
+      { id: "approved-1", status: "approved" },
+      { id: "new-1", status: "none" },
+      { id: "sent-1", status: "published" },
+    ];
+    expect(batch.filter((row) => reviewBelongsToTab("to-reply", row.status)).map((row) => row.id))
+      .toEqual(["draft-1", "approved-1", "new-1"]);
+    expect(batch.filter((row) => reviewBelongsToTab("failed", row.status)).map((row) => row.id))
+      .toEqual(["failed-1"]);
+    expect(batch.filter((row) => reviewBelongsToTab("sent", row.status)).map((row) => row.id))
+      .toEqual(["sent-1"]);
   });
 });
 

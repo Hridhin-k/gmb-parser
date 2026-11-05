@@ -8,7 +8,7 @@ export interface InboxTabLink {
   count: number;
 }
 
-/** To reply / Follow-ups / Sent, each with its count. The active tab is underlined in ink. */
+/** Each review queue has a count. The active tab is underlined in ink. */
 export function InboxTabs({ tabs, className }: { tabs: InboxTabLink[]; className?: string }) {
   return (
     <nav aria-label="Review status" className={cn("flex flex-wrap gap-1 border-b border-line", className)}>

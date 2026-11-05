@@ -14,6 +14,7 @@ import { SyncButton } from "@/components/sync-button";
 import { ReviewFilters, ReviewSortMenu } from "@/components/review-filters";
 import {
   TO_REPLY_STATUS_OPTIONS,
+  INBOX_TABS,
   inboxNarrowing,
   inboxStatuses,
   parseFollowUpQueue,
@@ -21,6 +22,7 @@ import {
   plural,
   statusLabel,
   type InboxTab,
+  type ReviewInboxTab,
 } from "@/components/reviews-status";
 import { InboxTabs } from "@/components/reviews-inbox-tabs";
 import { Banner } from "@/components/ui/banner";
@@ -132,12 +134,17 @@ export default async function ReviewsPage({ searchParams }: ReviewsPageProps) {
   };
   const reviewTab = tab === "follow-ups" ? null : tab;
 
-  const [role, toReply, sent, caseCounts, roster, contact] = await Promise.all([
+  const [role, toReply, failed, sent, caseCounts, roster, contact] = await Promise.all([
     getActiveRole(),
     getDashboardData(workspaceId, {
       ...baseFilters,
       filters: inboxStatuses("to-reply", narrowing),
       page: reviewTab === "to-reply" ? currentPage : 1,
+    }),
+    getDashboardData(workspaceId, {
+      ...baseFilters,
+      filters: inboxStatuses("failed", []),
+      page: reviewTab === "failed" ? currentPage : 1,
     }),
     getDashboardData(workspaceId, {
       ...baseFilters,
@@ -148,7 +155,7 @@ export default async function ReviewsPage({ searchParams }: ReviewsPageProps) {
     getWorkspaceRoster(workspaceId),
     EscalationContactStore.read(workspaceId),
   ]);
-  const data = reviewTab === "sent" ? sent : toReply;
+  const data = reviewTab === "sent" ? sent : reviewTab === "failed" ? failed : toReply;
   const canApprove = canApproveReplies(role);
   const aiOnly = draftsWithAiOnly(role);
   const openCases = caseCounts.needs_human + caseCounts.in_progress + caseCounts.past_sla;
@@ -186,6 +193,7 @@ export default async function ReviewsPage({ searchParams }: ReviewsPageProps) {
     });
   const tabCounts: Record<InboxTab, number> = {
     "to-reply": toReply.totalReviewCount,
+    failed: failed.totalReviewCount,
     "follow-ups": openCases,
     sent: sent.totalReviewCount,
   };
@@ -212,6 +220,10 @@ export default async function ReviewsPage({ searchParams }: ReviewsPageProps) {
       ? openCases === 0
         ? "No call-backs waiting."
         : `${plural(openCases, "customer needs", "customers need")} a call back`
+      : tab === "failed"
+        ? failed.totalReviewCount === 0
+          ? "No failed replies."
+          : `${plural(failed.totalReviewCount, "reply needs", "replies need")} another look`
       : toReply.totalReviewCount === 0
         ? "All caught up."
         : `${plural(toReply.totalReviewCount, "review needs", "reviews need")} a reply`;
@@ -264,15 +276,11 @@ export default async function ReviewsPage({ searchParams }: ReviewsPageProps) {
 
         <InboxTabs
           className="mt-4"
-          tabs={[
-            { key: "to-reply", label: "To reply" },
-            { key: "follow-ups", label: "Follow-ups" },
-            { key: "sent", label: "Sent" },
-          ].map((item) => ({
+          tabs={INBOX_TABS.map((item) => ({
             label: item.label,
-            href: tabHref(item.key as InboxTab),
+            href: tabHref(item.key),
             active: item.key === tab,
-            count: tabCounts[item.key as InboxTab],
+            count: tabCounts[item.key],
           }))}
         />
 
@@ -382,7 +390,7 @@ async function ReviewTabBody({
   syncIds,
   listProps,
 }: {
-  tab: "to-reply" | "sent";
+  tab: ReviewInboxTab;
   data: DashboardData;
   carried: URLSearchParams;
   narrowing: string[];
@@ -408,7 +416,7 @@ async function ReviewTabBody({
     redirect(`/reviews?${query.toString()}`);
   }
   if (data.reviews.length === 0) {
-    if (filterState.hasLocal || (filterState.hasScope && data.hasConnections && tab === "sent")) {
+    if (filterState.hasLocal || (filterState.hasScope && data.hasConnections && tab !== "to-reply")) {
       return (
         <EmptyState
           icon={SearchX}
@@ -441,11 +449,14 @@ async function ReviewTabBody({
         </EmptyState>
       );
     }
+    if (tab === "failed") {
+      return <EmptyState icon={CheckCircle2} title="No failed replies" description="Replies that Google could not accept appear here for you to review and retry." />;
+    }
     return tab === "to-reply" ? (
       <EmptyState
         icon={CheckCircle2}
-        title="Every review has a reply"
-        description="New reviews land here as soon as Google sends them."
+        title="No reviews waiting for a reply"
+        description="New reviews land here as soon as Google sends them. Check Failed replies for any publishing errors."
       >
         {canSync ? <SyncButton key={syncIds?.join(",") ?? "all"} syncAll locationIds={syncIds} label="Sync reviews now" size="sm" /> : null}
       </EmptyState>

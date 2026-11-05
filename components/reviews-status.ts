@@ -15,7 +15,7 @@ export interface ReviewStatusOption {
 /** Every status the inbox query understands, for combining several at once. */
 export const REVIEW_STATUS_OPTIONS: readonly ReviewStatusOption[] = [
   { key: "unanswered", label: "Needs reply", hint: "No reply drafted or published yet" },
-  { key: "attention", label: "Needs attention", hint: "No reply, a draft, or a failed publish" },
+  { key: "attention", label: "Needs attention", hint: "No reply or a draft waiting for review" },
   { key: "escalated", label: "Escalated", hint: "1–3★ without a published reply" },
   { key: "draft", label: "Drafts", hint: "Waiting for review or approval" },
   { key: "approved", label: "Ready to publish", hint: "Approved, or publishing now" },
@@ -42,30 +42,35 @@ export function activeStatusTab(statuses: readonly string[]): string | null {
 // Inbox tabs
 // ---------------------------------------------------------------------------
 
-export type InboxTab = "to-reply" | "follow-ups" | "sent";
+export type InboxTab = "to-reply" | "failed" | "follow-ups" | "sent";
+export type ReviewInboxTab = Exclude<InboxTab, "follow-ups">;
 
 export const INBOX_TABS: ReadonlyArray<{ key: InboxTab; label: string }> = [
   { key: "to-reply", label: "To reply" },
+  { key: "failed", label: "Failed replies" },
   { key: "follow-ups", label: "Follow-ups" },
   { key: "sent", label: "Sent" },
 ];
 
-/** Everything without a live reply: none, draft, approved, publishing, failed. */
-export const TO_REPLY_STATUSES = ["attention", "approved"] as const;
+/** Work in the normal reply queue; publishing failures have their own tab. */
+export const TO_REPLY_STATUSES = ["unanswered", "draft", "approved"] as const;
+export const FAILED_REPLY_STATUSES = ["failed"] as const;
 export const SENT_STATUSES = ["published"] as const;
 
 /** Statuses that narrow To reply further (More filters, and old `filter=` links). */
-const TO_REPLY_NARROWING = new Set(["unanswered", "attention", "escalated", "draft", "approved", "failed"]);
+const TO_REPLY_NARROWING = new Set(["unanswered", "attention", "escalated", "draft", "approved"]);
 
 /**
  * The tab for a request. `tab` wins; otherwise an old `filter=published` link
- * opens Sent and every other link opens To reply.
+ * opens Sent, and an old `filter=failed` link opens Failed replies.
  */
 export function parseInboxTab(tab: string | string[] | undefined, statuses: readonly string[] = []): InboxTab {
   const value = Array.isArray(tab) ? tab[0] : tab;
   if (value === "follow-ups" || value === "followups") return "follow-ups";
   if (value === "sent") return "sent";
+  if (value === "failed" || value === "failed-replies") return "failed";
   if (value === "to-reply" || value === "reply") return "to-reply";
+  if (statuses.length > 0 && statuses.every((status) => status === "failed")) return "failed";
   if (statuses.length > 0 && statuses.every((status) => status === "published" || status === "answered")) {
     return "sent";
   }
@@ -74,10 +79,11 @@ export function parseInboxTab(tab: string | string[] | undefined, statuses: read
 
 /**
  * Status keys to query for a tab. A narrowing that fits inside To reply is
- * kept (Drafts, Failed…); anything else falls back to the whole tab.
+ * kept; anything else falls back to the whole tab.
  */
 export function inboxStatuses(tab: InboxTab, statuses: readonly string[]): string[] {
   if (tab === "sent") return [...SENT_STATUSES];
+  if (tab === "failed") return [...FAILED_REPLY_STATUSES];
   const narrowing = statuses.filter((status) => TO_REPLY_NARROWING.has(status));
   return narrowing.length > 0 ? narrowing : [...TO_REPLY_STATUSES];
 }
@@ -88,10 +94,17 @@ export function inboxNarrowing(tab: InboxTab, statuses: readonly string[]): stri
   return statuses.filter((status) => TO_REPLY_NARROWING.has(status));
 }
 
-/** Status options offered in More filters on To reply. Sent and Follow-ups offer none. */
+/** Status options offered in More filters on To reply. Other tabs offer none. */
 export const TO_REPLY_STATUS_OPTIONS: readonly ReviewStatusOption[] = REVIEW_STATUS_OPTIONS.filter((option) =>
   TO_REPLY_NARROWING.has(option.key) && option.key !== "attention"
 );
+
+/** Keep local row updates in the same queue as the server query. */
+export function reviewBelongsToTab(tab: ReviewInboxTab, status: string): boolean {
+  if (tab === "failed") return status === "failed";
+  if (tab === "sent") return status === "published";
+  return status === "none" || status === "draft" || status === "approved" || status === "pending_publish";
+}
 
 // ---------------------------------------------------------------------------
 // Row rules

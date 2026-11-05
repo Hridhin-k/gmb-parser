@@ -177,6 +177,12 @@ export async function* reviewCsvLines(
       case "answered":
         query = query.neq("reply_status", "none");
         break;
+      case "attention":
+        query = query.in("reply_status", ["none", "draft"]);
+        break;
+      case "escalated":
+        query = query.lte("star_rating", 3).in("reply_status", ["none", "draft"]);
+        break;
       case "draft":
       case "failed":
       case "published":

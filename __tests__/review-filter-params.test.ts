@@ -54,7 +54,7 @@ describe("statusOrFilter", () => {
       "reply_status.eq.none,reply_status.eq.draft"
     );
     expect(statusOrFilter(["escalated", "published"])).toBe(
-      "and(star_rating.lte.3,reply_status.in.(none,draft,failed)),reply_status.eq.published"
+      "and(star_rating.lte.3,reply_status.in.(none,draft)),reply_status.eq.published"
     );
   });
 
@@ -68,6 +68,7 @@ describe("statusOrFilter", () => {
   it("maps single statuses to operands", () => {
     expect(statusFilterOperand("answered")).toBe("reply_status.neq.none");
     expect(statusFilterOperand("approved")).toBe("reply_status.in.(approved,pending_publish)");
+    expect(statusFilterOperand("attention")).toBe("reply_status.in.(none,draft)");
     expect(statusFilterOperand("nope")).toBeNull();
   });
 });

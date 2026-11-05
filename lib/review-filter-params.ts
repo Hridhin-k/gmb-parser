@@ -60,7 +60,7 @@ export function serializeParamValues(values: readonly (string | number)[]): stri
 
 const STATUS_OPERANDS: Record<string, string> = {
   unanswered: "reply_status.eq.none",
-  attention: "reply_status.in.(none,draft,failed)",
+  attention: "reply_status.in.(none,draft)",
   answered: "reply_status.neq.none",
   draft: "reply_status.eq.draft",
   approved: "reply_status.in.(approved,pending_publish)",
@@ -69,7 +69,7 @@ const STATUS_OPERANDS: Record<string, string> = {
   // PostgREST has no portable "is not null" operand inside or(); any real
   // reopen timestamp is after the epoch.
   reopened: "reopened_at.gt.1970-01-01T00:00:00Z",
-  escalated: "and(star_rating.lte.3,reply_status.in.(none,draft,failed))",
+  escalated: "and(star_rating.lte.3,reply_status.in.(none,draft))",
 };
 
 /** One status as a PostgREST `or()` operand, or null for unknown keys. */

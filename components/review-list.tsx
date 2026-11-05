@@ -26,12 +26,14 @@ import {
   isSendable,
   plural,
   replyStage,
+  reviewBelongsToTab,
   shortAge,
   type ReplyStage,
+  type ReviewInboxTab,
 } from "@/components/reviews-status";
 
 interface ReviewListProps {
-  tab: "to-reply" | "sent";
+  tab: ReviewInboxTab;
   reviews: InboxReview[];
   replies: Record<string, InboxReply>;
   /** Open follow-ups for reviews on this page, by review id. */
@@ -160,7 +162,7 @@ export function ReviewList({
       reviews.map((review) => {
         const patch = patches[review.id];
         return patch ? { ...review, reply_status: patch.status } : review;
-      }).filter((review) => tab !== "to-reply" || review.reply_status !== "published"),
+      }).filter((review) => reviewBelongsToTab(tab, review.reply_status)),
     [reviews, patches, tab]
   );
 
@@ -186,7 +188,7 @@ export function ReviewList({
     });
 
   const rows = viewReviews.map((review) => ({ review, stage: stageOf(review) }));
-  const open = tab === "to-reply" ? rows.filter((row) => !["held", "sending", "sent", "unconfirmed"].includes(row.stage)) : [];
+  const open = tab === "to-reply" ? rows.filter((row) => !["held", "sending", "sent", "unconfirmed", "failed"].includes(row.stage)) : [];
   const idle = open.filter((row) => row.stage !== "writing");
   // 1–2 star drafts start unticked so someone reads them before they go.
   const isPicked = (row: (typeof rows)[number]) => picks[row.review.id] ?? defaultPicked(row.review.star_rating, isSendable(row.stage));
@@ -609,7 +611,7 @@ export function ReviewList({
       <ul className="flex flex-col gap-3" aria-label="Reviews">
         {rows.length === 0 ? (
           <li className="rounded-xl border border-line bg-white px-4 py-6 text-sm text-ink-3" role="status">
-            All reviews on this page have been replied to. Updating the queue…
+            Reviews on this page have moved to another tab. Updating the queue…
           </li>
         ) : null}
         {rows.map(({ review, stage }) => {

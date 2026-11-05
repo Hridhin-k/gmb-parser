@@ -297,7 +297,7 @@ async function loadDashboardData(
       reviewQuery = reviewQuery.eq("reply_status", "none");
       break;
     case "attention":
-      reviewQuery = reviewQuery.in("reply_status", ["none", "draft", "failed"]);
+      reviewQuery = reviewQuery.in("reply_status", ["none", "draft"]);
       break;
     case "answered":
       reviewQuery = reviewQuery.neq("reply_status", "none");
@@ -323,7 +323,7 @@ async function loadDashboardData(
     case "escalated":
       reviewQuery = reviewQuery
         .lte("star_rating", 3)
-        .in("reply_status", ["none", "draft", "failed"]);
+        .in("reply_status", ["none", "draft"]);
       break;
     default:
       break;

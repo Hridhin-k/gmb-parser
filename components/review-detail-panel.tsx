@@ -393,7 +393,7 @@ export function ReviewDetailPanel({
     </Button>
   );
 
-  const shownError = localError ?? error;
+  const shownError = localError ?? error ?? (stage === "failed" ? reply?.last_error : null);
 
   return (
     <div className="flex flex-col gap-5">
@@ -657,7 +657,7 @@ export function ReviewDetailPanel({
           <span className="text-xs text-ink-3">
             {canSend
               ? inRow
-                ? `Posts publicly on Google as ${business}. Ticked rows go together with "Send drafts".`
+                ? `Posts publicly on Google as ${business}.`
                 : `Posts publicly on Google as ${business}. After sending, the next review opens.`
               : aiOnly
                 ? "A higher role approves this draft. After that, you can send it."
