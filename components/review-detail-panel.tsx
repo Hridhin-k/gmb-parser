@@ -172,7 +172,7 @@ export function ReviewDetailPanel({
   const [own, setOwn] = useState(false);
   const [content, setContent] = useState(reply?.content ?? "");
   const [editedHere, setEditedHere] = useState(false);
-  const [loading, setLoading] = useState<null | "save" | "submit" | "flag" | "assign" | "note" | "approve">(null);
+  const [loading, setLoading] = useState<null | "save" | "submit" | "flag" | "assign" | "note">(null);
   const [localError, setLocalError] = useState<string | null>(null);
   const [assignee, setAssignee] = useState(review.assigned_to ?? "");
   const [note, setNote] = useState("");
@@ -277,37 +277,6 @@ export function ReviewDetailPanel({
       toast.success("Sent for approval", { description: "Someone who can approve will read it before it goes to Google." });
     } catch (caught) {
       setLocalError(caught instanceof Error ? caught.message : "Could not submit the draft.");
-    } finally {
-      setLoading(null);
-    }
-  }
-
-  /** Marks the draft approved so "Send approved drafts" includes it. The text is unchanged. */
-  async function approveForBulk() {
-    if (!reply) return;
-    if (editing && !(await saveText())) return;
-    setLocalError(null);
-    setLoading("approve");
-    try {
-      await apiCall(`/api/reviews/${review.id}/reply/approve`, "POST", { replyId: reply.id });
-      onSaved({ ...reply, status: "approved", approved_at: new Date().toISOString() });
-    } catch (caught) {
-      setLocalError(caught instanceof Error ? caught.message : "Could not approve the draft.");
-    } finally {
-      setLoading(null);
-    }
-  }
-
-  /** Saving the same text again puts an approved reply back to draft. */
-  async function removeApproval() {
-    if (!reply) return;
-    setLocalError(null);
-    setLoading("approve");
-    try {
-      await apiCall(`/api/reviews/${review.id}/reply`, "PUT", { replyId: reply.id, content: reply.content });
-      onSaved({ ...reply, status: "draft", approved_at: null, approved_by: null });
-    } catch (caught) {
-      setLocalError(caught instanceof Error ? caught.message : "Could not remove the approval.");
     } finally {
       setLoading(null);
     }
@@ -656,16 +625,6 @@ export function ReviewDetailPanel({
                 Save draft
               </button>
             )}
-            {canSend && reply && !own ? (
-              <button
-                type="button"
-                className={pill("outline")}
-                disabled={busy || saving}
-                onClick={() => void (reply.status === "approved" ? removeApproval() : approveForBulk())}
-              >
-                {loading === "approve" ? "Saving…" : reply.status === "approved" ? "Remove approval" : "Approve for bulk send"}
-              </button>
-            ) : null}
             {aiOnly ? null : own ? (
               <button
                 type="button"
@@ -698,7 +657,7 @@ export function ReviewDetailPanel({
           <span className="text-xs text-ink-3">
             {canSend
               ? inRow
-                ? `Posts publicly on Google as ${business}. Approved drafts go out together with "Send approved drafts".`
+                ? `Posts publicly on Google as ${business}. Ticked rows go together with "Send drafts".`
                 : `Posts publicly on Google as ${business}. After sending, the next review opens.`
               : aiOnly
                 ? "A higher role approves this draft. After that, you can send it."

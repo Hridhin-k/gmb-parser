@@ -188,20 +188,17 @@ export function ReviewList({
   const rows = viewReviews.map((review) => ({ review, stage: stageOf(review) }));
   const open = tab === "to-reply" ? rows.filter((row) => !["held", "sending", "sent", "unconfirmed"].includes(row.stage)) : [];
   const idle = open.filter((row) => row.stage !== "writing");
-  // Someone approving a draft has read it, so it starts ticked whatever the rating.
-  const isPicked = (row: (typeof rows)[number]) =>
-    picks[row.review.id] ??
-    (viewReplies[row.review.id]?.status === "approved" ? true : defaultPicked(row.review.star_rating, isSendable(row.stage)));
+  // 1–2 star drafts start unticked so someone reads them before they go.
+  const isPicked = (row: (typeof rows)[number]) => picks[row.review.id] ?? defaultPicked(row.review.star_rating, isSendable(row.stage));
   const picked = idle.filter(isPicked);
   const undrafted = idle.filter((row) => row.stage === "none");
   const drafts = idle.filter((row) => isSendable(row.stage));
   const pickDraft = undrafted.filter(isPicked);
-  /** Only approved drafts go out together; the rest are sent from their row. */
-  const isApproved = (row: (typeof rows)[number]) => viewReplies[row.review.id]?.status === "approved";
-  const approved = drafts.filter(isApproved);
-  const pickSend = approved.filter((row) => isPicked(row) && sendAllowed(row.review));
+  /** Every ticked draft goes out together; each is approved and published in one go. */
+  const pickSend = drafts.filter((row) => isPicked(row) && sendAllowed(row.review));
   const noDrafts = drafts.length === 0;
-  const lowUnread = drafts.filter((row) => isLowRating(row.review.star_rating) && !isApproved(row)).length;
+  const lowUnticked = drafts.filter((row) => isLowRating(row.review.star_rating) && !isPicked(row)).length;
+  const cannotSend = drafts.filter((row) => isPicked(row) && !sendAllowed(row.review)).length;
 
   // A review opened from a link (?review=) scrolls into view once.
   useEffect(() => {
@@ -486,11 +483,13 @@ export function ReviewList({
   const jobPct = job ? Math.round((job.done / Math.max(1, job.total)) * 100) : 0;
   const barHint = noDrafts
     ? "AI writes each reply in your brand voice. Nothing goes to Google until you send."
-    : approved.length > 0
-      ? `${plural(approved.length, "approved draft", "approved drafts")} ready to send.${lowUnread > 0 ? ` ${plural(lowUnread, "low rating waits", "low ratings wait")} for a read first.` : ""}`
-      : drafts.some((row) => !sendAllowed(row.review))
-        ? "Drafts you can’t post wait for someone who can approve them."
-        : "Read each draft, then approve it for bulk send or send it from its row.";
+    : [
+        `${plural(pickSend.length, "draft", "drafts")} ticked to send.`,
+        lowUnticked > 0 ? `${plural(lowUnticked, "low rating starts", "low ratings start")} unticked so you read them first.` : null,
+        cannotSend > 0 ? `${plural(cannotSend, "draft waits", "drafts wait")} for someone who can approve them.` : null,
+      ]
+        .filter(Boolean)
+        .join(" ");
 
   return (
     <div className="flex flex-col gap-4">
@@ -532,7 +531,7 @@ export function ReviewList({
                   <Sparkles className="size-4 text-ai" aria-hidden />
                 )}
                 <span className="font-semibold">
-                  {job.kind === "send" ? "Sending approved drafts to Google" : job.withContact ? "Drafting replies with contact details" : "Drafting replies with AI"}
+                  {job.kind === "send" ? "Sending drafts to Google" : job.withContact ? "Drafting replies with contact details" : "Drafting replies with AI"}
                 </span>
                 <span className="text-ink-3 tabular-nums">
                   {job.done} of {job.total}
@@ -581,11 +580,11 @@ export function ReviewList({
                   type="button"
                   onClick={bulkSend}
                   disabled={pickSend.length === 0}
-                  title={pickSend.length === 0 ? "Approve a draft for bulk send first, or send it from its row." : undefined}
+                  title={pickSend.length === 0 ? "Tick the drafts you want to send." : undefined}
                   className="inline-flex h-11 items-center gap-2 rounded-full bg-brand px-[22px] text-sm font-semibold text-white hover:bg-brand-hover disabled:cursor-not-allowed disabled:opacity-40"
                 >
                   <Send className="size-4" aria-hidden />
-                  Send {plural(pickSend.length, "approved draft", "approved drafts")}
+                  Send {plural(pickSend.length, "draft", "drafts")}
                 </button>
               )}
             </>
@@ -600,7 +599,6 @@ export function ReviewList({
         {tab === "to-reply" ? (
           <ul className="flex flex-wrap items-center gap-3.5" aria-label="Row status legend">
             <LegendItem color="bg-ai" label="Draft ready" />
-            <LegendItem color="bg-brand" label="Approved for bulk send" />
             <LegendItem color="bg-[#c9cfda]" label="Writing" />
             <LegendItem color="bg-warn" label="Needs a read first" />
             <LegendItem color="bg-ok" label="Sent" />
@@ -622,7 +620,7 @@ export function ReviewList({
           const selectable = tab === "to-reply" && idle.some((row) => row.review.id === id);
           const followUp = flagged[id] ?? followUps[id] ?? null;
           const low = isLowRating(review.star_rating);
-          const holdForRead = low && isSendable(stage) && reply?.status !== "approved";
+          const holdForRead = low && isSendable(stage) && !isPicked({ review, stage });
           return (
             <li
               key={id}
