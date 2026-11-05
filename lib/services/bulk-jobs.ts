@@ -19,6 +19,7 @@ export interface BulkItemResult {
   error?: string;
   replyId?: string;
   content?: string;
+  source?: "ai" | "template";
 }
 
 export interface BulkJob {
@@ -136,7 +137,7 @@ export async function processBulkItem(input: {
       const denied = await reviewAllowed(userId, workspaceId, reviewId, "draft");
       if (denied) return { reviewId, ok: false, error: denied };
       const draft = await AIReviewService.generateDraft({ reviewId, workspaceId, userId, contact: input.options?.contact ?? null });
-      return { reviewId, ok: true, replyId: draft.replyId, content: draft.content };
+      return { reviewId, ok: true, replyId: draft.replyId, content: draft.content, source: draft.source ?? "ai" };
     }
 
     // publish

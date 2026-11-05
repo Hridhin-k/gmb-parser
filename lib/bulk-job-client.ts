@@ -4,6 +4,7 @@ export interface BulkJobItemResult {
   error?: string;
   replyId?: string;
   content?: string;
+  source?: "ai" | "template";
 }
 
 export interface BulkJobOutcome {

@@ -59,6 +59,7 @@ const ACTION_LABELS: Record<string, { label: string; tone: Tone }> = {
   "review.synced": { label: "Synced reviews", tone: "good" },
   "review.sync_failed": { label: "Review sync failed", tone: "bad" },
   "reply.ai_generated": { label: "Generated an AI draft", tone: "info" },
+  "reply.template_generated": { label: "Prepared a rating-only template", tone: "info" },
   "reply.ai_failed": { label: "AI draft failed", tone: "bad" },
   "ai.request_failed": { label: "AI request failed", tone: "bad" },
   "ai.request_completed": { label: "AI request completed", tone: "good" },

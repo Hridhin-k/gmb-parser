@@ -319,18 +319,19 @@ describe("AIReviewService.generateDraft Gemini output handling", () => {
     vi.restoreAllMocks();
   });
 
-  async function run(geminiBody: unknown) {
-    mockSingle.mockReturnValueOnce({ data: reviewData, error: null });
+  async function run(geminiBody: unknown, ratingOnly = false) {
+    mockSingle.mockReturnValueOnce({ data: ratingOnly ? { ...reviewData, comment: null } : reviewData, error: null });
     const mockFetch = vi
       .spyOn(globalThis, "fetch")
       .mockResolvedValueOnce(new Response(JSON.stringify(geminiBody), { status: 200 }));
     const { AIReviewService } = await import("@/lib/services/ai-review");
+    const save = ratingOnly ? vi.spyOn(AIReviewService, "persistGeneratedDraft").mockResolvedValue({ draftId: "draft-template", replyId: "reply-template" }) : null;
     const promise = AIReviewService.generateDraft({
       reviewId: "rev-1",
       workspaceId: "ws-1",
       userId: "user-1",
     });
-    return { promise, mockFetch };
+    return { promise, mockFetch, save };
   }
 
   it("rejects a reply that hit the token limit instead of saving it", async () => {
@@ -351,6 +352,36 @@ describe("AIReviewService.generateDraft Gemini output handling", () => {
   it("reports safety blocks", async () => {
     const { promise } = await run({ candidates: [{ finishReason: "SAFETY" }] });
     await expect(promise).rejects.toThrow("content restrictions");
+  });
+
+  it.each(["RECITATION", "SAFETY"])("recovers a rating-only %s rejection through the real Google SDK without saving blocked output", async (finishReason) => {
+    const { promise, mockFetch, save } = await run({ candidates: [{ finishReason,
+      content: { parts: [{ text: "BLOCKED PARTIAL RESPONSE" }] },
+      safetyRatings: [{ category: "HARM_CATEGORY_HARASSMENT", probability: "LOW", blocked: true }],
+    }], usageMetadata: { promptTokenCount: 100, candidatesTokenCount: 20, totalTokenCount: 120 } }, true);
+    const result = await promise;
+    expect(result.source).toBe("template");
+    expect(mockFetch).toHaveBeenCalledTimes(1);
+    expect(save).toHaveBeenCalledWith(expect.objectContaining({ modelId: "template:rating-only-v1",
+      generationParams: expect.objectContaining({ fallbackReason: finishReason === "RECITATION" ? "AI_RECITATION_BLOCKED" : "AI_SAFETY_BLOCKED" }) }));
+    expect(JSON.stringify(save!.mock.calls)).not.toContain("BLOCKED PARTIAL RESPONSE");
+    const { AuditService } = await import("@/lib/services/audit");
+    expect(AuditService.log).toHaveBeenCalledWith(expect.objectContaining({ action: "ai.request_failed",
+      metadata: expect.objectContaining({ rawFinishReason: finishReason, retryable: false }) }));
+  });
+
+  it("explains a recitation block accurately for written reviews and preserves the draft", async () => {
+    const { promise, mockFetch } = await run({ candidates: [{ finishReason: "RECITATION" }] });
+    await expect(promise).rejects.toMatchObject({ code: "AI_RECITATION_BLOCKED", statusCode: 422 });
+    expect(mockFetch).toHaveBeenCalledTimes(1);
+    expect(mockInsert).not.toHaveBeenCalled();
+  });
+
+  it("records an input safety block even when Google returns no candidates", async () => {
+    const { promise } = await run({ promptFeedback: { blockReason: "SAFETY", blockReasonMessage: "private feedback" } });
+    await expect(promise).rejects.toMatchObject({ code: "AI_SAFETY_BLOCKED", metadata: { providerBlockReason: "SAFETY", blockStage: "prompt" } });
+    const { AuditService } = await import("@/lib/services/audit");
+    expect(JSON.stringify(vi.mocked(AuditService.log).mock.calls)).not.toContain("private feedback");
   });
 });
 

@@ -41,6 +41,7 @@ export type AuditAction =
   | "review.synced"
   | "review.sync_failed"
   | "reply.ai_generated"
+  | "reply.template_generated"
   | "reply.ai_failed"
   | "ai.request_failed"
   | "ai.request_completed"

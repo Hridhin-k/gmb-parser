@@ -118,6 +118,7 @@ export async function POST(request: Request, { params }: RouteParams) {
       draftId: result.draftId,
       replyId: result.replyId,
       content: result.content,
+      source: result.source ?? "ai",
       jobId: result.jobId ?? null,
       persistence: result.persistence ?? "saved",
     });

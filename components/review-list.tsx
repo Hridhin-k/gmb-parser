@@ -99,11 +99,11 @@ function prunePatches(
   return changed ? next : current;
 }
 
-function draftReply(id: string, content: string): InboxReply {
+function draftReply(id: string, content: string, source: "ai" | "template" = "ai"): InboxReply {
   return {
     id,
     content,
-    source: "ai",
+    source,
     status: "draft",
     created_at: new Date().toISOString(),
     approved_at: null,
@@ -251,12 +251,12 @@ export function ReviewList({
   // ── Drafting ─────────────────────────────────────────────────────────────
 
   /** Watches the background save of a fresh AI draft; swaps in the real reply id. */
-  function watchSave(reviewId: string, jobId: string, content: string) {
+  function watchSave(reviewId: string, jobId: string, content: string, source: "ai" | "template" = "ai") {
     setSaving((prev) => withFlag(prev, [reviewId], true));
     void pollAiGeneration(jobId).then((result) => {
       setSaving((prev) => withFlag(prev, [reviewId], false));
       if (result.status === "saved") {
-        if (result.replyId) patchReply(reviewId, "draft", draftReply(result.replyId, content));
+        if (result.replyId) patchReply(reviewId, "draft", draftReply(result.replyId, content, source));
         refresh();
       } else if (result.status !== "superseded") {
         setError(reviewId, "The draft is on screen but was not saved. Draft it again before sending.");
@@ -285,11 +285,12 @@ export function ReviewList({
         replyId?: string;
         content?: string;
         jobId?: string | null;
+        source?: "ai" | "template";
       };
       if (!response.ok) throw new Error(data.error ?? "Couldn't write a draft. Try again.");
       if (data.content && data.replyId) {
-        patchReply(id, "draft", draftReply(data.replyId, data.content));
-        if (data.jobId) watchSave(id, data.jobId, data.content);
+        patchReply(id, "draft", draftReply(data.replyId, data.content, data.source));
+        if (data.jobId) watchSave(id, data.jobId, data.content, data.source);
       }
       if (!data.jobId) refresh();
     } catch (caught) {
@@ -357,7 +358,7 @@ export function ReviewList({
       ids,
       (item) => {
         setWriting((prev) => withFlag(prev, [item.reviewId], false));
-        if (item.ok && item.replyId && item.content) patchReply(item.reviewId, "draft", draftReply(item.replyId, item.content));
+        if (item.ok && item.replyId && item.content) patchReply(item.reviewId, "draft", draftReply(item.replyId, item.content, item.source));
         else if (!item.ok) setError(item.reviewId, item.error ?? "Couldn't write a draft.");
       },
       contactKind

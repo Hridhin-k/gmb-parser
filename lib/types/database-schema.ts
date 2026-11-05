@@ -2719,7 +2719,7 @@ export type Database = {
         | "pending_publish"
         | "published"
         | "failed"
-      grm_reply_source: "ai" | "manual"
+      grm_reply_source: "ai" | "manual" | "template"
       grm_reply_status:
         | "none"
         | "draft"

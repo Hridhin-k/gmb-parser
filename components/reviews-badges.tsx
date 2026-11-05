@@ -38,6 +38,7 @@ export function reviewStateBadges(input: {
         },
       ];
     case "draft":
+      if (input.source === "template") return [{ key: "draft", label: "Template draft", variant: "default" }];
       return input.source === "ai"
         ? [{ key: "draft", label: "AI draft", variant: "ai", ai: true }]
         : [{ key: "draft", label: "Draft", variant: "default" }];

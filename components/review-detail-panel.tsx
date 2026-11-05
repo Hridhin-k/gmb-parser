@@ -364,6 +364,8 @@ export function ReviewDetailPanel({
 
   const draftTag = own
     ? "Your words"
+    : reply?.source === "template"
+      ? editedHere ? "Template draft, edited" : low ? "Template draft · read before sending" : "Template draft"
     : reply?.source === "ai" && !editedHere
       ? low
         ? "AI draft · read before sending"
@@ -475,6 +477,9 @@ export function ReviewDetailPanel({
           {shownError}
         </Banner>
       ) : null}
+      {reply?.source === "template" && stage === "draft" ? (
+        <p className="text-xs text-ink-3">AI could not complete this rating-only reply. We prepared a template for you to review before sending.</p>
+      ) : null}
 
       {/* No reply yet */}
       {stage === "none" && !own ? (
@@ -534,11 +539,12 @@ export function ReviewDetailPanel({
 
       {/* Draft ready (or being written by hand) */}
       {showDraft && stage !== "writing" ? (
-        <div className="flex flex-col gap-3 border-l-2 border-ai-line pl-3.5">
+        <div className={cn("flex flex-col gap-3 border-l-2 pl-3.5", reply?.source === "template" ? "border-line" : "border-ai-line")}>
           <div className="flex flex-wrap items-center gap-2">
             <span className="text-[13px] font-semibold text-ink">Reply from {business}</span>
-            <span className="inline-flex items-center gap-1 rounded-full bg-ai-tint px-[7px] py-0.5 text-[11px] font-semibold text-ai">
-              <Sparkles className="size-2.5" aria-hidden />
+            <span className={cn("inline-flex items-center gap-1 rounded-full px-[7px] py-0.5 text-[11px] font-semibold",
+              reply?.source === "template" ? "bg-paper text-ink-2" : "bg-ai-tint text-ai")}>
+              {reply?.source === "template" ? null : <Sparkles className="size-2.5" aria-hidden />}
               {draftTag}
             </span>
             {reply?.status === "approved" ? <Badge variant="brand">Approved</Badge> : null}

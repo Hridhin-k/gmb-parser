@@ -3,14 +3,16 @@ import { AIReviewService } from "@/lib/services/ai-review";
 import { EscalationContactStore } from "@/lib/services/escalations";
 import { generateAi } from "@/lib/ai/service";
 import { createAiGenerationJob } from "@/lib/services/ai-generation-jobs";
+import { AppError } from "@/lib/errors";
+import { RATING_ONLY_TEMPLATE_MODEL } from "@/lib/rating-only-fallback";
 
-const state = vi.hoisted(() => ({ replies: [] as Array<Record<string, unknown>> }));
+const state = vi.hoisted(() => ({ replies: [] as Array<Record<string, unknown>>, comment: "The wait was long." as string | null }));
 vi.mock("@/lib/db/client", () => ({
   createAdminClient: () => ({ from: () => {
     const chain = {
       select: () => chain, eq: () => chain,
       single: async () => ({ data: {
-        id: "review-1", location_id: "location-1", star_rating: 2, comment: "The wait was long.",
+        id: "review-1", location_id: "location-1", star_rating: 2, comment: state.comment,
         reviewer_display_name: "Asha", reviewer_is_anonymous: false,
         grm_google_locations: { location_title: "Store", grm_clients: { name: "Business" } },
         grm_review_replies: state.replies,
@@ -42,6 +44,7 @@ describe("drafting with the saved business contact", () => {
     vi.restoreAllMocks();
     vi.clearAllMocks();
     state.replies = [];
+    state.comment = "The wait was long.";
     vi.mocked(EscalationContactStore.read).mockResolvedValue(contacts);
     vi.mocked(generateAi).mockResolvedValue(generated as Awaited<ReturnType<typeof generateAi>>);
     vi.spyOn(AIReviewService, "persistGeneratedDraft").mockResolvedValue({ draftId: "draft-1", replyId: "reply-1" });
@@ -109,5 +112,48 @@ describe("drafting with the saved business contact", () => {
     await expect(AIReviewService.generateDraft({ ...params, automated: true, contact: "phone" }))
       .rejects.toThrow("when a person drafts");
     expect(generateAi).not.toHaveBeenCalled();
+  });
+
+  it.each(["AI_SAFETY_BLOCKED", "AI_RECITATION_BLOCKED"])("prepares a labelled rating-only template after %s without another provider call", async (code) => {
+    state.comment = null;
+    vi.mocked(generateAi).mockRejectedValue(new AppError("Provider blocked the output", code, 422));
+    const result = await AIReviewService.generateDraft({ ...params, contact: "email" });
+    expect(generateAi).toHaveBeenCalledOnce();
+    expect(result).toMatchObject({ source: "template", persistence: "saved" });
+    expect(result.content).toContain("Please contact our team directly");
+    expect(result.content).toContain(contacts.email);
+    expect(AIReviewService.persistGeneratedDraft).toHaveBeenCalledWith(expect.objectContaining({ modelId: RATING_ONLY_TEMPLATE_MODEL,
+      generationParams: { method: "rating_only_template", fallbackReason: code } }));
+  });
+
+  it("keeps template provenance in the background-save job", async () => {
+    state.comment = null;
+    vi.mocked(generateAi).mockRejectedValue(new AppError("Blocked", "AI_SAFETY_BLOCKED", 422));
+    vi.mocked(createAiGenerationJob).mockResolvedValue("job-template");
+    const result = await AIReviewService.generateDraft({ ...params, deferPersistence: true });
+    expect(result).toMatchObject({ source: "template", persistence: "pending" });
+    expect(createAiGenerationJob).toHaveBeenCalledWith(expect.objectContaining({ model: RATING_ONLY_TEMPLATE_MODEL,
+      payload: expect.objectContaining({ generationParams: { method: "rating_only_template", fallbackReason: "AI_SAFETY_BLOCKED" } }) }));
+  });
+
+  it("does not replace a written review with a generic template when the provider blocks", async () => {
+    vi.mocked(generateAi).mockRejectedValue(new AppError("Provider content restrictions", "AI_SAFETY_BLOCKED", 422));
+    await expect(AIReviewService.generateDraft(params)).rejects.toMatchObject({ code: "AI_SAFETY_BLOCKED" });
+    expect(AIReviewService.persistGeneratedDraft).not.toHaveBeenCalled();
+  });
+
+  it.each(["approved", "pending_publish", "published"])("does not replace an existing %s reply with a generic template", async (status) => {
+    state.comment = null;
+    state.replies = [{ workspace_id: params.workspaceId, source: "ai", status, content: "An existing reviewed reply." }];
+    vi.mocked(generateAi).mockRejectedValue(new AppError("Blocked", "AI_SAFETY_BLOCKED", 422));
+    await expect(AIReviewService.generateDraft(params)).rejects.toMatchObject({ code: "AI_SAFETY_BLOCKED" });
+    expect(AIReviewService.persistGeneratedDraft).not.toHaveBeenCalled();
+  });
+
+  it.each(["AI_CREDITS_EXHAUSTED", "AI_BUDGET_EXCEEDED", "CONFIG_ERROR", "AI_TIMEOUT", "AI_OUTCOME_UNKNOWN"])("never masks %s with a template", async (code) => {
+    state.comment = null;
+    vi.mocked(generateAi).mockRejectedValue(new AppError("Failure", code));
+    await expect(AIReviewService.generateDraft(params)).rejects.toMatchObject({ code });
+    expect(AIReviewService.persistGeneratedDraft).not.toHaveBeenCalled();
   });
 });

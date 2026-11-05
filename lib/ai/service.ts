@@ -9,16 +9,18 @@ import { AuditService } from "@/lib/services/audit";
 import { auditErrorDetails } from "@/lib/audit-details";
 import { assertAiCredentials, resolveAiFallback, resolveAiRoute, routeId, type AiRoute, type AiTask } from "./config";
 import { languageModel, providerOptions } from "./registry";
+import { contentBlock } from "./content-block";
 
 export class AiError extends AppError {
-  constructor(message: string, code: string, public readonly retryable = false, status = 502) { super(message, code, status); }
+  constructor(message: string, code: string, public readonly retryable = false, status = 502, metadata?: Record<string, unknown>) { super(message, code, status, metadata); }
 }
 
-function safeError(error: unknown): AiError | AppError {
+function safeError(error: unknown, provider: string): AiError | AppError {
   if (error instanceof AppError) return error;
   if (NoObjectGeneratedError.isInstance(error)) {
     if (error.finishReason === "length") return new AiError("The AI response was cut off before it finished. Please try again.", "AI_INVALID_RESPONSE");
-    if (error.finishReason === "content-filter") return new AiError("AI generation was blocked due to content restrictions.", "AI_SAFETY_BLOCKED");
+    const block = contentBlock({ provider, finishReason: error.finishReason, responseBody: error.response?.body });
+    if (block) return new AiError(block.message, block.code, false, 422, block.diagnostics);
     return new AiError("AI returned an invalid structured response. Please try again.", "AI_INVALID_RESPONSE");
   }
   if (APICallError.isInstance(error)) {
@@ -149,7 +151,8 @@ export async function generateAi(input: GenerateInput) {
       providerResponseId = result.response.id;
       await record(result.totalUsage, result.finishReason);
       if (result.finishReason === "length") throw new AiError("The AI response was cut off before it finished. Please try again.", "AI_INVALID_RESPONSE");
-      if (result.finishReason === "content-filter") throw new AiError("AI generation was blocked due to content restrictions.", "AI_SAFETY_BLOCKED");
+      const block = contentBlock({ provider: route.provider, finishReason, rawFinishReason, providerMetadata: result.providerMetadata });
+      if (block) throw new AiError(block.message, block.code, false, 422, block.diagnostics);
       const text = input.schema ? JSON.stringify(result.output) : result.text;
       if (!text?.trim()) throw new AiError("AI returned an empty or unusable response. Please try again.", "AI_INVALID_RESPONSE");
       if (result.finishReason !== "stop") throw new AiError("AI did not complete its response. Please try again.", "AI_INVALID_RESPONSE");
@@ -160,13 +163,14 @@ export async function generateAi(input: GenerateInput) {
       };
     } catch (error) {
       if (!recorded && providerCalled) await record(NoObjectGeneratedError.isInstance(error) ? error.usage : undefined, "failed");
-      const safe = safeError(error);
+      const safe = safeError(error, route.provider);
       await audit("ai.request_failed", {
         ...auditErrorDetails(safe), ...providerFailureDetails(error), provider: route.provider, model: routeId(route),
         attempt, fallback: attempt > 1, stage, providerCalled, durationMs: Date.now() - started,
         retryable: safe instanceof AiError && safe.retryable,
         willFallback: attempt === 1 && Boolean(fallback && routeId(fallback) !== routeId(primary) && safe instanceof AiError && safe.retryable),
         finishReason: finishReason ?? (NoObjectGeneratedError.isInstance(error) ? error.finishReason : undefined), rawFinishReason,
+        ...(safe.metadata?.blockStage ? safe.metadata : {}),
         ...(providerRequestId ? { providerRequestId } : {}), ...(providerResponseId ? { providerResponseId } : {}), ...usage,
       });
       logger.warn("ai.call_failed", { requestId, workspaceId: input.workspaceId, operation: input.operation, provider: route.provider, model: route.model, errorCode: safe.code, durationMs: Date.now() - started });

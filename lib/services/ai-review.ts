@@ -37,6 +37,7 @@ import {
   type OrgContext,
 } from "@/lib/ai-config";
 import { inventedPromiseViolations, neverSayViolations, retrieveKnowledge } from "@/lib/reply-knowledge";
+import { ratingOnlyFallback, RATING_ONLY_TEMPLATE_MODEL } from "@/lib/rating-only-fallback";
 
 // ---------------------------------------------------------------------------
 // Config
@@ -126,6 +127,7 @@ export interface GenerateDraftResult {
   draftId: string;
   replyId: string;
   content: string;
+  source?: "ai" | "template";
   /** Set when persistence is deferred; replyId is provisional until the job saves. */
   jobId?: string;
   persistence?: "pending" | "saved";
@@ -396,12 +398,26 @@ export class AIReviewService {
     let modelId: string;
     let generationConfig: Record<string, unknown>;
     try {
-      const generated = await generateAi({
-        workspaceId: params.workspaceId, task: "reply", operation: "reply_draft",
-        audit: { userId: params.userId, reviewId: params.reviewId, locationId: review.location_id, aiConfigVersion: promptContext.config.version },
-        prompt: systemPrompt, fast: route === "fast", maxOutputTokens: 1024,
-        timeoutMs: REQUEST_TIMEOUT_MS, temperature: 0.6,
-      });
+      let generated: { text: string; model: string; generationParams: Record<string, unknown> };
+      try {
+        generated = await generateAi({
+          workspaceId: params.workspaceId, task: "reply", operation: "reply_draft",
+          audit: { userId: params.userId, reviewId: params.reviewId, locationId: review.location_id, aiConfigVersion: promptContext.config.version },
+          prompt: systemPrompt, fast: route === "fast", maxOutputTokens: 1024,
+          timeoutMs: REQUEST_TIMEOUT_MS, temperature: 0.6,
+        });
+      } catch (error) {
+        const blocked = error instanceof AppError && ["AI_SAFETY_BLOCKED", "AI_RECITATION_BLOCKED"].includes(error.code);
+        const fallback = blocked ? ratingOnlyFallback({
+          comment: review.comment, stars: review.star_rating, adjustment: params.adjustment,
+          previousDraft: previousDraft ?? (replies ?? []).find((reply) => reply.workspace_id === params.workspaceId
+            && ["approved", "pending_publish", "published"].includes(reply.status))?.content,
+          neverSay: [...configured.tone.neverSay, ...(promptContext.config.snapshot.tone.neverSay ?? [])],
+        }) : null;
+        if (!fallback) throw error;
+        generated = { text: fallback, model: RATING_ONLY_TEMPLATE_MODEL,
+          generationParams: { method: "rating_only_template", fallbackReason: (error as AppError).code } };
+      }
       modelId = generated.model;
       generationConfig = generated.generationParams;
       const text = generated.text;
@@ -500,6 +516,7 @@ export class AIReviewService {
           content: responseText,
           jobId,
           persistence: "pending",
+          source: modelId === RATING_ONLY_TEMPLATE_MODEL ? "template" : "ai",
         };
       }
       // Jobs table unavailable: save synchronously below so the draft is safe.
@@ -520,7 +537,7 @@ export class AIReviewService {
       generationId: null,
     });
 
-    return { ...saved, content: responseText, persistence: "saved" };
+    return { ...saved, content: responseText, persistence: "saved", source: modelId === RATING_ONLY_TEMPLATE_MODEL ? "template" : "ai" };
   }
 
   /**
@@ -543,6 +560,7 @@ export class AIReviewService {
     generationId: string | null;
   }): Promise<{ draftId: string; replyId: string }> {
     const admin = createAdminClient();
+    const source = input.modelId === RATING_ONLY_TEMPLATE_MODEL ? "template" as const : "ai" as const;
 
     let draftId: string | null = null;
     if (input.generationId) {
@@ -620,7 +638,7 @@ export class AIReviewService {
           .from("grm_review_replies")
           .update({
             content: input.content,
-            source: "ai" as const,
+            source,
             status: "draft" as const,
             ai_draft_id: draftId,
             approved_at: null,
@@ -642,7 +660,7 @@ export class AIReviewService {
             workspace_id: input.workspaceId,
             review_id: input.reviewId,
             content: input.content,
-            source: "ai" as const,
+            source,
             status: "draft" as const,
             created_by: input.userId,
             ai_draft_id: draftId,
@@ -677,7 +695,7 @@ export class AIReviewService {
       await AuditService.log({
         workspaceId: input.workspaceId,
         userId: input.userId,
-        action: "reply.ai_generated",
+        action: source === "template" ? "reply.template_generated" : "reply.ai_generated",
         entityType: "grm_review_ai_drafts",
         entityId: draftId,
         metadata: {
@@ -688,6 +706,7 @@ export class AIReviewService {
           reviewId: input.reviewId,
           adjustment: input.adjustmentKind,
           language: input.language,
+          ...(source === "template" ? { method: "rating_only_template", fallbackReason: input.generationParams.fallbackReason } : {}),
         },
       });
     }
