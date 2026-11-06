@@ -71,6 +71,15 @@ additional write attempt, or is reconciled if Google already stores the approved
 reply. A second write-time 404 reports a publishing problem and keeps the review.
 Network or server failures on a write retain the uncertain-outcome state.
 
+A second write-time 404 (`GOOGLE_REPLY_UNAVAILABLE`) usually means Google lists
+the review before its reply endpoint accepts writes, which can take hours. The
+reply is marked failed with Google's own status text in the audit verification
+(`writeMessage`, `retryMessage`), and `publish_result.retry` records when the
+review-pipeline cron may try again: after 15 minutes, 1 hour, 4 hours and 12
+hours, five tries in all. A manual "try again" from Failed replies runs the same
+publish and restarts that schedule. Once the tries are used up the reply stays
+failed and names Google Business Profile as the fallback.
+
 When `reviews.get` also returns 404, the same account must successfully list
 reviews for the same parent location, without returning the supposedly missing
 review. Only then is `missing_on_google_at` set. This targeted check does not

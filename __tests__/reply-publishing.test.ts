@@ -421,6 +421,25 @@ describe("ReplyPublishingService.publishReply", () => {
     await expect(ReplyPublishingService.publishReply("reply-1", "review-1", "ws-1", "user-1"))
       .rejects.toMatchObject({ code: "GOOGLE_REPLY_UNAVAILABLE", metadata: { retryable: true } });
     expect(keptReview.update).toHaveBeenCalledWith({ reply_status: "failed" });
+    const failedUpdate = fromSequences[3].update as ReturnType<typeof vi.fn>;
+    expect(failedUpdate).toHaveBeenCalledWith(expect.objectContaining({
+      status: "failed",
+      failure_count: 1,
+      publish_result: { retry: { code: "GOOGLE_REPLY_UNAVAILABLE", attempts: 1, notBefore: expect.any(String) } },
+    }));
+  });
+
+  it("ends the automatic tries after the fifth write rejection", async () => {
+    fromSequences.push(makeChain({ single: vi.fn(() => ({ data: buildReply({ failure_count: 4 }), error: null })) }));
+    fromSequences.push(makeChain({ single: vi.fn(() => ({ data: { id: "reply-1" }, error: null })) }));
+    const failedReply = makeChain();
+    fromSequences.push(makeChain(), failedReply, makeChain());
+    mockReplyToReview.mockRejectedValue(new AppError("Review exists, but Google could not accept the reply", "GOOGLE_REPLY_UNAVAILABLE", 503));
+
+    const { ReplyPublishingService } = await import("@/lib/services/reply-publishing");
+    await expect(ReplyPublishingService.publishReply("reply-1", "review-1", "ws-1", "user-1"))
+      .rejects.toMatchObject({ code: "GOOGLE_REPLY_UNAVAILABLE", message: expect.stringContaining("after 5 automatic tries") });
+    expect(failedReply.update).toHaveBeenCalledWith(expect.objectContaining({ status: "failed", failure_count: 5, publish_result: null }));
   });
 
   it("does not publish a review already confirmed missing", async () => {
@@ -496,5 +515,15 @@ describe("Audit log safety", () => {
     expect(auditLogCall).not.toContain("access_token");
     expect(auditLogCall).not.toContain("refresh_token");
     expect(auditLogCall).not.toContain("token_enc");
+  });
+});
+
+describe("writeRejectedRetryAt", () => {
+  it("waits longer each time and stops at the fifth try", async () => {
+    const { writeRejectedRetryAt } = await import("@/lib/services/reply-publishing");
+    const now = new Date("2026-11-06T12:00:00Z");
+    const waits = [1, 2, 3, 4].map((attempts) => (writeRejectedRetryAt(attempts, now)!.getTime() - now.getTime()) / 60_000);
+    expect(waits).toEqual([15, 60, 240, 720]);
+    expect(writeRejectedRetryAt(5, now)).toBeNull();
   });
 });

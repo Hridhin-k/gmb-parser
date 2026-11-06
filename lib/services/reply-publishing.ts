@@ -7,6 +7,7 @@ import { checkGeneratedReplyGuardrails, checkReplyGuardrails, negativeReviewNeed
 import { comparePublishedReply } from "@/lib/reply-adjustments";
 import { forgetReviewList } from "@/lib/services/dashboard";
 import { auditErrorDetails } from "@/lib/audit-details";
+import { logger } from "@/lib/logger";
 
 interface PublishAuditState {
   stage: string;
@@ -118,6 +119,16 @@ function classifyPublishError(error: unknown): PublishError {
     message: "An unexpected error occurred while publishing. Please try again.",
     retryable: true,
   };
+}
+
+/** Automatic tries for a reply Google can read but will not take; the waits roughly follow Google's lag. */
+export const WRITE_REJECTED_MAX_ATTEMPTS = 5;
+const WRITE_REJECTED_WAITS_MS = [15 * 60_000, 60 * 60_000, 4 * 3_600_000, 12 * 3_600_000];
+
+/** When the cron may try an `attempts`-times-failed reply again, or null once the tries are used up. */
+export function writeRejectedRetryAt(attempts: number, now: Date): Date | null {
+  if (attempts < 1 || attempts >= WRITE_REJECTED_MAX_ATTEMPTS) return null;
+  return new Date(now.getTime() + WRITE_REJECTED_WAITS_MS[Math.min(attempts, WRITE_REJECTED_WAITS_MS.length) - 1]);
 }
 
 function publishOutcomeUncertain(error: unknown): boolean {
@@ -407,14 +418,24 @@ export class ReplyPublishingService {
       }
 
       const classified = classifyPublishError(googleError);
+      const attempts = reply.failure_count + 1;
+      // Google sometimes lists a review hours before its reply endpoint accepts a write.
+      // A second write in the same second cannot help, so the cron tries again later.
+      const retryAt = classified.code === "GOOGLE_REPLY_UNAVAILABLE" ? writeRejectedRetryAt(attempts, new Date()) : null;
+      const lastError = retryAt
+        ? classified.message
+        : classified.code === "GOOGLE_REPLY_UNAVAILABLE"
+          ? `Google still would not accept this reply after ${WRITE_REJECTED_MAX_ATTEMPTS} automatic tries. Reply in Google Business Profile, or try again later.`
+          : classified.message;
 
       // Mark as failed — store safe error info, never tokens
       await db
         .from("grm_review_replies")
         .update({
           status: "failed",
-          last_error: classified.message,
-          failure_count: reply.failure_count + 1,
+          last_error: lastError,
+          failure_count: attempts,
+          publish_result: retryAt ? { retry: { code: classified.code, attempts, notBefore: retryAt.toISOString() } } : null,
         })
         .eq("id", replyId);
 
@@ -447,6 +468,7 @@ export class ReplyPublishingService {
           errorMessage: classified.message,
           retryable: classified.retryable,
           reviewMissingOnGoogle: missing,
+          ...(retryAt ? { retryScheduledAt: retryAt.toISOString() } : {}),
           failureCount: reply.failure_count + 1,
           durationMs: Date.now() - audit.startedAt,
           stage: audit.stage,
@@ -456,7 +478,8 @@ export class ReplyPublishingService {
       });
       audit.terminalRecorded = true;
 
-      if (!missing) {
+      // A scheduled retry is quiet after the first failure; exhaustion is told once.
+      if (!missing && (!retryAt || attempts === 1)) {
         const { notifyProfileEvent } = await import("@/lib/services/notifications");
         await notifyProfileEvent({
           workspaceId,
@@ -468,7 +491,7 @@ export class ReplyPublishingService {
         });
       }
 
-      throw new AppError(classified.message, classified.code, missing ? 410 : 502, { retryable: classified.retryable });
+      throw new AppError(lastError, classified.code, missing ? 410 : 502, { retryable: classified.retryable });
     }
 
     const outcome = comparePublishedReply(reply.content, googleReply.comment);
@@ -693,6 +716,40 @@ export class ReplyPublishingService {
       "PUBLISH_CONFLICT",
       409
     );
+  }
+
+  /**
+   * Publishes again the replies Google read but would not take, once their wait is over.
+   * Each try runs the normal publish, so a repeat failure schedules the next wait or ends the tries.
+   */
+  static async retryWriteRejectedReplies(options: { limit?: number; now?: Date } = {}): Promise<{ tried: number; published: number }> {
+    const db = createAdminClient();
+    const now = options.now ?? new Date();
+    const { data: due, error } = await db
+      .from("grm_review_replies")
+      .select("id, review_id, workspace_id, approved_by, created_by")
+      .eq("status", "failed")
+      .eq("publish_result->retry->>code", "GOOGLE_REPLY_UNAVAILABLE")
+      .lte("publish_result->retry->>notBefore", now.toISOString())
+      .order("updated_at", { ascending: true })
+      .limit(options.limit ?? 10);
+    if (error) throw new AppError("Could not load replies waiting for Google.", "DB_ERROR", 500);
+
+    let published = 0;
+    for (const row of due ?? []) {
+      const actor = row.approved_by ?? row.created_by;
+      if (!actor) continue;
+      try {
+        await this.resetFailedReply(row.id, row.review_id, row.workspace_id);
+        await this.publishReply(row.id, row.review_id, row.workspace_id, actor);
+        published += 1;
+      } catch (caught) {
+        // The publish path has already recorded the failure and scheduled or ended the tries.
+        logger.info("reply.retry_write_rejected_failed", { replyId: row.id, reviewId: row.review_id,
+          message: caught instanceof Error ? caught.message : "Unknown" });
+      }
+    }
+    return { tried: due?.length ?? 0, published };
   }
 
   /**

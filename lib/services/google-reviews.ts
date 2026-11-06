@@ -10,6 +10,20 @@ const MY_BUSINESS_API = "https://mybusiness.googleapis.com/v4";
 // Maximum page size allowed by the API
 const PAGE_SIZE = 50;
 
+/** Google's own status and message from an error body, for the audit trail. Never the request or token. */
+function googleErrorText(error: unknown): string | null {
+  if (!(error instanceof GoogleApiError)) return null;
+  const raw = error.metadata?.body;
+  if (typeof raw !== "string" || !raw.trim()) return null;
+  try {
+    const parsed = JSON.parse(raw) as { error?: { status?: string; message?: string } };
+    const text = [parsed.error?.status, parsed.error?.message].filter((part) => typeof part === "string" && part.trim()).join(": ");
+    return text ? text.slice(0, 240) : null;
+  } catch {
+    return raw.slice(0, 240);
+  }
+}
+
 function verificationFailure(error?: unknown, verification: Record<string, unknown> = {}): AppError {
   const status = error instanceof GoogleApiError ? error.googleErrorCode : undefined;
   if (status === 401 || status === 403) {
@@ -156,10 +170,12 @@ export class GoogleReviewService {
     reviewName: string,
     comment: string
   ): Promise<{ comment: string; updateTime: string | null }> {
+    let firstWrite: GoogleApiError;
     try {
       return await this.writeReply(accessToken, reviewName, comment);
     } catch (error) {
       if (!(error instanceof GoogleApiError) || error.googleErrorCode !== 404) throw error;
+      firstWrite = error;
     }
 
     // A 404 from the write endpoint alone does not prove that a review was deleted.
@@ -201,10 +217,11 @@ export class GoogleReviewService {
     } catch (error) {
       if (error instanceof GoogleApiError && error.googleErrorCode === 404) {
         throw new AppError(
-          "The review still exists on Google, but Google could not accept the reply. Please try again later or reply in Google Business Profile.",
+          "Google lists this review but is not accepting replies on it yet. It will be tried again over the next day. You can also reply in Google Business Profile.",
           "GOOGLE_REPLY_UNAVAILABLE",
           503,
-          { verification: { writeStatus: 404, reviewStatus: 200, writeAttempts: 2, reason: "readable_review_write_rejected" } }
+          { verification: { writeStatus: 404, reviewStatus: 200, writeAttempts: 2, reason: "readable_review_write_rejected",
+            writeMessage: googleErrorText(firstWrite), retryMessage: googleErrorText(error) } }
         );
       }
       throw error;
