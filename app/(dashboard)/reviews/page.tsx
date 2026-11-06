@@ -9,6 +9,7 @@ import { canApproveReplies, canSyncWorkspace, getWorkspaceRoster } from "@/lib/s
 import { allows, draftsWithAiOnly, workspaceGrant } from "@/lib/access";
 import { getActiveRole, getActiveWorkspace } from "@/lib/services/session";
 import { PageHeader } from "@/components/page-header";
+import { ReviewsDateSelect } from "@/components/reviews-date-select";
 import { EmptyState } from "@/components/empty-state";
 import { SyncButton } from "@/components/sync-button";
 import { ReviewFilters, ReviewSortMenu } from "@/components/review-filters";
@@ -238,6 +239,7 @@ export default async function ReviewsPage({ searchParams }: ReviewsPageProps) {
           </>
         }
       >
+        <ReviewsDateSelect />
         {reviewTab && data.totalReviewCount > 0 ? (
           <a
             href={`/api/reviews/export?${exportQuery.toString()}`}
