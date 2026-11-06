@@ -126,7 +126,7 @@ export interface BulkSyncResult {
 // ---------------------------------------------------------------------------
 // Hash helper — detects whether a review changed since last sync
 // ---------------------------------------------------------------------------
-function reviewHash(review: GoogleReview): string {
+export function reviewHash(review: GoogleReview): string {
   const stable = {
     starRating: review.starRating,
     comment: review.comment ?? null,

@@ -3290,6 +3290,36 @@
         }
       ]
     },
+    "grm_review_edit_sync": {
+      "columns": {
+        "location_id": "uuid",
+        "workspace_id": "uuid",
+        "last_completed_at": "timestamptz",
+        "run_started_at": "timestamptz",
+        "cutoff": "timestamptz",
+        "page_token": "text",
+        "available_at": "timestamptz",
+        "last_attempt_at": "timestamptz",
+        "pages_processed": "int4",
+        "reviews_checked": "int4",
+        "reviews_updated": "int4",
+        "attempts": "int4",
+        "last_error": "text"
+      },
+      "relations": [
+        {
+          "name": "grm_review_edit_sync_workspace_id_fkey",
+          "table": "grm_workspaces",
+          "columns": [
+            "workspace_id"
+          ],
+          "references": [
+            "id"
+          ],
+          "many": false
+        }
+      ]
+    },
     "grm_review_notes": {
       "columns": {
         "id": "uuid",
@@ -4430,6 +4460,17 @@
         {
           "name": "grm_review_analyses_workspace_id_fkey",
           "table": "grm_review_analyses",
+          "columns": [
+            "id"
+          ],
+          "references": [
+            "workspace_id"
+          ],
+          "many": true
+        },
+        {
+          "name": "grm_review_edit_sync_workspace_id_fkey",
+          "table": "grm_review_edit_sync",
           "columns": [
             "id"
           ],

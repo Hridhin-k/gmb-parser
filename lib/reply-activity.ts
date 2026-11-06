@@ -1,5 +1,6 @@
 const LABELS: Record<string, string> = {
   "review.synced": "Review stored from Google",
+  "review.edit_synced": "Review updated from Google",
   "reply.ai_generated": "Draft generated",
   "reply.edited": "Draft edited",
   "reply.submitted": "Submitted for approval",
