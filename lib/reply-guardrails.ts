@@ -1,8 +1,11 @@
+import { redactContactDetails, replyContactValues, type ResolutionContact } from "@/lib/resolution-contact";
+
 export type GuardrailCode =
   | "compensation"
   | "medical"
   | "legal"
-  | "personal_contact";
+  | "personal_contact"
+  | "staff_identity";
 
 export interface GuardrailViolation {
   code: GuardrailCode;
@@ -40,14 +43,19 @@ export function checkReplyGuardrails(content: string): GuardrailViolation[] {
   return found;
 }
 
-/** AI must not invent contact details. A person can add business contacts before sending. */
-export function checkGeneratedReplyGuardrails(content: string): GuardrailViolation[] {
-  const found = checkReplyGuardrails(content);
-  if (/[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}|\+?\d[\d\s().-]{8,}\d/i.test(content)) {
+/** Only explicitly selected saved business contacts may be included by AI. */
+export function checkGeneratedReplyGuardrails(content: string, allowed?: ResolutionContact | null): GuardrailViolation[] {
+  const found = checkReplyGuardrails(redactContactDetails(content, false));
+  const contacts = replyContactValues(content);
+  if (contacts.emails.some((value) => value.toLowerCase() !== allowed?.email?.toLowerCase()) ||
+      contacts.phones.some((value) => value.replace(/\D/g, "") !== allowed?.phone?.replace(/\D/g, ""))) {
     found.push({
       code: "personal_contact",
-      message: "Automatic replies cannot include an email address or phone number. Add business contact details manually before sending.",
+      message: "Automatic replies cannot include an unselected email address or phone number. Choose the store's saved contact details and try again.",
     });
+  }
+  if (/\b(?:staff(?:\s*member)?|employee|team(?:\s*member)?|associate|cashier|salesperson)\s*(?:(?:id|number|no\.?|code|#)\s*[:#-]?\s*)?[,:#-]?\s*\d+\b/i.test(content.replace(/[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/gi, ""))) {
+    found.push({ code: "staff_identity", message: "The draft treated a numeric code as a staff identity. Generate a new reply that acknowledges the service without naming a numbered employee." });
   }
   return found;
 }

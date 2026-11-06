@@ -13,10 +13,12 @@ import { toneInstruction, type ToneVoice } from "@/lib/onboarding";
 import { draftsPausedForLocation, resolvedToneForLocation } from "@/lib/services/hierarchy";
 import { adjustmentInstruction, type DraftAdjustment } from "@/lib/reply-adjustments";
 import {
-  existingResolutionContactSentence,
-  insertResolutionContact,
-  removeResolutionContact,
-  resolutionContactSentence,
+  contactKindAvailable,
+  hasResolutionContact,
+  redactContactDetails,
+  retainedResolutionContact,
+  selectedResolutionContact,
+  type ResolutionContact,
   type ResolutionContactKind,
 } from "@/lib/resolution-contact";
 import { checkGeneratedReplyGuardrails } from "@/lib/reply-guardrails";
@@ -43,7 +45,7 @@ import { ratingOnlyFallback, RATING_ONLY_TEMPLATE_MODEL } from "@/lib/rating-onl
 // Config
 // ---------------------------------------------------------------------------
 
-const PROMPT_VERSION = "v3.2";
+const PROMPT_VERSION = "v3.3";
 const REQUEST_TIMEOUT_MS = 30_000;
 const MAX_COMMENT_CHARS = 4000;
 
@@ -90,8 +92,7 @@ export interface GenerateDraftParams {
   /** True only when the user explicitly asked to replace a draft they edited. */
   replaceEdited?: boolean;
   /**
-   * Ends the draft with the workspace's saved resolution phone and/or email,
-   * word for word. The model never sees or writes the details itself.
+   * Explicitly asks the model to weave the selected store contact into the reply.
    */
   contact?: ResolutionContactKind | null;
   /** True only for a background worker. A pause blocks this path. A person drafting is unaffected. */
@@ -112,6 +113,7 @@ export interface ReviewContext {
   locationName: string;
   /** The unpublished draft being replaced when the user clicks Regenerate. */
   previousDraft?: string | null;
+  resolutionContact?: ResolutionContact | null;
   /** The draft to revise for shorter, warmer, formal, apology, or language changes. */
   currentDraft?: string | null;
   adjustment?: DraftAdjustment | null;
@@ -191,9 +193,14 @@ RULES
 - Never claim an action the business has not confirmed (for example "we have retrained our staff", "we are adding more counters", "it is back in stock"). Say the feedback will be shared with the team instead.
 - Never offer refunds, discounts, gifts, or compensation.
 - Never invent facts, staff names, policies, opening hours, phone numbers, email addresses, or URLs. Never use placeholders like [Name].
-- Do not include phone numbers or email addresses in the generated text. Any selected business contact details are added after drafting.
+- Unexplained numbers, codes, receipt numbers, dates or amounts are not staff identities. For "Good service 2079", thank the reviewer for the service feedback and ignore 2079. Never invent "Staff Member 2079", a numbered employee, or a promise to pass feedback to that person.
+${ctx.resolutionContact?.phone || ctx.resolutionContact?.email
+  ? `- Integrate every selected contact below naturally into the message body as part of a helpful sentence. Do not append a separate contact line, footer, list or signature. Use each supplied value exactly, once; do not include any other phone or email.
+APPROVED STORE CONTACT (selected by a person for this reply)
+${ctx.resolutionContact.phone ? `PHONE: ${ctx.resolutionContact.phone}\n` : ""}${ctx.resolutionContact.email ? `EMAIL: ${ctx.resolutionContact.email}\n` : ""}`
+  : "- Do not include phone numbers or email addresses. Do not copy them from the review, previous draft or business context."}
 - Avoid stock phrases such as "We appreciate your kind words" or "Your feedback is valuable to us".
-${toneInstruction(ctx.tone?.voice, ctx.tone?.note)}${ctx.voiceGuide ?? ""}${orgContextPromptBlock(ctx.orgContext ?? { industry: "", positioning: "", priorities: "", policies: "", legacyVoice: "", legacyNote: "" })}${knowledgePromptBlock(ctx.knowledge ?? [])}${templatesPromptBlock(ctx.templates ?? [])}${previousDraftBlock(ctx.previousDraft)}${adjustmentInstruction(ctx.adjustment, ctx.currentDraft)}
+${toneInstruction(ctx.tone?.voice, ctx.tone?.note)}${ctx.voiceGuide ?? ""}${orgContextPromptBlock(ctx.orgContext ?? { industry: "", positioning: "", priorities: "", policies: "", legacyVoice: "", legacyNote: "" })}${knowledgePromptBlock(ctx.knowledge ?? [])}${templatesPromptBlock(ctx.templates ?? [])}${previousDraftBlock(ctx.previousDraft)}${adjustmentInstruction(ctx.adjustment, ctx.currentDraft, Boolean(ctx.resolutionContact?.phone || ctx.resolutionContact?.email))}
 OUTPUT
 Return only the reply text — no quotes, labels, or notes.`;
 }
@@ -334,17 +341,16 @@ export class AIReviewService {
       );
     }
     const revising = params.adjustment && params.adjustment.kind !== "regenerate";
-    // The saved contact line is appended after generation: a chosen one, or the one a rewrite must keep.
-    const contactSentence = params.contact
-      ? resolutionContactSentence(params.contact, await EscalationContactStore.read(params.workspaceId, review.location_id))
-      : revising && activeReply
-        ? existingResolutionContactSentence(activeReply.content)
-        : null;
-    if (params.contact && !contactSentence) {
-      throw new ValidationError("That contact detail is not saved for this store. Set it in Settings first.");
+    let selectedContact: ResolutionContact | null = null;
+    if (params.contact) {
+      const saved = await EscalationContactStore.read(params.workspaceId, review.location_id);
+      if (!contactKindAvailable(params.contact, saved)) throw new ValidationError("That contact detail is not saved for this store. Set it in Settings first.");
+      selectedContact = selectedResolutionContact(params.contact, saved);
+    } else if (revising && activeReply && !params.automated && hasResolutionContact(activeReply.content)) {
+      const retained = retainedResolutionContact(activeReply.content, await EscalationContactStore.read(params.workspaceId, review.location_id));
+      selectedContact = retained.phone || retained.email ? retained : null;
     }
-    // Never ask the AI to reproduce a contact line.
-    const previousDraft = contactSentence && activeReply ? removeResolutionContact(activeReply.content) : activeReply?.content;
+    const previousDraft = activeReply ? redactContactDetails(activeReply.content) : null;
 
     const [tone, configured, promptContext] = await Promise.all([
       resolvedToneForLocation(params.workspaceId, review.location_id),
@@ -373,6 +379,7 @@ export class AIReviewService {
         : review.reviewer_display_name?.trim() || null,
       starRating: review.star_rating,
       comment: review.comment,
+      resolutionContact: selectedContact,
       businessName,
       locationName: locTyped.location_title,
       previousDraft: revising ? null : previousDraft,
@@ -410,8 +417,9 @@ export class AIReviewService {
         const blocked = error instanceof AppError && ["AI_SAFETY_BLOCKED", "AI_RECITATION_BLOCKED"].includes(error.code);
         const fallback = blocked ? ratingOnlyFallback({
           comment: review.comment, stars: review.star_rating, adjustment: params.adjustment,
-          previousDraft: previousDraft ?? (replies ?? []).find((reply) => reply.workspace_id === params.workspaceId
+          previousDraft: activeReply?.content ?? previousDraft ?? (replies ?? []).find((reply) => reply.workspace_id === params.workspaceId
             && ["approved", "pending_publish", "published"].includes(reply.status))?.content,
+          contact: selectedContact,
           neverSay: [...configured.tone.neverSay, ...(promptContext.config.snapshot.tone.neverSay ?? [])],
         }) : null;
         if (!fallback) throw error;
@@ -430,8 +438,8 @@ export class AIReviewService {
         );
       }
 
-      // The model's own text is checked before the saved contact line is added to it.
-      const violations = checkGeneratedReplyGuardrails(cleaned);
+      // The model may use only the selected current store contact.
+      const violations = checkGeneratedReplyGuardrails(cleaned, selectedContact);
       const forbidden = [
         ...neverSayViolations(cleaned, promptContext.config.snapshot.tone.neverSay ?? []),
         ...inventedPromiseViolations(cleaned, [org.policies]),
@@ -456,7 +464,14 @@ export class AIReviewService {
         throw new ValidationError(violations[0].message);
       }
 
-      responseText = contactSentence ? insertResolutionContact(cleaned, contactSentence) : cleaned;
+      if (selectedContact) {
+        const used = retainedResolutionContact(cleaned, selectedContact);
+        if ((selectedContact.phone && !used.phone) || (selectedContact.email && !used.email)) {
+          throw new AppError("The AI left out the selected contact details. Try drafting again.", "AI_CONTACT_MISSING", 422);
+        }
+        generationConfig = { ...generationConfig, contactMode: "integrated", contactKind: params.contact ?? "preserved" };
+      }
+      responseText = cleaned;
       logger.info("ai_review.generate_ok", {
         workspaceId: params.workspaceId,
         reviewId: params.reviewId,

@@ -3,6 +3,34 @@ import { adjustmentInstruction } from "@/lib/reply-adjustments";
 import { comparePublishedReply } from "@/lib/reply-adjustments";
 import { checkGeneratedReplyGuardrails, checkReplyGuardrails, negativeReviewNeedsApproval } from "@/lib/reply-guardrails";
 
+describe("selected contact details and numeric staff codes", () => {
+  const contact = { phone: "+44 7700 900123", email: "care@example.test" };
+  it("allows the selected store contact naturally in a sentence", () => {
+    expect(checkGeneratedReplyGuardrails("Please call +44 7700 900123 or email care@example.test so we can help with your visit.", contact)).toEqual([]);
+  });
+  it("rejects unselected or substituted phone/email values even with an approved contact", () => {
+    for (const text of ["Please email other@example.test.", "Call +44 7700 900124.", "Email care@example.test or extra@example.test."]) {
+      expect(checkGeneratedReplyGuardrails(text, contact).map((item) => item.code)).toContain("personal_contact");
+    }
+  });
+  it("does not mistake an approved contact address for an offer", () => {
+    expect(checkGeneratedReplyGuardrails("Please email refund@example.test so our team can help.", { phone: null, email: "refund@example.test" })).toEqual([]);
+    expect(checkGeneratedReplyGuardrails("We will refund your visit. Email care@example.test.", contact).map((item) => item.code)).toContain("compensation");
+  });
+  it("keeps checking promises inside a legacy-shaped contact sentence", () => {
+    expect(checkGeneratedReplyGuardrails("You can reach us at care@example.test for a refund so we can resolve this with you.", contact).map((item) => item.code)).toContain("compensation");
+  });
+  it.each(["Staff Member 2079", "employee number 2079", "cashier #2079", "team member 12345678"])("rejects numeric staff identity: %s", (name) => {
+    expect(checkGeneratedReplyGuardrails(`We will pass your kind words to ${name}.`).map((item) => item.code)).toContain("staff_identity");
+  });
+  it("allows general thanks, real names and selected contact numbers", () => {
+    for (const text of ["Thank you for the kind words about our service.", "We will share your feedback with our team.", "Thank you for mentioning Jane."]) {
+      expect(checkGeneratedReplyGuardrails(text)).toEqual([]);
+    }
+    expect(checkGeneratedReplyGuardrails("Please reach our team at +44 7700 900123.", contact)).toEqual([]);
+  });
+});
+
 describe("reply guardrails", () => {
   it("allows an ordinary apology", () => {
     expect(checkReplyGuardrails("We are sorry this visit fell short. Please contact the business directly.")).toEqual([]);

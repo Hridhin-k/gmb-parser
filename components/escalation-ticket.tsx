@@ -19,8 +19,6 @@ import {
   escalationEventLabel,
 } from "@/lib/escalations";
 import {
-  insertResolutionContact,
-  resolutionContactSentence,
   type ResolutionContact,
   type ResolutionContactKind,
 } from "@/lib/resolution-contact";
@@ -441,19 +439,12 @@ function ResolutionReply({
   const busy = saving || generating;
   const published = replyStatus === "published" && content === initialContent;
 
-  function add(kind: ResolutionContactKind) {
-    const sentence = resolutionContactSentence(kind, contact);
-    if (!sentence) return;
-    setContent((current) => insertResolutionContact(current, sentence));
-    setGenerated(false);
-    setError(null);
-  }
 
-  async function save() {
+  async function save(): Promise<boolean> {
     const text = content.trim();
     if (!text) {
       setError("Write a reply before saving it.");
-      return;
+      return false;
     }
     setSaving(true);
     setError(null);
@@ -465,20 +456,22 @@ function ResolutionReply({
     if (!response) {
       setSaving(false);
       setError("No connection. The reply was not saved.");
-      return;
+      return false;
     }
     const payload = (await response.json().catch(() => ({}))) as { error?: string; id?: string };
     setSaving(false);
     if (!response.ok) {
       setError(payload.error ?? "That reply could not be saved.");
-      return;
+      return false;
     }
     if (payload.id) setSavedId(payload.id);
     toast.success("Reply saved. It is not on Google yet.");
     router.refresh();
+    return true;
   }
 
   async function generate(contactKind?: ResolutionContactKind) {
+    if (contactKind && content.trim() && content !== initialContent && !(await save())) return;
     setGenerating(true);
     setError(null);
     const response = await fetch(`/api/reviews/${reviewId}/generate`, {
@@ -568,11 +561,11 @@ function ResolutionReply({
           <p className="text-xs text-ink-3">Your reply is written by AI. A higher role approves it before it can be published.</p>
         ) : (
           <div className="flex flex-wrap items-center gap-2">
-            <span className="text-xs text-ink-3">Add contact:</span>
-            <Button type="button" size="xs" variant="outline" disabled={!contact.phone || busy} onClick={() => add("phone")}>
+            <span className="text-xs text-ink-3">Rewrite with contact:</span>
+            <Button type="button" size="xs" variant="outline" disabled={!contact.phone || busy} onClick={() => void generate("phone")}>
               Phone
             </Button>
-            <Button type="button" size="xs" variant="outline" disabled={!contact.email || busy} onClick={() => add("email")}>
+            <Button type="button" size="xs" variant="outline" disabled={!contact.email || busy} onClick={() => void generate("email")}>
               Email
             </Button>
             <Button
@@ -580,7 +573,7 @@ function ResolutionReply({
               size="xs"
               variant="outline"
               disabled={!contact.phone || !contact.email || busy}
-              onClick={() => add("both")}
+              onClick={() => void generate("both")}
             >
               Both
             </Button>

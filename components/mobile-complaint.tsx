@@ -12,8 +12,6 @@ import { Banner } from "@/components/ui/banner";
 import { Button } from "@/components/ui/button";
 import { RESOLUTION_ACTIONS, type ResolutionCode } from "@/lib/escalations";
 import {
-  insertResolutionContact,
-  resolutionContactSentence,
   type ResolutionContactKind,
 } from "@/lib/resolution-contact";
 import { REPLY_LANGUAGES, type ReplyLanguage } from "@/lib/reply-adjustments";
@@ -83,6 +81,15 @@ export function MobileComplaintView({ data, aiOnly = false }: { data: MobileComp
     if (!card) return;
     setPending("generate");
     setError(null);
+    if (contactKind && content.trim() && content !== card.replyContent) {
+      const saved = await fetch(`/api/reviews/${card.reviewId}/reply`, {
+        method: replyId ? "PUT" : "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(replyId ? { replyId, content } : { content }),
+      });
+      if (!saved.ok) { setError(await errorText(saved)); setPending(null); return; }
+      const savedPayload = await saved.json() as { id?: string };
+      if (savedPayload.id) setReplyId(savedPayload.id);
+    }
     const response = await fetch(`/api/reviews/${card.reviewId}/generate`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -347,14 +354,7 @@ export function MobileComplaintView({ data, aiOnly = false }: { data: MobileComp
             phone={data.resolutionPhone}
             email={data.resolutionEmail}
             disabled={!card.canDraft || busy}
-            onAdd={(kind) => {
-              const sentence = resolutionContactSentence(kind, {
-                phone: data.resolutionPhone,
-                email: data.resolutionEmail,
-              });
-              if (!sentence) return;
-              setContent((current) => insertResolutionContact(current, sentence));
-            }}
+            onAdd={(kind) => void guarded(() => generate(kind))()}
           />
         )}
         <label htmlFor="complaint-language" className="block text-[13px] font-medium text-ink-2">
@@ -487,7 +487,7 @@ function ResolutionContactButtons({
         onClick={() => onAdd("phone")}
         className="inline-flex h-12 items-center rounded-md border border-line bg-white px-3.5 text-[15px] text-ink disabled:opacity-50"
       >
-        Add phone
+        AI with phone
       </button>
       <button
         type="button"
@@ -495,7 +495,7 @@ function ResolutionContactButtons({
         onClick={() => onAdd("email")}
         className="inline-flex h-12 items-center rounded-md border border-line bg-white px-3.5 text-[15px] text-ink disabled:opacity-50"
       >
-        Add email
+        AI with email
       </button>
       <button
         type="button"
@@ -503,7 +503,7 @@ function ResolutionContactButtons({
         onClick={() => onAdd("both")}
         className="inline-flex h-12 items-center rounded-md border border-line bg-white px-3.5 text-[15px] text-ink disabled:opacity-50"
       >
-        Add both
+        AI with both
       </button>
     </div>
   );

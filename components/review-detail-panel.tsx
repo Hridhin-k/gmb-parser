@@ -17,9 +17,6 @@ import { languageLabel, themeLabel } from "@/lib/review-inbox";
 import { splitGoogleTranslation } from "@/lib/review-text";
 import {
   hasResolutionContact,
-  insertResolutionContact,
-  removeResolutionContact,
-  resolutionContactSentence,
   type ResolutionContact,
   type ResolutionContactKind,
 } from "@/lib/resolution-contact";
@@ -65,7 +62,7 @@ export interface InboxReply {
   failure_count: number;
 }
 
-export type RewriteKind = "shorter" | "warmer" | "apology";
+export type RewriteKind = "shorter" | "warmer" | "apology" | "regenerate";
 
 export interface FollowUpRef {
   id: string;
@@ -320,36 +317,13 @@ export function ReviewDetailPanel({
     }
   }
 
-  function addContact(kind: ResolutionContactKind) {
-    const sentence = resolutionContactSentence(kind, contact);
-    if (!sentence) return;
-    setContent((current) => insertResolutionContact(current, sentence));
-    setEditing(true);
+  async function rewriteContact(kind: ResolutionContactKind | null) {
+    if (dirty && !(await saveText())) return;
+    setEditing(false);
+    setOwn(false);
+    onDraft("regenerate", kind);
   }
 
-  /**
-   * Adds, changes or removes the contact line on a saved AI draft and saves it
-   * straight away. While the person is typing it only changes the text box.
-   */
-  async function setContactLine(kind: ResolutionContactKind | null) {
-    const sentence = kind ? resolutionContactSentence(kind, contact) : null;
-    if (kind && !sentence) return;
-    const next = sentence ? insertResolutionContact(content, sentence) : removeResolutionContact(content);
-    setContent(next);
-    if (editing || !reply || own) return;
-    if (next === reply.content) return;
-    setLocalError(null);
-    setLoading("save");
-    try {
-      await apiCall(`/api/reviews/${review.id}/reply`, "PUT", { replyId: reply.id, content: next });
-      onSaved({ ...reply, content: next, status: reply.status === "failed" ? "failed" : "draft" });
-    } catch (caught) {
-      setContent(reply.content);
-      setLocalError(caught instanceof Error ? caught.message : "The reply could not be saved.");
-    } finally {
-      setLoading(null);
-    }
-  }
 
   function followUpHref(): string {
     const query = new URLSearchParams();
@@ -594,8 +568,8 @@ export function ReviewDetailPanel({
                   contact={contact}
                   present={hasResolutionContact(content)}
                   disabled={busy || saving}
-                  onAdd={(kind) => void setContactLine(kind)}
-                  onRemove={() => void setContactLine(null)}
+                  onAdd={(kind) => void rewriteContact(kind)}
+                  onRemove={() => void rewriteContact(null)}
                 />
               )}
             </div>
@@ -669,7 +643,7 @@ export function ReviewDetailPanel({
                 ? "A higher role approves this draft. After that, you can send it."
                 : "An owner or admin approves 1–3 star replies before they go to Google."}
           </span>
-          {editing && own && !aiOnly ? <ContactActions contact={contact} onAdd={addContact} /> : null}
+          {editing && own && !aiOnly ? <ContactActions contact={contact} disabled={busy || saving} onAdd={(kind) => void rewriteContact(kind)} /> : null}
         </div>
       ) : null}
 
@@ -750,7 +724,7 @@ function pill(kind: "ai" | "ink" | "outline"): string {
   );
 }
 
-function ContactActions({ contact, onAdd }: { contact: ResolutionContact; onAdd: (kind: ResolutionContactKind) => void }) {
+function ContactActions({ contact, onAdd, disabled }: { contact: ResolutionContact; disabled?: boolean; onAdd: (kind: ResolutionContactKind) => void }) {
   if (!contact.phone && !contact.email) {
     return (
       <p className="text-xs text-ink-3">
@@ -763,14 +737,14 @@ function ContactActions({ contact, onAdd }: { contact: ResolutionContact; onAdd:
   }
   return (
     <div className="flex flex-wrap items-center gap-1.5">
-      <span className="text-xs text-ink-3">Add contact:</span>
-      <Button type="button" size="xs" variant="ghost" disabled={!contact.phone} onClick={() => onAdd("phone")}>
+      <span className="text-xs text-ink-3">Rewrite with contact:</span>
+      <Button type="button" size="xs" variant="ghost" disabled={disabled || !contact.phone} onClick={() => onAdd("phone")}>
         Phone
       </Button>
-      <Button type="button" size="xs" variant="ghost" disabled={!contact.email} onClick={() => onAdd("email")}>
+      <Button type="button" size="xs" variant="ghost" disabled={disabled || !contact.email} onClick={() => onAdd("email")}>
         Email
       </Button>
-      <Button type="button" size="xs" variant="ghost" disabled={!contact.phone || !contact.email} onClick={() => onAdd("both")}>
+      <Button type="button" size="xs" variant="ghost" disabled={disabled || !contact.phone || !contact.email} onClick={() => onAdd("both")}>
         Both
       </Button>
     </div>

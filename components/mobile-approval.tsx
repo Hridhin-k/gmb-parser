@@ -13,8 +13,6 @@ import { Button } from "@/components/ui/button";
 import { REPLY_LANGUAGES, type ReplyLanguage } from "@/lib/reply-adjustments";
 import { checkReplyGuardrails } from "@/lib/reply-guardrails";
 import {
-  insertResolutionContact,
-  resolutionContactSentence,
   type ResolutionContactKind,
 } from "@/lib/resolution-contact";
 import type { MobileApproval } from "@/lib/services/mobile-work";
@@ -383,14 +381,11 @@ export function MobileApprovalView({ data }: { data: MobileApproval }) {
               phone={data.resolutionPhone}
               email={data.resolutionEmail}
               disabled={busy}
-              onAdd={(kind) => {
-                const sentence = resolutionContactSentence(kind, {
-                  phone: data.resolutionPhone,
-                  email: data.resolutionEmail,
-                });
-                if (!sentence) return;
-                setContent((current) => insertResolutionContact(current, sentence));
-              }}
+              onAdd={(kind) => void guarded(async () => {
+                setPending("generate");
+                if (dirty && !(await saveDraft())) { setPending(null); return; }
+                await generate({ adjustment: "regenerate", contact: kind });
+              })()}
             />
             <label className="block text-[13px] font-medium text-ink-2" htmlFor="reply-language">
               Reply language
@@ -502,7 +497,7 @@ function ResolutionContactButtons({
         onClick={() => onAdd("phone")}
         className="inline-flex h-12 items-center rounded-md border border-line bg-white px-3.5 text-[15px] text-ink disabled:opacity-50"
       >
-        Add phone
+        AI with phone
       </button>
       <button
         type="button"
@@ -510,7 +505,7 @@ function ResolutionContactButtons({
         onClick={() => onAdd("email")}
         className="inline-flex h-12 items-center rounded-md border border-line bg-white px-3.5 text-[15px] text-ink disabled:opacity-50"
       >
-        Add email
+        AI with email
       </button>
       <button
         type="button"
@@ -518,7 +513,7 @@ function ResolutionContactButtons({
         onClick={() => onAdd("both")}
         className="inline-flex h-12 items-center rounded-md border border-line bg-white px-3.5 text-[15px] text-ink disabled:opacity-50"
       >
-        Add both
+        AI with both
       </button>
     </div>
   );

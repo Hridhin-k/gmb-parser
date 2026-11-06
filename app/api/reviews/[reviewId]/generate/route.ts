@@ -26,7 +26,7 @@ const generateBodySchema = z.object({
   adjustment: z.enum(["regenerate", "shorter", "warmer", "formal", "apology"]).optional(),
   language: z.enum(["en", "ml", "manglish", "hi", "hinglish", "ar"]).optional(),
   replaceEdited: z.boolean().optional(),
-  /** End the draft with the saved resolution phone and/or email. */
+  /** Weave the selected saved store phone/email into the AI reply. */
   contact: z.enum(["phone", "email", "both"]).optional(),
 });
 

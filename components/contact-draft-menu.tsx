@@ -93,7 +93,7 @@ interface ContactDraftButtonProps {
 
 /**
  * Split button: the main part drafts in the brand voice as before, the
- * chevron opens the choice of ending every draft with the saved contact line.
+ * chevron asks AI to integrate the selected saved contact into each reply.
  */
 export function ContactDraftButton({ label, plainLabel, contact, disabled, tone = "solid", onDraft }: ContactDraftButtonProps) {
   const shell = cn(
@@ -133,7 +133,7 @@ export function ContactDraftButton({ label, plainLabel, contact, disabled, tone 
             <ContactKindItems contact={contact} onPick={onDraft} />
           </DropdownMenuGroup>
           <MenuFooter contact={contact}>
-            Adds one line to each draft: “You can reach us at … so we can resolve this with you.”
+            AI weaves each store’s selected contact naturally into its reply.
           </MenuFooter>
         </DropdownMenuContent>
       </DropdownMenu>
@@ -170,7 +170,7 @@ export function ContactDraftMenuButton({
         <DropdownMenuGroup>
           <ContactKindItems contact={contact} onPick={onDraft} />
         </DropdownMenuGroup>
-        <MenuFooter contact={contact}>Adds “You can reach us at … so we can resolve this with you.” as the last line.</MenuFooter>
+        <MenuFooter contact={contact}>AI weaves the selected contact into the message body.</MenuFooter>
       </DropdownMenuContent>
     </DropdownMenu>
   );
@@ -178,14 +178,14 @@ export function ContactDraftMenuButton({
 
 interface ContactChipProps {
   contact: ResolutionContact;
-  /** The draft already ends with the contact line. */
+  /** The draft contains contact details, inline or in a legacy footer. */
   present: boolean;
   disabled?: boolean;
   onAdd: (kind: ResolutionContactKind) => void;
   onRemove: () => void;
 }
 
-/** Rewrite-row chip on an existing draft: adds, changes or removes the contact line without a new AI call. */
+/** Explicitly requests an AI rewrite with or without the selected store contact. */
 export function ContactChip({ contact, present, disabled, onAdd, onRemove }: ContactChipProps) {
   return (
     <DropdownMenu>
@@ -207,10 +207,10 @@ export function ContactChip({ contact, present, disabled, onAdd, onRemove }: Con
         {present ? (
           <>
             <DropdownMenuSeparator />
-            <DropdownMenuItem onClick={onRemove}>Remove contact line</DropdownMenuItem>
+            <DropdownMenuItem onClick={onRemove}>Rewrite without contact details</DropdownMenuItem>
           </>
         ) : null}
-        <MenuFooter contact={contact}>Keeps the draft as it is and adds one line at the end. No new AI call.</MenuFooter>
+        <MenuFooter contact={contact}>Rewrites this draft with AI to include the selected contact naturally. Review the new draft before sending.</MenuFooter>
       </DropdownMenuContent>
     </DropdownMenu>
   );

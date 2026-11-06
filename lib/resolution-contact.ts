@@ -30,10 +30,40 @@ export function isResolutionContactKind(value: unknown): value is ResolutionCont
   return typeof value === "string" && (RESOLUTION_CONTACT_KINDS as string[]).includes(value);
 }
 
-/** True when the reply already ends with the saved contact line. */
+export function replyContactValues(content: string): { emails: string[]; phones: string[] } {
+  const emailPattern = /[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/gi;
+  return {
+    emails: content.match(emailPattern) ?? [],
+    phones: (content.replace(emailPattern, "").match(/\+?\d[\d\s().-]{4,}\d/g) ?? [])
+      .filter((phone) => phone.replace(/\D/g, "").length >= 6),
+  };
+}
+
+/** The contact can appear naturally anywhere in the reply, including legacy footers. */
 export function hasResolutionContact(content: string | null | undefined): boolean {
   if (!content) return false;
-  return content.split("\n").some((line) => CONTACT_LINE.test(line.trim()));
+  const values = replyContactValues(content);
+  return values.emails.length > 0 || values.phones.length > 0 || content.split("\n").some((line) => CONTACT_LINE.test(line.trim()));
+}
+
+export function selectedResolutionContact(kind: ResolutionContactKind, contact: ResolutionContact): ResolutionContact {
+  return { phone: kind === "email" ? null : contact.phone, email: kind === "phone" ? null : contact.email };
+}
+
+/** Preserve only current saved details during a rewrite, never an invented or outdated contact. */
+export function retainedResolutionContact(content: string, saved: ResolutionContact): ResolutionContact {
+  const values = replyContactValues(content);
+  return {
+    phone: saved.phone && values.phones.some((value) => value.replace(/\D/g, "") === saved.phone!.replace(/\D/g, "")) ? saved.phone : null,
+    email: saved.email && values.emails.some((value) => value.toLowerCase() === saved.email!.toLowerCase()) ? saved.email : null,
+  };
+}
+
+/** Remove old details from model context; selected current contacts are supplied separately. */
+export function redactContactDetails(content: string, dropLegacyLine = true): string {
+  return (dropLegacyLine ? removeResolutionContact(content) : content)
+    .replace(/[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/gi, "[email omitted]")
+    .replace(/\+?\d[\d\s().-]{4,}\d/g, (value) => value.replace(/\D/g, "").length >= 6 ? "[phone omitted]" : value);
 }
 
 /** Takes the contact line off a reply, leaving the rest as it was. */

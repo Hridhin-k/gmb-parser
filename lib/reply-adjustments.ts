@@ -48,12 +48,13 @@ const LANGUAGE_LINES: Record<ReplyLanguage, string> = {
 
 export function adjustmentInstruction(
   adjustment: DraftAdjustment | null | undefined,
-  currentDraft: string | null | undefined
+  currentDraft: string | null | undefined,
+  hasApprovedContact = false
 ): string {
   if (!adjustment || adjustment.kind === "regenerate") return "";
   const current = currentDraft?.trim();
   const currentBlock = current
-    ? `\nCURRENT DRAFT\n${current.slice(0, 1500)}\nRevise this draft. Keep the facts. Do not add offers, contact details, or claims that were not in it.\n`
+    ? `\nCURRENT DRAFT\n${current.slice(0, 1500)}\nRevise this draft. Keep the facts. ${hasApprovedContact ? "Use the approved store contact supplied above; do not invent additional contact details, offers or claims." : "Do not add offers, contact details, or claims that were not in it."}\n`
     : "";
   if (adjustment.kind === "shorter") {
     return `${currentBlock}\nADJUSTMENT\nMake the reply shorter. One or two complete sentences. Keep every complaint acknowledged.\n`;

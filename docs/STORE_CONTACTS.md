@@ -21,8 +21,14 @@ before/after values and whether the store now inherits the default in the audit
 log. Reads and writes are restricted by workspace; the settings picker includes
 only visible stores.
 
-Contacts are appended to drafts only on an explicit human action and are not
-sent to the AI provider. Saved contacts can appear in public Google replies, so
+On an explicit human action, only the selected saved store contact is supplied
+to the AI provider to weave naturally into the reply. The result must include
+the selected details and cannot contain a substituted or unselected phone/email.
+Contact buttons on existing drafts request an AI rewrite rather than adding a
+fixed footer. Unsaved manual edits are saved before that rewrite. Current saved
+contacts are preserved during Shorter/Warmer; outdated contacts are removed from
+model context. Safe rating-only template recovery uses the selected contact in
+its acknowledgement sentence. Saved contacts can appear in public Google replies, so
 use a contact intended for customers. Existing drafts and published replies are
 not rewritten by saving a new contact.
 

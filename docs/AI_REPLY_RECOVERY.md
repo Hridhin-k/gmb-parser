@@ -18,7 +18,7 @@ For an initial rating-only draft, a confirmed provider content block can recover
 using a small set of prepared acknowledgement templates. Only the star rating is
 used. The model's blocked output is discarded. Templates are checked against
 reply guardrails and the workspace/location never-say rules, then selected saved
-contact details can be appended through the usual human-requested contact flow.
+contact details are integrated into the acknowledgement sentence through the human-requested contact flow.
 The existing approval and publishing checks remain in force.
 
 Recovery is intentionally limited:
