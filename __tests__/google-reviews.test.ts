@@ -37,13 +37,15 @@ describe("Google reply publishing after a 404", () => {
     expect(fetchMock).toHaveBeenCalledTimes(2);
   });
 
-  it("keeps a readable review when the bounded retry also returns 404", async () => {
-    fetchMock.mockResolvedValueOnce(response(404))
+  it("keeps a readable review when the bounded retry also returns 404, recording Google's words", async () => {
+    const notFound = { error: { code: 404, status: "NOT_FOUND", message: "Requested entity was not found." } };
+    fetchMock.mockResolvedValueOnce(response(404, notFound))
       .mockResolvedValueOnce(response(200, review))
-      .mockResolvedValueOnce(response(404));
+      .mockResolvedValueOnce(new Response("not json", { status: 404 }));
     await expect(GoogleReviewService.replyToReview("token", reviewName, comment))
       .rejects.toMatchObject({ code: "GOOGLE_REPLY_UNAVAILABLE", statusCode: 503,
-        metadata: { verification: { writeStatus: 404, reviewStatus: 200, writeAttempts: 2, reason: "readable_review_write_rejected" } } });
+        metadata: { verification: { writeStatus: 404, reviewStatus: 200, writeAttempts: 2, reason: "readable_review_write_rejected",
+          writeMessage: "NOT_FOUND: Requested entity was not found.", retryMessage: "not json" } } });
     expect(fetchMock).toHaveBeenCalledTimes(3);
   });
 

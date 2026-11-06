@@ -37,7 +37,8 @@ export function auditErrorDetails(error: unknown): Record<string, unknown> {
   const safeVerification = verification && typeof verification === "object"
     ? Object.fromEntries(Object.entries(verification).filter(([key, value]) =>
         ["writeStatus", "reviewStatus", "parentStatus", "writeAttempts"].includes(key) && (typeof value === "number" || value === null)
-        || key === "reason" && typeof value === "string" && /^[\w.-]{1,100}$/.test(value)))
+        || key === "reason" && typeof value === "string" && /^[\w.-]{1,100}$/.test(value)
+        || ["writeMessage", "retryMessage"].includes(key) && (value === null || typeof value === "string" && value.length <= 300)))
     : undefined;
   return {
     errorCode: error instanceof AppError ? error.code : "UNKNOWN_ERROR",
