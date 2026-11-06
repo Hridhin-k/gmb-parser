@@ -74,6 +74,18 @@ describe("drafting with the saved business contact", () => {
     expect(EscalationContactStore.read).not.toHaveBeenCalled();
   });
 
+  it("makes a thoughtful revision without a brief voice cap and preserves the approved contact", async () => {
+    state.replies = [{ workspace_id: params.workspaceId, status: "draft", source: "manual", content: `Please email ${contacts.email} so we can help.` }];
+    const result = await AIReviewService.generateDraft({ ...params, replaceEdited: true, adjustment: { kind: "thoughtful" } });
+    const request = vi.mocked(generateAi).mock.calls[0][0];
+    expect(request.prompt).toContain("MORE THOUGHTFUL");
+    expect(request.prompt).not.toContain("Keep the reply to one or two short sentences");
+    expect(request.fast).toBe(false);
+    expect(result.content).toContain(contacts.email);
+    expect(AIReviewService.persistGeneratedDraft).toHaveBeenCalledWith(expect.objectContaining({ content: result.content,
+      generationParams: expect.objectContaining({ adjustmentKind: "thoughtful" }) }));
+  });
+
   it("resolves each review's store independently in a mixed-store drafting run", async () => {
     vi.mocked(EscalationContactStore.read).mockImplementation(async (_workspaceId, locationId) => ({
       phone: null, email: locationId === "location-1" ? "first@example.test" : "second@example.test",

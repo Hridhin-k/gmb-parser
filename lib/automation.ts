@@ -242,12 +242,12 @@ export function automationVerdict(input: {
   return { draft: true, publish: reasons.length === 0, reasons };
 }
 
-export function voiceGuide(tone: ToneValue, vary: boolean): string {
+export function voiceGuide(tone: ToneValue, vary: boolean, options?: { omitLength?: boolean }): string {
   const lines = ["CONFIGURED REPLY VOICE"];
   if (tone.greeting) lines.push(`- Open with this greeting when it fits: ${tone.greeting}`);
   if (tone.signoff) lines.push(`- Close with this sign-off: ${tone.signoff}`);
   lines.push(tone.warmth === "formal" ? "- Sound calm and formal." : "- Sound friendly and human.");
-  lines.push(
+  if (!options?.omitLength) lines.push(
     tone.length === "brief"
       ? "- Keep the reply to one or two short sentences."
       : tone.length === "detailed"

@@ -66,7 +66,7 @@ export interface InboxReply {
   failure_count: number;
 }
 
-export type RewriteKind = "shorter" | "warmer" | "apology" | "regenerate";
+export type RewriteKind = "shorter" | "thoughtful" | "warmer" | "apology" | "regenerate";
 
 export interface FollowUpRef {
   id: string;
@@ -584,10 +584,12 @@ export function ReviewDetailPanel({
               {(
                 [
                   ["shorter", "Shorter"],
+                  ["thoughtful", "More thoughtful"],
                   ["warmer", "Warmer"],
                   ["apology", "Add apology"],
                 ] as const
               ).map(([kind, label]) => (
+                kind === "thoughtful" && !review.comment?.trim() ? null :
                 <button
                   key={kind}
                   type="button"

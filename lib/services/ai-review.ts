@@ -45,9 +45,9 @@ import { ratingOnlyFallback, RATING_ONLY_TEMPLATE_MODEL } from "@/lib/rating-onl
 // Config
 // ---------------------------------------------------------------------------
 
-const PROMPT_VERSION = "v3.3";
+const PROMPT_VERSION = "v3.4";
 const REQUEST_TIMEOUT_MS = 30_000;
-const MAX_COMMENT_CHARS = 4000;
+const MAX_COMMENT_CHARS = 10000;
 
 export type DraftModelRoute = "fast" | "full";
 
@@ -119,6 +119,7 @@ export interface ReviewContext {
   adjustment?: DraftAdjustment | null;
   tone?: { voice: ToneVoice | null; note: string | null } | null;
   voiceGuide?: string | null;
+  lengthPreference?: "brief" | "standard" | "detailed";
   /** Organisation context from the active AI config (saved instructions, not training). */
   orgContext?: OrgContext | null;
   knowledge?: AiKnowledgeRow[] | null;
@@ -139,8 +140,15 @@ export interface GenerateDraftResult {
 // Prompt construction
 // ---------------------------------------------------------------------------
 
-function lengthRule(comment: string | null): string {
+export function isDetailedReview(comment: string | null): boolean {
+  return Boolean(comment && splitGoogleTranslation(comment).original.trim().length >= 600);
+}
+
+function lengthRule(comment: string | null, fuller: boolean, adjustment?: DraftAdjustment | null, brief = false): string {
   if (!comment) return "1–2 short sentences.";
+  if (adjustment?.kind === "shorter") return "1–2 complete sentences, keeping the key feedback acknowledged.";
+  if (fuller) return "For substantive feedback, aim for 5–8 complete sentences in one or two short paragraphs. Match the review's substance; do not add filler just to reach a length.";
+  if (brief) return "1–2 short sentences, covering the key feedback without repetition.";
   if (comment.length < 200) return "2–3 sentences.";
   return "3–5 sentences — enough to respond to every point they raised, and no more.";
 }
@@ -158,11 +166,12 @@ function commentBlock(comment: string | null): string {
 function previousDraftBlock(previous: string | null | undefined): string {
   const text = previous?.trim();
   if (!text) return "";
-  return `\nPREVIOUS DRAFT (the user rejected it and asked for a new version)\n${text.slice(0, 1500)}\n- Write a noticeably different reply: a different opening line and different wording. Keep the same facts and follow every rule above.\n- If the previous draft was cut off or missed a point from the review, make sure the new one is complete and covers it.\n`;
+  return `\nPREVIOUS DRAFT (the user rejected it and asked for a new version)\n${text.slice(0, 4000)}\n- Write a noticeably different reply: a different opening line and different wording. Keep the same facts and follow every rule above.\n- If the previous draft was cut off or missed a point from the review, make sure the new one is complete and covers it.\n`;
 }
 
 export function buildReplyPrompt(ctx: ReviewContext): string {
   const comment = ctx.comment?.trim() || null;
+  const fuller = ctx.adjustment?.kind === "thoughtful" || (isDetailedReview(comment) && ctx.lengthPreference !== "brief" && ctx.tone?.voice !== "brief");
 
   return `You write replies to Google reviews on behalf of "${ctx.businessName}" (location: "${ctx.locationName}"). The reply is published publicly under the business's name.
 
@@ -174,6 +183,7 @@ ${commentBlock(comment)}
 READ THE REVIEW FIRST
 - Base the tone on what the reviewer actually wrote. The star rating is only a hint: a 5-star review can contain a complaint and a 1-star review can contain praise. Respond to both sides.
 - Identify every distinct point (praise, complaint, request, question). The reply must address each one — never answer only part of the review.
+- When someone shares detailed feedback, respond with proportionate care: acknowledge their effort naturally and address their specific experience, grouping related points. A generic thank-you is not enough. Do not repeat yourself or invent extra detail to sound attentive.
 - If the comment is unclear, very short, or only emojis, keep the reply short and general instead of guessing what they meant.
 - With no written comment: thank them for the rating. For 1–3 stars, also invite them to tell the business directly what went wrong.
 
@@ -182,7 +192,7 @@ LANGUAGE
 - If the reviewer wrote in another script (for example Malayalam or Hindi script), reply in that same language and script.
 
 LENGTH
-- ${lengthRule(comment)}
+- ${lengthRule(comment, fuller, ctx.adjustment, ctx.lengthPreference === "brief" || ctx.tone?.voice === "brief")}
 - Every sentence must be complete. No signature, sign-off name, or hashtags. Use an emoji only if the reviewer did.
 
 RULES
@@ -200,7 +210,7 @@ APPROVED STORE CONTACT (selected by a person for this reply)
 ${ctx.resolutionContact.phone ? `PHONE: ${ctx.resolutionContact.phone}\n` : ""}${ctx.resolutionContact.email ? `EMAIL: ${ctx.resolutionContact.email}\n` : ""}`
   : "- Do not include phone numbers or email addresses. Do not copy them from the review, previous draft or business context."}
 - Avoid stock phrases such as "We appreciate your kind words" or "Your feedback is valuable to us".
-${toneInstruction(ctx.tone?.voice, ctx.tone?.note)}${ctx.voiceGuide ?? ""}${orgContextPromptBlock(ctx.orgContext ?? { industry: "", positioning: "", priorities: "", policies: "", legacyVoice: "", legacyNote: "" })}${knowledgePromptBlock(ctx.knowledge ?? [])}${templatesPromptBlock(ctx.templates ?? [])}${previousDraftBlock(ctx.previousDraft)}${adjustmentInstruction(ctx.adjustment, ctx.currentDraft, Boolean(ctx.resolutionContact?.phone || ctx.resolutionContact?.email))}
+${toneInstruction(fuller && ctx.tone?.voice === "brief" ? null : ctx.tone?.voice, ctx.tone?.note)}${ctx.voiceGuide ?? ""}${orgContextPromptBlock(ctx.orgContext ?? { industry: "", positioning: "", priorities: "", policies: "", legacyVoice: "", legacyNote: "" })}${knowledgePromptBlock(ctx.knowledge ?? [])}${templatesPromptBlock(ctx.templates ?? [])}${previousDraftBlock(ctx.previousDraft)}${adjustmentInstruction(ctx.adjustment, ctx.currentDraft, Boolean(ctx.resolutionContact?.phone || ctx.resolutionContact?.email))}
 OUTPUT
 Return only the reply text — no quotes, labels, or notes.`;
 }
@@ -337,7 +347,7 @@ export class AIReviewService {
     );
     if (manuallyEdited && !params.replaceEdited) {
       throw new ValidationError(
-        "This draft has manual edits. Use Shorter, Warmer, More formal, Add apology, Regenerate, a language, or a template when you want to replace it."
+        "This draft has manual edits. Use Shorter, More thoughtful, Warmer, More formal, Add apology, Regenerate, a language, or a template when you want to replace it."
       );
     }
     const revising = params.adjustment && params.adjustment.kind !== "regenerate";
@@ -386,7 +396,11 @@ export class AIReviewService {
       currentDraft: revising ? previousDraft : null,
       adjustment: params.adjustment ?? null,
       tone: legacyTone,
-      voiceGuide: voiceGuide(configured.tone, configured.automation.varyWording),
+      lengthPreference: configured.tone.length,
+      voiceGuide: voiceGuide(configured.tone, configured.automation.varyWording, {
+        omitLength: ["thoughtful", "shorter"].includes(params.adjustment?.kind ?? "")
+          || (isDetailedReview(review.comment) && configured.tone.length !== "brief" && legacyTone?.voice !== "brief"),
+      }),
       orgContext: org,
       knowledge,
       templates: promptContext.templates,
@@ -428,6 +442,7 @@ export class AIReviewService {
       }
       modelId = generated.model;
       generationConfig = generated.generationParams;
+      if (params.adjustment?.kind === "thoughtful") generationConfig = { ...generationConfig, adjustmentKind: "thoughtful" };
       const text = generated.text;
       const cleaned = cleanReply(text);
       if (cleaned.length < 5) {

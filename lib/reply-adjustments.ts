@@ -32,6 +32,7 @@ export type ReplyTemplateId = (typeof REPLY_TEMPLATES)[number]["id"];
 export type DraftAdjustment =
   | { kind: "regenerate" }
   | { kind: "shorter" }
+  | { kind: "thoughtful" }
   | { kind: "warmer" }
   | { kind: "formal" }
   | { kind: "apology" }
@@ -54,10 +55,13 @@ export function adjustmentInstruction(
   if (!adjustment || adjustment.kind === "regenerate") return "";
   const current = currentDraft?.trim();
   const currentBlock = current
-    ? `\nCURRENT DRAFT\n${current.slice(0, 1500)}\nRevise this draft. Keep the facts. ${hasApprovedContact ? "Use the approved store contact supplied above; do not invent additional contact details, offers or claims." : "Do not add offers, contact details, or claims that were not in it."}\n`
+    ? `\nCURRENT DRAFT\n${current.slice(0, 4000)}\nRevise this draft. Keep the facts. ${hasApprovedContact ? "Use the approved store contact supplied above; do not invent additional contact details, offers or claims." : "Do not add offers, contact details, or claims that were not in it."}\n`
     : "";
   if (adjustment.kind === "shorter") {
     return `${currentBlock}\nADJUSTMENT\nMake the reply shorter. One or two complete sentences. Keep every complaint acknowledged.\n`;
+  }
+  if (adjustment.kind === "thoughtful") {
+    return `${currentBlock}\nADJUSTMENT: MORE THOUGHTFUL\nWrite a fuller, more considered response to the original review, not just a longer version of the draft. Recognise the effort behind detailed feedback naturally. Address the main praise, concerns and questions specifically, grouping related points. Preserve the current draft's language and script unless a language change was requested. For a substantive review, aim for 5–8 complete sentences in one or two short paragraphs; let the substance determine the length. This requested length overrides general brevity guidance. Do not pad a short or rating-only review, repeat thanks, echo the whole review, or invent details, actions, promises or compensation.\n`;
   }
   if (adjustment.kind === "warmer") {
     return `${currentBlock}\nADJUSTMENT\nMake the reply warmer and more human. Do not become effusive, and do not add compensation.\n`;

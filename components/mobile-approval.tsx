@@ -62,7 +62,7 @@ export function MobileApprovalView({ data }: { data: MobileApproval }) {
     };
   }
 
-  async function generate(body: { adjustment?: "regenerate" | "shorter" | "warmer"; language?: ReplyLanguage; contact?: ResolutionContactKind }) {
+  async function generate(body: { adjustment?: "regenerate" | "shorter" | "thoughtful" | "warmer"; language?: ReplyLanguage; contact?: ResolutionContactKind }) {
     if (!card) return;
     setPending("generate");
     setError(null);
@@ -358,6 +358,9 @@ export function MobileApprovalView({ data }: { data: MobileApproval }) {
               <Button type="button" variant="outline" className="h-12 px-4 text-[15px]" disabled={busy} onClick={guarded(() => generate({ adjustment: "shorter" }))}>
                 Shorter
               </Button>
+              {card.original?.trim() ? <Button type="button" variant="outline" className="h-12 px-4 text-[15px]" disabled={busy} onClick={guarded(() => generate({ adjustment: "thoughtful" }))}>
+                More thoughtful
+              </Button> : null}
               <Button type="button" variant="outline" className="h-12 px-4 text-[15px]" disabled={busy} onClick={guarded(() => generate({ adjustment: "warmer" }))}>
                 Warmer
               </Button>
