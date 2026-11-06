@@ -1,3 +1,4 @@
+import { googleReviewReplyUrl, normalizeReviewMedia, type ReviewMediaItem } from "@/lib/review-media";
 import { getAuthUserById } from "@/lib/auth/users";
 import { createAdminClient } from "@/lib/db/client";
 import { canAct, reviewPermission, type ResourceRef } from "@/lib/access";
@@ -78,6 +79,8 @@ export interface MobileApprovalCard {
   starRating: number;
   reviewerName: string;
   when: string;
+  reviewMediaItems?: ReviewMediaItem[];
+  reviewUrl?: string | null;
   original: string | null;
   translation: string | null;
   locationName: string;
@@ -123,6 +126,8 @@ export interface MobileComplaintCard {
   starRating: number;
   reviewerName: string;
   when: string;
+  reviewMediaItems?: ReviewMediaItem[];
+  reviewUrl?: string | null;
   original: string | null;
   translation: string | null;
   theme: string | null;
@@ -441,6 +446,8 @@ export async function loadMobileOverview(input: {
 }
 
 interface ReviewRow {
+  review_media_items?: unknown;
+  review_url?: string | null;
   id: string;
   star_rating: number;
   reviewer_display_name: string | null;
@@ -514,7 +521,7 @@ export async function loadMobileApproval(input: {
   const locationIds = loaded.locations.map((location) => location.id);
   const { data, error } = await admin
     .from("grm_reviews")
-    .select("id, star_rating, reviewer_display_name, comment, review_create_time, location_id, reply_status, complaint_theme")
+    .select("id, star_rating, reviewer_display_name, comment, review_create_time, location_id, reply_status, complaint_theme, review_media_items, review_url")
     .eq("workspace_id", input.workspaceId)
     .is("missing_on_google_at", null)
     .in("location_id", locationIds)
@@ -580,6 +587,8 @@ export async function loadMobileApproval(input: {
       starRating: current.star_rating,
       reviewerName: name,
       when: relativeTime(current.review_create_time, now),
+      reviewMediaItems: normalizeReviewMedia(current.review_media_items),
+      reviewUrl: googleReviewReplyUrl(current.review_url),
       original: text.original.trim() ? text.original.trim() : null,
       translation: text.translation,
       locationName: location ? loaded.names.get(location.id) ?? "Location" : "Location",
@@ -666,7 +675,7 @@ export async function loadMobileComplaint(input: {
     const [reviewResult, notesResult, photos] = await Promise.all([
       admin
         .from("grm_reviews")
-        .select("id, star_rating, reviewer_display_name, comment, review_create_time, location_id, reply_status, complaint_theme")
+        .select("id, star_rating, reviewer_display_name, comment, review_create_time, location_id, reply_status, complaint_theme, review_media_items, review_url")
         .eq("id", current.review_id)
         .eq("workspace_id", input.workspaceId)
         .maybeSingle(),
@@ -718,6 +727,8 @@ export async function loadMobileComplaint(input: {
       starRating: review.star_rating,
       reviewerName: name,
       when: relativeTime(review.review_create_time, now),
+      reviewMediaItems: normalizeReviewMedia(review.review_media_items),
+      reviewUrl: googleReviewReplyUrl(review.review_url),
       original: text.original.trim() ? text.original.trim() : null,
       translation: text.translation,
       theme: themeLabel(current.theme ?? review.complaint_theme),

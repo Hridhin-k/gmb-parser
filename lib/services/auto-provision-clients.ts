@@ -1,4 +1,7 @@
 import { createAdminClient } from "@/lib/db/client";
+import { getPool } from "@/lib/db/pool";
+import { createHash } from "node:crypto";
+import { AuditService } from "@/lib/services/audit";
 import { AppError } from "@/lib/errors";
 import { logger } from "@/lib/logger";
 import {
@@ -28,13 +31,17 @@ export function isAutoClientMarker(notes: string | null | undefined): boolean {
 }
 
 export function autoOrgMarker(orgName: string): string {
-  const key =
-    orgName
-      .toLowerCase()
-      .replace(/[^a-z0-9]+/g, "-")
-      .replace(/^-+|-+$/g, "")
-      .slice(0, 80) || "org";
-  return `${AUTO_ORG_PREFIX}${key}`;
+  // Preserve Unicode and punctuation; ASCII slugs merged unrelated businesses.
+  return `${AUTO_ORG_PREFIX}v2:${createHash("sha256").update(businessKey(orgName)).digest("hex")}`;
+}
+
+function businessKey(name: string): string {
+  return name.normalize("NFKC").replace(/\s+/g, " ").trim().toLowerCase();
+}
+
+function businessNameForLocation(loc: LocationRow): string {
+  return organizationNameFromTitle(loc.location_title,
+    loc.store_code ? `Location ${loc.store_code}` : `Google location ${loc.google_location_name}`);
 }
 
 /**
@@ -61,8 +68,7 @@ export function organizationNameFromTitle(title: string, fallback = "Google loca
 function shouldStripTrailingQualifier(inner: string): boolean {
   if (/^\d+$/.test(inner)) return true;
   if (/^[A-Za-z0-9]+(?:-[A-Za-z0-9]+)+$/.test(inner)) return true;
-  if (/^\d{8,}$/.test(inner)) return true;
-  if (/^[A-Za-z0-9]{8,}$/.test(inner)) return true;
+  if (/^(?=.*\d)[A-Za-z0-9]{8,}$/.test(inner)) return true;
   return false;
 }
 
@@ -81,6 +87,7 @@ type LocationRow = {
   client_id: string | null;
   is_active: boolean;
   hold_reason: string | null;
+  group_id: string | null;
 };
 
 /**
@@ -99,7 +106,7 @@ export async function autoProvisionClientsFromLocations(
   const { data: locations, error: locError } = await db
     .from("grm_google_locations")
     .select(
-      "id, google_location_name, location_title, store_code, client_id, is_active, hold_reason"
+      "id, google_location_name, location_title, store_code, client_id, is_active, hold_reason, group_id"
     )
     .eq("workspace_id", workspaceId)
     .eq("is_active", true);
@@ -129,16 +136,18 @@ export async function autoProvisionClientsFromLocations(
   const clients = (existingClients ?? []) as ClientRow[];
   const clientById = new Map(clients.map((c) => [c.id, c]));
   const byOrgMarker = new Map<string, string>();
-  const byName = new Map<string, string>();
+  const byName = new Map<string, string | null>();
 
   for (const c of clients) {
-    if (c.notes === UNASSIGNED_CLIENT_MARKER) continue;
-    if (c.name) byName.set(c.name.toLowerCase(), c.id);
-    if (isAutoOrgMarker(c.notes)) byOrgMarker.set(c.notes!, c.id);
+    if (c.notes === UNASSIGNED_CLIENT_MARKER || isAutoLocMarker(c.notes)) continue;
+    const key = businessKey(c.name);
+    // Ambiguous existing names need an explicit choice, not an arbitrary owner.
+    byName.set(key, byName.has(key) ? null : c.id);
+    if (isAutoOrgMarker(c.notes) && c.notes === autoOrgMarker(c.name)) byOrgMarker.set(c.notes, c.id);
   }
 
   const toProvision = ((locations ?? []) as LocationRow[]).filter(
-    (loc) => !loc.hold_reason && shouldProvisionLocation(loc, clientById, unassignedIds)
+    (loc) => !loc.hold_reason && !loc.group_id && shouldProvisionLocation(loc, clientById, unassignedIds)
   );
 
   if (!toProvision.length) {
@@ -151,26 +160,14 @@ export async function autoProvisionClientsFromLocations(
   const emptiedClientIds = new Set<string>();
 
   for (const loc of toProvision) {
-    const orgName = organizationNameFromTitle(
-      loc.location_title,
-      loc.store_code ? `Location ${loc.store_code}` : "Google location"
-    );
+    const orgName = businessNameForLocation(loc);
     const marker = autoOrgMarker(orgName);
 
-    let clientId = byOrgMarker.get(marker) ?? byName.get(orgName.toLowerCase());
+    let clientId = byOrgMarker.get(marker) ?? byName.get(businessKey(orgName));
 
     if (clientId) {
       clientsReused += 1;
-      const existing = clientById.get(clientId);
-      if (existing && !isAutoOrgMarker(existing.notes)) {
-        await db
-          .from("grm_clients")
-          .update({ notes: marker })
-          .eq("id", clientId)
-          .eq("workspace_id", workspaceId);
-        existing.notes = marker;
-        byOrgMarker.set(marker, clientId);
-      }
+      // Reusing a manually created business must preserve its notes and ownership.
     } else {
       const { data: created, error: createError } = await db
         .from("grm_clients")
@@ -190,6 +187,7 @@ export async function autoProvisionClientsFromLocations(
           .select("id")
           .eq("workspace_id", workspaceId)
           .eq("notes", marker)
+          .eq("is_active", true)
           .maybeSingle();
 
         if (!raced) {
@@ -198,6 +196,10 @@ export async function autoProvisionClientsFromLocations(
             orgName,
             dbError: createError?.message,
           });
+          await AuditService.log({ workspaceId, userId, action: "location.grouping_failed",
+            entityType: "grm_google_locations", entityId: loc.id,
+            metadata: { stage: "create_business", businessName: orgName, errorCode: createError?.code,
+              error: createError?.message, previousClientId: loc.client_id } });
           continue;
         }
         clientId = raced.id;
@@ -205,22 +207,26 @@ export async function autoProvisionClientsFromLocations(
       } else {
         clientId = created.id;
         clientsCreated += 1;
+        await AuditService.log({ workspaceId, userId, action: "client.created", entityType: "grm_clients", entityId: clientId,
+          metadata: { source: "google_business_grouping", name: orgName } });
       }
 
       byOrgMarker.set(marker, clientId);
-      byName.set(orgName.toLowerCase(), clientId);
+      byName.set(businessKey(orgName), clientId);
       clientById.set(clientId, { id: clientId, name: orgName, notes: marker });
     }
 
-    if (loc.client_id && loc.client_id !== clientId) {
-      emptiedClientIds.add(loc.client_id);
-    }
-
-    const { error: linkError } = await db
+    let link = db
       .from("grm_google_locations")
-      .update({ client_id: clientId })
+      .update({ client_id: clientId, group_id: null })
       .eq("id", loc.id)
-      .eq("workspace_id", workspaceId);
+      .eq("workspace_id", workspaceId)
+      .eq("is_active", true)
+      .is("hold_reason", null)
+      .is("group_id", null);
+    // A concurrent manual assignment wins over this discovery snapshot.
+    link = loc.client_id ? link.eq("client_id", loc.client_id) : link.is("client_id", null);
+    const { data: linked, error: linkError } = await link.select("id").maybeSingle();
 
     if (linkError) {
       logger.error("client.auto_provision.link_failed", {
@@ -228,10 +234,22 @@ export async function autoProvisionClientsFromLocations(
         clientId,
         dbError: linkError.message,
       });
+      await AuditService.log({ workspaceId, userId, action: "location.grouping_failed",
+        entityType: "grm_google_locations", entityId: loc.id,
+        metadata: { stage: "link_store", businessName: orgName, errorCode: linkError.code, error: linkError.message,
+          before: { clientId: loc.client_id }, targetClientId: clientId } });
       continue;
     }
 
+    if (!linked) continue;
     locationsLinked += 1;
+    if (loc.client_id && loc.client_id !== clientId) emptiedClientIds.add(loc.client_id);
+    await AuditService.log({
+      workspaceId, userId, action: "location.moved", entityType: "grm_google_locations", entityId: loc.id,
+      metadata: { source: "google_business_grouping", businessName: orgName,
+        before: { clientId: loc.client_id, groupId: loc.group_id ?? null },
+        after: { clientId, groupId: null } },
+    });
   }
 
   const leftoverAutoLoc = [...emptiedClientIds].filter((id) => {
@@ -240,11 +258,17 @@ export async function autoProvisionClientsFromLocations(
   });
 
   if (leftoverAutoLoc.length > 0) {
-    await db
-      .from("grm_clients")
-      .update({ is_active: false })
-      .eq("workspace_id", workspaceId)
-      .in("id", leftoverAutoLoc);
+    // Include held and inactive stores; a legacy business with any store stays visible.
+    const { rows: archived } = await getPool().query<{ id: string; name: string }>(`UPDATE grm_clients c SET is_active=false
+      WHERE c.workspace_id=$1 AND c.is_active AND c.id=ANY($2::uuid[]) AND c.notes LIKE 'grm:auto:loc:%'
+      AND NOT EXISTS (SELECT 1 FROM grm_google_locations l WHERE l.workspace_id=c.workspace_id AND l.client_id=c.id)
+      RETURNING c.id,c.name`,
+    [workspaceId, leftoverAutoLoc]);
+    for (const business of archived) {
+      await AuditService.log({ workspaceId, userId, action: "client.updated", entityType: "grm_clients", entityId: business.id,
+        metadata: { source: "google_business_grouping", name: business.name, reason: "empty_legacy_business",
+          before: { isActive: true }, after: { isActive: false } } });
+    }
   }
 
   return { clientsCreated, clientsReused, locationsLinked };
@@ -260,8 +284,9 @@ function shouldProvisionLocation(
   if (!client || client.notes === UNASSIGNED_CLIENT_MARKER) return true;
   if (isAutoLocMarker(client.notes)) return true;
   if (isAutoOrgMarker(client.notes)) {
-    const orgName = organizationNameFromTitle(loc.location_title);
-    return autoOrgMarker(orgName) !== client.notes;
+    const orgName = businessNameForLocation(loc);
+    // Old slug markers remain valid when the actual business name matches.
+    return businessKey(orgName) !== businessKey(client.name);
   }
   return false;
 }

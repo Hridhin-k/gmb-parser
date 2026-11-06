@@ -9,6 +9,7 @@ const { fromMock, createAdminClient } = vi.hoisted(() => {
 });
 
 vi.mock("@/lib/db/client", () => ({ createAdminClient }));
+vi.mock("@/lib/services/audit", () => ({ AuditService: { log: vi.fn() } }));
 
 vi.mock("@/lib/services/unassigned-client", () => ({
   UNASSIGNED_CLIENT_MARKER: "grm:system:unassigned",
@@ -30,6 +31,7 @@ import {
 
 function chain(result: { data: unknown; error: unknown }) {
   const api: Record<string, unknown> = {};
+  let updating = false;
   const self = () => api;
   for (const m of [
     "select",
@@ -44,7 +46,8 @@ function chain(result: { data: unknown; error: unknown }) {
     api[m] = vi.fn(self);
   }
   api.single = vi.fn().mockResolvedValue(result);
-  api.maybeSingle = vi.fn().mockResolvedValue(result);
+  api.update = vi.fn(() => { updating = true; return api; });
+  api.maybeSingle = vi.fn(() => Promise.resolve(updating && !result.error ? { data: { id: "linked" }, error: null } : result));
   api.then = (resolve: (v: unknown) => unknown) =>
     Promise.resolve(result).then(resolve);
   return api;
@@ -64,14 +67,25 @@ describe("organizationNameFromTitle", () => {
     expect(organizationNameFromTitle(legal)).toBe(legal);
     expect(organizationNameFromTitle(`${legal} (2)`)).toBe(legal);
   });
+
+  it("preserves meaningful long qualifiers", () => {
+    expect(organizationNameFromTitle("Acme (Hospital)")).toBe("Acme (Hospital)");
+  });
 });
 
 describe("autoOrgMarker", () => {
   it("is stable for an organisation name", () => {
     const marker = autoOrgMarker("Fazyo");
-    expect(marker).toBe("grm:auto:org:fazyo");
+    expect(marker).toMatch(/^grm:auto:org:v2:[a-f0-9]{64}$/);
+    expect(autoOrgMarker("  FAZYO  ")).toBe(marker);
     expect(isAutoClientMarker(marker)).toBe(true);
     expect(isAutoClientMarker("grm:system:unassigned")).toBe(false);
+  });
+
+  it("keeps Unicode, punctuation and long business identities distinct", () => {
+    expect(autoOrgMarker("മലയാളം")).not.toBe(autoOrgMarker("தமிழ்"));
+    expect(autoOrgMarker("A+B")).not.toBe(autoOrgMarker("A B"));
+    expect(autoOrgMarker(`${"a".repeat(90)}x`)).not.toBe(autoOrgMarker(`${"a".repeat(90)}y`));
   });
 });
 

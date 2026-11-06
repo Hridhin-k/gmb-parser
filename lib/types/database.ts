@@ -127,6 +127,7 @@ export type AuditAction =
   | "location_group.renamed"
   | "location_group.merged"
   | "location.moved"
+  | "location.grouping_failed"
   | "location.tagged"
   | "location.manager_set"
   | "location.settings_updated"

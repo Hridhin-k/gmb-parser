@@ -79,6 +79,8 @@ export interface GoogleReview {
   comment?: string;
   createTime: string;
   updateTime?: string;
+  reviewMediaItems?: Array<{ thumbnailUrl?: string; thumbnailLabel?: string; videoUrl?: string }>;
+  reviewReplyUrl?: string;
   reviewReply?: {
     comment: string;
     updateTime: string;

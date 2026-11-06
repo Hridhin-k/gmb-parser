@@ -168,6 +168,30 @@ describe("classifyReviewError", () => {
 // ---------------------------------------------------------------------------
 
 describe("ReviewSyncService.syncLocation", () => {
+  it("stores review photos/videos, detects media-only changes, and removes deleted attachments", async () => {
+    const photo = { thumbnailUrl: "https://lh3.googleusercontent.com/photo", thumbnailLabel: "Customer photo" };
+    const video = { thumbnailUrl: "https://lh3.googleusercontent.com/poster", videoUrl: "https://rr1.googlevideo.com/play" };
+    const replyUrl = "https://business.google.com/review/123";
+    const sync = async (media: unknown[]) => {
+      mockApiResponse(200, { reviews: [makeReview("media", { reviewMediaItems: media, reviewReplyUrl: replyUrl })] });
+      return ReviewSyncService.syncLocation("loc-1", "conn-1", "ws-1", "user-1");
+    };
+    await sync([photo]);
+    const first = (upsertCalls.flat() as Array<Record<string, unknown>>).at(-1)!;
+    expect(first).toMatchObject({ review_media_items: [{ ...photo, videoUrl: null }], review_url: replyUrl });
+    syncState.existingReviewRows = [first as typeof syncState.existingReviewRows[number]];
+    const unchanged = await sync([photo]);
+    expect(unchanged.reviewsUpdated).toBe(0);
+    await sync([photo, video]);
+    const changed = (upsertCalls.flat() as Array<Record<string, unknown>>).at(-1)!;
+    expect(changed.review_media_items).toHaveLength(2);
+    expect(changed.content_fingerprint).toBe(first.content_fingerprint);
+    expect(changed.response_fingerprint).toBe(first.response_fingerprint);
+    syncState.existingReviewRows = [changed as typeof syncState.existingReviewRows[number]];
+    await sync([]);
+    expect((upsertCalls.flat() as Array<Record<string, unknown>>).at(-1)?.review_media_items).toEqual([]);
+  });
+
   it("returns a resumable checkpoint before declaring a long full sync complete", async () => {
     mockApiResponse(200, { reviews: [makeReview("checkpoint-review")], nextPageToken: "next-page" });
     const result = await ReviewSyncService.syncLocation("loc-1", "conn-1", "ws-1", "user-1", { mode: "full", deadlineAt: 1 });
@@ -222,6 +246,8 @@ describe("ReviewSyncService.syncLocation", () => {
             updateTime: review.updateTime ?? null,
             replyComment: null,
             replyUpdateTime: null,
+            reviewMediaItems: [],
+            reviewReplyUrl: null,
           })
         )
         .digest("hex");

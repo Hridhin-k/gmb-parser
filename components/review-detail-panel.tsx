@@ -15,6 +15,8 @@ import { formatFriendlyDateTime } from "@/lib/format-date";
 import { cn } from "@/lib/utils";
 import { languageLabel, themeLabel } from "@/lib/review-inbox";
 import { splitGoogleTranslation } from "@/lib/review-text";
+import { ReviewMedia } from "@/components/review-media";
+import type { ReviewMediaItem } from "@/lib/review-media";
 import {
   hasResolutionContact,
   type ResolutionContact,
@@ -33,6 +35,8 @@ export interface InboxReview {
   reviewer_is_anonymous: boolean;
   star_rating: number;
   comment: string | null;
+  review_media_items?: ReviewMediaItem[];
+  review_url?: string | null;
   review_create_time: string;
   review_update_time: string | null;
   google_reply_comment: string | null;
@@ -85,7 +89,7 @@ interface ReviewDetailPanelProps {
   followUp: FollowUpRef | null;
   /** Reviews still without a draft, for the "draft them all" tip. */
   undraftedCount: number;
-  /** Draft or rewrite with AI. `contact` ends the draft with the saved resolution details. */
+  /** Draft or rewrite with AI, weaving the selected saved contact into the reply. */
   onDraft: (rewrite?: RewriteKind, contact?: ResolutionContactKind | null) => void;
   onSend: () => void;
   onUndo: () => void;
@@ -442,6 +446,7 @@ export function ReviewDetailPanel({
         ) : (
           <p className="text-[15px] italic text-ink-3">Rating only. No written comment.</p>
         )}
+        <ReviewMedia items={review.review_media_items} replyUrl={review.review_url} />
       </div>
       </>
       )}

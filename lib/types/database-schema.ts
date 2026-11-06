@@ -996,6 +996,7 @@ export type Database = {
       }
       grm_reviews: {
         Row: {
+          review_media_items: Json
           comment: string | null
           created_at: string
           first_synced_at: string
@@ -1027,6 +1028,7 @@ export type Database = {
           workspace_id: string
         }
         Insert: {
+          review_media_items?: Json
           comment?: string | null
           created_at?: string
           first_synced_at?: string
@@ -1058,6 +1060,7 @@ export type Database = {
           workspace_id: string
         }
         Update: {
+          review_media_items?: Json
           comment?: string | null
           created_at?: string
           first_synced_at?: string

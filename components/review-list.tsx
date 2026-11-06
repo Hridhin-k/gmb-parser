@@ -7,6 +7,7 @@ import { cn } from "@/lib/utils";
 import { Checkbox } from "@/components/ui/checkbox";
 import { InlineStars } from "@/components/reviews-badges";
 import { splitGoogleTranslation } from "@/lib/review-text";
+import { ReviewMedia } from "@/components/review-media";
 import { bulkContactAvailability, type ResolutionContact, type ResolutionContactKind } from "@/lib/resolution-contact";
 import { useServerRefresh, useSettleWhenUpdated } from "@/hooks/use-server-refresh";
 import { pollBulkJob, type BulkJobItemResult } from "@/lib/bulk-job-client";
@@ -629,12 +630,12 @@ export function ReviewList({
               key={id}
               id={`review-${id}`}
               className={cn(
-                "grid overflow-hidden rounded-xl border bg-white xl:grid-cols-[minmax(300px,420px)_minmax(0,1fr)]",
+                "grid grid-cols-1 overflow-hidden rounded-xl border bg-white xl:grid-cols-[minmax(300px,420px)_minmax(0,1fr)]",
                 holdForRead ? "border-warn-line bg-[#fffdf7]" : "border-line",
                 initialSelectedId === id && "ring-2 ring-brand-line"
               )}
             >
-              <div className="flex flex-col gap-2 border-b border-line-2 px-4 py-4 xl:border-r xl:border-b-0">
+              <div className="flex min-w-0 flex-col gap-2 border-b border-line-2 px-4 py-4 xl:border-r xl:border-b-0">
                 <div className="flex items-start gap-3">
                   {selectable ? (
                     <Checkbox
@@ -684,6 +685,7 @@ export function ReviewList({
                 >
                   {text || "Rating only. No written comment."}
                 </p>
+                <div className="pl-[30px]"><ReviewMedia items={review.review_media_items} replyUrl={review.review_url} /></div>
               </div>
               <div className="min-w-0 px-4 py-4 sm:px-5">
                 <ReviewDetailPanel

@@ -1,5 +1,7 @@
 "use client";
 
+import { ReviewMedia } from "@/components/review-media";
+
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
@@ -254,7 +256,8 @@ export function MobileComplaintView({ data, aiOnly = false }: { data: MobileComp
           <p className="text-[13px] text-ink-3">{card.sameNameCount} stored reviews use this display name.</p>
         ) : null}
         <MobileReviewQuote original={card.original} translation={card.translation} />
-        {card.photosStored ? null : <p className="text-xs text-ink-3">Photos are not stored on this server.</p>}
+        <ReviewMedia items={card.reviewMediaItems} replyUrl={card.reviewUrl} />
+        {card.reviewMediaItems?.length ? null : <p className="text-xs text-ink-3">No photos or videos were returned by the last review sync.</p>}
         <Link
           href={`/escalations/${card.id}`}
           className="inline-flex h-12 items-center gap-1.5 text-[15px] font-medium text-brand"

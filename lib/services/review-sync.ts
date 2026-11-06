@@ -10,6 +10,7 @@ import { detectComplaintTheme, detectReviewLanguage, shouldReopenReview } from "
 import { absenceIsConfirmed, planReviewVersion, reviewsConfirmedMissing } from "@/lib/review-version";
 import { isFreshReview } from "@/lib/services/notifications";
 import type { Database } from "@/lib/types/database-schema";
+import { googleReviewReplyUrl, normalizeReviewMedia } from "@/lib/review-media";
 
 type ReviewInsert = Database["public"]["Tables"]["grm_reviews"]["Insert"];
 
@@ -132,6 +133,8 @@ function reviewHash(review: GoogleReview): string {
     updateTime: review.updateTime ?? null,
     replyComment: review.reviewReply?.comment ?? null,
     replyUpdateTime: review.reviewReply?.updateTime ?? null,
+    reviewMediaItems: normalizeReviewMedia(review.reviewMediaItems),
+    reviewReplyUrl: googleReviewReplyUrl(review.reviewReplyUrl),
   };
   return crypto
     .createHash("sha256")
@@ -718,6 +721,8 @@ export class ReviewSyncService {
         google_review_id: review.reviewId,
         reviewer_display_name: review.reviewer?.displayName ?? "",
         reviewer_profile_url: review.reviewer?.profilePhotoUrl ?? null,
+        review_media_items: normalizeReviewMedia(review.reviewMediaItems),
+        review_url: googleReviewReplyUrl(review.reviewReplyUrl),
         reviewer_is_anonymous:
           review.reviewer?.isAnonymous ?? !review.reviewer?.displayName,
         star_rating: stars,

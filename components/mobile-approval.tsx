@@ -1,5 +1,7 @@
 "use client";
 
+import { ReviewMedia } from "@/components/review-media";
+
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
@@ -316,6 +318,7 @@ export function MobileApprovalView({ data }: { data: MobileApproval }) {
         ) : null}
 
         <MobileReviewQuote original={card.original} translation={card.translation} />
+        <ReviewMedia items={card.reviewMediaItems} replyUrl={card.reviewUrl} />
 
         <div
           className={cn(

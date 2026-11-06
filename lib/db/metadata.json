@@ -3509,7 +3509,8 @@
         "content_fingerprint": "text",
         "response_fingerprint": "text",
         "missing_on_google_at": "timestamptz",
-        "downstream_stale_at": "timestamptz"
+        "downstream_stale_at": "timestamptz",
+        "review_media_items": "jsonb"
       },
       "relations": [
         {

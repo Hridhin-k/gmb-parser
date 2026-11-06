@@ -1,5 +1,7 @@
 "use client";
 
+import { ReviewMedia } from "@/components/review-media";
+
 import { useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
@@ -379,6 +381,7 @@ function CaseDetail({
         ) : (
           <p className="text-[15px] italic text-ink-3">Rating only. No written comment.</p>
         )}
+        <ReviewMedia items={item.reviewMediaItems} replyUrl={item.reviewUrl} />
       </div>
 
       {open ? (

@@ -1,4 +1,5 @@
 import { after } from "next/server";
+import { googleReviewReplyUrl, normalizeReviewMedia } from "@/lib/review-media";
 import { createAdminClient } from "@/lib/db/client";
 import { rpcLocationReviewStats } from "@/lib/db/rpc";
 import { UNASSIGNED_CLIENT_MARKER } from "@/lib/services/unassigned-client";
@@ -83,6 +84,8 @@ export interface DashboardReviewRow {
   reviewer_is_anonymous: boolean;
   star_rating: number;
   comment: string | null;
+  review_media_items?: import("@/lib/review-media").ReviewMediaItem[];
+  review_url?: string | null;
   review_create_time: string;
   review_update_time: string | null;
   google_reply_comment: string | null;
@@ -270,7 +273,7 @@ async function loadDashboardData(
       `id, google_review_id, star_rating, comment, reviewer_display_name,
        reviewer_is_anonymous, review_create_time, review_update_time,
        google_reply_comment, google_reply_update_time, reply_status, last_synced_at,
-       review_language, complaint_theme, assigned_to, reopened_at,
+       review_language, complaint_theme, assigned_to, reopened_at, review_media_items, review_url,
        location_id,
        grm_google_locations!inner(
          id, location_title, store_code, address_formatted, client_id, group_id,
@@ -413,6 +416,8 @@ async function loadDashboardData(
       reviewer_is_anonymous: r.reviewer_is_anonymous,
       star_rating: r.star_rating,
       comment: r.comment,
+      review_media_items: normalizeReviewMedia(r.review_media_items),
+      review_url: googleReviewReplyUrl(r.review_url),
       review_create_time: r.review_create_time,
       review_update_time: r.review_update_time,
       google_reply_comment: r.google_reply_comment,

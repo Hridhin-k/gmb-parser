@@ -1,3 +1,4 @@
+import { googleReviewReplyUrl, normalizeReviewMedia, type ReviewMediaItem } from "@/lib/review-media";
 import { getAuthUserById } from "@/lib/auth/users";
 import { createHash } from "crypto";
 import { createAdminClient } from "@/lib/db/client";
@@ -201,6 +202,8 @@ export interface EscalationQueueItem {
   ticketNo: number | null;
   reviewerName: string;
   starRating: number;
+  reviewMediaItems?: ReviewMediaItem[];
+  reviewUrl?: string | null;
   comment: string | null;
   theme: string | null;
   replyStatus: string;
@@ -1082,7 +1085,8 @@ export class EscalationService {
       pageReviewIds.length
         ? admin
             .from("grm_reviews")
-            .select("id, reviewer_display_name, star_rating, comment, complaint_theme, reply_status, location_id")
+            .select("id, reviewer_display_name, star_rating, comment, complaint_theme, reply_status, location_id, review_media_items, review_url")
+            .eq("workspace_id", input.workspaceId)
             .in("id", pageReviewIds)
         : Promise.resolve({ data: [], error: null }),
       escalationIds.length
@@ -1157,6 +1161,8 @@ export class EscalationService {
         ticketNo: row.ticket_no,
         reviewerName: review.reviewer_display_name,
         starRating: review.star_rating,
+        reviewMediaItems: normalizeReviewMedia(review.review_media_items),
+        reviewUrl: googleReviewReplyUrl(review.review_url),
         comment: review.comment,
         theme: review.complaint_theme,
         replyStatus: review.reply_status,
@@ -1245,7 +1251,7 @@ export class EscalationService {
     const [reviewResult, locationResult, events, replyResult, ownerResult] = await Promise.all([
       admin
         .from("grm_reviews")
-        .select("id, reviewer_display_name, star_rating, comment, complaint_theme, reply_status")
+        .select("id, reviewer_display_name, star_rating, comment, complaint_theme, reply_status, review_media_items, review_url")
         .eq("id", current.review_id)
         .eq("workspace_id", workspaceId)
         .maybeSingle(),
@@ -1312,6 +1318,8 @@ export class EscalationService {
       ticketNo: current.ticket_no,
       reviewerName: reviewResult.data.reviewer_display_name || "No name stored",
       starRating: reviewResult.data.star_rating,
+      reviewMediaItems: normalizeReviewMedia(reviewResult.data.review_media_items),
+      reviewUrl: googleReviewReplyUrl(reviewResult.data.review_url),
       comment: reviewResult.data.comment,
       theme: reviewResult.data.complaint_theme,
       replyStatus: reviewResult.data.reply_status,
