@@ -88,12 +88,15 @@ export function validateFilterString(value: unknown): string {
 /** POST /api/reviews/[reviewId]/reply */
 export const createReplyBodySchema = z.object({
   content: replyContentSchema,
+  expectedGoogleReply: z.string().max(10000).nullable().optional(),
 });
 
 /** PUT /api/reviews/[reviewId]/reply */
 export const updateReplyBodySchema = z.object({
   content: replyContentSchema,
   replyId: uuidSchema,
+  expectedContent: z.string().max(10000).optional(),
+  expectedGoogleReply: z.string().max(10000).nullable().optional(),
 });
 
 /** DELETE /api/reviews/[reviewId]/reply */

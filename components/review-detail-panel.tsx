@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import { useSearchParams } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { toast } from "sonner";
 import { AlertCircle, Check, ChevronLeft, Phone, Send, Sparkles } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -168,8 +168,13 @@ export function ReviewDetailPanel({
 }: ReviewDetailPanelProps) {
   const inRow = variant === "row";
   const searchParams = useSearchParams();
+  const router = useRouter();
   // The list remounts this panel per review (key), so initial state is per review.
   const [editing, setEditing] = useState(false);
+  const [editingPublished, setEditingPublished] = useState(false);
+  const [editSnapshot, setEditSnapshot] = useState<{
+    replyId: string | null; expectedContent?: string; expectedGoogleReply: string | null; originalText: string;
+  } | null>(null);
   const [own, setOwn] = useState(false);
   const [content, setContent] = useState(reply?.content ?? "");
   const [editedHere, setEditedHere] = useState(false);
@@ -189,11 +194,13 @@ export function ReviewDetailPanel({
   const business = businessName(review);
   const text = review.comment ? splitGoogleTranslation(review.comment) : null;
   const low = isLowRating(review.star_rating);
-  const dirty = editing && content.trim() !== (own ? "" : (reply?.content ?? "")).trim();
+  const dirty = editing && content.trim() !== (editSnapshot?.originalText ?? (own ? "" : (reply?.content ?? ""))).trim();
   const busy = loading !== null || stage === "writing" || stage === "sending";
   const tag = STAGE_TAG[justSent && stage === "sent" ? "justSent" : stage];
   const isDraftStage = stage === "draft" || stage === "failed";
-  const showDraft = isDraftStage || own;
+  const showDraft = isDraftStage || own || editingPublished;
+  const publishedText = review.google_reply_comment ?? (stage === "sent" ? reply?.content : null) ?? "";
+  const updatingPublished = Boolean(publishedText.trim());
 
   useEffect(() => {
     onDirtyChange?.(dirty);
@@ -230,16 +237,23 @@ export function ReviewDetailPanel({
       setLocalError(`Replies can be up to ${REPLY_MAX.toLocaleString("en-US")} characters.`);
       return false;
     }
-    if (!dirty && reply && !own) return true;
+    if (!dirty && reply && !own && !editingPublished) {
+      setEditing(false); setEditSnapshot(null); return true;
+    }
     setLocalError(null);
     setLoading("save");
     try {
+      if (editSnapshot && editSnapshot.replyId !== (reply?.id ?? null)) throw new Error("The reply changed. Refresh before saving your update.");
       if (reply && !own) {
-        await apiCall(`/api/reviews/${review.id}/reply`, "PUT", { replyId: reply.id, content: next });
-        onSaved({ ...reply, content: next, status: reply.status === "failed" ? "failed" : "draft" });
+        const result = await apiCall(`/api/reviews/${review.id}/reply`, "PUT", {
+          replyId: reply.id, content: next, expectedContent: editSnapshot?.expectedContent ?? reply.content,
+          expectedGoogleReply: editSnapshot ? editSnapshot.expectedGoogleReply : review.google_reply_comment,
+        });
+        onSaved((result.reply as InboxReply | undefined) ?? { ...reply, content: next, status: "draft", approved_at: null, approved_by: null, published_at: null, last_error: null, failure_count: 0 });
         setEditedHere(true);
       } else {
-        const created = (await apiCall(`/api/reviews/${review.id}/reply`, "POST", { content: next })) as unknown as InboxReply;
+        const created = (await apiCall(`/api/reviews/${review.id}/reply`, "POST", { content: next,
+          expectedGoogleReply: editSnapshot ? editSnapshot.expectedGoogleReply : review.google_reply_comment })) as unknown as InboxReply;
         onSaved({
           id: created.id,
           content: next,
@@ -254,6 +268,16 @@ export function ReviewDetailPanel({
         setOwn(false);
       }
       setEditing(false);
+      setEditSnapshot(null);
+      if (editingPublished) {
+        setEditingPublished(false);
+        toast.success("Update draft saved", { description: "Your current reply stays live until you send the update." });
+        const params = new URLSearchParams(searchParams.toString());
+        params.delete("tab"); params.delete("filter"); params.delete("page");
+        params.set("review", review.id);
+        router.push(`/reviews?${params}`);
+        router.refresh();
+      }
       return true;
     } catch (caught) {
       setLocalError(caught instanceof Error ? caught.message : "The reply could not be saved.");
@@ -459,6 +483,11 @@ export function ReviewDetailPanel({
       {reply?.source === "template" && stage === "draft" ? (
         <p className="text-xs text-ink-3">AI could not complete this rating-only reply. We prepared a template for you to review before sending.</p>
       ) : null}
+      {review.reopened_at && (stage === "sent" || updatingPublished) ? (
+        <Banner tone="warn" title="Customer edited this review">
+          Check whether your current response still addresses the updated text and rating.
+        </Banner>
+      ) : null}
 
       {/* No reply yet */}
       {stage === "none" && !own ? (
@@ -519,6 +548,7 @@ export function ReviewDetailPanel({
       {/* Draft ready (or being written by hand) */}
       {showDraft && stage !== "writing" ? (
         <div className={cn("flex flex-col gap-3 border-l-2 pl-3.5", reply?.source === "template" ? "border-line" : "border-ai-line")}>
+          {updatingPublished ? <p className="text-xs text-ink-3">Update draft. Your current Google reply stays live until you send this update.</p> : null}
           <div className="flex flex-wrap items-center gap-2">
             <span className="text-[13px] font-semibold text-ink">Reply from {business}</span>
             <span className={cn("inline-flex items-center gap-1 rounded-full px-[7px] py-0.5 text-[11px] font-semibold",
@@ -548,7 +578,7 @@ export function ReviewDetailPanel({
           ) : (
             <p className="whitespace-pre-wrap text-[15px] leading-relaxed text-ink-2">{content}</p>
           )}
-          {own ? null : (
+          {own || editingPublished ? null : (
             <div className="flex flex-wrap items-center gap-1.5" role="group" aria-label="Rewrite with AI">
               <span className="mr-0.5 text-xs text-ink-3">Rewrite</span>
               {(
@@ -580,7 +610,13 @@ export function ReviewDetailPanel({
             </div>
           )}
           <div className="flex flex-wrap items-center gap-2 pt-1">
-            {canSend ? (
+            {editingPublished ? <>
+              <Button type="button" loading={loading === "save"} disabled={busy || saving || !content.trim() || content.trim() === publishedText.trim()}
+                onClick={() => void saveText()}>Save update draft</Button>
+              <Button type="button" variant="outline" disabled={busy || saving} onClick={() => {
+                setEditingPublished(false); setEditing(false); setEditSnapshot(null); setLocalError(null); setContent(reply?.content ?? "");
+              }}>Cancel</Button>
+            </> : canSend ? (
               <button
                 type="button"
                 onClick={() => void handleSend()}
@@ -588,7 +624,7 @@ export function ReviewDetailPanel({
                 className={pill("ink")}
               >
                 <Send className="size-[15px]" aria-hidden />
-                {stage === "failed" ? "Try sending again" : "Send reply"}
+                {stage === "failed" ? "Try sending again" : updatingPublished ? "Send update" : "Send reply"}
               </button>
             ) : reply ? (
               <Button
@@ -610,7 +646,7 @@ export function ReviewDetailPanel({
                 Save draft
               </button>
             )}
-            {aiOnly ? null : own ? (
+            {aiOnly || editingPublished ? null : own ? (
               <button
                 type="button"
                 className={pill("outline")}
@@ -630,7 +666,11 @@ export function ReviewDetailPanel({
                 disabled={busy || saving}
                 onClick={() => {
                   if (editing) void saveText();
-                  else setEditing(true);
+                  else {
+                    setEditSnapshot({ replyId: reply?.id ?? null, expectedContent: reply?.content,
+                      expectedGoogleReply: review.google_reply_comment, originalText: content });
+                    setEditing(true);
+                  }
                 }}
               >
                 {loading === "save" ? "Saving…" : editing ? "Done" : "Edit"}
@@ -640,7 +680,7 @@ export function ReviewDetailPanel({
             {flagButton}
           </div>
           <span className="text-xs text-ink-3">
-            {canSend
+            {editingPublished ? "Saving creates a local draft. Review it in To reply before sending the update." : canSend
               ? inRow
                 ? `Posts publicly on Google as ${business}.`
                 : `Posts publicly on Google as ${business}. After sending, the next review opens.`
@@ -648,6 +688,10 @@ export function ReviewDetailPanel({
                 ? "A higher role approves this draft. After that, you can send it."
                 : "An owner or admin approves 1–3 star replies before they go to Google."}
           </span>
+          {updatingPublished && !editingPublished ? <details className="text-xs text-ink-3">
+            <summary className="cursor-pointer">Current reply on Google</summary>
+            <p className="mt-2 whitespace-pre-wrap text-sm text-ink-2">{publishedText}</p>
+          </details> : null}
           {editing && own && !aiOnly ? <ContactActions contact={contact} disabled={busy || saving} onAdd={(kind) => void rewriteContact(kind)} /> : null}
         </div>
       ) : null}
@@ -693,13 +737,19 @@ export function ReviewDetailPanel({
             </span>
           </span>
           <p className="whitespace-pre-wrap text-sm leading-relaxed text-ink-2">
-            {reply?.content ?? review.google_reply_comment ?? ""}
+            {stage === "sent" ? publishedText : reply?.content ?? review.google_reply_comment ?? ""}
           </p>
           {reply?.published_at ? (
             <span className="text-xs text-ink-3">{formatFriendlyDateTime(reply.published_at, "2-digit")}</span>
           ) : review.google_reply_update_time ? (
             <span className="text-xs text-ink-3">{formatFriendlyDateTime(review.google_reply_update_time, "2-digit")}</span>
           ) : null}
+          {stage === "sent" && !aiOnly && !editingPublished && publishedText.trim() ? <Button type="button" variant="outline" className="mt-2 self-start"
+            disabled={busy || saving} onClick={() => {
+              setContent(publishedText); setEditingPublished(true); setEditing(true); setLocalError(null);
+              setEditSnapshot({ replyId: reply?.id ?? null, expectedContent: reply?.content,
+                expectedGoogleReply: review.google_reply_comment, originalText: publishedText });
+            }}>Edit response</Button> : null}
         </div>
       ) : null}
 

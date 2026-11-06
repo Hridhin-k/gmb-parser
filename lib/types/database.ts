@@ -52,6 +52,7 @@ export type AuditAction =
   | "insight.report_failed"
   | "reviews.bulk_failed"
   | "reply.edited"
+  | "reply.edit_failed"
   | "reply.approved"
   | "reply.publish_attempted"
   | "reply.published"

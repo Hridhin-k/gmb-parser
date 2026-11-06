@@ -2,7 +2,6 @@ import { NextResponse } from "next/server";
 import { getCurrentUser } from "@/lib/auth/server";
 import { createAdminClient } from "@/lib/db/client";
 import { AuditService } from "@/lib/services/audit";
-import { logger } from "@/lib/logger";
 import {
   parseBody,
   validateId,
@@ -15,6 +14,8 @@ import { ensurePersonalWorkspace } from "@/lib/services/workspace";
 import { assertCanEditReplyText, assertReviewAction } from "@/lib/services/access";
 import { assertSafePublicReply } from "@/lib/services/reply-checks";
 import { AppError } from "@/lib/errors";
+import { saveManualReply } from "@/lib/services/manual-reply";
+import { auditErrorDetails } from "@/lib/audit-details";
 
 interface RouteParams {
   params: Promise<{ reviewId: string }>;
@@ -22,6 +23,12 @@ interface RouteParams {
 
 async function getWorkspace(user: { id: string; email?: string | null }) {
   return ensurePersonalWorkspace(user);
+}
+
+async function saveFailure(error: unknown, workspaceId: string, userId: string, reviewId: string, replyId?: string) {
+  await AuditService.log({ workspaceId, userId, action: "reply.edit_failed", entityType: "grm_reviews", entityId: reviewId,
+    metadata: { ...auditErrorDetails(error), stage: "save_manual_reply", replyId } });
+  return NextResponse.json({ error: toUserMessage(error) }, { status: toStatusCode(error) });
 }
 
 /**
@@ -40,7 +47,7 @@ export async function POST(request: Request, { params }: RouteParams) {
     return NextResponse.json({ error: "Invalid review ID" }, { status: 400 });
   }
 
-  let body: { content: string };
+  let body: { content: string; expectedGoogleReply?: string | null };
   try {
     body = await parseBody(request, createReplyBodySchema);
   } catch (e) {
@@ -87,42 +94,17 @@ export async function POST(request: Request, { params }: RouteParams) {
     return NextResponse.json({ error: toUserMessage(error) }, { status });
   }
 
-  const { data: reply, error } = await admin
-    .from("grm_review_replies")
-    .insert({
-      workspace_id: membership.workspace_id,
-      review_id: reviewId,
-      content: body.content,
-      source: "manual" as const,
-      status: "draft" as const,
-      created_by: user.id,
-    })
-    .select("id, content, source, status, created_at")
-    .single();
-
-  if (error) {
-    if (error.code === "23505") {
-      return NextResponse.json(
-        { error: "An active reply already exists for this review." },
-        { status: 409 }
-      );
-    }
-    logger.error("reply.create.failed", {
-      userId: user.id,
-      workspaceId: membership.workspace_id,
-      reviewId,
-      errorCode: error.code,
-    });
-    return NextResponse.json({ error: "Failed to create reply" }, { status: 500 });
+  try {
+    const reply = await saveManualReply({ workspaceId: membership.workspace_id, userId: user.id, reviewId, ...body });
+    return NextResponse.json(reply, { status: 201 });
+  } catch (error) {
+    return saveFailure(error, membership.workspace_id, user.id, reviewId);
   }
-
-  await admin.from("grm_reviews").update({ reply_status: "draft" }).eq("id", reviewId);
-  return NextResponse.json(reply, { status: 201 });
 }
 
 /**
  * PUT /api/reviews/[reviewId]/reply
- * Edit an existing draft reply.
+ * Save a draft edit or a proposed update to a published reply. Never sends to Google.
  */
 export async function PUT(request: Request, { params }: RouteParams) {
   const { reviewId: rawReviewId } = await params;
@@ -136,7 +118,7 @@ export async function PUT(request: Request, { params }: RouteParams) {
     return NextResponse.json({ error: "Invalid review ID" }, { status: 400 });
   }
 
-  let body: { content: string; replyId: string };
+  let body: { content: string; replyId: string; expectedContent?: string; expectedGoogleReply?: string | null };
   try {
     body = await parseBody(request, updateReplyBodySchema);
   } catch (e) {
@@ -160,18 +142,6 @@ export async function PUT(request: Request, { params }: RouteParams) {
     throw error;
   }
 
-  const admin = createAdminClient();
-
-  const { data: reply } = await admin
-    .from("grm_review_replies")
-    .select("id, status")
-    .eq("id", body.replyId)
-    .eq("review_id", reviewId)
-    .eq("workspace_id", membership.workspace_id)
-    .single();
-
-  if (!reply) return NextResponse.json({ error: "Reply not found" }, { status: 404 });
-
   try {
     await assertSafePublicReply({
       workspaceId: membership.workspace_id,
@@ -185,40 +155,12 @@ export async function PUT(request: Request, { params }: RouteParams) {
     return NextResponse.json({ error: toUserMessage(error) }, { status });
   }
 
-  if (reply.status === "pending_publish") {
-    return NextResponse.json(
-      { error: "This reply is being published. Wait until that finishes, then edit it." },
-      { status: 409 }
-    );
+  try {
+    const reply = await saveManualReply({ workspaceId: membership.workspace_id, userId: user.id, reviewId, ...body });
+    return NextResponse.json({ success: true, reply });
+  } catch (error) {
+    return saveFailure(error, membership.workspace_id, user.id, reviewId, body.replyId);
   }
-
-  const { error } = await admin
-    .from("grm_review_replies")
-    .update({ content: body.content, status: "draft", approved_at: null, approved_by: null })
-    .eq("id", body.replyId);
-
-  if (error) {
-    logger.error("reply.edit.failed", {
-      userId: user.id,
-      workspaceId: membership.workspace_id,
-      reviewId,
-      replyId: body.replyId,
-      errorCode: error.code,
-    });
-    return NextResponse.json({ error: "Failed to update reply" }, { status: 500 });
-  }
-
-  await admin.from("grm_reviews").update({ reply_status: "draft" }).eq("id", reviewId);
-
-  await AuditService.log({
-    workspaceId: membership.workspace_id,
-    userId: user.id,
-    action: "reply.edited",
-    entityType: "grm_review_replies",
-    entityId: body.replyId,
-  });
-
-  return NextResponse.json({ success: true });
 }
 
 /**
