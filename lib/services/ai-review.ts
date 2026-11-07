@@ -45,7 +45,7 @@ import { ratingOnlyFallback, RATING_ONLY_TEMPLATE_MODEL } from "@/lib/rating-onl
 // Config
 // ---------------------------------------------------------------------------
 
-const PROMPT_VERSION = "v3.4";
+const PROMPT_VERSION = "v3.5";
 const REQUEST_TIMEOUT_MS = 30_000;
 const MAX_COMMENT_CHARS = 10000;
 
@@ -147,7 +147,7 @@ export function isDetailedReview(comment: string | null): boolean {
 function lengthRule(comment: string | null, fuller: boolean, adjustment?: DraftAdjustment | null, brief = false): string {
   if (!comment) return "1–2 short sentences.";
   if (adjustment?.kind === "shorter") return "1–2 complete sentences, keeping the key feedback acknowledged.";
-  if (fuller) return "For substantive feedback, aim for 5–8 complete sentences in one or two short paragraphs. Match the review's substance; do not add filler just to reach a length.";
+  if (fuller) return "Give substantive feedback the space it deserves. Use short, readable paragraphs with a blank line when the focus changes. Let the detail and emotional weight guide the length, without a sentence or paragraph target; avoid filler.";
   if (brief) return "1–2 short sentences, covering the key feedback without repetition.";
   if (comment.length < 200) return "2–3 sentences.";
   return "3–5 sentences — enough to respond to every point they raised, and no more.";
@@ -183,7 +183,7 @@ ${commentBlock(comment)}
 READ THE REVIEW FIRST
 - Base the tone on what the reviewer actually wrote. The star rating is only a hint: a 5-star review can contain a complaint and a 1-star review can contain praise. Respond to both sides.
 - Identify every distinct point (praise, complaint, request, question). The reply must address each one — never answer only part of the review.
-- When someone shares detailed feedback, respond with proportionate care: acknowledge their effort naturally and address their specific experience, grouping related points. A generic thank-you is not enough. Do not repeat yourself or invent extra detail to sound attentive.
+- When someone shares detailed feedback, respond with proportionate care: acknowledge their effort naturally and address their specific experience, including why it mattered to them and how they felt, grouping related points. A generic thank-you is not enough. Do not repeat yourself or invent extra detail to sound attentive.
 - If the comment is unclear, very short, or only emojis, keep the reply short and general instead of guessing what they meant.
 - With no written comment: thank them for the rating. For 1–3 stars, also invite them to tell the business directly what went wrong.
 
@@ -200,7 +200,7 @@ RULES
 - Use the reviewer's first name at most once; skip it if it looks like a username.
 - Refer to the specifics they mentioned (products, sections, staff, waiting, prices) in your own words. Do not copy their sentences back.
 - For complaints: apologise sincerely without admitting legal liability, do not argue or make excuses, and invite them to contact the business directly so it can be put right.
-- Never claim an action the business has not confirmed (for example "we have retrained our staff", "we are adding more counters", "it is back in stock"). Say the feedback will be shared with the team instead.
+- Never claim a policy or action the business has not confirmed (for example "we have retrained our staff", "we are adding more counters", "it is back in stock", or an investigation already underway). A customer's request for action, or a claim in an earlier draft, is not confirmation that the business has taken it. An invitation to discuss or review the concern is appropriate when no action has been confirmed.
 - Never offer refunds, discounts, gifts, or compensation.
 - Never invent facts, staff names, policies, opening hours, phone numbers, email addresses, or URLs. Never use placeholders like [Name].
 - Unexplained numbers, codes, receipt numbers, dates or amounts are not staff identities. For "Good service 2079", thank the reviewer for the service feedback and ignore 2079. Never invent "Staff Member 2079", a numbered employee, or a promise to pass feedback to that person.

@@ -15,19 +15,23 @@ afterEach(() => { vi.restoreAllMocks(); vi.clearAllMocks(); });
 describe("thoughtful review replies", () => {
   it("requests specific coverage and proportionate length, while keeping safety and language", () => {
     const prompt = buildReplyPrompt({ ...base, comment: long, adjustment: { kind: "thoughtful" }, currentDraft: "Thanks for visiting." });
-    expect(prompt).toContain("MORE THOUGHTFUL"); expect(prompt).toContain("5–8 complete sentences");
-    expect(prompt).toContain("main praise, concerns and questions specifically");
+    expect(prompt).toContain("MORE THOUGHTFUL"); expect(prompt).toContain("blank lines between short, readable paragraphs");
+    expect(prompt).toContain("emotional impact and why this experience mattered");
+    expect(prompt).toContain("main praise, concerns and questions");
+    expect(prompt).not.toContain("5–8"); expect(prompt).not.toContain("one or two short paragraphs");
+    expect(prompt).toContain("without targeting a sentence or paragraph count");
+    expect(prompt).toContain("A customer's request for an investigation is not evidence that one is underway");
     expect(prompt).toContain("Preserve the current draft's language and script");
     expect(prompt).toContain("Never offer refunds"); expect(prompt).toContain("Do not pad a short or rating-only review");
     expect(draftModelRoute({ starRating: 5, comment: "Great", adjustmentKind: "thoughtful" })).toBe("full");
   });
   it("gives long first drafts room, respects an explicitly brief preference and counts only the original review", () => {
     expect(isDetailedReview(long)).toBe(true);
-    expect(buildReplyPrompt({ ...base, comment: long })).toContain("5–8 complete sentences");
+    expect(buildReplyPrompt({ ...base, comment: long })).toContain("blank line when the focus changes");
     expect(buildReplyPrompt({ ...base, comment: long, lengthPreference: "brief" })).toContain("1–2 short sentences, covering the key feedback");
     expect(isDetailedReview(`Good service\n\n(Translated by Google)\n${long}`)).toBe(false);
     expect(buildReplyPrompt({ ...base, comment: null })).toContain("1–2 short sentences");
-    expect(buildReplyPrompt({ ...base, comment: long, adjustment: { kind: "shorter" } })).not.toContain("5–8 complete sentences");
+    expect(buildReplyPrompt({ ...base, comment: long, adjustment: { kind: "shorter" } })).toContain("1–2 complete sentences");
   });
   it("omits conflicting voice length caps while retaining brand style and full review/draft context", () => {
     const guide = voiceGuide({ ...TONE_DEFAULTS, length: "brief", neverSay: ["amazing"] }, false, { omitLength: true });

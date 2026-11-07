@@ -86,6 +86,14 @@ describe("drafting with the saved business contact", () => {
       generationParams: expect.objectContaining({ adjustmentKind: "thoughtful" }) }));
   });
 
+  it("preserves natural paragraph breaks through generation and draft persistence", async () => {
+    const text = "We are sorry your visit left you feeling hurt.\n\nYou deserved a respectful conversation about suitable alternatives.\n\nPlease contact our team so we can listen to your experience directly.";
+    vi.mocked(generateAi).mockResolvedValueOnce({ ...generated, text } as Awaited<ReturnType<typeof generateAi>>);
+    const result = await AIReviewService.generateDraft({ ...params, adjustment: { kind: "thoughtful" } });
+    expect(result.content).toBe(text);
+    expect(AIReviewService.persistGeneratedDraft).toHaveBeenCalledWith(expect.objectContaining({ content: text }));
+  });
+
   it("resolves each review's store independently in a mixed-store drafting run", async () => {
     vi.mocked(EscalationContactStore.read).mockImplementation(async (_workspaceId, locationId) => ({
       phone: null, email: locationId === "location-1" ? "first@example.test" : "second@example.test",
